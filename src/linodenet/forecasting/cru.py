@@ -9,14 +9,12 @@ __all__ = [
     "apply_masked",
 ]
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Final
 
 import torch
-from torch import Tensor, nn
-from torch.distributions import Distribution
-from torch.nn.utils.rnn import pad_sequence
+from torch import Tensor, nan, nn
 
 
 class ELU1P(nn.Module):
@@ -227,6 +225,7 @@ class CRUConfig:
     variance_activation: str = "elup1"
     initial_variance: float = 10.0
     validate_args: bool = False
+    batch_first: bool = True
 
 
 def apply_masked[R: Tensor | tuple[Tensor, ...]](
@@ -329,6 +328,8 @@ class CRU(nn.Module):
     r"""CONST: Dimensionality of encoded latent observations."""
     validate_args: Final[bool]
     r"""CONST: Whether forward inputs should be validated before computation."""
+    batch_first: Final[bool]
+    r"""CONST: If True, time axis is the second-to-last dimension of inputs."""
 
     # Submodules
     encoder: nn.Module
@@ -409,6 +410,7 @@ class CRU(nn.Module):
         initial_variance: float = 10.0,
         variance_activation: str = "elup1",
         validate_args: bool = False,
+        batch_first: bool = True,
     ) -> None:
         super().__init__()
         if initial_variance <= 0:
@@ -426,6 +428,7 @@ class CRU(nn.Module):
         self.num_basis = num_basis
         self.validate_args = validate_args
         self.initial_variance = initial_variance
+        self.batch_first = batch_first
 
         self.variance_activation = new_activation(variance_activation)
 
@@ -477,87 +480,87 @@ class CRU(nn.Module):
         self.register_buffer("posterior_means", torch.empty(0), persistent=False)
         self.register_buffer("posterior_variances", torch.empty(0), persistent=False)
 
-    def forecast_unbatched(
-        self,
-        args: Iterable[tuple[Tensor, Tensor, Tensor]],  # ($K), ($N), ($N, D)
-        /,
-    ) -> list[Distribution]:  # ($K)
-        # convert list of tuples to tuples of tensors
-        query_times: tuple[Tensor, ...]
-        context_times: tuple[Tensor, ...]
-        context_values: tuple[Tensor, ...]
-        query_times, context_times, context_values = zip(*args, strict=True)
-
-        # pad with NaN
-        context_times_tensor = pad_sequence(
-            context_times,  # type: ignore[arg-type]
-            batch_first=True,
-            padding_value=torch.nan,
-        )
-        context_values_tensor = pad_sequence(
-            context_values,  # type: ignore[arg-type]
-            batch_first=True,
-            padding_value=torch.nan,
-        )
-        query_times_tensor = pad_sequence(
-            query_times,  # type: ignore[arg-type]
-            batch_first=True,
-            padding_value=torch.nan,
-        )
-        return self(query_times_tensor, context_times_tensor, context_values_tensor)
-
     def forward(
         self,
-        query_times: Tensor,  # [..., Q]
-        context_times: Tensor,  # [..., T]
-        context_values: Tensor,  # [..., T, N]
-    ) -> tuple[Tensor, Tensor]:  # [..., Q, N], [..., Q, N]
-        r"""Return the predictive distribution at ``query_times``.
+        times: Tensor,  # (..., $N + $K), possibly with trailing NaNs (padding)
+        context_values: Tensor,  # (..., $N + $K, D), possibly with NaNs
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, F), bool
+        *,
+        initial_state: tuple[Tensor, Tensor] | None = None,  # ((..., 2d), (..., d, 3))
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> tuple[Tensor, Tensor]:  # (..., $N + $K, F), (..., $N + $K, F)
+        r"""Filter and forecast over combined context/query time points.
 
-        To create batches whose members have varying sequence length,
-        use `torch.nn.rnn.utils.pad_sequence` with `padding_value=torch.nan`.
+        Context and query masks explicitly select valid feature-level entries.
+        Context values outside ``context_mask`` are ignored. CRU does not
+        support feature-level missingness: each time step must be either fully
+        observed or fully missing (all context features present or none).
 
         Args:
-            query_times: Times at which forecasts are requested.
-            context_times: Times of the observed context sequence.
-            context_values: Observed context values.
+            times: Combined context and query time points, sorted non-decreasing.
+            context_values: Sparse observations at context/query time points.
+            context_mask: Boolean mask selecting observed context entries.
+            query_mask: Boolean mask selecting requested forecast entries.
+            initial_state: Optional initial latent state ``(mean, cov)`` where
+                ``mean`` has shape ``(..., 2d)`` and ``cov`` has shape
+                ``(..., d, 3)``.
+            initial_time: Optional initial time ``t₀``.
 
         Returns:
-            Predictive distribution over target values at ``query_times``.
+            pred_means: Posterior predicted means at all time points, shape
+                ``(..., $N + $K, F)``. NaN at non-query positions.
+            pred_vars: Posterior predicted variances, same shape. NaN at
+                non-query positions.
         """
-        # ensure time stamps are sorted
-        batch_shape = context_times.shape[:-1]
         d = self.latent_size
-        query_mask = query_times.isfinite()
-        context_mask = context_times.isfinite()
-        context_lengths = context_mask.sum(dim=-1)  # (...)
-        last_context_time = torch.take_along_dim(
-            context_times, (context_lengths - 1).unsqueeze(-1), dim=-1
+
+        # Step-level masks derived from feature-level masks.
+        has_context = context_mask.any(dim=-1)  # (..., $N+$K)
+        has_query = query_mask.any(dim=-1)  # (..., $N+$K)
+        valid_steps = times.isfinite() & (has_context | has_query)
+        query_out_mask = has_query.unsqueeze(-1)  # (..., $N+$K, 1)
+
+        # CRU does not support feature-level missingness.
+        assert torch.equal(has_context, context_mask.all(dim=-1)), (
+            "CRU requires all context features present or none per step."
         )
-        context_deltas = context_times.diff(prepend=context_times[..., [0]])  # (..., T)
-        query_deltas = query_times.diff(prepend=last_context_time)  # (..., Q)
-        assert (context_deltas[context_mask] >= 0).all(), "context times not sorted"
-        assert (query_deltas[query_mask] >= 0).all(), "query times not sorted"
-        # we assume sequences were batched using NaN-padding.
-        # since the model does not support missing values, we mark any observation vector
-        # that contains any missing value as illegal.
-        observation_valid = context_values.isfinite().all(dim=-1)  # (..., T)
-        assert (context_mask == observation_valid).all()
+        # Observations must align with finite time stamps.
+        assert (~has_context | times.isfinite()).all(), (
+            "context_mask is True at a time step with non-finite time."
+        )
 
-        # encode observations
+        *batch_shape, _ = times.shape
+
+        # Sanitize and encode all context observations upfront.
+        context_values = context_values.masked_fill(~has_context.unsqueeze(-1), nan)
         y_means, y_variances = apply_masked(
-            self.encoder, (context_values,), context_mask
-        )  # (..., T, D), (..., T, D)
+            self.encoder, (context_values,), has_context
+        )  # (..., $N+$K, d), (..., $N+$K, d)
 
-        # prepare initial state μ₀⁺, Σ₀⁺
-        cov_u = self.initial_covariance[:d, :d].diagonal(dim1=-2, dim2=-1)
-        cov_l = self.initial_covariance[d:, d:].diagonal(dim1=-2, dim2=-1)
-        cov_s = self.initial_covariance[:d, d:].diagonal(dim1=-2, dim2=-1)
-        post_mean = self.initial_mean.expand(*batch_shape, 2 * d)  # (..., 2d)
-        post_cov = torch.stack(
-            [cov_u, cov_l, cov_s],
-            dim=-1,
-        ).expand(*batch_shape, d, 3)  # (..., d, 3)
+        if self.batch_first:
+            times = times.moveaxis(-1, 0)
+            y_means = y_means.moveaxis(-2, 0)
+            y_variances = y_variances.moveaxis(-2, 0)
+            has_context = has_context.moveaxis(-1, 0)
+            has_query = has_query.moveaxis(-1, 0)
+            valid_steps = valid_steps.moveaxis(-1, 0)
+
+        # Initialize state (mean: (..., 2d), cov: (..., d, 3)).
+        t = times[0] if initial_time is None else initial_time
+        if initial_state is None:
+            cov_u = self.initial_covariance[:d, :d].diagonal()
+            cov_l = self.initial_covariance[d:, d:].diagonal()
+            cov_s = self.initial_covariance[:d, d:].diagonal()
+            post_mean = self.initial_mean.expand(*batch_shape, 2 * d)
+            post_cov = torch.stack(
+                [cov_u, cov_l, cov_s],
+                dim=-1,
+            ).expand(*batch_shape, d, 3)
+        else:
+            post_mean, post_cov = initial_state
+            post_mean = post_mean.expand(*batch_shape, 2 * d)
+            post_cov = post_cov.expand(*batch_shape, d, 3)
 
         prior_means_list: list[Tensor] = []
         prior_vars_list: list[Tensor] = []
@@ -566,63 +569,59 @@ class CRU(nn.Module):
         pred_means_list: list[Tensor] = []
         pred_vars_list: list[Tensor] = []
 
-        # forward loop over sequence length
-        for dt, y, y_var, mask in zip(
-            context_deltas.unbind(dim=-1),
-            y_means.unbind(dim=-2),
-            y_variances.unbind(dim=-2),
-            context_mask.unbind(dim=-1),
+        for t_obs, y, y_var, ctx_mask, active in zip(
+            times,
+            y_means,
+            y_variances,
+            has_context,
+            valid_steps,
             strict=True,
         ):
-            prior_mean, prior_cov = apply_masked(
-                self.propagate_state, (dt, post_mean, post_cov), mask
+            delta = torch.where(active, t_obs - t, torch.zeros_like(t_obs))
+            t = torch.where(active, t_obs, t)
+
+            # Propagate only for active batch elements; restore old state for inactive.
+            _prior_mean, _prior_cov = apply_masked(
+                self.propagate_state, (delta, post_mean, post_cov), active
             )
+            prior_mean = torch.where(active.unsqueeze(-1), _prior_mean, post_mean)
+            prior_cov = torch.where(
+                active.unsqueeze(-1).unsqueeze(-1), _prior_cov, post_cov
+            )
+
+            # Sanitize encoder outputs for non-context steps: NaN inputs into
+            # torch.where branches that are masked out would still produce NaN
+            # gradients via the 0*NaN rule in the backward pass.
+            safe_y = y.nan_to_num(nan=0.0)
+            safe_y_var = y_var.nan_to_num(nan=1.0)
             post_mean, post_cov = self.update_state(
-                y, y_var, mask, prior_mean, prior_cov
+                safe_y, safe_y_var, ctx_mask, prior_mean, prior_cov
             )
+
+            # Decode at query steps; NaN elsewhere via apply_masked fill.
+            pred_mean, pred_var = self.decoder(post_mean, post_cov)
 
             prior_means_list.append(prior_mean)
             prior_vars_list.append(prior_cov)
             post_means_list.append(post_mean)
             post_vars_list.append(post_cov)
-
-        # create buffers of the trajectory
-        self.prior_means = torch.stack(prior_means_list, dim=-2)
-        self.prior_variances = torch.stack(prior_vars_list, dim=-3)
-        self.posterior_means = torch.stack(post_means_list, dim=-2)
-        self.posterior_variances = torch.stack(post_vars_list, dim=-3)
-
-        # select the last valid state for each batch element
-        last_post_mean = torch.take_along_dim(
-            self.posterior_means,  # (..., T, 2d)
-            (context_lengths - 1).unsqueeze(-1).unsqueeze(-1),
-            dim=-2,
-        ).squeeze(-2)  # (..., 2d)
-        last_post_cov = torch.take_along_dim(
-            self.posterior_variances,  # (..., T, d, 3)
-            (context_lengths - 1).unsqueeze(-1).unsqueeze(-1).unsqueeze(-1),
-            dim=-3,
-        ).squeeze(-3)  # (..., d, 3)
-
-        # forward loop over query
-        # μₜ⁻, Σₜ⁻ ← predict(μₛ⁺, Σₛ⁺, t - s)
-        # μₜ⁺, Σₜ⁺ ← update(μₜ⁻, Σₜ⁻, yₜ, σₜ^{obs})
-        # oₜ, σₜ^{out} ← g_ϕ(μₜ⁺, Σₜ⁺)
-        mean, cov = last_post_mean, last_post_cov
-        for dt, mask in zip(
-            query_deltas.unbind(dim=-1),
-            query_mask.unbind(dim=-1),
-            strict=True,
-        ):
-            mean, cov = apply_masked(self.propagate_state, (dt, mean, cov), mask)
-            pred_mean, pred_var = apply_masked(self.decoder, (mean, cov), mask)
             pred_means_list.append(pred_mean)
             pred_vars_list.append(pred_var)
 
-        return (
-            torch.stack(pred_means_list, dim=-2),
-            torch.stack(pred_vars_list, dim=-2),
-        )
+        stack_dim_mean = -2 if self.batch_first else 0
+        stack_dim_cov = -3 if self.batch_first else 0
+
+        self.prior_means = torch.stack(prior_means_list, dim=stack_dim_mean)
+        self.prior_variances = torch.stack(prior_vars_list, dim=stack_dim_cov)
+        self.posterior_means = torch.stack(post_means_list, dim=stack_dim_mean)
+        self.posterior_variances = torch.stack(post_vars_list, dim=stack_dim_cov)
+
+        pred_means = torch.stack(pred_means_list, dim=stack_dim_mean)
+        pred_vars = torch.stack(pred_vars_list, dim=stack_dim_mean)
+        pred_means = pred_means.masked_fill(~query_out_mask, nan)
+        pred_vars = pred_vars.masked_fill(~query_out_mask, nan)
+
+        return pred_means, pred_vars
 
     def transition_matrix_model(self, mean: Tensor) -> Tensor:
         """Locally linear transition model.
@@ -778,4 +777,5 @@ def build_cru(config: CRUConfig | Mapping[str, object], /) -> CRU:
         initial_variance=config.initial_variance,
         variance_activation=config.variance_activation,
         validate_args=config.validate_args,
+        batch_first=config.batch_first,
     )

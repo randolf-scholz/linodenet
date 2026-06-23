@@ -17,6 +17,7 @@ from linodenet.forecasting.cru import (
     apply_masked,
     build_cru,
 )
+from linodenet.forecasting.utils import BatchedDenseArgs
 
 from .base import SequentialData, TestForecastingModel
 
@@ -187,7 +188,7 @@ class TestModel(TestForecastingModel):
     r"""Tests for direct CRU model construction."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (5,)
-    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = (3,)  # pyright: ignore[reportIncompatibleVariableOverride]
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
     STANDARD_CONFIG: ClassVar[CRUConfig] = CRUConfig(
         input_size=CONTEXT_SHAPE[0],
         output_size=OUTPUT_SHAPE[0],
@@ -271,11 +272,32 @@ class TestModel(TestForecastingModel):
         self, model: CRU, inputs: SequentialData, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return CRU predictions for sequential forecasting inputs."""
-        pred_mean, pred_var = model(
-            inputs.query_times,
-            inputs.context_times,
-            inputs.context_values,
+        context_mask = inputs.context_mask.unsqueeze(-1).expand_as(
+            inputs.context_values
         )
+        query_mask = inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values)
+        combined = BatchedDenseArgs(
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            context_mask=context_mask,
+            query_times=inputs.query_times,
+            query_mask=query_mask,
+            query_values=inputs.query_values,
+        ).to_combined()
+
+        all_pred_means, all_pred_vars = model(
+            combined.times,
+            combined.context_values,
+            combined.context_mask,
+            combined.query_mask,
+        )
+
+        # Extract predictions at query steps and scatter into (*, Q, F) output.
+        has_query = combined.query_mask.any(dim=-1)
+        pred_mean = torch.full_like(inputs.query_values, torch.nan)
+        pred_var = torch.full_like(inputs.query_values, torch.nan)
+        pred_mean[inputs.query_mask] = all_pred_means[has_query]
+        pred_var[inputs.query_mask] = all_pred_vars[has_query]
 
         assert pred_mean.shape == inputs.query_values.shape
         assert pred_var.shape == inputs.query_values.shape
@@ -323,31 +345,36 @@ class TestModel(TestForecastingModel):
         assert model.decoder.hidden_size == config.decoder.hidden_size
 
     def test_rejects_finite_context_time_with_missing_value(self) -> None:
+        # CRU does not support feature-level missingness: passing a context_mask
+        # that is partially True for a single time step should raise.
         model = self.make_cru()
-        data = self.make_sequential_data(
-            seed=self.SEED,
-            batch_shape=(),
-            min_steps=3,
-            max_steps=3,
-            context_shape=self.CONTEXT_SHAPE,
-            output_shape=self.OUTPUT_SHAPE,
-        )
-        context_values = data.context_values.clone()
-        context_values[1, 0] = torch.nan
+        D = self.STANDARD_CONFIG.input_size
+        F = self.STANDARD_CONFIG.output_size or D
+        times = torch.tensor([0.0, 0.5, 1.0, 2.0])
+        context_values = torch.randn(4, D)
+        # step 1 has feature 0 missing → partial context_mask row
+        context_mask = torch.ones(4, D, dtype=torch.bool)
+        context_mask[1, 0] = False
+        query_mask = torch.zeros(4, F, dtype=torch.bool)
+        query_mask[3] = True
 
-        with pytest.raises(AssertionError):
-            model(data.query_times, data.context_times, context_values)
+        with pytest.raises((AssertionError, ValueError)):
+            model(times, context_values, context_mask, query_mask)
 
     def test_rejects_padded_context_time_with_finite_value(self) -> None:
+        # A time step with times=NaN but context_mask=True is contradictory.
         model = self.make_cru()
-        context_times = torch.tensor([[0.0, 1.0, torch.nan]])
-        context_values = torch.full((1, 3, self.STANDARD_CONFIG.input_size), torch.nan)
-        context_values[:, :2] = torch.randn(1, 2, self.STANDARD_CONFIG.input_size)
-        context_values[:, 2] = 0.0
-        query_times = torch.tensor([[2.0]])
+        D = self.STANDARD_CONFIG.input_size
+        F = self.STANDARD_CONFIG.output_size or D
+        times = torch.tensor([0.0, 1.0, torch.nan, 2.0])
+        context_values = torch.randn(4, D)
+        # step 2 has NaN time but context_mask=True → invalid
+        context_mask = torch.tensor([[True] * D, [True] * D, [True] * D, [False] * D])
+        query_mask = torch.zeros(4, F, dtype=torch.bool)
+        query_mask[3] = True
 
-        with pytest.raises(AssertionError):
-            model(query_times, context_times, context_values)
+        with pytest.raises((AssertionError, ValueError)):
+            model(times, context_values, context_mask, query_mask)
 
 
 def test_build_cru_instantiates_from_dataclass_config() -> None:
