@@ -7,6 +7,7 @@ __all__ = [
     "EncoderConfig",
     "build_cru",
     "apply_masked",
+    "update_masked",
 ]
 
 from collections.abc import Callable, Mapping
@@ -269,6 +270,29 @@ def apply_masked[R: Tensor | tuple[Tensor, ...]](
         y_flat[mask_flat] = y
         y_result.append(y_flat.reshape(*batch_shape, *y.shape[1:]))
     return y_result[0] if returns_tensor else tuple(y_result)
+
+
+def update_masked[R: tuple[Tensor, ...]](
+    fn: Callable[..., R],  # [*(..., *dᵢ)] -> (*(..., *eᵢ),)
+    args: tuple[Tensor, ...],
+    *,
+    target: R,  # (*(..., *eᵢ),)
+    mask: Tensor,  # (...)
+) -> R:  # (*(..., *eᵢ),)
+    r"""Update ``target`` with ``fn`` applied to selected batch elements."""
+    assert mask.dtype == torch.bool
+    batch_shape = mask.shape
+    batch_rank = len(batch_shape)
+    mask_flat = mask.flatten()
+
+    ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
+
+    return tuple(  # type: ignore[return-type]
+        t.reshape(-1, *t.shape[batch_rank:])
+        .index_put([mask_flat], y)
+        .reshape(*batch_shape, *t.shape[batch_rank:])
+        for y, t in zip(ys_flat, target, strict=True)
+    )
 
 
 class CRU(nn.Module):
@@ -581,25 +605,19 @@ class CRU(nn.Module):
             t = torch.where(active, t_obs, t)
 
             # Propagate only for active batch elements; restore old state for inactive.
-            _prior_mean, _prior_cov = apply_masked(
-                self.propagate_state, (delta, post_mean, post_cov), active
-            )
-            prior_mean = torch.where(active.unsqueeze(-1), _prior_mean, post_mean)
-            prior_cov = torch.where(
-                active.unsqueeze(-1).unsqueeze(-1), _prior_cov, post_cov
+            prior_mean, prior_cov = update_masked(
+                self.propagate_state,
+                (delta, post_mean, post_cov),
+                target=(post_mean, post_cov),
+                mask=active,
             )
 
-            # Only update state for batch elements that have context at this step.
-            # fill_value=0.0 avoids the 0*NaN gradient issue from torch.where.
-            _post_mean, _post_cov = apply_masked(
+            # Update only for batch elements that have context at this step.
+            post_mean, post_cov = update_masked(
                 self.update_state,
                 (y, y_var, ctx_mask, prior_mean, prior_cov),
-                ctx_mask,
-                fill_value=0.0,
-            )
-            post_mean = torch.where(ctx_mask.unsqueeze(-1), _post_mean, prior_mean)
-            post_cov = torch.where(
-                ctx_mask.unsqueeze(-1).unsqueeze(-1), _post_cov, prior_cov
+                target=(prior_mean, prior_cov),
+                mask=ctx_mask,
             )
 
             # Decode at query steps; NaN elsewhere via apply_masked fill.
