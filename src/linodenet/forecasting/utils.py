@@ -488,29 +488,22 @@ class BatchedDenseArgs:
         M = self.query_mask
         batch_shape = X.shape[:-2]
 
-        context_counts = C.sum(dim=(-2, -1))  # (...)
-        num_context = int(context_counts.max().item())
+        # `nonzero` orders entries by batch, then time, then channel. Subtracting
+        # the number of earlier valid entries in the same batch converts the global
+        # nonzero order into a 0-based ragged position for that batch item.
         *ctx_batch_idx, ctx_time, c_channel = C.nonzero(as_tuple=True)
-        context_offsets = (
-            context_counts.flatten().cumsum(dim=0).reshape(batch_shape) - context_counts
-        )
-        context_indices = (
-            *ctx_batch_idx,
-            torch.arange(ctx_time.numel(), device=ctx_time.device)
-            - context_offsets[*ctx_batch_idx],
-        )
+        counts = C.sum(dim=(-2, -1))  # (...)
+        positions = torch.arange(ctx_time.numel(), device=ctx_time.device)
+        offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts
+        context_indices = (*ctx_batch_idx, positions - offsets[*ctx_batch_idx])
+        num_context = int(counts.max().item())
 
-        query_counts = M.sum(dim=(-2, -1))  # (...)
-        num_query = int(query_counts.max().item())
         *q_batch_idx, q_time, q_channel = M.nonzero(as_tuple=True)
-        query_offsets = (
-            query_counts.flatten().cumsum(dim=0).reshape(batch_shape) - query_counts
-        )
-        query_indices = (
-            *q_batch_idx,
-            torch.arange(q_time.numel(), device=q_time.device)
-            - query_offsets[*q_batch_idx],
-        )
+        counts = M.sum(dim=(-2, -1))  # (...)
+        positions = torch.arange(q_time.numel(), device=q_time.device)
+        offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts
+        query_indices = (*q_batch_idx, positions - offsets[*q_batch_idx])
+        num_query = int(counts.max().item())
 
         return BatchedTripletArgs(
             context_times=scatter_fill(
