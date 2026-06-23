@@ -490,13 +490,19 @@ class CRU(nn.Module):
 
         # pad with NaN
         context_times_tensor = pad_sequence(
-            context_times, batch_first=True, padding_value=torch.nan
+            context_times,  # type: ignore[arg-type]
+            batch_first=True,
+            padding_value=torch.nan,
         )
         context_values_tensor = pad_sequence(
-            context_values, batch_first=True, padding_value=torch.nan
+            context_values,  # type: ignore[arg-type]
+            batch_first=True,
+            padding_value=torch.nan,
         )
         query_times_tensor = pad_sequence(
-            query_times, batch_first=True, padding_value=torch.nan
+            query_times,  # type: ignore[arg-type]
+            batch_first=True,
+            padding_value=torch.nan,
         )
         return self(query_times_tensor, context_times_tensor, context_values_tensor)
 
@@ -505,7 +511,7 @@ class CRU(nn.Module):
         query_times: Tensor,  # [..., Q]
         context_times: Tensor,  # [..., T]
         context_values: Tensor,  # [..., T, N]
-    ) -> Distribution:
+    ) -> tuple[Tensor, Tensor]:  # [..., Q, N], [..., Q, N]
         r"""Return the predictive distribution at ``query_times``.
 
         To create batches whose members have varying sequence length,
@@ -553,12 +559,12 @@ class CRU(nn.Module):
             dim=-1,
         ).expand(*batch_shape, d, 3)  # (..., d, 3)
 
-        prior_means_list = []
-        prior_variances_list = []
-        posterior_means_list = []
-        posterior_variances_list = []
-        pred_means_list = []
-        pred_variances_list = []
+        prior_means_list: list[Tensor] = []
+        prior_vars_list: list[Tensor] = []
+        post_means_list: list[Tensor] = []
+        post_vars_list: list[Tensor] = []
+        pred_means_list: list[Tensor] = []
+        pred_vars_list: list[Tensor] = []
 
         # forward loop over sequence length
         for dt, y, y_var, mask in zip(
@@ -576,15 +582,15 @@ class CRU(nn.Module):
             )
 
             prior_means_list.append(prior_mean)
-            prior_variances_list.append(prior_cov)
-            posterior_means_list.append(post_mean)
-            posterior_variances_list.append(post_cov)
+            prior_vars_list.append(prior_cov)
+            post_means_list.append(post_mean)
+            post_vars_list.append(post_cov)
 
         # create buffers of the trajectory
         self.prior_means = torch.stack(prior_means_list, dim=-2)
-        self.prior_variances = torch.stack(prior_variances_list, dim=-3)
-        self.posterior_means = torch.stack(posterior_means_list, dim=-2)
-        self.posterior_variances = torch.stack(posterior_variances_list, dim=-3)
+        self.prior_variances = torch.stack(prior_vars_list, dim=-3)
+        self.posterior_means = torch.stack(post_means_list, dim=-2)
+        self.posterior_variances = torch.stack(post_vars_list, dim=-3)
 
         # select the last valid state for each batch element
         last_post_mean = torch.take_along_dim(
@@ -611,11 +617,11 @@ class CRU(nn.Module):
             mean, cov = apply_masked(self.propagate_state, (dt, mean, cov), mask)
             pred_mean, pred_var = apply_masked(self.decoder, (mean, cov), mask)
             pred_means_list.append(pred_mean)
-            pred_variances_list.append(pred_var)
+            pred_vars_list.append(pred_var)
 
         return (
             torch.stack(pred_means_list, dim=-2),
-            torch.stack(pred_variances_list, dim=-2),
+            torch.stack(pred_vars_list, dim=-2),
         )
 
     def transition_matrix_model(self, mean: Tensor) -> Tensor:
