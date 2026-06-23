@@ -232,20 +232,15 @@ class DenseArg:
         Y = self.query_values
 
         time_indices, context_channels = C.nonzero(as_tuple=True)  # O×2
-        context_times = T[time_indices]
-        context_values = X[time_indices, context_channels]
-
         query_indices, query_channels = M.nonzero(as_tuple=True)
-        query_times = Q[query_indices]
-        query_values = Y[query_indices, query_channels] if Y is not None else None
 
         return TripletArg(
-            context_times=context_times,
+            context_times=T[time_indices],
             context_channels=context_channels,
-            context_values=context_values,
-            query_times=query_times,
+            context_values=X[time_indices, context_channels],
+            query_times=Q[query_indices],
             query_channels=query_channels,
-            query_values=query_values,
+            query_values=Y[query_indices, query_channels] if Y is not None else None,
             static_covariates=self.static_covariates,
         )
 
@@ -257,37 +252,34 @@ class DenseArg:
         T = self.context_times
         Q = self.query_times
 
-        *_, context_size, context_dim = X.shape
-        *_, query_size, query_dim = M.shape
+        *_, ctx_size, ctx_dim = X.shape
+        *_, q_size, q_dim = M.shape
 
-        T = torch.cat([T, Q], dim=-1)
-        X = torch.cat(
-            [X, X.new_full((query_size, context_dim), nan)],
-            dim=-2,
-        )
-        C = torch.cat(
-            [C, C.new_zeros((query_size, context_dim))],
-            dim=-2,
-        )
-        Y = (
-            None
-            if Y is None
-            else torch.cat(
-                [Y.new_full((context_size, query_dim), nan), Y],
-                dim=-2,
-            )
-        )
-        M = torch.cat(
-            [M.new_zeros((context_size, query_dim)), M],
-            dim=-2,
-        )
-        indices = torch.argsort(T, dim=-1, stable=True)
+        times = torch.cat([T, Q], dim=-1)
+        perm = torch.argsort(times, dim=-1, stable=True).unsqueeze(-1)
+
         return CombinedArg(
-            times=T[..., indices],
-            context_values=X[..., indices, :],
-            context_mask=C[..., indices, :],
-            query_values=Y[..., indices, :] if Y is not None else None,
-            query_mask=M[..., indices, :],
+            times=times.take_along_dim(perm.squeeze(-1), dim=-1),
+            context_values=torch.cat(
+                [X, X.new_full((q_size, ctx_dim), nan)],
+                dim=-2,
+            ).take_along_dim(perm, dim=-2),
+            context_mask=torch.cat(
+                [C, C.new_zeros((q_size, ctx_dim))],
+                dim=-2,
+            ).take_along_dim(perm, dim=-2),
+            query_values=(
+                None
+                if Y is None
+                else torch.cat(
+                    [Y.new_full((ctx_size, q_dim), nan), Y],
+                    dim=-2,
+                ).take_along_dim(perm, dim=-2)
+            ),
+            query_mask=torch.cat(
+                [M.new_zeros((ctx_size, q_dim)), M],
+                dim=-2,
+            ).take_along_dim(perm, dim=-2),
             static_covariates=self.static_covariates,
         )
 
@@ -496,81 +488,71 @@ class BatchedDenseArgs:
         M = self.query_mask
         batch_shape = X.shape[:-2]
 
-        X_valid = C
-        context_counts = X_valid.sum(dim=(-2, -1))  # (...)
+        context_counts = C.sum(dim=(-2, -1))  # (...)
         num_context = int(context_counts.max().item())
-        *batch_idx, t_idx, c_idx = X_valid.nonzero(as_tuple=True)
+        *ctx_batch_idx, ctx_time, c_channel = C.nonzero(as_tuple=True)
         context_offsets = (
             context_counts.flatten().cumsum(dim=0).reshape(batch_shape) - context_counts
         )
-        positions = (
-            torch.arange(t_idx.numel(), device=t_idx.device)
-            - context_offsets[*batch_idx]
-        )
-        context_indices = (*batch_idx, positions)
-
-        context_times = scatter_fill(
-            (*batch_shape, num_context),
-            context_indices,
-            T[*batch_idx, t_idx],
-            fill_value=nan,
-        )
-        context_channels = scatter_fill(
-            (*batch_shape, num_context),
-            context_indices,
-            c_idx,
-            fill_value=-1,
-        )
-        context_values = scatter_fill(
-            (*batch_shape, num_context),
-            context_indices,
-            X[*batch_idx, t_idx, c_idx],
-            fill_value=nan,
+        context_indices = (
+            *ctx_batch_idx,
+            torch.arange(ctx_time.numel(), device=ctx_time.device)
+            - context_offsets[*ctx_batch_idx],
         )
 
-        M_dense = M
-        query_counts = M_dense.sum(dim=(-2, -1))  # (...)
+        query_counts = M.sum(dim=(-2, -1))  # (...)
         num_query = int(query_counts.max().item())
-
-        *batch_idx, t_idx, c_idx = M_dense.nonzero(as_tuple=True)
+        *q_batch_idx, q_time, q_channel = M.nonzero(as_tuple=True)
         query_offsets = (
             query_counts.flatten().cumsum(dim=0).reshape(batch_shape) - query_counts
         )
-        positions = (
-            torch.arange(t_idx.numel(), device=t_idx.device) - query_offsets[*batch_idx]
-        )
-        query_indices = (*batch_idx, positions)
-
-        query_times = scatter_fill(
-            (*batch_shape, num_query),
-            query_indices,
-            Q[*batch_idx, t_idx],
-            fill_value=nan,
-        )
-        query_channels = scatter_fill(
-            (*batch_shape, num_query),
-            query_indices,
-            c_idx,
-            fill_value=-1,
-        )
-        query_values = (
-            None
-            if Y is None
-            else scatter_fill(
-                (*batch_shape, num_query),
-                query_indices,
-                Y[*batch_idx, t_idx, c_idx],
-                fill_value=nan,
-            )
+        query_indices = (
+            *q_batch_idx,
+            torch.arange(q_time.numel(), device=q_time.device)
+            - query_offsets[*q_batch_idx],
         )
 
         return BatchedTripletArgs(
-            context_times=context_times,
-            context_channels=context_channels,
-            context_values=context_values,
-            query_times=query_times,
-            query_channels=query_channels,
-            query_values=query_values,
+            context_times=scatter_fill(
+                (*batch_shape, num_context),
+                context_indices,
+                T[*ctx_batch_idx, ctx_time],
+                fill_value=nan,
+            ),
+            context_channels=scatter_fill(
+                (*batch_shape, num_context),
+                context_indices,
+                c_channel,
+                fill_value=-1,
+            ),
+            context_values=scatter_fill(
+                (*batch_shape, num_context),
+                context_indices,
+                X[*ctx_batch_idx, ctx_time, c_channel],
+                fill_value=nan,
+            ),
+            query_times=scatter_fill(
+                (*batch_shape, num_query),
+                query_indices,
+                Q[*q_batch_idx, q_time],
+                fill_value=nan,
+            ),
+            query_channels=scatter_fill(
+                (*batch_shape, num_query),
+                query_indices,
+                q_channel,
+                fill_value=-1,
+            ),
+            query_values=(
+                None
+                if Y is None
+                else scatter_fill(
+                    (*batch_shape, num_query),
+                    query_indices,
+                    Y[*q_batch_idx, q_time, q_channel],
+                    fill_value=nan,
+                )
+            ),
             static_covariates=self.static_covariates,
         )
 
