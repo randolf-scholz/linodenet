@@ -1,0 +1,1193 @@
+r"""Separable flows."""
+
+__all__ = [
+    # constants
+    "DEFAULT_MIN_BIN_HEIGHT",
+    "DEFAULT_MIN_BIN_WIDTH",
+    "DEFAULT_MIN_DERIVATIVE",
+    # classes
+    "MarginalizableNormalizingFlow",
+    "BinKnots",
+    "LearnableLRS",
+    "LinearRationalSpline",
+    "ModuleSequence",
+    "MultiHeadGaussian",
+    "SplineCoefficients",
+    "SplineFlow",
+    "UnconstrainedLinearRationalSpline",
+    # functions
+    "inverse_softplus",
+]
+
+
+import math
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from typing import TYPE_CHECKING, Final, NamedTuple, Optional, overload
+
+import torch
+from torch import Tensor, nn
+from torch.linalg import cholesky, solve_triangular
+from torch.nn import functional as F
+
+DEFAULT_MIN_BIN_WIDTH: Final[float] = 1e-3
+DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3
+DEFAULT_MIN_DERIVATIVE: Final[float] = 1e-3
+
+
+class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
+    r"""Wrapper for ModuleList to make it a generic Sequence type."""
+
+    if TYPE_CHECKING:
+        _modules: Mapping[str, M]  # type: ignore[override]
+
+        # noinspection PyMissingConstructor
+        def __init__(self, _: Iterable[M] = (), /) -> None: ...
+        def __iter__(self) -> Iterator[M]: ...
+
+    @overload
+    def __getitem__(self, index: int, /) -> M: ...  # pyrefly: ignore[bad-override]
+    @overload
+    def __getitem__(self, index: slice, /) -> ModuleSequence[M]: ...
+    def __getitem__(self, index: int | slice, /) -> M | ModuleSequence[M]:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if isinstance(index, slice):
+            modules = list(self._modules.values())
+            selection = modules[index]
+            return ModuleSequence(selection)
+        return self._modules[self._get_abs_string_index(index)]
+
+
+def _centered_cumulative_knots(widths: Tensor, center: Tensor, /) -> Tensor:
+    r"""Convert positive increments to centered knot coordinates."""
+    cumwidths = torch.cat(
+        [
+            widths.new_zeros(*widths.shape[:-1], 1),
+            widths.cumsum(dim=-1),
+        ],
+        dim=-1,
+    )
+    num_knots = cumwidths.shape[-1]
+    if num_knots % 2 == 1:
+        center_idx = num_knots // 2
+        center_offset = cumwidths[..., center_idx : center_idx + 1]
+    else:
+        right_center_idx = num_knots // 2
+        left_center_idx = right_center_idx - 1
+        center_offset = 0.5 * (
+            cumwidths[..., left_center_idx : left_center_idx + 1]
+            + cumwidths[..., right_center_idx : right_center_idx + 1]
+        )
+
+    return cumwidths - center_offset + center.unsqueeze(-1)
+
+
+class BinKnots(NamedTuple):
+    r"""Knot parameters that specify a rational linear spline."""
+
+    # position of knots as well as derivatives and lambda-parameters
+    x: Tensor  # (..., K+1)
+    y: Tensor  # (..., K+1)
+    lambdas: Tensor  # (..., K)
+    derivatives: Tensor  # (..., K+1)
+
+    def to(self, dtype: torch.dtype | None, device: torch.device | None) -> BinKnots:
+        return BinKnots(
+            x=self.x.to(dtype=dtype, device=device),
+            y=self.y.to(dtype=dtype, device=device),
+            lambdas=self.lambdas.to(dtype=dtype, device=device),
+            derivatives=self.derivatives.to(dtype=dtype, device=device),
+        )
+
+    def to_coefficients(self) -> SplineCoefficients:
+        return SplineCoefficients.from_knots(self)
+
+
+class SplineCoefficients(NamedTuple):
+    r"""Tuple of coefficients for a rational linear spline."""
+
+    lam: Tensor  # (..., K)
+    wa: Tensor  # (..., K)
+    wb: Tensor  # (..., K)
+    wc: Tensor  # (..., K)
+    ya: Tensor  # (..., K)
+    yb: Tensor  # (..., K)
+    yc: Tensor  # (..., K)
+    xa: Tensor  # (..., K)
+    xb: Tensor  # (..., K)
+    xc: Tensor  # (..., K)
+
+    @staticmethod
+    def from_knots(knots: BinKnots) -> SplineCoefficients:
+        r"""Get the spline coefficients for the given knots shape: (..., K)."""
+        x = knots.x  # (..., K)
+        y = knots.y  # (..., K)
+        λ = knots.lambdas  # (..., K)
+        d = knots.derivatives  # (..., K)
+        widths = x.diff(dim=-1)  # (..., K)
+        heights = y.diff(dim=-1)  # (..., K)
+        deltas = heights / widths  # (..., K)
+        d_now = d[..., :-1]  # (..., K)
+        d_next = d[..., 1:]  # (..., K)
+
+        wa = torch.ones_like(d_now)
+        wb = torch.sqrt(d_now / d_next) * wa
+        wc = ((1 - λ) * wb * d_next + λ * wa * d_now) / deltas
+
+        ya = y[..., :-1]  # (..., K)
+        yb = y[..., 1:]  # (..., K)
+        yc = ((1 - λ) * wa * ya + λ * wb * yb) / ((1 - λ) * wa + λ * wb)
+
+        xa = x[..., :-1]  # (..., K)
+        xb = x[..., 1:]
+        xc = (1 - λ) * xa + λ * xb
+
+        return SplineCoefficients(λ, wa, wb, wc, ya, yb, yc, xa, xb, xc)
+
+    @staticmethod
+    def from_selected_knots(knots: BinKnots, bin_idx: Tensor, /) -> SplineCoefficients:
+        r"""Get the spline coefficients for the selected bins.
+
+        Args:
+            knots: The bin parameters (shape: (..., K)).
+            bin_idx: The selected bin indices (shape: (...) with entries in {0, ..., K-1}).
+
+        Returns:
+            SplineCoefficients: The coefficients for the selected bins (shape: (...)).
+        """
+        # bin_idx: LongTensor with entries 0...K-1
+        xa = knots.x.gather(-1, bin_idx).squeeze(-1)  # (...)
+        xb = knots.x.gather(-1, bin_idx + 1).squeeze(-1)  # (...)
+
+        ya = knots.y.gather(-1, bin_idx).squeeze(-1)  # (...)
+        yb = knots.y.gather(-1, bin_idx + 1).squeeze(-1)  # (...)
+
+        da = knots.derivatives.gather(-1, bin_idx).squeeze(-1)  # (...)
+        db = knots.derivatives.gather(-1, bin_idx + 1).squeeze(-1)  # (...)
+
+        λ = knots.lambdas.gather(-1, bin_idx).squeeze(-1)  # (...)
+
+        wa = torch.ones_like(da)
+        wb = torch.sqrt(da / db) * wa
+        wc = ((1 - λ) * wb * db + λ * wa * da) * (xb - xa) / (yb - ya)
+        xc = (1 - λ) * xa + λ * xb
+        yc = ((1 - λ) * wa * ya + λ * wb * yb) / ((1 - λ) * wa + λ * wb)
+
+        return SplineCoefficients(λ, wa, wb, wc, ya, yb, yc, xa, xb, xc)
+
+
+def _lrs_encode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
+    r"""Evaluate the bounded LRS forward map and log|det J| at inputs."""
+    num_bins = knots.x.shape[-1] - 1
+    bin_idx = torch.searchsorted(
+        knots.x[..., 1:-1].contiguous(), inputs.unsqueeze(-1), side="right"
+    ).clip(0, num_bins - 1)
+
+    lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = SplineCoefficients.from_selected_knots(
+        knots, bin_idx
+    )
+
+    phi = (inputs - xa) / (xb - xa)
+    numerator = torch.where(
+        phi <= lam,
+        (lam - phi) * wa * ya + phi * wc * yc,
+        (1 - phi) * wc * yc + (phi - lam) * wb * yb,
+    )
+    denominator = torch.where(
+        phi <= lam,
+        (lam - phi) * wa + phi * wc,
+        (1 - phi) * wc + (phi - lam) * wb,
+    )
+    derivative_numerator = torch.where(
+        phi <= lam,
+        lam * wa * wc * (yc - ya),
+        (1 - lam) * wb * wc * (yb - yc),
+    ) / (xb - xa)  # fmt: skip
+    logabsdet = derivative_numerator.log() - 2 * denominator.abs().log()
+    return numerator / denominator, logabsdet
+
+
+def _lrs_decode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
+    r"""Evaluate the bounded LRS inverse map and log|det J| at inputs."""
+    num_bins = knots.y.shape[-1] - 1
+    bin_idx = torch.searchsorted(
+        knots.y[..., 1:-1].contiguous(), inputs.unsqueeze(-1), side="right"
+    ).clip(0, num_bins - 1)
+
+    lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = SplineCoefficients.from_selected_knots(
+        knots, bin_idx
+    )
+
+    numerator = torch.where(
+        inputs <= yc,
+        lam * wa * (ya - inputs),
+        lam * wb * (yb - inputs) + wc * (inputs - yc),
+    )
+    denominator = torch.where(
+        inputs <= yc,
+        (wc - wa) * inputs + wa * ya - wc * yc,
+        (wc - wb) * inputs + wb * yb - wc * yc,
+    )
+    derivative_numerator = (xb - xa) * torch.where(
+        inputs <= yc,
+        lam * wa * wc * (yc - ya),
+        (1 - lam) * wb * wc * (yb - yc),
+    )
+    logabsdet = derivative_numerator.log() - 2 * denominator.abs().log()
+    return (xb - xa) * (numerator / denominator) + xa, logabsdet
+
+
+class LinearRationalSpline(nn.Module):
+    r"""Non-trainable Linear Rational Spline."""
+
+    # BUFFERS
+    MIN_BIN_WIDTH: Tensor
+    MIN_BIN_HEIGHT: Tensor
+    MIN_DERIVATIVE: Tensor
+
+    use_fp64: Final[bool]
+
+    def __init__(
+        self,
+        *,
+        min_bin_width: float = DEFAULT_MIN_BIN_WIDTH,
+        min_bin_height: float = DEFAULT_MIN_BIN_HEIGHT,
+        min_derivative: float = DEFAULT_MIN_DERIVATIVE,
+        use_fp64: bool = True,
+    ) -> None:
+        super().__init__()
+        self.use_fp64 = use_fp64
+        dtype = torch.float64 if use_fp64 else torch.float32
+        self.register_buffer(
+            "MIN_DERIVATIVE", torch.tensor(float(min_derivative), dtype=dtype)
+        )
+        self.register_buffer(
+            "MIN_BIN_WIDTH", torch.tensor(float(min_bin_width), dtype=dtype)
+        )
+        self.register_buffer(
+            "MIN_BIN_HEIGHT", torch.tensor(float(min_bin_height), dtype=dtype)
+        )
+
+    def get_spline_knots(
+        self,
+        *,
+        widths: Tensor,  # (..., K)
+        heights: Tensor,  # (..., K)
+        lambdas: Tensor,  # (..., K)
+        derivatives: Tensor,  # (..., K)
+        x_center: Tensor,  # (...,)
+        y_center: Tensor,  # (...,)
+    ) -> BinKnots:
+        r"""Determine the spline parameters from the raw inputs.
+
+        Note:
+            Instead of x and y, we expect positive widths and heights together with
+            the x/y center coordinates.
+
+        Args:
+            widths: The positive widths of the bins.
+            heights: The positive heights of the bins.
+            lambdas: The raw lambdas of the bins. (λ∈(0,1)ᴷ⁻¹)
+            derivatives: The raw derivatives of the knots. (d>0)
+            x_center: The x center of the bins. (d>0)
+            y_center: The y center of the bins. (d>0)
+        """
+        work_dtype = self.MIN_DERIVATIVE.dtype
+        widths = widths.to(dtype=work_dtype)
+        heights = heights.to(dtype=work_dtype)
+        lambdas = lambdas.to(dtype=work_dtype)
+        derivatives = derivatives.to(dtype=work_dtype)
+        x_center = x_center.to(dtype=work_dtype)
+        y_center = y_center.to(dtype=work_dtype)
+
+        num_bins = widths.shape[-1]
+        assert num_bins > 0
+        assert (widths >= self.MIN_BIN_WIDTH).all()
+        assert (heights >= self.MIN_BIN_HEIGHT).all()
+        assert (lambdas > 0.0).all()
+        assert (lambdas < 1.0).all()
+        assert (derivatives > 0.0).all()
+
+        x = _centered_cumulative_knots(widths, x_center)
+        y = _centered_cumulative_knots(heights, y_center)
+
+        derivatives = derivatives.clip(self.MIN_DERIVATIVE)
+
+        return BinKnots(x=x, y=y, lambdas=lambdas, derivatives=derivatives)
+
+    def encode_and_logabsdet(
+        self,
+        inputs: Tensor,  # (...)
+        *,
+        widths: Tensor,  # (..., K)
+        heights: Tensor,  # (..., K)
+        lambdas: Tensor,  # (..., K)
+        derivatives: Tensor,  # (..., K+1)
+    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        original_dtype = inputs.dtype
+        inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
+        knots = self.get_spline_knots(
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
+            x_center=torch.zeros_like(inputs),
+            y_center=torch.zeros_like(inputs),
+        )
+        outputs, logabsdet = _lrs_encode(inputs, knots)
+        return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
+
+    def decode_and_logabsdet(
+        self,
+        inputs: Tensor,  # (...)
+        *,
+        widths: Tensor,  # (..., K)
+        heights: Tensor,  # (..., K)
+        lambdas: Tensor,  # (..., K)
+        derivatives: Tensor,  # (..., K+1)
+    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        original_dtype = inputs.dtype
+        inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
+        knots = self.get_spline_knots(
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
+            x_center=torch.zeros_like(inputs),
+            y_center=torch.zeros_like(inputs),
+        )
+        outputs, logabsdet = _lrs_decode(inputs, knots)
+        return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
+
+
+class UnconstrainedLinearRationalSpline(LinearRationalSpline):
+    r"""Non-trainable unconstrained LRS with linear tails."""
+
+    def encode_and_logabsdet(
+        self,
+        inputs: Tensor,  # (...)
+        *,
+        widths: Tensor,  # (..., K)
+        heights: Tensor,  # (..., K)
+        lambdas: Tensor,  # (..., K)
+        derivatives: Tensor,  # (..., K+1)
+    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        r"""Use linear tails anchored at the learned spline endpoints."""
+        original_dtype = inputs.dtype
+        inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
+        knots = self.get_spline_knots(
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
+            x_center=torch.zeros_like(inputs),
+            y_center=torch.zeros_like(inputs),
+        )
+        outputs, logabsdet = _lrs_encode(inputs, knots)
+
+        left_x, right_x = knots.x[..., 0], knots.x[..., -1]
+        left_d, right_d = knots.derivatives[..., 0], knots.derivatives[..., -1]
+        left_mask, right_mask = inputs < left_x, inputs > right_x
+        outputs = torch.where(
+            left_mask, knots.y[..., 0] + left_d * (inputs - left_x), outputs
+        )
+        outputs = torch.where(
+            right_mask, knots.y[..., -1] + right_d * (inputs - right_x), outputs
+        )
+        logabsdet = torch.where(left_mask, left_d.log(), logabsdet)
+        logabsdet = torch.where(right_mask, right_d.log(), logabsdet)
+
+        return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
+
+    def decode_and_logabsdet(
+        self,
+        inputs: Tensor,  # (...)
+        *,
+        widths: Tensor,  # (..., K)
+        heights: Tensor,  # (..., K)
+        lambdas: Tensor,  # (..., K)
+        derivatives: Tensor,  # (..., K+1)
+    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        r"""Invert the linear tails anchored at the learned spline endpoints."""
+        original_dtype = inputs.dtype
+        inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
+        knots = self.get_spline_knots(
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
+            x_center=torch.zeros_like(inputs),
+            y_center=torch.zeros_like(inputs),
+        )
+        outputs, logabsdet = _lrs_decode(inputs, knots)
+
+        left_y, right_y = knots.y[..., 0], knots.y[..., -1]
+        left_x, right_x = knots.x[..., 0], knots.x[..., -1]
+        left_d, right_d = knots.derivatives[..., 0], knots.derivatives[..., -1]
+        left_mask, right_mask = inputs < left_y, inputs > right_y
+        outputs = torch.where(left_mask, left_x + (inputs - left_y) / left_d, outputs)
+        outputs = torch.where(
+            right_mask, right_x + (inputs - right_y) / right_d, outputs
+        )
+        logabsdet = torch.where(left_mask, -left_d.log(), logabsdet)
+        logabsdet = torch.where(right_mask, -right_d.log(), logabsdet)
+
+        return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
+
+
+class LearnableLRS(nn.Module):
+    r"""Trainable Linear Rational Spline."""
+
+    n_heads: Final[torch.Size]  # tuple[*H]
+    r"""Number of mixture components."""
+    num_bins: Final[int]
+    r"""Number of rational linear spline components."""
+
+    # Parameters
+    widths: Tensor  # (*H, K)
+    heights: Tensor  # (*H, K)
+    lambdas: Tensor  # (*H, K)
+    derivatives: Tensor  # (*H, K+1)
+    x_center: Tensor  # (*H,)
+    y_center: Tensor  # (*H,)
+
+    spline: UnconstrainedLinearRationalSpline
+
+    def __init__(
+        self,
+        n_heads: int | tuple[int, ...],
+        *,
+        num_bins: int,
+        x_bounds: tuple[float, float],
+        y_bounds: tuple[float, float],
+        use_fp64: bool = True,
+    ) -> None:
+        super().__init__()
+        #  Constants
+        self.num_bins = int(num_bins)
+        self.x_bounds = x_bounds
+        self.y_bounds = y_bounds
+        self.n_heads = torch.Size((n_heads,) if isinstance(n_heads, int) else n_heads)
+        left, right = x_bounds
+        bottom, top = y_bounds
+        assert left < right
+        assert bottom < top
+        slope = (top - bottom) / (right - left)
+        assert slope > 0.0
+        width_init = (right - left) / self.num_bins
+        height_init = (top - bottom) / self.num_bins
+        min_bin_width = float(DEFAULT_MIN_BIN_WIDTH)
+        min_bin_height = float(DEFAULT_MIN_BIN_HEIGHT)
+        assert width_init > min_bin_width
+        assert height_init > min_bin_height
+
+        def _inverse_softplus(value: float, /) -> float:
+            return value + math.log(-math.expm1(-value))
+
+        # Parameters
+        self.widths = nn.Parameter(
+            torch.full(
+                (*self.n_heads, num_bins),
+                _inverse_softplus(width_init - min_bin_width),
+            )
+        )
+        self.heights = nn.Parameter(
+            torch.full(
+                (*self.n_heads, num_bins),
+                _inverse_softplus(height_init - min_bin_height),
+            )
+        )
+        self.lambdas = nn.Parameter(torch.zeros(*self.n_heads, num_bins))
+        self.derivatives = nn.Parameter(
+            torch.full((*self.n_heads, num_bins + 1), _inverse_softplus(slope))
+        )
+        self.x_center = nn.Parameter(torch.full(self.n_heads, 0.5 * (left + right)))
+        self.y_center = nn.Parameter(torch.full(self.n_heads, 0.5 * (bottom + top)))
+        # Submodules
+        self.spline = UnconstrainedLinearRationalSpline(use_fp64=use_fp64)
+
+    def spline_parameters(
+        self, batch_shape: tuple[int, ...], /
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        r"""Expand spline parameters to match the batch shape."""
+        widths = self.spline.MIN_BIN_WIDTH + F.softplus(self.widths)
+        heights = self.spline.MIN_BIN_HEIGHT + F.softplus(self.heights)
+        lambdas = torch.sigmoid(self.lambdas)
+        derivatives = F.softplus(self.derivatives)
+
+        return (
+            widths.expand(*batch_shape, *widths.shape),
+            heights.expand(*batch_shape, *heights.shape),
+            lambdas.expand(*batch_shape, *lambdas.shape),
+            derivatives.expand(*batch_shape, *derivatives.shape),
+        )
+
+    @torch.no_grad()
+    def marginalize(self, kept: list[int] | Tensor) -> LearnableLRS:
+        r"""Marginalize out the specified variables.
+
+        Assumes that n_heads = (*heads, dims),
+        and that the last dimension corresponds to the features.
+        """
+        device = self.widths.device
+        kept = torch.as_tensor(kept, device=device)
+        if kept.dtype == torch.bool:
+            assert kept.shape == (self.n_heads[-1],)
+            num_kept = int(kept.sum().item())
+            kept = kept.nonzero(as_tuple=False).squeeze(-1)
+        else:
+            assert kept.min() >= 0
+            assert kept.max() < self.n_heads[-1]
+            num_kept = len(kept)
+
+        new_heads = (*self.n_heads[:-1], num_kept)
+        new = LearnableLRS(
+            n_heads=new_heads,
+            num_bins=self.num_bins,
+            x_bounds=self.x_bounds,
+            y_bounds=self.y_bounds,
+        ).to(device=device)
+
+        # remove the specified variables from the parameters
+        marg_widths = self.widths.index_select(dim=-2, index=kept)
+        marg_heights = self.heights.index_select(dim=-2, index=kept)
+        marg_lambdas = self.lambdas.index_select(dim=-2, index=kept)
+        marg_derivatives = self.derivatives.index_select(dim=-2, index=kept)
+        marg_x_center = self.x_center.index_select(dim=-1, index=kept)
+        marg_y_center = self.y_center.index_select(dim=-1, index=kept)
+
+        new.widths.copy_(marg_widths)
+        new.heights.copy_(marg_heights)
+        new.lambdas.copy_(marg_lambdas)
+        new.derivatives.copy_(marg_derivatives)
+        new.x_center.copy_(marg_x_center)
+        new.y_center.copy_(marg_y_center)
+        return new
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        r"""Forward pass of the flow.
+
+        Args:
+            x (..., *H, D): input tensor
+
+        Returns:
+            y (..., *H, D): transformed tensor
+            ldj (..., *H): log determinant of the Jacobian
+        """
+        batch_shape = x.shape[: -len(self.n_heads)] if self.n_heads else x.shape
+        widths, heights, lambdas, derivatives = self.spline_parameters(batch_shape)
+        y, logabsdet = self.spline.encode_and_logabsdet(
+            x - self.x_center,
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
+        )
+        y = y + self.y_center
+        return y, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        r"""Inverse pass of the flow.
+
+        Args:
+            y (..., *H, D): input tensor
+
+        Returns:
+            x (..., *H, D): transformed tensor
+            ldj (..., *H): log determinant of the Jacobian
+        """
+        batch_shape = y.shape[: -len(self.n_heads)] if self.n_heads else y.shape
+        widths, heights, lambdas, derivatives = self.spline_parameters(batch_shape)
+        y = y - self.y_center
+        x, logabsdet = self.spline.decode_and_logabsdet(
+            y,
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
+        )
+        x = x + self.x_center
+        return x, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
+
+
+class SplineFlow(ModuleSequence[LearnableLRS]):
+    r"""Implements a sequence of rational linear spline layers."""
+
+    @classmethod
+    def from_iterable(cls, layers: Iterable[LearnableLRS], /) -> SplineFlow:
+        r"""Create a SplineFlow from an iterable of LRS layers."""
+        new = SplineFlow.__new__(SplineFlow)
+        super(SplineFlow, new).__init__(layers)
+        return new
+
+    def __init__(
+        self,
+        n_heads: int | tuple[int, ...] = (),
+        *,
+        num_flow_layers: int,
+        num_bins: int,
+        x_bounds: tuple[float, float],
+        y_bounds: tuple[float, float],
+        use_fp64: bool = True,
+    ) -> None:
+        layers = [
+            LearnableLRS(
+                n_heads,
+                num_bins=num_bins,
+                x_bounds=x_bounds,
+                y_bounds=y_bounds,
+                use_fp64=use_fp64,
+            )
+            for _ in range(num_flow_layers)
+        ]
+        super().__init__(layers)
+
+    def marginalize(self, variables: list[int] | Tensor) -> SplineFlow:
+        r"""Marginalize out the specified variables."""
+        return SplineFlow.from_iterable(layer.marginalize(variables) for layer in self)
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        logabsdets: list[Tensor] = []
+
+        for layer in self:
+            x, logabsdet = layer.encode_and_logabsdet(x)
+            logabsdets.append(logabsdet)
+
+        logabsdet = torch.stack(logabsdets, dim=-1).sum(dim=-1)
+        return x, logabsdet
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        logabsdets: list[Tensor] = []
+
+        for layer in reversed(self):
+            y, logabsdet = layer.decode_and_logabsdet(y)
+            logabsdets.append(logabsdet)
+
+        logabsdet = torch.stack(logabsdets, dim=-1).sum(dim=-1)
+        return y, logabsdet
+
+
+def inverse_softplus(y: Tensor) -> Tensor:
+    r"""Compute the inverse of the softplus function.
+
+    y = softplus(x) = log(1 + exp(x))
+    x = inverse_softplus(y) = log(exp(y) - 1) = y + log(1 - exp(-y)) = y + log(-expm1(-y))
+    """
+    return y + torch.log(-torch.expm1(-y))
+
+
+class MultiHeadGaussian(nn.Module):
+    r"""Implements a multi-head Gaussian distribution."""
+
+    normalization_constant: Tensor
+    r"""CONST: Normalization constant of a Gaussian distribution."""
+    num_heads: Final[int]
+    r"""CONST: Shape of heads"""
+    num_features: Final[int]
+    r"""CONST: Number of features in input."""
+
+    # parameters/buffers
+    means: Tensor
+    r"""PARAM: Means of the gaussians."""
+    scale_tril: Tensor  # shape: (n_gaussians, n_inputs, n_inputs)
+    r"""PARAM: Parameters determining the covariances."""
+
+    # non-permanent buffers
+    eye: Tensor
+    r"""BUFFER: Identity matrix."""
+    covs: Tensor
+    r"""BUFFER: Covariances of the gaussians."""
+    cholesky_factor: Tensor  # shape: (n_gaussians, n_inputs, n_inputs)
+    r"""BUFFER: Cholesky factor of the covariance matrix."""
+    samples: Tensor
+    r"""BUFFER: Stored samples when sampling."""
+    latents: Tensor
+    r"""BUFFER: Stored latents when evaluating log_probs."""
+    log_probs: Tensor
+    r"""BUFFER: Stored log_probs when evaluating log_probs."""
+
+    @staticmethod
+    def _sample_default_means(n_heads: int, n_feats: int) -> Tensor:
+        r"""Sample default means $μᵢ∼𝓝(0,1)$, normalized."""
+        means = torch.randn(n_heads, n_feats)
+        means = means / means.norm(dim=-1, keepdim=True)
+        return means
+
+    @staticmethod
+    def _sample_default_covs(n_heads: int, n_feats: int) -> Tensor:
+        r"""Sample default covariances."""
+        noise = (2 * torch.rand(n_heads, n_feats, n_feats) - 1) / (2 * n_feats)
+        return torch.eye(n_feats) + noise
+
+    def __init__(
+        self,
+        n_heads: int,
+        n_feats: int,
+        *,
+        means: Optional[Tensor] = None,
+        covs: Optional[Tensor] = None,
+    ) -> None:
+        super().__init__()
+
+        # CONSTANTS
+        self.num_heads = int(n_heads)
+        self.num_features = int(n_feats)
+        normalization_constant = (
+            0.5 * self.num_features * math.log(2 * math.pi)
+        )  # -log (2π)^{-k/2}
+        self.register_buffer(
+            "normalization_constant", torch.tensor(normalization_constant)
+        )
+        self.register_buffer("eye", torch.eye(n_feats, dtype=torch.bool))
+
+        # BUFFERS
+        self.register_buffer("covs", torch.empty(0), persistent=False)
+        self.register_buffer("cholesky_factor", torch.empty(0), persistent=False)
+        self.register_buffer("samples", torch.empty(0), persistent=False)
+        self.register_buffer("latents", torch.empty(0), persistent=False)
+        self.register_buffer("log_probs", torch.empty(0), persistent=False)
+
+        # initialize the means
+        self.means = nn.Parameter(
+            torch.as_tensor(means)
+            if means is not None
+            else self._sample_default_means(n_heads, n_feats)
+        )
+        # initialize the covariances
+        self.scale_tril = nn.Parameter(  # not a parameter!
+            torch.as_tensor(covs).tril()
+            if covs is not None
+            else self._sample_default_covs(n_heads, n_feats).tril()
+        )
+
+        assert self.means.shape == (n_heads, n_feats)
+        assert self.scale_tril.shape == (n_heads, n_feats, n_feats)
+
+    @torch.no_grad()
+    def marginalize(self, kept: list[int] | Tensor, /) -> MultiHeadGaussian:
+        r"""Marginalize the distribution over the given indices.
+
+        Given p(x,y) = 𝓝(μ, Σ), μ=[μₓ, μᵧ], Σ=[[Σₓₓ, Σₓᵧ], [Σᵧₓ, Σᵧᵧ]],
+        the marginal distribution p(y) is given by 𝓝(μᵧ, Σᵧᵧ).
+        """
+        device = self.means.device
+        kept = torch.as_tensor(kept, device=device)
+
+        if kept.dtype == torch.bool:
+            assert kept.shape == (self.num_features,)
+            num_kept = int(kept.sum().item())
+        else:
+            assert kept.min() >= 0
+            assert kept.max() < self.num_features
+            num_kept = len(kept)
+
+        orig_means = self.means
+        marg_means = orig_means[:, kept]
+        orig_covs = self.get_covariance()
+        marg_covs = orig_covs[..., kept, :][..., :, kept]
+        marg_chol = cholesky(marg_covs)
+        marg_diag = marg_chol.diagonal(dim1=-2, dim2=-1)
+        marg_tril = torch.where(
+            self.eye[..., kept, :][..., :, kept],
+            self._map_diagonal_inverse(marg_diag).unsqueeze(-1),
+            marg_chol,
+        )
+
+        marg_model = MultiHeadGaussian(
+            n_heads=self.num_heads,
+            n_feats=num_kept,
+        ).to(device=device)
+        marg_model.means.copy_(marg_means)
+        marg_model.scale_tril.copy_(marg_tril)
+
+        # double check covariance match
+        assert torch.allclose(marg_covs, marg_model.get_covariance())
+
+        return marg_model
+
+    @torch.no_grad()
+    def condition(
+        self, variables: list[int] | Tensor, values: list[float] | Tensor, /
+    ) -> MultiHeadGaussian:
+        r"""Condition the distribution on the given indices and values.
+
+        Args:
+            variables: The indices to condition on.
+            values: The values to condition on.
+
+        Given p(u,v) = 𝓝(μ, Σ), μ=[μᵤ, μᵥ], Σ=[[Σᵤᵤ, Σᵤᵥ], [Σᵥᵤ, Σᵥᵥ]],
+        the conditional distribution is given by
+
+        p(u∣v=v⁎) = 𝓝(u ∣ μᵤ + Σᵤᵥ Σᵥᵥ⁻¹ (v⁎-μᵥ), Σᵤᵤ - Σᵤᵥ Σᵥᵥ⁻¹ Σᵥᵤ)
+        note that for the cholesky factorization,
+        """
+        device = self.means.device
+        values = torch.as_tensor(values, device=device)
+        variables = torch.as_tensor(variables, device=device)
+        remaining = torch.tensor(
+            [i for i in range(self.num_features) if i not in variables],
+            device=device,
+        )
+        assert variables.max() < self.num_features
+        assert variables.shape == values.shape[-1:]
+
+        mu_u = self.means[:, remaining]
+        mu_v = self.means[:, variables]
+        orig_covs = self.get_covariance()
+        sigma_uu = orig_covs[..., remaining, :][..., :, remaining]
+        # sigma_uv = orig_covs[..., remaining, :][..., :, variables]
+        sigma_vu = orig_covs[..., variables, :][..., :, remaining]
+        sigma_vv = orig_covs[..., variables, :][..., :, variables]
+
+        L = cholesky(sigma_vv)
+        S = solve_triangular(L, sigma_vu, upper=False)  # S = L⁻¹ Σᵤᵥ, s = L⁻¹(v⁎ - μᵥ)
+        s = solve_triangular(L, (values - mu_v).unsqueeze(-1), upper=False)
+        cond_means = mu_u + torch.einsum("kpm, kpd -> km", S, s)  # μᵤ + Sᵀ s
+        cond_covs = sigma_uu - torch.einsum("kpm, kpn -> kmn", S, S)  # Σᵤᵤ - Sᵀ S
+        cond_chol = cholesky(cond_covs)
+
+        # convert cholesky factor to unconstrained parameters (reverting softplus)
+        tril_diag = self._map_diagonal_inverse(cond_chol.diagonal(dim1=-2, dim2=-1))
+        cond_tril = torch.where(
+            self.eye[..., remaining, :][..., :, remaining],
+            tril_diag.unsqueeze(-1),
+            cond_chol,
+        )
+
+        cond_model = MultiHeadGaussian(
+            n_heads=self.num_heads,
+            n_feats=self.num_features - len(variables),
+        ).to(device=device)
+
+        cond_model.means.copy_(cond_means)
+        cond_model.scale_tril.copy_(cond_tril)
+
+        # double check covariance match
+        assert torch.allclose(cond_covs, cond_model.get_covariance())
+
+        return cond_model
+
+    def _map_diagonal(self, diag: Tensor) -> Tensor:
+        r"""Map the diagonal of the cholesky factor to positive values."""
+        return F.softplus(diag) + 1e-6
+
+    def _map_diagonal_inverse(self, diag: Tensor) -> Tensor:
+        r"""Map the diagonal of the cholesky factor to unconstrained values."""
+        return inverse_softplus(diag - 1e-6)
+
+    def get_cholesky(self) -> Tensor:
+        r"""Compute cholesky factor of covariance matrix."""
+        lower = self.scale_tril.tril()
+        diag = lower.diagonal(dim1=-2, dim2=-1)
+        diag = self._map_diagonal(diag)
+        # (D, D), (M, D, 1), (M, D, D) -> (M, D, D)
+        self.cholesky_factor = torch.where(self.eye, diag.unsqueeze(-1), lower)
+        return self.cholesky_factor
+
+    def get_covariance(self) -> Tensor:
+        r"""Compute covariance matrix from cholesky factor."""
+        L = self.get_cholesky()  # M x D x D
+        self.covs = torch.einsum("mij,mkj->mik", L, L)  # L Lᵀ
+        return self.covs
+
+    def forward(self, x: Tensor) -> Tensor:
+        r"""Transform $x -> y = Lx + μ$.
+
+        Args:
+            x (..., H, D): input tensor
+
+        Returns:
+            y (..., H, D): transformed tensor
+        """
+        L = self.get_cholesky()
+        y = self.means + torch.einsum("...mj, mij -> ...mi", x, L)
+        return y
+
+    def inverse(self, y: Tensor) -> tuple[Tensor, Tensor]:
+        r"""Transform $y -> x = L⁻¹(y-μ)$.
+
+        Args:
+            y (..., H, D): input tensor
+
+        Returns:
+            x (..., H, D): transformed tensor
+            ldj (H): log determinant of the Jacobian
+        """
+        L = self.get_cholesky()
+
+        # compute z = L⁻¹(x-μ)
+        y = y - self.means
+        y = y.unsqueeze(-1)  # (..., H, D) -> (..., H, D, 1)
+        # (..., D, D), (..., D, 1) -> (..., D, 1)
+        u = solve_triangular(L, y, upper=False)
+        u = u.squeeze(-1)  # (..., D, 1) -> (..., D)
+
+        # compute log |det L⁻¹| = - log |det L|
+        #      = -log ∏ᵢ Lᵢᵢ = -∑ᵢ log Lᵢᵢ
+        ldj = -L.diagonal(dim1=-2, dim2=-1).log().sum(-1)
+        return u, ldj
+
+    def sample(self, size: int | tuple[int, ...]) -> Tensor:
+        r"""Sample from the model.
+
+        Args:
+            size (int | tuple[int, ...]): size of the sample
+
+        Returns:
+            u (..., H, D): sample
+        """
+        shape = (size,) if isinstance(size, int) else size
+        shape = (*shape, self.num_heads, self.num_features)
+        z = torch.randn(*shape, device=self.normalization_constant.device)
+        u = self.forward(z)
+        self.samples = u  # store buffer for post-hoc analysis
+        return u
+
+    def log_prob(self, u: Tensor, /) -> Tensor:
+        r"""Compute the log-likelihood of the input.
+
+        Args:
+            u (..., H, D): input tensor
+
+        Returns:
+            log_prob (..., H): log likelihood
+        """
+        self.latents = u  # store buffer for post-hoc analysis
+
+        # parse through the gaussians
+        z, ldj = self.inverse(u)
+
+        # compute the base log-likelihood
+        # log p(u) = -½ D log(2π) - ½‖z‖² - log|det L|
+        log_prob = -self.normalization_constant - 0.5 * (z * z).sum(-1)  # (..., H)
+        log_prob = log_prob + ldj  # (..., H)
+        self.log_probs = log_prob  # store buffer for post-hoc analysis
+        return log_prob
+
+
+class MarginalizableNormalizingFlow(nn.Module):
+    r"""Implements a Marginalizable Normalizing Flow."""
+
+    num_features: Final[int]
+    r"""Number of features in input."""
+    num_components: Final[int]
+    r"""Number of mixture components."""
+    num_flow_layers: Final[int]
+    r"""Number of rational linear spline layers."""
+    num_bins: Final[int]
+    r"""Number of bins in the rational linear splines."""
+    bounds: Final[tuple[float, float]]
+    r"""Tail bound of the rational linear splines."""
+
+    mixture_params: Tensor  # shape: (n_gaussians,)
+    r"""PARAM: Parameters determining the weights."""
+
+    # buffers
+    mixture_weights: Tensor
+    r"""BUFFER: Mixture weights of the gaussians."""
+    mixture_logits: Tensor
+    r"""BUFFER: Mixture weight logits log wₖ."""
+    sample_indices: Tensor
+    r"""BUFFER: Indices of the mixture components."""
+    latents: Tensor
+    r"""BUFFER: Latent state of the model."""
+    log_probs_per_head: Tensor
+    r"""BUFFER: NLL of each Gaussian component."""
+    log_probs: Tensor
+    r"""BUFFER: NLL of the Gaussian base distribution."""
+    samples: Tensor
+    r"""BUFFER: Samples from the model."""
+    logits: Tensor
+    r"""BUFFER: Mixture logits."""
+
+    # submodules
+    flow: SplineFlow
+    base: MultiHeadGaussian
+
+    def __init__(
+        self,
+        n_feats: int,
+        n_heads: int,
+        *,
+        num_flow_layers: int,
+        num_bins: int = 16,
+        bounds: tuple[float, float] = (-5, +5),
+    ) -> None:
+        super().__init__()
+        # constants
+        self.num_features = n_feats
+        self.num_flow_layers = num_flow_layers
+        self.num_components = n_heads
+        self.num_bins = num_bins
+        self.bounds = bounds if isinstance(bounds, tuple) else (bounds, bounds)
+
+        # parameters
+        initial_mixture = torch.ones(n_heads) / n_heads  # initialize 𝜔 = 1/M
+        self.mixture_params = nn.Parameter(initial_mixture)
+
+        # non-permanent buffers
+        self.register_buffer("mixture_weights", torch.empty(0), persistent=False)
+        self.register_buffer("mixture_logits", torch.empty(0), persistent=False)
+        self.register_buffer("sample_indices", torch.empty(0), persistent=False)
+        self.register_buffer("latents", torch.empty(0), persistent=False)
+        self.register_buffer("samples", torch.empty(0), persistent=False)
+        self.register_buffer("log_probs", torch.empty(0), persistent=False)
+        self.register_buffer("log_probs_per_head", torch.empty(0), persistent=False)
+
+        # NOTE: splines should be local, so instead of mapping fixed [left, right] -> [bottom, top]
+        #  we should perform an offset accoring to the mean of each gaussian.
+
+        # submodules
+        self.flow = SplineFlow(
+            (n_heads, n_feats),
+            num_flow_layers=num_flow_layers,
+            num_bins=num_bins,
+            x_bounds=self.bounds,
+            y_bounds=self.bounds,
+        )
+        self.base = MultiHeadGaussian(n_heads=n_heads, n_feats=n_feats)
+
+    def get_mixture_weights(self) -> Tensor:
+        r"""Compute mixture weights from mixture parameters."""
+        weights = self.mixture_params.softmax(dim=0)
+        self.mixture_weights = weights
+        return weights
+
+    def get_mixture_logits(self) -> Tensor:
+        r"""Compute mixture logits from mixture parameters."""
+        logits = self.mixture_params.log_softmax(dim=0)
+        self.mixture_logits = logits
+        return logits
+
+    def log_prob(self, inputs: Tensor) -> Tensor:
+        r"""Compute the log-likelihood of the input."""
+        # (..., D) -> ...
+
+        # create copy for each component (..., D) -> (..., H, D)
+        x = inputs.unsqueeze(-2).repeat_interleave(self.num_components, dim=-2)
+
+        # ℹ️ TRICK - shift by mean
+        # x = x - self.base.means
+
+        # parse through the flow
+        u, log_det_flow = self.flow.encode_and_logabsdet(x)
+
+        # ℹ️ TRICK - shift by mean
+        # u = u + self.base.means
+
+        self.latents = u  # store buffer for post-hoc analysis
+
+        # compute the base log probability
+        #  NOTE: shape (..., H) instead of (..., H, D), since operations are element-wise
+        log_probs = self.base.log_prob(u) + log_det_flow  # (..., H)
+        self.log_probs_per_head = log_probs  # store log pₖ(x) in buffer
+
+        # compute the mixture logits
+        logits = self.get_mixture_logits()  # (H)
+
+        # (..., M), (..., M) -> ...
+        log_prob = (logits + log_probs).logsumexp(dim=-1)  # (H), (..., H) -> (...)
+        self.log_probs = log_prob  # store log p(x) in buffer
+        return log_prob
+
+    def sample(self, num: int) -> Tensor:
+        r"""Sample from the model."""
+        # sample from the base distribution
+        u = self.base.sample(num)
+        self.latents = u  # store buffer for post-hoc analysis
+
+        # ℹ️ TRICK - shift by mean
+        # u = u - self.base.means
+
+        x, _ = self.flow.decode_and_logabsdet(u)
+
+        # ℹ️ TRICK - shift by mean
+        # x = x + self.base.means
+
+        # select mixture components (N, M, D), (N) -> (N, D)
+        select = self.sample_mixture(num)
+        idx = torch.arange(num, device=select.device)
+        samples = x[idx, select]  # NOTE: this is NOT the same as x[:, idx]
+        self.samples = samples  # store buffer for post-hoc analysis
+        return samples
+
+    def sample_mixture(self, num: int) -> Tensor:  # shape: N
+        r"""Return indices of the mixture."""
+        p = self.get_mixture_weights()
+        indices = torch.multinomial(p, num, replacement=True)
+        self.sample_indices = indices  # save buffer for post-hoc analysis
+        return indices
+
+    @torch.no_grad()
+    def marginalize(self, kept: list[int] | Tensor) -> MarginalizableNormalizingFlow:
+        r"""Return a new MarginalizableNormalizingFlow with the specified features marginalized out."""
+        device = self.mixture_params.device
+
+        kept = torch.as_tensor(kept, device=device)
+        if kept.dtype == torch.bool:
+            assert kept.shape == (self.num_features,)
+            num_kept = int(kept.sum().item())
+        else:
+            assert kept.min() >= 0
+            assert kept.max() < self.num_features
+            num_kept = len(kept)
+
+        new = MarginalizableNormalizingFlow(
+            n_feats=num_kept,
+            n_heads=self.num_components,
+            num_flow_layers=self.num_flow_layers,
+            num_bins=self.num_bins,
+            bounds=self.bounds,
+        ).to(device=device)
+        new.mixture_params.copy_(self.mixture_params)
+        new.flow = self.flow.marginalize(kept)
+        new.base = self.base.marginalize(kept)
+
+        return new
+
+    @torch.no_grad()
+    def condition(
+        self, variables: list[int] | Tensor, values: list[float] | Tensor
+    ) -> MarginalizableNormalizingFlow:
+        r"""Return a new MarginalizableNormalizingFlow with the specified features conditioned on the given values.
+
+        Since p(x) = ∑ₖ wₖpₖ(f⁻¹(x))|det Jₖ(f⁻¹(x))|, we can compute the conditional mixture weights as follows:
+        we have p(x∣y) = ∑ₖ wₖ'pₖ(f⁻¹(x)∣y)|det Jₖ(f⁻¹(x))|,
+        where log wₖ' = log wₖ + log pₖ(y) - log p(y).
+
+        """
+        device = self.mixture_params.device
+        dtype = self.mixture_params.dtype
+        values = torch.as_tensor(values, device=device, dtype=dtype)
+        assert values.shape == (len(variables),)
+        variables = torch.as_tensor(variables, device=device)
+        remaining = torch.tensor(
+            [i for i in range(self.num_features) if i not in variables], device=device
+        )
+        marg_ndim = len(variables)
+        cond_ndim = len(remaining)
+
+        # compute the conditional mixture weights
+        # log wₖ' = log wₖ + log pₖ(v⁎) - log p(v⁎)
+        marg_model = self.marginalize(variables)  # p(v)
+        log_p_v = marg_model.log_prob(values)  # log p(v⁎), shape=()
+        log_p_v_k = marg_model.log_probs_per_head  # log pₖ(v⁎), shape=(H)
+        log_w_k = marg_model.mixture_logits
+        log_w = log_w_k + log_p_v_k - log_p_v
+
+        # compute the conditional base distribution
+        marg_flow = self.flow.marginalize(variables)
+        latent_values, _ = marg_flow.encode_and_logabsdet(values)
+        assert latent_values.shape == (self.num_components, marg_ndim)
+
+        cond_model = MarginalizableNormalizingFlow(  # p(u | v)
+            n_feats=cond_ndim,
+            n_heads=self.num_components,
+            num_flow_layers=self.num_flow_layers,
+            num_bins=self.num_bins,
+            bounds=self.bounds,
+        ).to(device=device)
+
+        cond_model.mixture_params.copy_(log_w)
+        cond_model.flow = self.flow.marginalize(remaining)
+        cond_model.base = self.base.condition(variables, latent_values)
+
+        return cond_model
