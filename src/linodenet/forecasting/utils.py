@@ -1085,11 +1085,11 @@ class CombinedArg:
         - each time stamp has at least one context or query mask entry
     """
 
-    times: Tensor  # Float[(N + K)], finite, non-decreasing
-    context_values: Tensor  # Float[(N + K, D)], sparse
-    context_mask: Tensor  # Bool[(N + K, D)]
-    query_mask: Tensor  # Bool[(N + K, E)]
-    query_values: Tensor | None = None  # Float[(N + K, E)], sparse
+    times: Tensor  # Float[($N + $K)], finite, non-decreasing
+    context_values: Tensor  # Float[($N + $K, D)], sparse
+    context_mask: Tensor  # Bool[($N + $K, D)]
+    query_mask: Tensor  # Bool[($N + $K, E)]
+    query_values: Tensor | None = None  # Float[($N + $K, E)], sparse
 
     static_covariates: Tensor | None = None  # Float[(M)], sparse
 
@@ -1191,11 +1191,11 @@ class BatchedCombinedArgs:
         - each valid time stamp has at least one context or query mask entry
     """
 
-    times: Tensor  # Float[(..., N + K)], padded NaN, non-decreasing
-    context_values: Tensor  # Float[(..., N + K, D)], padded NaN, sparse
-    context_mask: Tensor  # Bool[(..., N + K, D)], padded False
-    query_mask: Tensor  # Bool[(..., N + K, E)], padded False
-    query_values: Tensor | None = None  # Float[(..., N + K, E)], padded NaN, sparse
+    times: Tensor  # Float[(..., $N + $K)], padded NaN, non-decreasing
+    context_values: Tensor  # Float[(..., $N + $K, D)], padded NaN, sparse
+    context_mask: Tensor  # Bool[(..., $N + $K, D)], padded False
+    query_mask: Tensor  # Bool[(..., $N + $K, E)], padded False
+    query_values: Tensor | None = None  # Float[(..., $N + $K, E)], padded NaN, sparse
 
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
 
