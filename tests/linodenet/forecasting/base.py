@@ -48,6 +48,7 @@ class SequentialData(NamedTuple):
         max_steps: int,
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...] | None = None,
+        input_missingness: bool = False,
     ) -> SequentialData:
         r"""Sample random context and query data for a forecasting model."""
         if min_steps < 1:
@@ -108,6 +109,11 @@ class SequentialData(NamedTuple):
 
         context_times, query_times = times
         context_values, query_values = values
+
+        if input_missingness:
+            miss_mask = torch.rand(context_values.shape, generator=generator) < 0.5
+            context_values = context_values.masked_fill(miss_mask, torch.nan)
+
         context_lengths = context_steps.reshape(batch_shape)
         query_lengths = query_steps.reshape(batch_shape)
         context_length = int(context_steps.max())
@@ -199,6 +205,11 @@ class TestForecastingModel[M: nn.Module](ABC):
         r"""Configuration object passed to :meth:`make_model`."""
         return None
 
+    @pytest.fixture
+    def input_missingness(self) -> bool:
+        r"""Whether to randomly mask half of the context values with NaN."""
+        return False
+
     def test_forward_unbatched(
         self,
         model_config: object,
@@ -207,6 +218,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         max_steps: int,
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
+        input_missingness: bool,
     ) -> None:
         data = SequentialData.new_sample(
             seed=seed,
@@ -215,6 +227,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             max_steps=max_steps,
             context_shape=context_shape,
             output_shape=output_shape,
+            input_missingness=input_missingness,
         )
         torch.manual_seed(seed)
         model = self.make_model(model_config)
@@ -229,6 +242,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
         batch_shape: tuple[int, ...],
+        input_missingness: bool,
     ) -> None:
         data = SequentialData.new_sample(
             seed=seed,
@@ -237,6 +251,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             max_steps=max_steps,
             context_shape=context_shape,
             output_shape=output_shape,
+            input_missingness=input_missingness,
         )
         torch.manual_seed(seed)
         model = self.make_model(model_config)
@@ -248,6 +263,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         seed: int,
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
+        input_missingness: bool,
     ) -> None:
         r"""Check batched predictions do not depend on sequence padding."""
         generator = torch.Generator().manual_seed(seed)
@@ -278,6 +294,10 @@ class TestForecastingModel[M: nn.Module](ABC):
                 *output_shape,
                 generator=generator,
             )
+
+        if input_missingness:
+            miss_mask = torch.rand(context_values.shape, generator=generator) < 0.5
+            context_values = context_values.masked_fill(miss_mask, torch.nan)
 
         data = SequentialData(
             context_times=context_times,
@@ -344,6 +364,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
         batch_shape: tuple[int, ...],
+        input_missingness: bool,
     ) -> None:
         r"""Check predictions are unchanged by extra NaN tail padding."""
         data = SequentialData.new_sample(
@@ -353,6 +374,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             max_steps=max_steps,
             context_shape=context_shape,
             output_shape=output_shape,
+            input_missingness=input_missingness,
         )
         padding = 32
         batch_dims = data.context_times.shape[:-1]
@@ -432,6 +454,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         max_steps: int,
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
+        input_missingness: bool,
     ) -> None:
         torch.manual_seed(seed)
         data = SequentialData.new_sample(
@@ -441,6 +464,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             max_steps=max_steps,
             context_shape=context_shape,
             output_shape=output_shape,
+            input_missingness=input_missingness,
         )
         model = self.make_model(model_config)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
@@ -486,6 +510,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
         batch_shape: tuple[int, ...],
+        input_missingness: bool,
     ) -> None:
         torch.manual_seed(seed)
         data = SequentialData.new_sample(
@@ -495,6 +520,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             max_steps=max_steps,
             context_shape=context_shape,
             output_shape=output_shape,
+            input_missingness=input_missingness,
         )
         model = self.make_model(model_config)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
