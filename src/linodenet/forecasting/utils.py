@@ -14,6 +14,7 @@ __all__ = [
 ]
 
 
+import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
@@ -891,84 +892,83 @@ class BatchedTripletArgs:
         if (qry_dim <= M).any():
             raise ValueError("Expected query channel indices below query_dim.")
 
-        batch_shape = T.shape[:-1]
-        *_, num_context = T.shape
+        *batch_shape, num_context = T.shape
         *_, num_query = Q.shape
+        num_batches = math.prod(batch_shape)
 
+        # Collapse arbitrary batch dimensions into one axis for vectorized grouping.
         T_flat = T.reshape(-1, num_context)
         C_flat = C.reshape(-1, num_context)
         X_flat = X.reshape(-1, num_context)
         Q_flat = Q.reshape(-1, num_query)
         M_flat = M.reshape(-1, num_query)
         Y_flat = Y.reshape(-1, num_query) if Y is not None else None
-        num_batches = T_flat.shape[0]
-        context_valid = C_flat.ge(0)
-        query_valid = M_flat.ge(0)
 
-        context_inverse, context_lengths = _consecutive_group_indices(
-            T_flat, context_valid
+        # Map context triplets to dense row indices by grouping consecutive times.
+        ctx_valid = C_flat.ge(0)
+        ctx_inverse, ctx_lengths = _consecutive_group_indices(T_flat, ctx_valid)
+        ctx_size = int(ctx_lengths.max().item())
+        ctx_batch = (
+            torch.arange(num_batches, device=T.device)
+            .unsqueeze(-1)
+            .expand_as(ctx_valid)
         )
-        context_size = int(context_lengths.max().item())
-        context_batch = torch.arange(num_batches, device=T.device)
-        context_batch = context_batch.reshape(-1, 1).expand(-1, num_context)
-        context_indices = (context_batch[context_valid], context_inverse[context_valid])
+        ctx_indices = (ctx_batch[ctx_valid], ctx_inverse[ctx_valid])
+        ctx_channels = C_flat[ctx_valid]
 
-        query_inverse, query_lengths = _consecutive_group_indices(Q_flat, query_valid)
-        query_size = int(query_lengths.max().item())
-        query_batch = torch.arange(num_batches, device=Q.device)
-        query_batch = query_batch.reshape(-1, 1).expand(-1, num_query)
-        query_indices = (query_batch[query_valid], query_inverse[query_valid])
-        query_channels = M_flat[query_valid]
-
-        context_times = scatter_fill(
-            (num_batches, context_size),
-            context_indices,
-            T_flat[context_valid],
-            fill_value=nan,
-        ).reshape(*batch_shape, context_size)
-        context_values = scatter_fill(
-            (num_batches, context_size, ctx_dim),
-            (*context_indices, C_flat[context_valid]),
-            X_flat[context_valid],
-            fill_value=nan,
-        ).reshape(*batch_shape, context_size, ctx_dim)
-        context_mask = scatter_fill(
-            (num_batches, context_size, ctx_dim),
-            (*context_indices, C_flat[context_valid]),
-            torch.ones_like(C_flat[context_valid], dtype=torch.bool),
-            fill_value=False,
-        ).reshape(*batch_shape, context_size, ctx_dim)
-
-        query_times = scatter_fill(
-            (num_batches, query_size),
-            query_indices,
-            Q_flat[query_valid],
-            fill_value=nan,
-        ).reshape(*batch_shape, query_size)
-        query_mask = scatter_fill(
-            (num_batches, query_size, qry_dim),
-            (*query_indices, query_channels),
-            torch.ones_like(query_channels, dtype=torch.bool),
-            fill_value=False,
-        ).reshape(*batch_shape, query_size, qry_dim)
-        query_values = (
-            scatter_fill(
-                (num_batches, query_size, qry_dim),
-                (*query_indices, query_channels),
-                Y_flat[query_valid],
-                fill_value=nan,
-            ).reshape(*batch_shape, query_size, qry_dim)
-            if Y_flat is not None
-            else None
+        # Map query triplets to dense row indices by grouping consecutive times.
+        qry_valid = M_flat.ge(0)
+        qry_inverse, qry_lengths = _consecutive_group_indices(Q_flat, qry_valid)
+        qry_size = int(qry_lengths.max().item())
+        qry_batch = (
+            torch.arange(num_batches, device=Q.device)
+            .unsqueeze(-1)
+            .expand_as(qry_valid)
         )
+        qry_indices = (qry_batch[qry_valid], qry_inverse[qry_valid])
+        qry_channels = M_flat[qry_valid]
 
         return BatchedDenseArgs(
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_times=query_times,
-            query_mask=query_mask,
-            query_values=query_values,
+            context_times=scatter_fill(
+                (num_batches, ctx_size),
+                ctx_indices,
+                T_flat[ctx_valid],
+                fill_value=nan,
+            ).reshape(*batch_shape, ctx_size),
+            context_values=scatter_fill(
+                (num_batches, ctx_size, ctx_dim),
+                (*ctx_indices, ctx_channels),
+                X_flat[ctx_valid],
+                fill_value=nan,
+            ).reshape(*batch_shape, ctx_size, ctx_dim),
+            context_mask=scatter_fill(
+                (num_batches, ctx_size, ctx_dim),
+                (*ctx_indices, ctx_channels),
+                torch.ones_like(ctx_channels, dtype=torch.bool),
+                fill_value=False,
+            ).reshape(*batch_shape, ctx_size, ctx_dim),
+            query_times=scatter_fill(
+                (num_batches, qry_size),
+                qry_indices,
+                Q_flat[qry_valid],
+                fill_value=nan,
+            ).reshape(*batch_shape, qry_size),
+            query_mask=scatter_fill(
+                (num_batches, qry_size, qry_dim),
+                (*qry_indices, qry_channels),
+                torch.ones_like(qry_channels, dtype=torch.bool),
+                fill_value=False,
+            ).reshape(*batch_shape, qry_size, qry_dim),
+            query_values=(
+                scatter_fill(
+                    (num_batches, qry_size, qry_dim),
+                    (*qry_indices, qry_channels),
+                    Y_flat[qry_valid],
+                    fill_value=nan,
+                ).reshape(*batch_shape, qry_size, qry_dim)
+                if Y_flat is not None
+                else None
+            ),
             static_covariates=self.static_covariates,
         )
 
