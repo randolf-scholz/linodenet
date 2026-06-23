@@ -1261,62 +1261,33 @@ class BatchedCombinedArgs:
         Y = self.query_values
         M = self.query_mask
 
-        *batch_shape, _, context_dim = X.shape
-        query_dim = M.shape[-1]
-
-        # Compact the masked steps to the front of each batch item. `cumsum - 1`
-        # gives the 0-based position of each selected step within its batch item;
-        # `nonzero` supplies the matching batch indices for arbitrary batch shapes.
+        # Gather the selected steps to the front of each batch item: a stable sort
+        # of `~valid` keeps the selected steps (key False) in order ahead of the
+        # rest, so the first `size` columns hold them. The gathered mask/values
+        # tails are already all-False/all-NaN (unselected steps), so only the
+        # gathered times need their padding tail (`~keep`) reset to NaN.
         ctx_valid = C.any(dim=-1)
-        ctx_size = int(ctx_valid.sum(dim=-1).max().item())
-        *ctx_batch_idx, ctx_step = ctx_valid.nonzero(as_tuple=True)
-        ctx_indices = (*ctx_batch_idx, (ctx_valid.cumsum(dim=-1) - 1)[ctx_valid])
+        ctx_count = ctx_valid.sum(dim=-1)
+        ctx_size = int(ctx_count.max().item())
+        ctx_perm = torch.argsort(~ctx_valid, dim=-1, stable=True)[..., :ctx_size]
+        ctx_keep = torch.arange(ctx_size, device=T.device) < ctx_count[..., None]
 
         qry_valid = M.any(dim=-1)
-        qry_size = int(qry_valid.sum(dim=-1).max().item())
-        *qry_batch_idx, qry_step = qry_valid.nonzero(as_tuple=True)
-        qry_indices = (*qry_batch_idx, (qry_valid.cumsum(dim=-1) - 1)[qry_valid])
+        qry_count = qry_valid.sum(dim=-1)
+        qry_size = int(qry_count.max().item())
+        qry_perm = torch.argsort(~qry_valid, dim=-1, stable=True)[..., :qry_size]
+        qry_keep = torch.arange(qry_size, device=T.device) < qry_count[..., None]
 
         return BatchedDenseArgs(
-            context_times=scatter_fill(
-                (*batch_shape, ctx_size),
-                ctx_indices,
-                T[*ctx_batch_idx, ctx_step],
-                fill_value=nan,
+            context_times=T.take_along_dim(ctx_perm, dim=-1).masked_fill(
+                ~ctx_keep, nan
             ),
-            context_mask=scatter_fill(
-                (*batch_shape, ctx_size, context_dim),
-                ctx_indices,
-                C[*ctx_batch_idx, ctx_step],
-                fill_value=False,
-            ),
-            context_values=scatter_fill(
-                (*batch_shape, ctx_size, context_dim),
-                ctx_indices,
-                X[*ctx_batch_idx, ctx_step],
-                fill_value=nan,
-            ),
-            query_times=scatter_fill(
-                (*batch_shape, qry_size),
-                qry_indices,
-                T[*qry_batch_idx, qry_step],
-                fill_value=nan,
-            ),
-            query_mask=scatter_fill(
-                (*batch_shape, qry_size, query_dim),
-                qry_indices,
-                M[*qry_batch_idx, qry_step],
-                fill_value=False,
-            ),
+            context_mask=C.take_along_dim(ctx_perm[..., None], dim=-2),
+            context_values=X.take_along_dim(ctx_perm[..., None], dim=-2),
+            query_times=T.take_along_dim(qry_perm, dim=-1).masked_fill(~qry_keep, nan),
+            query_mask=M.take_along_dim(qry_perm[..., None], dim=-2),
             query_values=(
-                scatter_fill(
-                    (*batch_shape, qry_size, query_dim),
-                    qry_indices,
-                    Y[*qry_batch_idx, qry_step],
-                    fill_value=nan,
-                )
-                if Y is not None
-                else None
+                Y.take_along_dim(qry_perm[..., None], dim=-2) if Y is not None else None
             ),
             static_covariates=self.static_covariates,
         )
