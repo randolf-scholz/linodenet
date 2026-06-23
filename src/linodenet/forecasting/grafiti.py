@@ -499,19 +499,14 @@ class Grafiti(nn.Module):
         context_mask = context_values.isfinite()  # (..., T, D)
         dense_edge_mask = context_mask | target_mask  # (..., T, D)
 
-        edge_counts = dense_edge_mask.sum(dim=(-2, -1))  # (...)
-        max_edges = int(edge_counts.max().item())  # E
-
         # nonzero returns one global list of N true entries in row-major batch order.
         # Subtract each batch item's global start offset to get its local slot in E.
         *batch_idx, t_idx, c_idx = dense_edge_mask.nonzero(as_tuple=True)  # (N)
-        edge_offsets = (  # (...)
-            edge_counts.flatten().cumsum(dim=0).reshape(batch_shape) - edge_counts
-        )
-        edge_positions = (  # (N)
-            torch.arange(t_idx.numel(), device=device) - edge_offsets[*batch_idx]
-        )
-        edge_indices = (*batch_idx, edge_positions)
+        counts = dense_edge_mask.sum(dim=(-2, -1))  # (...)
+        offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts  # (...)
+        positions = torch.arange(t_idx.numel(), device=device)  # (N)
+        edge_indices = (*batch_idx, positions - offsets[*batch_idx])
+        max_edges = int(counts.max().item())  # E
 
         # collect the results in tensors of shape (..., E)
         edge_t_indices = t_idx.new_zeros(*batch_shape, max_edges)
