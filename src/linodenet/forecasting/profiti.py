@@ -484,7 +484,7 @@ class ProFITi(nn.Module):
 
     def log_prob(
         self,
-        value: Tensor,  # (*S, ..., $K, D)
+        values: Tensor,  # (*S, ..., $K, D)
         /,
         *,
         context_times: Tensor,  # (..., $N), padded NaN
@@ -494,37 +494,41 @@ class ProFITi(nn.Module):
         r"""Compute the joint log-likelihood of the target values under the model.
 
         .. math:: \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ)))
+
+        The leading ``*S`` dims of ``value`` beyond ``context_values``'s batch
+        shape are treated as sample dims; all samples must share the same
+        finite/NaN pattern (e.g. samples drawn by :meth:`sample_and_log_prob`).
         """
-        T = context_times
-        X = context_values
-        Q = query_times
-        M = value.isfinite()
+        # target_shape = sample_shape + batch_shape
+        *target_shape, qry_size, _ = values.shape
+        *_, ctx_size, ctx_dim = context_values.shape
 
-        *sample_and_batch_shape, query_size, context_dim = value.shape
-        *batch_shape, context_size, context_dim = X.shape
+        T = context_times.broadcast_to(*target_shape, context_times.shape[-1])
+        X = context_values.broadcast_to(*target_shape, *context_values.shape[-2:])
+        Q = query_times.broadcast_to(*target_shape, query_times.shape[-1])
+        M = values.isfinite()
+        Y = X.new_full((*target_shape, qry_size, ctx_dim), nan)
 
-        Y = X.new_full((*batch_shape, query_size, context_dim), nan)
-        time_points = torch.cat([T, Q], dim=-1).nan_to_num(0.0)
-
-        H = self.context_embedding(
-            time_points,
+        H = self.context_embedding(  # (..., P, H), P = max_target_count
+            torch.cat([T, Q], dim=-1).nan_to_num(0.0),
             torch.cat([X, Y], dim=-2),
             torch.cat(
                 [
-                    M.new_zeros((*sample_and_batch_shape, context_size, context_dim)),
+                    M.new_zeros((*target_shape, ctx_size, ctx_dim)),
                     M,
                 ],
                 dim=-2,
             ),
-        )  # (..., P, H), P = max_target_count
+        )
 
         target_counts = M.sum(dim=(-2, -1))
-        target_slots = torch.arange(H.shape[-2], device=H.device)
+        max_target_count = H.shape[-2]  # == target_counts.max()
+        target_slots = torch.arange(max_target_count, device=H.device)
         valid_mask = target_slots < target_counts.unsqueeze(dim=-1)
         H = torch.where(valid_mask.unsqueeze(dim=-1), H, nan)
 
-        value_flat = value.new_full(H.shape[:-1], nan)
-        value_flat[valid_mask] = value[M]
+        value_flat = values.new_full(H.shape[:-1], nan)
+        value_flat[valid_mask] = values[M]
 
         Z, logabsdet = self.conditional_flow.encode_and_logabsdet(value_flat, H)
         log_prob = -0.5 * (Z.square() + _LOG2PI).nansum(dim=-1)
