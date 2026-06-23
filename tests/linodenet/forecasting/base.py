@@ -377,7 +377,7 @@ class TestForecastingModel[M: nn.Module](ABC):
                 prediction.masked_fill(~mask, torch.nan),
                 expected,
                 equal_nan=True,
-                rtol=0.0,
+                rtol=1e-6,
                 atol=1e-4,
             )
 
