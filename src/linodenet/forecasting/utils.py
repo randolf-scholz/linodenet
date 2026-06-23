@@ -814,22 +814,6 @@ class BatchedTripletArgs:
         if not args:
             raise ValueError("Expected at least one TripletArg.")
 
-        query_channels = _all_or_none(arg.query_channels for arg in args)
-        if query_channels is None:
-            raise ValueError("Expected query channels for batched triplet arguments.")
-
-        query_values = (
-            None
-            if (V := _all_or_none(arg.query_values for arg in args)) is None
-            else pad_sequence(V, batch_first=True, padding_value=nan)
-        )
-
-        static_covariates = (
-            None
-            if (S := _all_or_none(arg.static_covariates for arg in args)) is None
-            else torch.stack(S)
-        )
-
         return cls(
             context_times=pad_sequence(
                 [arg.context_times for arg in args],
@@ -852,12 +836,20 @@ class BatchedTripletArgs:
                 padding_value=nan,
             ),
             query_channels=pad_sequence(
-                query_channels,
+                [arg.query_channels for arg in args],
                 batch_first=True,
                 padding_value=-1,
             ),
-            query_values=query_values,
-            static_covariates=static_covariates,
+            query_values=(
+                None
+                if (V := _all_or_none(arg.query_values for arg in args)) is None
+                else pad_sequence(V, batch_first=True, padding_value=nan)
+            ),
+            static_covariates=(
+                None
+                if (S := _all_or_none(arg.static_covariates for arg in args)) is None
+                else torch.stack(S)
+            ),
         )
 
     def unbatch(self) -> list[TripletArg]:
