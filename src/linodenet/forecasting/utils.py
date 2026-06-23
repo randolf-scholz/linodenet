@@ -378,18 +378,6 @@ class BatchedDenseArgs:
         if not args:
             raise ValueError("Expected at least one DenseArg.")
 
-        query_values = (
-            pad_sequence(V, batch_first=True, padding_value=nan)
-            if (V := _all_or_none(arg.query_values for arg in args)) is not None
-            else None
-        )
-
-        static_covariates = (
-            torch.stack(S)
-            if (S := _all_or_none(arg.static_covariates for arg in args)) is not None
-            else None
-        )
-
         return cls(
             context_times=pad_sequence(
                 [arg.context_times for arg in args],
@@ -416,8 +404,17 @@ class BatchedDenseArgs:
                 batch_first=True,
                 padding_value=False,
             ),
-            query_values=query_values,
-            static_covariates=static_covariates,
+            query_values=(
+                pad_sequence(V, batch_first=True, padding_value=nan)
+                if (V := _all_or_none(arg.query_values for arg in args)) is not None
+                else None
+            ),
+            static_covariates=(
+                torch.stack(S)
+                if (S := _all_or_none(arg.static_covariates for arg in args))
+                is not None
+                else None
+            ),
         )
 
     def unbatch(self) -> list[DenseArg]:
@@ -448,15 +445,15 @@ class BatchedDenseArgs:
 
         return [
             DenseArg(
-                context_times=context_time,
-                context_values=context_value,
-                context_mask=context_mask,
-                query_times=query_time,
-                query_mask=query_mask,
-                query_values=query_value,
+                context_times=c_time,
+                context_values=c_value,
+                context_mask=c_mask,
+                query_times=q_time,
+                query_mask=q_mask,
+                query_values=q_value,
                 static_covariates=static_arg,
             )
-            for context_time, context_value, context_mask, query_time, query_mask, query_value, static_arg in zip(
+            for c_time, c_value, c_mask, q_time, q_mask, q_value, static_arg in zip(
                 unpad_sequence(T, context_lengths, batch_first=True),
                 unpad_sequence(X, context_lengths, batch_first=True),
                 unpad_sequence(C, context_lengths, batch_first=True),
