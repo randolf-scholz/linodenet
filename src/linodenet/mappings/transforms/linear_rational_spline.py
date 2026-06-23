@@ -245,7 +245,7 @@ class LinearRationalSpline(nn.Module):
             "MIN_BIN_HEIGHT", torch.tensor(float(min_bin_height), dtype=dtype)
         )
 
-    def get_spline_parameters(
+    def get_spline_knots(
         self,
         *,
         widths: Tensor,  # (..., K)
@@ -303,7 +303,7 @@ class LinearRationalSpline(nn.Module):
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
-        knots = self.get_spline_parameters(
+        knots = self.get_spline_knots(
             widths=widths,
             heights=heights,
             lambdas=lambdas,
@@ -325,7 +325,7 @@ class LinearRationalSpline(nn.Module):
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
-        knots = self.get_spline_parameters(
+        knots = self.get_spline_knots(
             widths=widths,
             heights=heights,
             lambdas=lambdas,
@@ -352,7 +352,7 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
         r"""Use linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
-        knots = self.get_spline_parameters(
+        knots = self.get_spline_knots(
             widths=widths,
             heights=heights,
             lambdas=lambdas,
@@ -388,7 +388,7 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
         r"""Invert the linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
-        knots = self.get_spline_parameters(
+        knots = self.get_spline_knots(
             widths=widths,
             heights=heights,
             lambdas=lambdas,

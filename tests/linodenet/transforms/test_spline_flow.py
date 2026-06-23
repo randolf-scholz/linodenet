@@ -130,7 +130,7 @@ class TestSplineFlow(TestTransform):
             widths, heights, lambdas, derivatives = layer.spline_parameters(
                 torch.Size()
             )
-            knots = layer.spline.get_spline_parameters(
+            knots = layer.spline.get_spline_knots(
                 widths=widths,
                 heights=heights,
                 lambdas=lambdas,
@@ -182,7 +182,7 @@ class TestSplineFlow(TestTransform):
         )
         layer = model[0]
         widths, heights, lambdas, derivatives = layer.spline_parameters(torch.Size())
-        knots = layer.spline.get_spline_parameters(
+        knots = layer.spline.get_spline_knots(
             widths=widths,
             heights=heights,
             lambdas=lambdas,
@@ -240,7 +240,7 @@ class TestSplineFlow(TestTransform):
             layer.y_center.fill_(1.25)
 
         widths, heights, lambdas, derivatives = layer.spline_parameters(torch.Size())
-        knots = layer.spline.get_spline_parameters(
+        knots = layer.spline.get_spline_knots(
             widths=widths,
             heights=heights,
             lambdas=lambdas,
