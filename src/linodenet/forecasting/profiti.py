@@ -484,13 +484,13 @@ class ProFITi(nn.Module):
 
     def log_prob(
         self,
-        value: Tensor,  # (..., $K, D)
+        value: Tensor,  # (*S, ..., $K, D)
         /,
         *,
         context_times: Tensor,  # (..., $N), padded NaN
         context_values: Tensor,  # (..., $N, D), padded NaN, sparse
         query_times: Tensor,  # (..., $K), padded NaN
-    ) -> Tensor:
+    ) -> Tensor:  # (*S, ...)
         r"""Compute the joint log-likelihood of the target values under the model.
 
         .. math:: \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ)))
@@ -500,10 +500,8 @@ class ProFITi(nn.Module):
         Q = query_times
         M = value.isfinite()
 
+        *sample_and_batch_shape, query_size, context_dim = value.shape
         *batch_shape, context_size, context_dim = X.shape
-        query_size = Q.shape[-1]
-
-        assert value.shape == (*batch_shape, query_size, context_dim)
 
         Y = X.new_full((*batch_shape, query_size, context_dim), nan)
         time_points = torch.cat([T, Q], dim=-1).nan_to_num(0.0)
@@ -513,7 +511,7 @@ class ProFITi(nn.Module):
             torch.cat([X, Y], dim=-2),
             torch.cat(
                 [
-                    M.new_zeros((*batch_shape, context_size, context_dim)),
+                    M.new_zeros((*sample_and_batch_shape, context_size, context_dim)),
                     M,
                 ],
                 dim=-2,

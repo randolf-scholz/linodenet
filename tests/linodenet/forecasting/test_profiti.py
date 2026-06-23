@@ -356,6 +356,11 @@ class TestProfiti(TestForecastingModel[ProFITi]):
         r"""Configuration used to instantiate the ProFITi model under test."""
         return self.STANDARD_CONFIG
 
+    @pytest.fixture(params=[False, True], ids=["no_missingness", "input_missingness"])
+    def input_missingness(self, request: pytest.FixtureRequest) -> bool:
+        r"""Whether to randomly mask half of the context values with NaN."""
+        return request.param
+
     def make_model(self, model_config: object, /) -> ProFITi:
         r"""Instantiate a ProFITi model from :attr:`STANDARD_CONFIG`."""
         if not isinstance(model_config, ProFITiTestConfig):
@@ -606,3 +611,34 @@ class TestProfiti(TestForecastingModel[ProFITi]):
         for name, parameter in model.named_parameters():
             if parameter.grad is not None:
                 assert parameter.grad.isfinite().all(), name
+
+    @pytest.mark.parametrize("size", [(), (5,), (1, 2, 3)])
+    def test_sample_and_log_prob_consistent(self, size: tuple[int, ...]) -> None:
+        r"""Check ProFITi sample log-probs match log_prob evaluated on the same samples."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        D = self.STANDARD_CONFIG.input_dim
+        context_times = torch.tensor([0.0, 0.5, 1.0, 1.5])
+        context_values = torch.randn(4, D)
+        context_mask = torch.tensor([[True] * D, [True] * D, [False] * D, [True] * D])
+        context_values = context_values.masked_fill(~context_mask, torch.nan)
+        query_times = torch.tensor([2.0, 2.5, 3.0, 3.5])
+        query_mask = torch.zeros(4, D, dtype=torch.bool)
+        query_mask[2] = True
+        query_mask[3] = True
+
+        samples, log_prob_direct = model.sample_and_log_prob(
+            size,
+            context_times=context_times,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+        log_prob_via_sample = model.log_prob(
+            samples,
+            context_times=context_times,
+            context_values=context_values,
+            query_times=query_times,
+        )
+
+        assert_close(log_prob_direct, log_prob_via_sample)
