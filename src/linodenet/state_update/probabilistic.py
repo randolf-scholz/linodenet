@@ -184,15 +184,12 @@ class NaturalGaussianUpdater(nn.Module):
 
     Let
 
-    .. math::
-        z = h⁻¹(y), \qquad
-        \log p_θ(y) = \log 𝓝(z; μ, Σ) + \log|\det \frac{∂z}{∂y}|
+    .. math:: z = h⁻¹(y), \qquad \log p_θ(y) = \log 𝓝(z; μ, Σ) + \log|\det\frac{∂z}{∂y}|
 
     Since the Jacobian term is independent of $(μ, Σ)$, this module computes the
     exact minimizer of the KL-regularized objective
 
-    .. math::
-        \min_{μ', Σ'} -\log 𝓝(z; μ', Σ') + λ⋅\mathrm{KL}(𝓝(μ, Σ) \,\|\, 𝓝(μ', Σ'))
+    .. math:: \min_{μ', Σ'} -\log 𝓝(z; μ', Σ') + λ⋅\mathrm{KL}(𝓝(μ, Σ) ∣ 𝓝(μ', Σ'))
 
     Writing $η = (1 + λ)⁻¹$ and $δ = z - μ$, the unique Gaussian minimizer is
 
