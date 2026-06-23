@@ -1181,17 +1181,6 @@ class BatchedCombinedArgs:
         if not args:
             raise ValueError("Expected at least one CombinedArg.")
 
-        static_covariates = (
-            torch.stack(S)
-            if (S := _all_or_none(arg.static_covariates for arg in args)) is not None
-            else None
-        )
-        query_values = (
-            pad_sequence(V, batch_first=True, padding_value=nan)
-            if (V := _all_or_none(arg.query_values for arg in args)) is not None
-            else None
-        )
-
         return cls(
             times=pad_sequence(
                 [arg.times for arg in args],
@@ -1213,8 +1202,17 @@ class BatchedCombinedArgs:
                 batch_first=True,
                 padding_value=False,
             ),
-            query_values=query_values,
-            static_covariates=static_covariates,
+            query_values=(
+                pad_sequence(V, batch_first=True, padding_value=nan)
+                if (V := _all_or_none(arg.query_values for arg in args)) is not None
+                else None
+            ),
+            static_covariates=(
+                torch.stack(S)
+                if (S := _all_or_none(arg.static_covariates for arg in args))
+                is not None
+                else None
+            ),
         )
 
     def unbatch(self) -> list[CombinedArg]:
@@ -1222,51 +1220,36 @@ class BatchedCombinedArgs:
         X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
         M = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
-        query_values = (
-            self.query_values.unsqueeze(0).flatten(end_dim=-3)
-            if self.query_values is not None
-            else None
-        )
-        static_covariates = (
-            self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
-            if self.static_covariates is not None
-            else None
-        )
-
         lengths = T.isfinite().sum(dim=-1)
-        num_samples = T.shape[0]
-
-        times = unpad_sequence(T, lengths, batch_first=True)
-        context_values = unpad_sequence(X, lengths, batch_first=True)
-        context_masks = unpad_sequence(C, lengths, batch_first=True)
-        query_masks = unpad_sequence(M, lengths, batch_first=True)
-        query_values = (
-            unpad_sequence(query_values, lengths, batch_first=True)
-            if query_values is not None
-            else [None] * num_samples
-        )
-        static_args = (
-            list(static_covariates.unbind(dim=0))
-            if static_covariates is not None
-            else [None] * num_samples
-        )
 
         return [
             CombinedArg(
                 times=time,
-                context_values=context_value,
-                context_mask=context_mask,
-                query_values=query_value,
-                query_mask=query_mask,
+                context_values=c_value,
+                context_mask=c_mask,
+                query_values=q_value,
+                query_mask=q_mask,
                 static_covariates=static_arg,
             )
-            for time, context_value, context_mask, query_value, query_mask, static_arg in zip(
-                times,
-                context_values,
-                context_masks,
-                query_values,
-                query_masks,
-                static_args,
+            for time, c_mask, c_value, q_mask, q_value, static_arg in zip(
+                unpad_sequence(T, lengths, batch_first=True),
+                unpad_sequence(C, lengths, batch_first=True),
+                unpad_sequence(X, lengths, batch_first=True),
+                unpad_sequence(M, lengths, batch_first=True),
+                (
+                    unpad_sequence(
+                        self.query_values.unsqueeze(0).flatten(end_dim=-3),
+                        lengths,
+                        batch_first=True,
+                    )
+                    if self.query_values is not None
+                    else [None] * len(T)
+                ),
+                (
+                    self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+                    if self.static_covariates is not None
+                    else [None] * len(T)
+                ),
                 strict=True,
             )
         ]
