@@ -915,24 +915,6 @@ class BatchedTripletArgs:
         context_batch = torch.arange(num_batches, device=T.device)
         context_batch = context_batch.reshape(-1, 1).expand(-1, num_context)
         context_indices = (context_batch[context_valid], context_inverse[context_valid])
-        context_times = scatter_fill(
-            (num_batches, context_size),
-            context_indices,
-            T_flat[context_valid],
-            fill_value=nan,
-        )
-        context_values = scatter_fill(
-            (num_batches, context_size, context_dim),
-            (*context_indices, C_flat[context_valid]),
-            X_flat[context_valid],
-            fill_value=nan,
-        )
-        context_mask = scatter_fill(
-            (num_batches, context_size, context_dim),
-            (*context_indices, C_flat[context_valid]),
-            torch.ones_like(C_flat[context_valid], dtype=torch.bool),
-            fill_value=False,
-        )
 
         query_inverse, query_lengths = _consecutive_group_indices(Q_flat, query_valid)
         query_size = int(query_lengths.max().item())
@@ -940,42 +922,56 @@ class BatchedTripletArgs:
         query_batch = query_batch.reshape(-1, 1).expand(-1, num_query)
         query_indices = (query_batch[query_valid], query_inverse[query_valid])
         query_channels = M_flat[query_valid]
+
+        context_times = scatter_fill(
+            (num_batches, context_size),
+            context_indices,
+            T_flat[context_valid],
+            fill_value=nan,
+        ).reshape(*batch_shape, context_size)
+        context_values = scatter_fill(
+            (num_batches, context_size, context_dim),
+            (*context_indices, C_flat[context_valid]),
+            X_flat[context_valid],
+            fill_value=nan,
+        ).reshape(*batch_shape, context_size, context_dim)
+        context_mask = scatter_fill(
+            (num_batches, context_size, context_dim),
+            (*context_indices, C_flat[context_valid]),
+            torch.ones_like(C_flat[context_valid], dtype=torch.bool),
+            fill_value=False,
+        ).reshape(*batch_shape, context_size, context_dim)
+
         query_times = scatter_fill(
             (num_batches, query_size),
             query_indices,
             Q_flat[query_valid],
             fill_value=nan,
-        )
+        ).reshape(*batch_shape, query_size)
         query_mask = scatter_fill(
             (num_batches, query_size, query_dim),
             (*query_indices, query_channels),
             torch.ones_like(query_channels, dtype=torch.bool),
             fill_value=False,
-        )
+        ).reshape(*batch_shape, query_size, query_dim)
         query_values = (
             scatter_fill(
                 (num_batches, query_size, query_dim),
                 (*query_indices, query_channels),
                 Y_flat[query_valid],
                 fill_value=nan,
-            )
+            ).reshape(*batch_shape, query_size, query_dim)
             if Y_flat is not None
             else None
         )
 
         return BatchedDenseArgs(
-            context_times=context_times.reshape(*batch_shape, context_size),
-            context_values=context_values.reshape(
-                *batch_shape, context_size, context_dim
-            ),
-            context_mask=context_mask.reshape(*batch_shape, context_size, context_dim),
-            query_times=query_times.reshape(*batch_shape, query_size),
-            query_mask=query_mask.reshape(*batch_shape, query_size, query_dim),
-            query_values=(
-                query_values.reshape(*batch_shape, query_size, query_dim)
-                if query_values is not None
-                else None
-            ),
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            query_values=query_values,
             static_covariates=self.static_covariates,
         )
 
