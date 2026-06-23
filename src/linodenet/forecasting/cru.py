@@ -589,13 +589,17 @@ class CRU(nn.Module):
                 active.unsqueeze(-1).unsqueeze(-1), _prior_cov, post_cov
             )
 
-            # Sanitize encoder outputs for non-context steps: NaN inputs into
-            # torch.where branches that are masked out would still produce NaN
-            # gradients via the 0*NaN rule in the backward pass.
-            safe_y = y.nan_to_num(nan=0.0)
-            safe_y_var = y_var.nan_to_num(nan=1.0)
-            post_mean, post_cov = self.update_state(
-                safe_y, safe_y_var, ctx_mask, prior_mean, prior_cov
+            # Only update state for batch elements that have context at this step.
+            # fill_value=0.0 avoids the 0*NaN gradient issue from torch.where.
+            _post_mean, _post_cov = apply_masked(
+                self.update_state,
+                (y, y_var, ctx_mask, prior_mean, prior_cov),
+                ctx_mask,
+                fill_value=0.0,
+            )
+            post_mean = torch.where(ctx_mask.unsqueeze(-1), _post_mean, prior_mean)
+            post_cov = torch.where(
+                ctx_mask.unsqueeze(-1).unsqueeze(-1), _post_cov, prior_cov
             )
 
             # Decode at query steps; NaN elsewhere via apply_masked fill.
