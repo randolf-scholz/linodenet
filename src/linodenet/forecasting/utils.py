@@ -751,6 +751,10 @@ class BatchedTripletArgs:
         assert is_prefix_mask(T.isfinite()).all()
         assert is_prefix_mask(X.isfinite()).all()
         assert is_prefix_mask(T.diff(dim=-1).ge(0.0)).all()
+        C_valid = C >= 0
+        assert is_prefix_mask(C_valid).all()
+        assert torch.equal(C_valid, T.isfinite())
+        assert torch.equal(C_valid, X.isfinite())
 
         *_, num_query = self.query_times.shape
         assert Q.shape == (*batch_shape, num_query)
@@ -760,6 +764,7 @@ class BatchedTripletArgs:
         M_valid = M >= 0
         assert M.shape == (*batch_shape, num_query)
         assert is_prefix_mask(M_valid).all()
+        assert torch.equal(M_valid, Q.isfinite())
         query_pairs = torch.stack([Q, M], dim=-1)
         query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), nan)
         assert torch.equal(unique_count(query_pairs), M_valid.sum(dim=-1))
@@ -890,8 +895,8 @@ class BatchedTripletArgs:
         M_flat = M.reshape(-1, num_query)
         Y_flat = Y.reshape(-1, num_query) if Y is not None else None
         num_batches = T_flat.shape[0]
-        query_valid = Q_flat.isfinite() & M_flat.ge(0)
-        context_valid = T_flat.isfinite() & C_flat.ge(0) & X_flat.isfinite()
+        context_valid = C_flat.ge(0)
+        query_valid = M_flat.ge(0)
 
         context_dim = (
             context_dim
