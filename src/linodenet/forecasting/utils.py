@@ -26,10 +26,10 @@ def _all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
     result = []
     has_none = False
     for arg in vals:
-        if arg is None:
-            has_none = True
-        else:
+        if arg is not None:
             result.append(arg)
+        else:
+            has_none = True
     if has_none and result:
         raise ValueError("Either all or none of the given values must be None.")
     return None if has_none else result
@@ -269,12 +269,12 @@ class DenseArg:
                 dim=-2,
             ).take_along_dim(perm, dim=-2),
             query_values=(
-                None
-                if Y is None
-                else torch.cat(
+                torch.cat(
                     [Y.new_full((ctx_size, q_dim), nan), Y],
                     dim=-2,
                 ).take_along_dim(perm, dim=-2)
+                if Y is not None
+                else None
             ),
             query_mask=torch.cat(
                 [M.new_zeros((ctx_size, q_dim)), M],
@@ -379,15 +379,15 @@ class BatchedDenseArgs:
             raise ValueError("Expected at least one DenseArg.")
 
         query_values = (
-            None
-            if (V := _all_or_none(arg.query_values for arg in args)) is None
-            else pad_sequence(V, batch_first=True, padding_value=nan)
+            pad_sequence(V, batch_first=True, padding_value=nan)
+            if (V := _all_or_none(arg.query_values for arg in args)) is not None
+            else None
         )
 
         static_covariates = (
-            None
-            if (S := _all_or_none(arg.static_covariates for arg in args)) is None
-            else torch.stack(S)
+            torch.stack(S)
+            if (S := _all_or_none(arg.static_covariates for arg in args)) is not None
+            else None
         )
 
         return cls(
@@ -661,8 +661,10 @@ class TripletArg:
         C = self.context_channels
         M = self.query_channels
 
-        context_dim = int(C.max().item()) + 1 if context_dim is None else context_dim
-        query_dim = int(M.max().item()) + 1 if query_dim is None else query_dim
+        context_dim = (
+            context_dim if context_dim is not None else int(C.max().item()) + 1
+        )
+        query_dim = query_dim if query_dim is not None else int(M.max().item()) + 1
 
         if (self.context_channels >= context_dim).any():
             raise ValueError("Expected context channel indices below context_dim.")
@@ -816,14 +818,15 @@ class BatchedTripletArgs:
                 padding_value=-1,
             ),
             query_values=(
-                None
-                if (V := _all_or_none(arg.query_values for arg in args)) is None
-                else pad_sequence(V, batch_first=True, padding_value=nan)
+                pad_sequence(V, batch_first=True, padding_value=nan)
+                if (V := _all_or_none(arg.query_values for arg in args)) is not None
+                else None
             ),
             static_covariates=(
-                None
-                if (S := _all_or_none(arg.static_covariates for arg in args)) is None
-                else torch.stack(S)
+                torch.stack(S)
+                if (S := _all_or_none(arg.static_covariates for arg in args))
+                is not None
+                else None
             ),
         )
 
@@ -897,20 +900,20 @@ class BatchedTripletArgs:
         X_flat = X.reshape(-1, num_context)
         Q_flat = Q.reshape(-1, num_query)
         M_flat = M.reshape(-1, num_query)
-        Y_flat = None if Y is None else Y.reshape(-1, num_query)
+        Y_flat = Y.reshape(-1, num_query) if Y is not None else None
         num_batches = T_flat.shape[0]
         query_valid = Q_flat.isfinite() & M_flat.ge(0)
         context_valid = T_flat.isfinite() & C_flat.ge(0) & X_flat.isfinite()
 
         context_dim = (
-            int(C_flat[context_valid].max().item()) + 1
-            if context_dim is None
-            else context_dim
+            context_dim
+            if context_dim is not None
+            else int(C_flat[context_valid].max().item()) + 1
         )
         query_dim = (
-            int(M_flat[query_valid].max().item()) + 1
-            if query_dim is None
-            else query_dim
+            query_dim
+            if query_dim is not None
+            else int(M_flat[query_valid].max().item()) + 1
         )
         if (self.context_channels >= context_dim).any():
             raise ValueError("Expected context channel indices below context_dim.")
@@ -962,14 +965,14 @@ class BatchedTripletArgs:
             fill_value=False,
         )
         query_values = (
-            None
-            if Y_flat is None
-            else scatter_fill(
+            scatter_fill(
                 (num_batches, query_size, query_dim),
                 (*query_indices, query_channels),
                 Y_flat[query_valid],
                 fill_value=nan,
             )
+            if Y_flat is not None
+            else None
         )
 
         return BatchedDenseArgs(
@@ -981,9 +984,9 @@ class BatchedTripletArgs:
             query_times=query_times.reshape(*batch_shape, query_size),
             query_mask=query_mask.reshape(*batch_shape, query_size, query_dim),
             query_values=(
-                None
-                if query_values is None
-                else query_values.reshape(*batch_shape, query_size, query_dim)
+                query_values.reshape(*batch_shape, query_size, query_dim)
+                if query_values is not None
+                else None
             ),
             static_covariates=self.static_covariates,
         )
@@ -1031,9 +1034,9 @@ class CombinedArg:
             self,
             "query_values",
             (
-                None
-                if self.query_values is None
-                else self.query_values.masked_fill(~self.query_mask, nan)
+                self.query_values.masked_fill(~self.query_mask, nan)
+                if self.query_values is not None
+                else None
             ),
         )
 
@@ -1086,9 +1089,9 @@ class CombinedArg:
             query_times=self.times[..., query_filter],
             query_mask=self.query_mask[..., query_filter, :],
             query_values=(
-                None
-                if self.query_values is None
-                else self.query_values[..., query_filter, :]
+                self.query_values[..., query_filter, :]
+                if self.query_values is not None
+                else None
             ),
             static_covariates=self.static_covariates,
         )
@@ -1137,9 +1140,9 @@ class BatchedCombinedArgs:
             self,
             "query_values",
             (
-                None
-                if self.query_values is None
-                else self.query_values.masked_fill(~self.query_mask, nan)
+                self.query_values.masked_fill(~self.query_mask, nan)
+                if self.query_values is not None
+                else None
             ),
         )
 
@@ -1198,14 +1201,14 @@ class BatchedCombinedArgs:
             raise ValueError("Expected at least one CombinedArg.")
 
         static_covariates = (
-            None
-            if (S := _all_or_none(arg.static_covariates for arg in args)) is None
-            else torch.stack(S)
+            torch.stack(S)
+            if (S := _all_or_none(arg.static_covariates for arg in args)) is not None
+            else None
         )
         query_values = (
-            None
-            if (V := _all_or_none(arg.query_values for arg in args)) is None
-            else pad_sequence(V, batch_first=True, padding_value=nan)
+            pad_sequence(V, batch_first=True, padding_value=nan)
+            if (V := _all_or_none(arg.query_values for arg in args)) is not None
+            else None
         )
 
         return cls(
@@ -1239,14 +1242,14 @@ class BatchedCombinedArgs:
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
         M = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
         query_values = (
-            None
-            if self.query_values is None
-            else self.query_values.unsqueeze(0).flatten(end_dim=-3)
+            self.query_values.unsqueeze(0).flatten(end_dim=-3)
+            if self.query_values is not None
+            else None
         )
         static_covariates = (
-            None
-            if self.static_covariates is None
-            else self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+            self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+            if self.static_covariates is not None
+            else None
         )
 
         lengths = T.isfinite().sum(dim=-1)
@@ -1257,14 +1260,14 @@ class BatchedCombinedArgs:
         context_masks = unpad_sequence(C, lengths, batch_first=True)
         query_masks = unpad_sequence(M, lengths, batch_first=True)
         query_values = (
-            [None] * num_samples
-            if query_values is None
-            else unpad_sequence(query_values, lengths, batch_first=True)
+            unpad_sequence(query_values, lengths, batch_first=True)
+            if query_values is not None
+            else [None] * num_samples
         )
         static_args = (
-            [None] * num_samples
-            if static_covariates is None
-            else list(static_covariates.unbind(dim=0))
+            list(static_covariates.unbind(dim=0))
+            if static_covariates is not None
+            else [None] * num_samples
         )
 
         return [
@@ -1300,7 +1303,7 @@ class BatchedCombinedArgs:
         T_flat = T.reshape(-1, num_combined)
         X_flat = X.reshape(-1, num_combined, context_dim)
         C_flat = C.reshape(-1, num_combined, context_dim)
-        Y_flat = None if Y is None else Y.reshape(-1, num_combined, query_dim)
+        Y_flat = Y.reshape(-1, num_combined, query_dim) if Y is not None else None
         M_flat = M.reshape(-1, num_combined, query_dim)
         num_batches = T_flat.shape[0]
 
@@ -1354,14 +1357,14 @@ class BatchedCombinedArgs:
             fill_value=False,
         )
         query_values = (
-            None
-            if Y_flat is None
-            else scatter_fill(
+            scatter_fill(
                 (num_batches, query_size, query_dim),
                 query_indices,
                 Y_flat[query_filter],
                 fill_value=nan,
             )
+            if Y_flat is not None
+            else None
         )
 
         return BatchedDenseArgs(
@@ -1373,9 +1376,9 @@ class BatchedCombinedArgs:
             query_times=query_times.reshape(*batch_shape, query_size),
             query_mask=query_mask.reshape(*batch_shape, query_size, query_dim),
             query_values=(
-                None
-                if query_values is None
-                else query_values.reshape(*batch_shape, query_size, query_dim)
+                query_values.reshape(*batch_shape, query_size, query_dim)
+                if query_values is not None
+                else None
             ),
             static_covariates=self.static_covariates,
         )
