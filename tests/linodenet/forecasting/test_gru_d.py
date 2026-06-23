@@ -4,9 +4,11 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
+from torch import nan
 from torch.nn import functional as F
 
 from linodenet.forecasting.gru_d import GRU_D
+from linodenet.forecasting.utils import BatchedDenseArgs
 
 from .base import SequentialData, TestForecastingModel
 
@@ -58,16 +60,32 @@ class TestGRU_D(TestForecastingModel[GRU_D]):
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GRU-D predictions for sequential forecasting inputs."""
-        predictions = model(
-            inputs.context_times,
-            inputs.context_values,
-            inputs.query_times,
+        query_mask_nd = inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values)
+        dense = BatchedDenseArgs(
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            context_mask=inputs.context_values.isfinite(),
+            query_times=inputs.query_times,
+            query_mask=query_mask_nd,
+            query_values=inputs.query_values,
         )
+        combined = dense.to_combined()
 
-        assert predictions.shape == inputs.query_values.shape
-        assert predictions[inputs.query_mask].isfinite().all()
-        assert predictions[~inputs.query_mask].isnan().all()
-        return (predictions,)
+        combined_pred = model(
+            combined.times,
+            combined.context_values,
+            combined.context_mask,
+            combined.query_mask,
+        )  # (..., N+K, F)
+
+        query_steps = combined.query_mask.any(dim=-1)  # (..., N+K)
+        pred = torch.full_like(inputs.query_values, nan)
+        pred[inputs.query_mask] = combined_pred[query_steps]
+
+        assert pred.shape == inputs.query_values.shape
+        assert pred[inputs.query_mask].isfinite().all()
+        assert pred[~inputs.query_mask].isnan().all()
+        return (pred,)
 
     def loss(
         self,

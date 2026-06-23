@@ -1,11 +1,4 @@
-r"""Implementation of GRU-D model for time series forecasting.
-
-Reference:
-    - | Recurrent Neural Networks for Multivariate Time Series with Missing Values
-      | Zhengping Che, Sanjay Purushotham, Kyunghyun Cho, David Sontag & Yan Liu
-      | Nature Scientific Reports
-      | https://www.nature.com/articles/s41598-018-24271-9
-"""
+r"""Implementation of GRU-D model for time series forecasting."""
 
 __all__ = [
     "GRU_D",
@@ -13,8 +6,10 @@ __all__ = [
     "DiagonalLinear",
 ]
 
+from typing import Final
+
 import torch
-from torch import Tensor, nn
+from torch import Tensor, nan, nn
 
 
 class GRU_DCell(nn.Module):
@@ -31,10 +26,10 @@ class GRU_DCell(nn.Module):
 
     def forward(self, x_hat: Tensor, h_hat: Tensor, m: Tensor, /) -> Tensor:
         # GRU update (eq 13-16)
-        # rₖ = σ(Wᵣ x̂ₖ + Uᵣĥₖ₋₁ + Vᵣmₖ + bᵣ)              (13)
-        # zₖ = σ(W_z x̂ₖ + U_z ĥₖ₋₁ + V_z mₖ + b_z)        (14)
-        # h̃ₖ = tanh(Wx̂ₖ + U (rₖ ⊙ ĥₖ₋₁) + Vmₖ + b)        (15)
-        # hₖ = (1 − zₖ) ⊙ ĥₖ₋₁ + zₖ ⊙ h̃ₖ                  (16)
+        # rₖ = σ(Wᵣ x̂ₖ + Uᵣĥₖ₋₁ + Vᵣmₖ + bᵣ)              (13)
+        # zₖ = σ(W_z x̂ₖ + U_z ĥₖ₋₁ + V_z mₖ + b_z)        (14)
+        # h̃ₖ = tanh(Wx̂ₖ + U (rₖ ⊙ ĥₖ₋₁) + Vmₖ + b)        (15)
+        # hₖ = (1 − zₖ) ⊙ ĥₖ₋₁ + zₖ ⊙ h̃ₖ                  (16)
         m = m.to(dtype=x_hat.dtype)  # convert bool to float
         u = torch.cat([x_hat, h_hat, m], dim=-1)
         r = torch.sigmoid(self.reset_gate(u))
@@ -58,43 +53,30 @@ class DiagonalLinear(nn.Module):
 
 
 class GRU_D(nn.Module):
-    r"""TODO: Implement GRU-D model for time series forecasting.
+    r"""GRU-D model for time series forecasting with missing values.
 
-    ∆tₖ = tₖ-tₖ₋₁
-    mₖ = ⟦xₖ = 𝙽𝙰 ? 0 : 1⟧
-    δₖ = ⟦mₖ=1 ?  ∆tₖ : ∆tₖ + δₖ₋₁⟧
-    ∆t₁ = 0
-    δ₀ = 0
+    Processes a combined sequence of context and query time points sorted in
+    non-decreasing order.  At each context step the state is updated with the
+    GRU-D imputation rule; at each query step the decoder produces predictions.
 
-    rₖ = σ(Wᵣ xₖ + Uᵣhₖ₋₁ + bᵣ)  (3)
-    zₖ = σ(W_z xₖ + U_z hₖ₋₁ + b_z )(4)tanh(Wx t + U (rt  h t −1) + b)
-    h̃ₖ = tanh(Wxₖ + U (rₖ ⊙ h̃ₖ₋₁) + b)(5)
-    hₖ = (1 − zₖ)⊙h̃ₖ₋₁ + zₖ⊙h̃ₖ
+    GRU-D equations (Che et al., 2018):
+        delta_k per feature: reset if observed, accumulate otherwise
+        gamma_x = exp(-max(0, W_gamma_x * delta + b)),  W_gamma_x diagonal
+        gamma_h = exp(-max(0, W_gamma_h * delta + b))
+        x_hat = m * x + (1-m) * (gamma_x * x' + (1-gamma_x) * x_tilde)
+        h = GRU(x_hat, gamma_h * h, m)
 
-    GRU-D equations:
-
-    γₜ = exp{ − max(0,Wᵧδₖ + bᵧ)}
-
-    W_{γₓ} is chosen diagonal.
-
-    xₖ' = ⟦mₖ ? xₖ : xₖ₋₁'⟧  (last observation)
-    x̃ = emiprical mean over training data.
-
-    x̂ₖ = mₖxₖ + (1 − mₖ) (γ_{xₖ}xₖ' + (1 − γ_{xₖ})x̃ₖ)
-       = ⟦mₖ ? xₖ : γ_{xₖ}xₖ' + (1 − γ_{xₖ})x̃⟧  (imputation)
-
-    ĥₖ₋₁ = γ_{hₖ} ⊙ hₖ₋₁
-
-    rₖ = σ(Wᵣ x̂ₖ + Uᵣĥₖ₋₁ + Vᵣmₖ + bᵣ)          (13)
-    zₖ = σ(W_z x̂ₖ + U_z ĥₖ₋₁ + V_z mₖ + b_z)        (14)
-    h̃ₖ = tanh(Wx̂ₖ + U (rₖ ⊙ ĥₖ₋₁) + Vmₖ + b)(15)
-    hₖ = (1 − zₖ) ⊙ ĥₖ₋₁ + zₖ ⊙ h̃ₖ  (16)
-
-    GRU-mean:  xₖ ← ⟦mₖ ? xₖ : x̃⟧
-    GRU-forward: xₖ ← ⟦mₖ ? xₖ : xₖ'⟧
-    GRU-simple: xₖ ← [uₖ, mₖ, δₖ]  (uₖ = GRU-mean or GRU-forward)
-    GRU-D: x̂ₖ ← ⟦mₖ ? xₖ : γ_{xₖ}xₖ' + (1 − γ_{xₖ})x̃⟧  (imputation)
+    Reference:
+        - | Recurrent Neural Networks for Multivariate Time Series with Missing Values
+          | Zhengping Che, Sanjay Purushotham, Kyunghyun Cho, David Sontag & Yan Liu
+          | Nature Scientific Reports
+          | https://www.nature.com/articles/s41598-018-24271-9
     """
+
+    input_size: Final[int]
+    hidden_size: Final[int]
+    output_size: Final[int]
+    batch_first: Final[bool]
 
     empirical_mean: Tensor
 
@@ -105,11 +87,13 @@ class GRU_D(nn.Module):
         *,
         empirical_mean: Tensor,
         output_size: int | None = None,
+        batch_first: bool = True,
     ) -> None:
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.output_size = input_size if output_size is None else output_size
+        self.batch_first = batch_first
 
         self.register_buffer("empirical_mean", empirical_mean)
         assert self.empirical_mean.shape == (self.input_size,)
@@ -123,89 +107,85 @@ class GRU_D(nn.Module):
 
     def forward(
         self,
-        times: Tensor,  # (..., $N)
-        values: Tensor,  # (..., $N, D)
-        query_times: Tensor,  # (..., $K)
+        times: Tensor,  # (..., $N + $K), possibly with trailing NaNs (padding)
+        context_values: Tensor,  # (..., $N + $K, D), possibly with NaNs
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, F), bool
         *,
-        h0: Tensor | None = None,  # (..., H)
-    ) -> Tensor:
-        *batch_shape, _ = times.shape
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> Tensor:  # (..., $N + $K, F)
+        r"""Filter and forecast over combined context/query time points."""
+        # optional: sanitize values
+        context_values = context_values.masked_fill(~context_mask, nan)
 
-        mask = values.isfinite()  # (..., $N, D), observed values
-        valid_times = times.isfinite().unsqueeze(-1)  # (..., $N, 1)
-        times = times.nan_to_num(0.0)
-        t0 = times[..., [0]]
-        # ∆tₖ = tₖ - tₖ₋₁; ∆t₁ = 0
-        increments = times.diff(dim=-1, prepend=t0).unsqueeze(-1)  # (..., $N, 1)
+        # initialize mask over valid time steps
+        valid_steps = times.isfinite() & (context_mask | query_mask).any(dim=-1)
+        result_mask = query_mask
 
-        # δ₀ = 0
-        delta = times.new_zeros(*batch_shape, self.input_size)
+        if self.batch_first:
+            times = times.moveaxis(-1, 0)
+            context_values = context_values.moveaxis(-2, 0)
+            context_mask = context_mask.moveaxis(-2, 0)
+            query_mask = query_mask.moveaxis(-2, 0)
+            valid_steps = valid_steps.moveaxis(-1, 0)
 
-        # initialize h0
-        h = (
+        num_steps, *batch_shape = times.shape
+        assert context_values.shape == (num_steps, *batch_shape, self.input_size)
+        assert context_mask.shape == (num_steps, *batch_shape, self.input_size)
+        assert query_mask.shape == (num_steps, *batch_shape, self.input_size)
+        assert valid_steps.shape == (num_steps, *batch_shape)
+
+        # get initial state
+        t = times[0] if initial_time is None else initial_time  # (...)
+        h = (  # (..., H)
             self.h0.expand(*batch_shape, self.hidden_size)
-            if h0 is None
-            else h0.expand(*batch_shape, self.hidden_size)
+            if initial_state is None
+            else initial_state.expand(*batch_shape, self.hidden_size)
         )
-        # initialize x0 = x̃
-        x = self.empirical_mean.expand(*batch_shape, self.input_size)
+        x = self.empirical_mean.expand(*batch_shape, self.input_size)  # (..., D)
+        delta = times.new_zeros(*batch_shape, self.input_size)  # (..., D)
 
-        # iterate over observations
-        for active, inc, m, x_obs in zip(
-            valid_times.unbind(-2),
-            increments.unbind(-2),
-            mask.unbind(-2),
-            values.unbind(-2),
+        predictions_list: list[Tensor] = []
+
+        for t_obs, ctx_vals, ctx_mask, active in zip(
+            times,
+            context_values,
+            context_mask,
+            valid_steps,
             strict=True,
         ):
-            # δₖ = ⟦mₖ=1 ?  ∆tₖ : ∆tₖ + δₖ₋₁⟧;
-            delta = torch.where(active, torch.where(m, inc, delta + inc), delta)  # (..., D)  # fmt: skip
-            # last observation (x_{t'})
-            x = torch.where(active, torch.where(m, x_obs, x), x)  # (..., D)
+            inc = torch.where(active, t_obs - t, torch.zeros_like(t_obs)).unsqueeze(
+                -1
+            )  # (..., 1)
+            t = torch.where(active, t_obs, t)  # (...)
 
-            # γₜ = exp{ − max(0,Wᵧδₖ + bᵧ)}  (eq 10)
-            # for γₓ, W_{γₓ} is diagonal
-            # for γₕ, W_{γₕ} is full matrix
-            gamma_x = torch.exp(-torch.relu(self.gamma_x_linear(delta)))  # (..., D)
-            gamma_h = torch.exp(-torch.relu(self.gamma_h_linear(delta)))  # (..., H)
-
-            # x̂ₜ = ⟦mₖ ? xₖ : γ_{xₖ}xₖ' + (1 − γ_{xₖ})x̃⟧  (eq. 11)
-            x_hat = torch.where(  # (..., D)
-                m,
-                x_obs,
-                gamma_x * x + (1 - gamma_x) * self.empirical_mean,
+            # per-feature delta: reset if observed, accumulate if not; unchanged if inactive
+            delta = torch.where(  # (..., D)
+                active[..., None],
+                torch.where(ctx_mask, inc, delta + inc),
+                delta,
             )
 
-            # ĥₖ₋₁ = γ_{hₖ} ⊙ hₖ₋₁  (eq 12)
-            h_hat = gamma_h * h  # (..., H)
-
-            # GRU-D equations (13-16)
-            h_candidate = self.gru_d_cell(x_hat, h_hat, m)  # (..., H)
-            h = torch.where(active, h_candidate, h)  # (..., H)
-
-        # Roll forward to query times with completely missing observations.
-        time_mask = valid_times.squeeze(-1)  # (..., $N)
-        last_time_indices = time_mask.sum(dim=-1).clamp_min(1).unsqueeze(-1) - 1
-        last_times = torch.take_along_dim(times, last_time_indices, dim=-1)
-
-        query_valid = query_times.isfinite()
-        query_times = query_times.nan_to_num(0.0)
-        query_increments = query_times.diff(dim=-1, prepend=last_times).unsqueeze(-1)
-        missing = mask.new_zeros(*batch_shape, self.input_size)
-
-        h_queries_list: list[Tensor] = []
-
-        for inc in query_increments.unbind(-2):
-            delta = delta + inc  # (..., D)
-
+            # compute decay values γₜ, γₕ
             gamma_x = torch.exp(-torch.relu(self.gamma_x_linear(delta)))  # (..., D)
             gamma_h = torch.exp(-torch.relu(self.gamma_h_linear(delta)))  # (..., H)
-            x_hat = gamma_x * x + (1 - gamma_x) * self.empirical_mean  # (..., D)
+
+            x = torch.where(active[..., None] & ctx_mask, ctx_vals, x)  # (..., D)
+            x_hat = torch.where(  # (..., D)
+                ctx_mask,
+                ctx_vals,
+                gamma_x * x + (1 - gamma_x) * self.empirical_mean,
+            )
             h_hat = gamma_h * h  # (..., H)
+            h_candidate = self.gru_d_cell(x_hat, h_hat, ctx_mask)  # (..., H)
+            h = torch.where(active[..., None], h_candidate, h)  # (..., H)
 
-            h = self.gru_d_cell(x_hat, h_hat, missing)  # (..., H)
-            h_queries_list.append(h)
+            # make prediction
+            y = self.decoder(h)
 
-        h_query = torch.stack(h_queries_list, dim=-2)  # (..., $K, H)
-        prediction = self.decoder(h_query)  # (..., $K, O)
-        return prediction.masked_fill(~query_valid.unsqueeze(-1), torch.nan)
+            predictions_list.append(y)  # (..., F)
+
+        stack_dim = -2 if self.batch_first else 0
+        result = torch.stack(predictions_list, dim=stack_dim)  # (..., N+K, F)
+        return result.masked_fill(~result_mask, nan)

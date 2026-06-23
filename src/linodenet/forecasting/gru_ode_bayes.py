@@ -750,7 +750,7 @@ class GRU_ODE_Bayes(nn.Module):
         assert query_mask.shape == (num_steps, *batch_shape, self.input_size)
         assert valid_steps.shape == (num_steps, *batch_shape)
 
-        # initialize 𝐡₀
+        # get initial state
         t = times[0] if initial_time is None else initial_time
         post_state = self.initial_state if initial_state is None else initial_state
         post_state = post_state.expand(*batch_shape, self.hidden_size)
