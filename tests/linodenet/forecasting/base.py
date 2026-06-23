@@ -38,73 +38,8 @@ class SequentialData(NamedTuple):
             < self.query_lengths[..., None]
         )
 
-
-class TestForecastingModel[M: nn.Module](ABC):
-    r"""Shared behavioral tests for forecasting models."""
-
-    SEED: ClassVar[int] = 0
-    MIN_STEPS: ClassVar[int] = 2
-    MAX_STEPS: ClassVar[int] = 5
-    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
-    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
-
-    @abstractmethod
-    def make_model(self, model_config: object, /) -> M:
-        r"""Instantiate the forecasting model under test."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def forecast(self, model: M, inputs: SequentialData, /) -> tuple[Tensor, ...]:
-        r"""Return model predictions for sequential forecasting inputs."""
-        raise NotImplementedError
-
-    @abstractmethod
-    def loss(
-        self, model: M, predictions: tuple[Tensor, ...], targets: Tensor
-    ) -> Tensor:
-        r"""Return a scalar training loss for model predictions."""
-        raise NotImplementedError
-
-    @pytest.fixture
-    def seed(self) -> int:
-        r"""Random seed used for synthetic data and model initialization."""
-        return self.SEED
-
-    @pytest.fixture
-    def min_steps(self) -> int:
-        r"""Minimum number of context and query time steps."""
-        return self.MIN_STEPS
-
-    @pytest.fixture
-    def max_steps(self) -> int:
-        r"""Maximum number of context and query time steps."""
-        return self.MAX_STEPS
-
-    @pytest.fixture
-    def context_shape(self) -> tuple[int, ...]:
-        r"""Context value event shape."""
-        return self.CONTEXT_SHAPE
-
-    @pytest.fixture
-    def output_shape(self, context_shape: tuple[int, ...]) -> tuple[int, ...]:
-        r"""Query value event shape."""
-        return context_shape if self.OUTPUT_SHAPE is None else self.OUTPUT_SHAPE
-
-    @pytest.fixture(
-        params=[(), (8,), (1, 2, 3)],
-        ids=["batch_shape=()", "batch_shape=(8,)", "batch_shape=(1,2,3)"],
-    )
-    def batch_shape(self, request: pytest.FixtureRequest) -> tuple[int, ...]:
-        r"""Batch shape used for batched tests."""
-        return request.param
-
-    @pytest.fixture
-    def model_config(self) -> object:
-        r"""Configuration object passed to :meth:`make_model`."""
-        return None
-
     @classmethod
-    def make_sequential_data(
+    def new_sample(
         cls,
         *,
         seed: int,
@@ -199,6 +134,71 @@ class TestForecastingModel[M: nn.Module](ABC):
             query_lengths=query_lengths,
         )
 
+
+class TestForecastingModel[M: nn.Module](ABC):
+    r"""Shared behavioral tests for forecasting models."""
+
+    SEED: ClassVar[int] = 0
+    MIN_STEPS: ClassVar[int] = 2
+    MAX_STEPS: ClassVar[int] = 5
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+
+    @abstractmethod
+    def make_model(self, model_config: object, /) -> M:
+        r"""Instantiate the forecasting model under test."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def forecast(self, model: M, inputs: SequentialData, /) -> tuple[Tensor, ...]:
+        r"""Return model predictions for sequential forecasting inputs."""
+        raise NotImplementedError
+
+    @abstractmethod
+    def loss(
+        self, model: M, predictions: tuple[Tensor, ...], targets: Tensor
+    ) -> Tensor:
+        r"""Return a scalar training loss for model predictions."""
+        raise NotImplementedError
+
+    @pytest.fixture
+    def seed(self) -> int:
+        r"""Random seed used for synthetic data and model initialization."""
+        return self.SEED
+
+    @pytest.fixture
+    def min_steps(self) -> int:
+        r"""Minimum number of context and query time steps."""
+        return self.MIN_STEPS
+
+    @pytest.fixture
+    def max_steps(self) -> int:
+        r"""Maximum number of context and query time steps."""
+        return self.MAX_STEPS
+
+    @pytest.fixture
+    def context_shape(self) -> tuple[int, ...]:
+        r"""Context value event shape."""
+        return self.CONTEXT_SHAPE
+
+    @pytest.fixture
+    def output_shape(self, context_shape: tuple[int, ...]) -> tuple[int, ...]:
+        r"""Query value event shape."""
+        return context_shape if self.OUTPUT_SHAPE is None else self.OUTPUT_SHAPE
+
+    @pytest.fixture(
+        params=[(), (8,), (1, 2, 3)],
+        ids=["batch_shape=()", "batch_shape=(8,)", "batch_shape=(1,2,3)"],
+    )
+    def batch_shape(self, request: pytest.FixtureRequest) -> tuple[int, ...]:
+        r"""Batch shape used for batched tests."""
+        return request.param
+
+    @pytest.fixture
+    def model_config(self) -> object:
+        r"""Configuration object passed to :meth:`make_model`."""
+        return None
+
     def test_forward_unbatched(
         self,
         model_config: object,
@@ -208,7 +208,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
     ) -> None:
-        data = self.make_sequential_data(
+        data = SequentialData.new_sample(
             seed=seed,
             batch_shape=(),
             min_steps=min_steps,
@@ -230,7 +230,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         output_shape: tuple[int, ...],
         batch_shape: tuple[int, ...],
     ) -> None:
-        data = self.make_sequential_data(
+        data = SequentialData.new_sample(
             seed=seed,
             batch_shape=batch_shape,
             min_steps=min_steps,
@@ -346,7 +346,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         batch_shape: tuple[int, ...],
     ) -> None:
         r"""Check predictions are unchanged by extra NaN tail padding."""
-        data = self.make_sequential_data(
+        data = SequentialData.new_sample(
             seed=seed,
             batch_shape=batch_shape,
             min_steps=min_steps,
@@ -434,7 +434,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         output_shape: tuple[int, ...],
     ) -> None:
         torch.manual_seed(seed)
-        data = self.make_sequential_data(
+        data = SequentialData.new_sample(
             seed=seed,
             batch_shape=(),
             min_steps=min_steps,
@@ -488,7 +488,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         batch_shape: tuple[int, ...],
     ) -> None:
         torch.manual_seed(seed)
-        data = self.make_sequential_data(
+        data = SequentialData.new_sample(
             seed=seed,
             batch_shape=batch_shape,
             min_steps=min_steps,
