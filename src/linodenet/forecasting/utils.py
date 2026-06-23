@@ -428,21 +428,6 @@ class BatchedDenseArgs:
         query_lengths = Q.isfinite().sum(dim=-1)
         num_samples = T.shape[0]
 
-        query_values = (
-            unpad_sequence(
-                self.query_values.unsqueeze(0).flatten(end_dim=-3),
-                query_lengths,
-                batch_first=True,
-            )
-            if self.query_values is not None
-            else [None] * num_samples
-        )
-        static_args = (
-            self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
-            if self.static_covariates is not None
-            else [None] * num_samples
-        )
-
         return [
             DenseArg(
                 context_times=c_time,
@@ -453,14 +438,26 @@ class BatchedDenseArgs:
                 query_values=q_value,
                 static_covariates=static_arg,
             )
-            for c_time, c_value, c_mask, q_time, q_mask, q_value, static_arg in zip(
+            for c_time, c_mask, c_value, q_time, q_mask, q_value, static_arg in zip(
                 unpad_sequence(T, context_lengths, batch_first=True),
-                unpad_sequence(X, context_lengths, batch_first=True),
                 unpad_sequence(C, context_lengths, batch_first=True),
+                unpad_sequence(X, context_lengths, batch_first=True),
                 unpad_sequence(Q, query_lengths, batch_first=True),
                 unpad_sequence(M, query_lengths, batch_first=True),
-                query_values,
-                static_args,
+                (
+                    unpad_sequence(
+                        self.query_values.unsqueeze(0).flatten(end_dim=-3),
+                        query_lengths,
+                        batch_first=True,
+                    )
+                    if self.query_values is not None
+                    else [None] * num_samples
+                ),
+                (
+                    self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+                    if self.static_covariates is not None
+                    else [None] * num_samples
+                ),
                 strict=True,
             )
         ]
@@ -499,10 +496,7 @@ class BatchedDenseArgs:
                 fill_value=nan,
             ),
             context_channels=scatter_fill(
-                (*batch_shape, num_context),
-                context_indices,
-                c_channel,
-                fill_value=-1,
+                (*batch_shape, num_context), context_indices, c_channel, fill_value=-1
             ),
             context_values=scatter_fill(
                 (*batch_shape, num_context),
@@ -547,32 +541,32 @@ class BatchedDenseArgs:
         *_, q_size, q_dim = M.shape
 
         times = torch.cat([T, Q], dim=-1)
-        perm = torch.argsort(
+        permutation = torch.argsort(
             times.nan_to_num(nan=torch.inf), dim=-1, stable=True
         ).unsqueeze(-1)
 
         return BatchedCombinedArgs(
-            times=times.take_along_dim(perm.squeeze(-1), dim=-1),
+            times=times.take_along_dim(permutation.squeeze(-1), dim=-1),
             context_values=torch.cat(
                 [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
                 dim=-2,
-            ).take_along_dim(perm, dim=-2),
+            ).take_along_dim(permutation, dim=-2),
             context_mask=torch.cat(
                 [C, C.new_zeros((*batch_shape, q_size, ctx_dim))],
                 dim=-2,
-            ).take_along_dim(perm, dim=-2),
+            ).take_along_dim(permutation, dim=-2),
             query_values=(
                 torch.cat(
                     [Y.new_full((*batch_shape, ctx_size, q_dim), nan), Y],
                     dim=-2,
-                ).take_along_dim(perm, dim=-2)
+                ).take_along_dim(permutation, dim=-2)
                 if Y is not None
                 else None
             ),
             query_mask=torch.cat(
                 [M.new_zeros((*batch_shape, ctx_size, q_dim)), M],
                 dim=-2,
-            ).take_along_dim(perm, dim=-2),
+            ).take_along_dim(permutation, dim=-2),
             static_covariates=self.static_covariates,
         )
 
@@ -837,21 +831,6 @@ class BatchedTripletArgs:
         context_lengths = T.isfinite().sum(dim=-1)
         query_lengths = Q.isfinite().sum(dim=-1)
 
-        query_values = (
-            unpad_sequence(
-                self.query_values.unsqueeze(0).flatten(end_dim=-2),
-                query_lengths,
-                batch_first=True,
-            )
-            if self.query_values is not None
-            else [None] * len(Q)
-        )
-        static_args = (
-            self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
-            if self.static_covariates is not None
-            else [None] * len(T)
-        )
-
         return [
             TripletArg(
                 context_times=c_time,
@@ -868,8 +847,20 @@ class BatchedTripletArgs:
                 unpad_sequence(X, context_lengths, batch_first=True),
                 unpad_sequence(Q, query_lengths, batch_first=True),
                 unpad_sequence(M, query_lengths, batch_first=True),
-                query_values,
-                static_args,
+                (
+                    unpad_sequence(
+                        self.query_values.unsqueeze(0).flatten(end_dim=-2),
+                        query_lengths,
+                        batch_first=True,
+                    )
+                    if self.query_values is not None
+                    else [None] * len(Q)
+                ),
+                (
+                    self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+                    if self.static_covariates is not None
+                    else [None] * len(T)
+                ),
                 strict=True,
             )
         ]
