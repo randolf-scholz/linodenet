@@ -709,6 +709,36 @@ class TestDense:
 
         _assert_dense_equal(actual, original)
 
+    def test_to_combined_roundtrip_unbatched_distinct_dims(self) -> None:
+        original = DenseArg(
+            context_times=torch.tensor([1.0, 3.0]),
+            context_values=torch.tensor([
+                [10.0,  nan],
+                [ nan, 30.0],
+            ]),
+            context_mask=torch.tensor([
+                [ True, False],
+                [False,  True],
+            ]),
+            query_times=torch.tensor([2.0, 4.0]),
+            query_mask=torch.tensor([
+                [ True, False,  True],
+                [False,  True,  True],
+            ]),
+            query_values=torch.tensor([
+                [20.0,  nan, 22.0],
+                [ nan, 41.0, 42.0],
+            ]),
+        )  # fmt: skip
+
+        combined = original.to_combined()
+        assert combined.context_values.shape == (4, 2)
+        assert combined.query_mask.shape == (4, 3)
+
+        actual = combined.to_dense()
+
+        _assert_dense_equal(actual, original)
+
     def test_batched_roundtrip(self) -> None:
         args = [
             DenseArg(
@@ -1004,6 +1034,25 @@ class TestDense:
         )  # fmt: skip
 
         actual = original.to_combined().to_dense()
+
+        _assert_batched_dense_equal(actual, original)
+
+    @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
+    def test_to_combined_roundtrip_batched_distinct_dims(
+        self,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        original = _make_random_batched_dense(
+            batch_shape,
+            context_dim=3,
+            query_dim=4,
+        )
+
+        combined = original.to_combined()
+        assert combined.context_values.shape[-1] == 3
+        assert combined.query_mask.shape[-1] == 4
+
+        actual = combined.to_dense()
 
         _assert_batched_dense_equal(actual, original)
 

@@ -258,15 +258,7 @@ class DenseArg:
         Q = self.query_times
 
         *_, context_size, context_dim = X.shape
-        *_, query_size = Q.shape
-        if Y is not None and Y.shape[-1] != context_dim:
-            raise ValueError(
-                "Expected query_values and context_values dimensions to match."
-            )
-        if M.shape[-1] != context_dim:
-            raise ValueError(
-                "Expected query_mask and context_values dimensions to match."
-            )
+        *_, query_size, query_dim = M.shape
 
         T = torch.cat([T, Q], dim=-1)
         X = torch.cat(
@@ -281,12 +273,12 @@ class DenseArg:
             None
             if Y is None
             else torch.cat(
-                [Y.new_full((context_size, context_dim), nan), Y],
+                [Y.new_full((context_size, query_dim), nan), Y],
                 dim=-2,
             )
         )
         M = torch.cat(
-            [M.new_zeros((context_size, context_dim)), M],
+            [M.new_zeros((context_size, query_dim)), M],
             dim=-2,
         )
         indices = torch.argsort(T, dim=-1, stable=True)
@@ -591,15 +583,7 @@ class BatchedDenseArgs:
         Y = self.query_values
 
         *batch_shape, context_size, context_dim = X.shape
-        *_, query_size = Q.shape
-        if Y is not None and Y.shape[-1] != context_dim:
-            raise ValueError(
-                "Expected query_values and context_values dimensions to match."
-            )
-        if M.shape[-1] != context_dim:
-            raise ValueError(
-                "Expected query_mask and context_values dimensions to match."
-            )
+        *_, query_size, query_dim = M.shape
 
         times = torch.cat([T, Q], dim=-1)
         query_mask = M
@@ -615,12 +599,12 @@ class BatchedDenseArgs:
             None
             if Y is None
             else torch.cat([
-                Y.new_full((*batch_shape, context_size, context_dim), nan),
+                Y.new_full((*batch_shape, context_size, query_dim), nan),
                 Y,
             ], dim=-2)
         )  # fmt: skip
         query_mask = torch.cat([
-            query_mask.new_zeros((*batch_shape, context_size, context_dim)),
+            query_mask.new_zeros((*batch_shape, context_size, query_dim)),
             query_mask,
         ], dim=-2)  # fmt: skip
 
@@ -1089,7 +1073,8 @@ class CombinedArg:
     Shapes:
         N: context size
         K: query size
-        D: data dimensionality
+        D: context data dimensionality
+        E: query data dimensionality
 
     Assumptions:
         - time stamps are finite and non-decreasing
@@ -1103,8 +1088,8 @@ class CombinedArg:
     times: Tensor  # Float[(N + K)], finite, non-decreasing
     context_values: Tensor  # Float[(N + K, D)], sparse
     context_mask: Tensor  # Bool[(N + K, D)]
-    query_mask: Tensor  # Bool[(N + K, D)]
-    query_values: Tensor | None = None  # Float[(N + K, D)], sparse
+    query_mask: Tensor  # Bool[(N + K, E)]
+    query_values: Tensor | None = None  # Float[(N + K, E)], sparse
 
     static_covariates: Tensor | None = None  # Float[(M)], sparse
 
@@ -1132,23 +1117,25 @@ class CombinedArg:
         Y = self.query_values
         Q = self.query_mask
 
-        *_, num_combined, num_dim = X.shape
+        *_, num_combined, context_dim = X.shape
+        *_, query_combined, query_dim = Q.shape
         assert C.dtype == torch.bool
         assert T.shape == (num_combined,)
         assert T.isfinite().all()
         assert T.diff(dim=-1).ge(0.0).all()  # sorted in ascending order
 
-        assert X.shape == (num_combined, num_dim)
-        assert C.shape == (num_combined, num_dim)
+        assert X.shape == (num_combined, context_dim)
+        assert C.shape == (num_combined, context_dim)
         assert torch.equal(X.isfinite(), C)
 
         assert Q.dtype == torch.bool
-        assert Q.shape == (num_combined, num_dim)
+        assert Q.shape == (query_combined, query_dim)
+        assert query_combined == num_combined
         assert (C.any(dim=-1) | Q.any(dim=-1)).all()
         assert T[C.any(dim=-1)].diff(dim=-1).ge(0.0).all()
         assert T[Q.any(dim=-1)].diff(dim=-1).gt(0.0).all()
         if Y is not None:
-            assert Y.shape == (num_combined, num_dim)
+            assert Y.shape == (num_combined, query_dim)
             assert torch.equal(Y.isfinite(), Q)
 
     @classmethod
@@ -1191,7 +1178,8 @@ class BatchedCombinedArgs:
     Shapes:
         N: max(Nᵢ) context size
         K: max(Kᵢ) query size
-        E: combined data dimensionality
+        D: context data dimensionality
+        E: query data dimensionality
         M: static covariate dimensionality
 
     Assumptions: (up to tail padding)
@@ -1204,8 +1192,8 @@ class BatchedCombinedArgs:
     """
 
     times: Tensor  # Float[(..., N + K)], padded NaN, non-decreasing
-    context_values: Tensor  # Float[(..., N + K, E)], padded NaN, sparse
-    context_mask: Tensor  # Bool[(..., N + K, E)], padded False
+    context_values: Tensor  # Float[(..., N + K, D)], padded NaN, sparse
+    context_mask: Tensor  # Bool[(..., N + K, D)], padded False
     query_mask: Tensor  # Bool[(..., N + K, E)], padded False
     query_values: Tensor | None = None  # Float[(..., N + K, E)], padded NaN, sparse
 
@@ -1235,7 +1223,8 @@ class BatchedCombinedArgs:
         Y = self.query_values
         Q = self.query_mask
 
-        *batch_shape, num_combined, num_dim = X.shape
+        *batch_shape, num_combined, context_dim = X.shape
+        *query_batch_shape, query_combined, query_dim = Q.shape
         T_valid = T.isfinite()
         T_ascending = T.diff(dim=-1).ge(0.0)
         assert T.shape == (*batch_shape, num_combined)
@@ -1243,17 +1232,19 @@ class BatchedCombinedArgs:
         assert is_prefix_mask(T_ascending).all()  # sorted in ascending order
 
         assert C.dtype == torch.bool
-        assert C.shape == (*batch_shape, num_combined, num_dim)
+        assert C.shape == (*batch_shape, num_combined, context_dim)
         assert torch.equal(X.isfinite(), C)
         mask_valid = C.any(dim=-1) | Q.any(dim=-1)
 
-        assert X.shape == (*batch_shape, num_combined, num_dim)
+        assert X.shape == (*batch_shape, num_combined, context_dim)
         assert Q.dtype == torch.bool
-        assert Q.shape == (*batch_shape, num_combined, num_dim)
+        assert Q.shape == (*query_batch_shape, query_combined, query_dim)
+        assert query_batch_shape == batch_shape
+        assert query_combined == num_combined
         assert is_prefix_mask(mask_valid).all()  # at least one value per step
 
         if Y is not None:
-            assert Y.shape == (*batch_shape, num_combined, num_dim)
+            assert Y.shape == (*batch_shape, num_combined, query_dim)
             assert torch.equal(Y.isfinite(), Q)
 
         context_filter = C.any(dim=-1)
@@ -1378,12 +1369,13 @@ class BatchedCombinedArgs:
         M = self.query_mask
 
         batch_shape = T.shape[:-1]
-        num_combined, num_dim = X.shape[-2:]
+        num_combined, context_dim = X.shape[-2:]
+        query_dim = M.shape[-1]
         T_flat = T.reshape(-1, num_combined)
-        X_flat = X.reshape(-1, num_combined, num_dim)
-        C_flat = C.reshape(-1, num_combined, num_dim)
-        Y_flat = None if Y is None else Y.reshape(-1, num_combined, num_dim)
-        M_flat = M.reshape(-1, num_combined, num_dim)
+        X_flat = X.reshape(-1, num_combined, context_dim)
+        C_flat = C.reshape(-1, num_combined, context_dim)
+        Y_flat = None if Y is None else Y.reshape(-1, num_combined, query_dim)
+        M_flat = M.reshape(-1, num_combined, query_dim)
         num_batches = T_flat.shape[0]
 
         context_filter = C_flat.any(dim=-1)
@@ -1406,13 +1398,13 @@ class BatchedCombinedArgs:
             fill_value=nan,
         )
         context_values = scatter_fill(
-            (num_batches, context_size, num_dim),
+            (num_batches, context_size, context_dim),
             context_indices,
             X_flat[context_filter],
             fill_value=nan,
         )
         context_mask = scatter_fill(
-            (num_batches, context_size, num_dim),
+            (num_batches, context_size, context_dim),
             context_indices,
             C_flat[context_filter],
             fill_value=False,
@@ -1430,7 +1422,7 @@ class BatchedCombinedArgs:
             fill_value=nan,
         )
         query_mask = scatter_fill(
-            (num_batches, query_size, num_dim),
+            (num_batches, query_size, query_dim),
             query_indices,
             M_flat[query_filter],
             fill_value=False,
@@ -1439,7 +1431,7 @@ class BatchedCombinedArgs:
             None
             if Y_flat is None
             else scatter_fill(
-                (num_batches, query_size, num_dim),
+                (num_batches, query_size, query_dim),
                 query_indices,
                 Y_flat[query_filter],
                 fill_value=nan,
@@ -1448,14 +1440,16 @@ class BatchedCombinedArgs:
 
         return BatchedDenseArgs(
             context_times=context_times.reshape(*batch_shape, context_size),
-            context_values=context_values.reshape(*batch_shape, context_size, num_dim),
-            context_mask=context_mask.reshape(*batch_shape, context_size, num_dim),
+            context_values=context_values.reshape(
+                *batch_shape, context_size, context_dim
+            ),
+            context_mask=context_mask.reshape(*batch_shape, context_size, context_dim),
             query_times=query_times.reshape(*batch_shape, query_size),
-            query_mask=query_mask.reshape(*batch_shape, query_size, num_dim),
+            query_mask=query_mask.reshape(*batch_shape, query_size, query_dim),
             query_values=(
                 None
                 if query_values is None
-                else query_values.reshape(*batch_shape, query_size, num_dim)
+                else query_values.reshape(*batch_shape, query_size, query_dim)
             ),
             static_covariates=self.static_covariates,
         )
