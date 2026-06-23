@@ -1261,87 +1261,75 @@ class BatchedCombinedArgs:
         Y = self.query_values
         M = self.query_mask
 
-        batch_shape = T.shape[:-1]
-        num_combined, context_dim = X.shape[-2:]
+        *batch_shape, num_combined, context_dim = X.shape
         query_dim = M.shape[-1]
+        num_batch = math.prod(batch_shape)
+
         T_flat = T.reshape(-1, num_combined)
         X_flat = X.reshape(-1, num_combined, context_dim)
         C_flat = C.reshape(-1, num_combined, context_dim)
-        Y_flat = Y.reshape(-1, num_combined, query_dim) if Y is not None else None
         M_flat = M.reshape(-1, num_combined, query_dim)
-        num_batches = T_flat.shape[0]
+        Y_flat = Y.reshape(-1, num_combined, query_dim) if Y is not None else None
 
-        context_filter = C_flat.any(dim=-1)
-        query_filter = M_flat.any(dim=-1)
-        context_size = int(context_filter.sum(dim=-1).max().item())
-        query_size = int(query_filter.sum(dim=-1).max().item())
-
-        batch_indices = torch.arange(num_batches, device=T.device)
-        batch_indices = batch_indices.reshape(-1, 1).expand(-1, num_combined)
-
-        context_positions = context_filter.cumsum(dim=-1) - 1
-        context_indices = (
-            batch_indices[context_filter],
-            context_positions[context_filter],
-        )
-        context_times = scatter_fill(
-            (num_batches, context_size),
-            context_indices,
-            T_flat[context_filter],
-            fill_value=nan,
-        )
-        context_values = scatter_fill(
-            (num_batches, context_size, context_dim),
-            context_indices,
-            X_flat[context_filter],
-            fill_value=nan,
-        )
-        context_mask = scatter_fill(
-            (num_batches, context_size, context_dim),
-            context_indices,
-            C_flat[context_filter],
-            fill_value=False,
+        batch_indices = (
+            torch.arange(num_batch, device=T.device).unsqueeze(-1).expand_as(T_flat)
         )
 
-        query_positions = query_filter.cumsum(dim=-1) - 1
-        query_indices = (
-            batch_indices[query_filter],
-            query_positions[query_filter],
+        ctx_filter = C_flat.any(dim=-1)
+        ctx_size = int(ctx_filter.sum(dim=-1).max().item())
+        ctx_positions = ctx_filter.cumsum(dim=-1) - 1
+        ctx_indices = (
+            batch_indices[ctx_filter],
+            ctx_positions[ctx_filter],
         )
-        query_times = scatter_fill(
-            (num_batches, query_size),
-            query_indices,
-            T_flat[query_filter],
-            fill_value=nan,
-        )
-        query_mask = scatter_fill(
-            (num_batches, query_size, query_dim),
-            query_indices,
-            M_flat[query_filter],
-            fill_value=False,
-        )
-        query_values = (
-            scatter_fill(
-                (num_batches, query_size, query_dim),
-                query_indices,
-                Y_flat[query_filter],
-                fill_value=nan,
-            )
-            if Y_flat is not None
-            else None
+
+        qry_filter = M_flat.any(dim=-1)
+        qry_size = int(qry_filter.sum(dim=-1).max().item())
+        qry_positions = qry_filter.cumsum(dim=-1) - 1
+        qry_indices = (
+            batch_indices[qry_filter],
+            qry_positions[qry_filter],
         )
 
         return BatchedDenseArgs(
-            context_times=context_times.reshape(*batch_shape, context_size),
-            context_values=context_values.reshape(
-                *batch_shape, context_size, context_dim
-            ),
-            context_mask=context_mask.reshape(*batch_shape, context_size, context_dim),
-            query_times=query_times.reshape(*batch_shape, query_size),
-            query_mask=query_mask.reshape(*batch_shape, query_size, query_dim),
+            context_times=scatter_fill(
+                (num_batch, ctx_size),
+                ctx_indices,
+                T_flat[ctx_filter],
+                fill_value=nan,
+            ).reshape(*batch_shape, ctx_size),
+            context_mask=scatter_fill(
+                (num_batch, ctx_size, context_dim),
+                ctx_indices,
+                C_flat[ctx_filter],
+                fill_value=False,
+            ).reshape(*batch_shape, ctx_size, context_dim),
+            context_values=scatter_fill(
+                (num_batch, ctx_size, context_dim),
+                ctx_indices,
+                X_flat[ctx_filter],
+                fill_value=nan,
+            ).reshape(*batch_shape, ctx_size, context_dim),
+            query_times=scatter_fill(
+                (num_batch, qry_size),
+                qry_indices,
+                T_flat[qry_filter],
+                fill_value=nan,
+            ).reshape(*batch_shape, qry_size),
+            query_mask=scatter_fill(
+                (num_batch, qry_size, query_dim),
+                qry_indices,
+                M_flat[qry_filter],
+                fill_value=False,
+            ).reshape(*batch_shape, qry_size, query_dim),
             query_values=(
-                query_values.reshape(*batch_shape, query_size, query_dim)
-                if query_values is not None
+                scatter_fill(
+                    (num_batch, qry_size, query_dim),
+                    qry_indices,
+                    Y_flat[qry_filter],
+                    fill_value=nan,
+                ).reshape(*batch_shape, qry_size, query_dim)
+                if Y_flat is not None
                 else None
             ),
             static_covariates=self.static_covariates,
