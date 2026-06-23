@@ -544,7 +544,7 @@ class TestGRUODEBayes:
             model.update_state,
             (state, observation),
             target=state,
-            mask=mask,
+            batch_mask=mask,
         )
 
         assert result.shape == state.shape

@@ -110,17 +110,17 @@ def update_masked(
     args: tuple[Tensor, ...],
     *,
     target: Tensor,  # (..., *e)
-    mask: Tensor,  # (...)
+    batch_mask: Tensor,  # (...)
 ) -> Tensor:  # (..., *e)
     r"""Update ``target`` with ``fn`` applied to selected batch elements."""
-    assert mask.dtype == torch.bool
-    batch_shape = mask.shape
+    assert batch_mask.dtype == torch.bool
+    batch_shape = batch_mask.shape
     batch_rank = len(batch_shape)
 
     event_shape = target.shape[batch_rank:]
     assert target.shape == batch_shape + event_shape
 
-    mask_flat = mask.flatten()
+    mask_flat = batch_mask.flatten()
     ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
 
     return (
@@ -780,7 +780,7 @@ class GRU_ODE_Bayes(nn.Module):
                 self.propagate_state,
                 (delta, post_state),
                 target=post_state,
-                mask=active,
+                batch_mask=active,
             )
 
             # get the prior prediction
@@ -792,7 +792,7 @@ class GRU_ODE_Bayes(nn.Module):
                 self.update_cell,
                 (prior_state, observation, prior_mean, prior_logvar),
                 target=prior_state,
-                mask=update_mask,
+                batch_mask=update_mask,
             )
 
             # get the posterior prediciton
