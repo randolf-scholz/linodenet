@@ -277,18 +277,19 @@ def update_masked[R: tuple[Tensor, ...]](
     args: tuple[Tensor, ...],
     *,
     target: R,  # (*(..., *eᵢ),)
-    mask: Tensor,  # (...)
+    batch_mask: Tensor,  # (...)
 ) -> R:  # (*(..., *eᵢ),)
     r"""Update ``target`` with ``fn`` applied to selected batch elements."""
-    assert mask.dtype == torch.bool
-    batch_shape = mask.shape
+    assert batch_mask.dtype == torch.bool
+    batch_shape = batch_mask.shape
     batch_rank = len(batch_shape)
-    mask_flat = mask.flatten()
+    mask_flat = batch_mask.flatten()
 
     ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
 
     return tuple(  # type: ignore[return-type]
-        t.reshape(-1, *t.shape[batch_rank:])
+        t
+        .reshape(-1, *t.shape[batch_rank:])
         .index_put([mask_flat], y)
         .reshape(*batch_shape, *t.shape[batch_rank:])
         for y, t in zip(ys_flat, target, strict=True)
@@ -476,7 +477,8 @@ class CRU(nn.Module):
 
         # create a mask for the transition matrix model
         band_mask = (
-            torch.ones((latent_size, latent_size), dtype=torch.bool)
+            torch
+            .ones((latent_size, latent_size), dtype=torch.bool)
             .triu(-bandwidth)
             .tril(bandwidth)
         )
@@ -609,7 +611,7 @@ class CRU(nn.Module):
                 self.propagate_state,
                 (delta, post_mean, post_cov),
                 target=(post_mean, post_cov),
-                mask=active,
+                batch_mask=active,
             )
 
             # Update only for batch elements that have context at this step.
@@ -617,7 +619,7 @@ class CRU(nn.Module):
                 self.update_state,
                 (y, y_var, ctx_mask, prior_mean, prior_cov),
                 target=(prior_mean, prior_cov),
-                mask=ctx_mask,
+                batch_mask=ctx_mask,
             )
 
             # Decode at query steps; NaN elsewhere via apply_masked fill.
