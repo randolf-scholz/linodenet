@@ -425,36 +425,25 @@ class BatchedDenseArgs:
         X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
         Q = self.query_times.unsqueeze(0).flatten(end_dim=-2)
-        query_mask = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
-        query_values = (
-            None
-            if self.query_values is None
-            else self.query_values.unsqueeze(0).flatten(end_dim=-3)
-        )
-        static_covariates = (
-            None
-            if self.static_covariates is None
-            else self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
-        )
+        M = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
 
         context_lengths = T.isfinite().sum(dim=-1)
         query_lengths = Q.isfinite().sum(dim=-1)
         num_samples = T.shape[0]
 
-        context_times = unpad_sequence(T, context_lengths, batch_first=True)
-        context_values = unpad_sequence(X, context_lengths, batch_first=True)
-        context_masks = unpad_sequence(C, context_lengths, batch_first=True)
-        query_times = unpad_sequence(Q, query_lengths, batch_first=True)
-        query_masks = unpad_sequence(query_mask, query_lengths, batch_first=True)
         query_values = (
-            [None] * num_samples
-            if query_values is None
-            else unpad_sequence(query_values, query_lengths, batch_first=True)
+            unpad_sequence(
+                self.query_values.unsqueeze(0).flatten(end_dim=-3),
+                query_lengths,
+                batch_first=True,
+            )
+            if self.query_values is not None
+            else [None] * num_samples
         )
         static_args = (
-            [None] * num_samples
-            if static_covariates is None
-            else list(static_covariates.unbind(dim=0))
+            self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+            if self.static_covariates is not None
+            else [None] * num_samples
         )
 
         return [
@@ -468,11 +457,11 @@ class BatchedDenseArgs:
                 static_covariates=static_arg,
             )
             for context_time, context_value, context_mask, query_time, query_mask, query_value, static_arg in zip(
-                context_times,
-                context_values,
-                context_masks,
-                query_times,
-                query_masks,
+                unpad_sequence(T, context_lengths, batch_first=True),
+                unpad_sequence(X, context_lengths, batch_first=True),
+                unpad_sequence(C, context_lengths, batch_first=True),
+                unpad_sequence(Q, query_lengths, batch_first=True),
+                unpad_sequence(M, query_lengths, batch_first=True),
                 query_values,
                 static_args,
                 strict=True,
@@ -537,14 +526,14 @@ class BatchedDenseArgs:
                 fill_value=-1,
             ),
             query_values=(
-                None
-                if Y is None
-                else scatter_fill(
+                scatter_fill(
                     (*batch_shape, num_query),
                     query_indices,
                     Y[*q_batch_idx, q_time, q_channel],
                     fill_value=nan,
                 )
+                if Y is not None
+                else None
             ),
             static_covariates=self.static_covariates,
         )
@@ -576,12 +565,12 @@ class BatchedDenseArgs:
                 dim=-2,
             ).take_along_dim(perm, dim=-2),
             query_values=(
-                None
-                if Y is None
-                else torch.cat(
+                torch.cat(
                     [Y.new_full((*batch_shape, ctx_size, q_dim), nan), Y],
                     dim=-2,
                 ).take_along_dim(perm, dim=-2)
+                if Y is not None
+                else None
             ),
             query_mask=torch.cat(
                 [M.new_zeros((*batch_shape, ctx_size, q_dim)), M],
