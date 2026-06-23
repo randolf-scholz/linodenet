@@ -6,7 +6,6 @@ __all__ = [
     "DecoderConfig",
     "EncoderConfig",
     "build_cru",
-    "apply_masked",
     "update_masked",
 ]
 
@@ -229,49 +228,6 @@ class CRUConfig:
     batch_first: bool = True
 
 
-def apply_masked[R: Tensor | tuple[Tensor, ...]](
-    fn: Callable[..., R],  # [*(..., *dᵢ)] -> [*(..., *eᵢ)]
-    args: tuple[Tensor, ...],
-    mask: Tensor,  # (...)
-    *,
-    fill_value: float = float("nan"),
-) -> R:  # *(..., *eᵢ)
-    r"""Apply fn only to selected batch elements.
-
-    Args:
-        fn: Function to apply. Must accept tensors with shared batch shape.
-        args: The arguments to fn. Must all have the same batch shape.
-        mask: The boolean mask indicating which batch elements to apply fn to. Must have the same batch shape as args.
-        fill_value: The value to fill masked out batch elements with.
-    """
-    batch_shape = mask.shape
-    B = batch_shape.numel() if batch_shape else 1
-    mask_flat = mask.reshape(B).bool()  # [B]
-
-    xs_flat = []
-    for x in args:
-        event_shape = x.shape[len(batch_shape) :]
-        assert x.shape == batch_shape + event_shape
-        xs_flat.append(x.reshape(-1, *event_shape))
-
-    # apply fn over selected batch elements
-    ys_flat = fn(*(x[mask_flat] for x in xs_flat))
-    returns_tensor = isinstance(ys_flat, Tensor)
-    ys_tuple: tuple[Tensor, ...] = (ys_flat,) if returns_tensor else ys_flat
-
-    y_result = []
-    for y in ys_tuple:
-        y_flat = torch.full(
-            (B, *y.shape[1:]),
-            fill_value,
-            dtype=y.dtype,
-            device=y.device,
-        )
-        y_flat[mask_flat] = y
-        y_result.append(y_flat.reshape(*batch_shape, *y.shape[1:]))
-    return y_result[0] if returns_tensor else tuple(y_result)
-
-
 def update_masked[R: tuple[Tensor, ...]](
     fn: Callable[..., R],  # [*(..., *dᵢ)] -> (*(..., *eᵢ),)
     args: tuple[Tensor, ...],
@@ -288,8 +244,7 @@ def update_masked[R: tuple[Tensor, ...]](
     ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
 
     return tuple(  # type: ignore[return-type]
-        t
-        .reshape(-1, *t.shape[batch_rank:])
+        t.reshape(-1, *t.shape[batch_rank:])
         .index_put([mask_flat], y)
         .reshape(*batch_shape, *t.shape[batch_rank:])
         for y, t in zip(ys_flat, target, strict=True)
@@ -477,8 +432,7 @@ class CRU(nn.Module):
 
         # create a mask for the transition matrix model
         band_mask = (
-            torch
-            .ones((latent_size, latent_size), dtype=torch.bool)
+            torch.ones((latent_size, latent_size), dtype=torch.bool)
             .triu(-bandwidth)
             .tril(bandwidth)
         )
@@ -558,11 +512,14 @@ class CRU(nn.Module):
 
         *batch_shape, _ = times.shape
 
-        # Sanitize and encode all context observations upfront.
-        context_values = context_values.masked_fill(~has_context.unsqueeze(-1), nan)
-        y_means, y_variances = apply_masked(
-            self.encoder, (context_values,), has_context
-        )  # (..., $N+$K, d), (..., $N+$K, d)
+        y_means = context_values.new_full((*context_values.shape[:-1], d), nan)
+        y_variances = context_values.new_full((*context_values.shape[:-1], d), nan)
+        y_means, y_variances = update_masked(  # (..., $N+$K, d) each
+            self.encoder,
+            (context_values,),
+            target=(y_means, y_variances),
+            batch_mask=has_context,
+        )
 
         if self.batch_first:
             times = times.moveaxis(-1, 0)
@@ -622,7 +579,6 @@ class CRU(nn.Module):
                 batch_mask=ctx_mask,
             )
 
-            # Decode at query steps; NaN elsewhere via apply_masked fill.
             pred_mean, pred_var = self.decoder(post_mean, post_cov)
 
             prior_means_list.append(prior_mean)
