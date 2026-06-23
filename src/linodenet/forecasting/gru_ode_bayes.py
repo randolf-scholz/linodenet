@@ -760,7 +760,7 @@ class GRU_ODE_Bayes(nn.Module):
         post_means_list = []
         post_logvars_list = []
 
-        for t_obs, observation, mask, active in zip(
+        for t_obs, observation, ctx_mask, active in zip(
             times,
             context_values,
             context_mask.any(dim=-1),
@@ -781,12 +781,11 @@ class GRU_ODE_Bayes(nn.Module):
             prior_mean, prior_logvar = self.decoder(prior_state)
 
             # update the state
-            update_mask = active & mask
             post_state = update_masked(
                 self.update_cell,
                 (prior_state, observation, prior_mean, prior_logvar),
                 target=prior_state,
-                batch_mask=update_mask,
+                batch_mask=active & ctx_mask,
             )
 
             # get the posterior prediciton

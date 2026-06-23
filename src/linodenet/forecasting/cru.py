@@ -537,7 +537,7 @@ class CRU(nn.Module):
         has_context = context_mask.any(dim=-1)  # (..., $N+$K)
         has_query = query_mask.any(dim=-1)  # (..., $N+$K)
         valid_steps = times.isfinite() & (has_context | has_query)
-        query_out_mask = has_query.unsqueeze(-1)  # (..., $N+$K, 1)
+        has_query = has_query.unsqueeze(-1)  # (..., $N+$K, 1)
 
         # CRU does not support feature-level missingness.
         assert torch.equal(has_context, context_mask.all(dim=-1)), (
@@ -564,7 +564,6 @@ class CRU(nn.Module):
             y_means = y_means.moveaxis(-2, 0)
             y_variances = y_variances.moveaxis(-2, 0)
             has_context = has_context.moveaxis(-1, 0)
-            has_query = has_query.moveaxis(-1, 0)
             valid_steps = valid_steps.moveaxis(-1, 0)
 
         # Initialize state (mean: (..., 2d), cov: (..., d, 3)).
@@ -614,7 +613,7 @@ class CRU(nn.Module):
                 self.update_state,
                 (y, y_var, ctx_mask, prior_mean, prior_cov),
                 target=(prior_mean, prior_cov),
-                batch_mask=ctx_mask,
+                batch_mask=active & ctx_mask,
             )
 
             pred_mean, pred_var = self.decoder(post_mean, post_cov)
@@ -636,8 +635,8 @@ class CRU(nn.Module):
 
         pred_means = torch.stack(pred_means_list, dim=stack_dim_mean)
         pred_vars = torch.stack(pred_vars_list, dim=stack_dim_mean)
-        pred_means = pred_means.masked_fill(~query_out_mask, nan)
-        pred_vars = pred_vars.masked_fill(~query_out_mask, nan)
+        pred_means = pred_means.masked_fill(~has_query, nan)
+        pred_vars = pred_vars.masked_fill(~has_query, nan)
 
         self.pred_means = pred_means
         self.pred_variances = pred_vars
