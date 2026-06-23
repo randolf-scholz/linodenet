@@ -582,47 +582,36 @@ class BatchedDenseArgs:
         M = self.query_mask
         Y = self.query_values
 
-        *batch_shape, context_size, context_dim = X.shape
-        *_, query_size, query_dim = M.shape
+        *batch_shape, ctx_size, ctx_dim = X.shape
+        *_, q_size, q_dim = M.shape
 
         times = torch.cat([T, Q], dim=-1)
-        query_mask = M
-        context_values = torch.cat([
-            X,
-            X.new_full((*batch_shape, query_size, context_dim), nan),
-        ], dim=-2)  # fmt: skip
-        context_mask = torch.cat([
-            C,
-            C.new_zeros((*batch_shape, query_size, context_dim)),
-        ], dim=-2)  # fmt: skip
-        query_values = (
-            None
-            if Y is None
-            else torch.cat([
-                Y.new_full((*batch_shape, context_size, query_dim), nan),
-                Y,
-            ], dim=-2)
-        )  # fmt: skip
-        query_mask = torch.cat([
-            query_mask.new_zeros((*batch_shape, context_size, query_dim)),
-            query_mask,
-        ], dim=-2)  # fmt: skip
+        perm = torch.argsort(
+            times.nan_to_num(nan=torch.inf), dim=-1, stable=True
+        ).unsqueeze(-1)
 
-        indices = torch.argsort(times.nan_to_num(nan=torch.inf), dim=-1, stable=True)
         return BatchedCombinedArgs(
-            times=torch.take_along_dim(times, indices, dim=-1),
-            context_values=torch.take_along_dim(
-                context_values, indices.unsqueeze(-1), dim=-2
-            ),
-            context_mask=torch.take_along_dim(
-                context_mask, indices.unsqueeze(-1), dim=-2
-            ),
+            times=times.take_along_dim(perm.squeeze(-1), dim=-1),
+            context_values=torch.cat(
+                [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
+                dim=-2,
+            ).take_along_dim(perm, dim=-2),
+            context_mask=torch.cat(
+                [C, C.new_zeros((*batch_shape, q_size, ctx_dim))],
+                dim=-2,
+            ).take_along_dim(perm, dim=-2),
             query_values=(
                 None
-                if query_values is None
-                else torch.take_along_dim(query_values, indices.unsqueeze(-1), dim=-2)
+                if Y is None
+                else torch.cat(
+                    [Y.new_full((*batch_shape, ctx_size, q_dim), nan), Y],
+                    dim=-2,
+                ).take_along_dim(perm, dim=-2)
             ),
-            query_mask=torch.take_along_dim(query_mask, indices.unsqueeze(-1), dim=-2),
+            query_mask=torch.cat(
+                [M.new_zeros((*batch_shape, ctx_size, q_dim)), M],
+                dim=-2,
+            ).take_along_dim(perm, dim=-2),
             static_covariates=self.static_covariates,
         )
 
