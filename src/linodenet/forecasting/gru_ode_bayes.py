@@ -706,12 +706,6 @@ class GRU_ODE_Bayes(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
-        num_extra_dims = values.ndim - mean.ndim
-        if num_extra_dims < 0 or values.shape[num_extra_dims:] != mean.shape:
-            raise ValueError(
-                f"Expected values.shape={mean.shape} with optional leading sample "
-                f"dimensions, got {values.shape}."
-            )
         return _marginal_logvar_gaussian_log_prob(
             values,
             mean=mean.expand(*values.shape),

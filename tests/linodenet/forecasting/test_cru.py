@@ -167,7 +167,9 @@ class TestUpdateMasked:
                     (values,),
                     target=(
                         torch.zeros(
-                            values.shape[0], 3, dtype=values.dtype, device=values.device
+                            [values.shape[0], 3],
+                            dtype=values.dtype,
+                            device=values.device,
                         ),
                     ),
                     batch_mask=values.isfinite().all(dim=-1),
@@ -419,6 +421,37 @@ class TestCRU(TestForecastingModel[CRU]):
 
         with pytest.raises((AssertionError, ValueError)):
             model(times, context_values, context_mask, query_mask)
+
+    @pytest.mark.parametrize("size", [(), (5,), (1, 2, 3)])
+    def test_sample_and_log_prob_consistent(self, size: tuple[int, ...]) -> None:
+        torch.manual_seed(0)
+        model = self.make_cru()
+        D = self.STANDARD_CONFIG.input_size
+        F = self.STANDARD_CONFIG.output_size
+        times = torch.tensor([0.0, 0.5, 1.0, 1.5])
+        context_values = torch.randn(4, D)
+        context_mask = torch.tensor([[True] * D, [True] * D, [False] * D, [True] * D])
+        context_values = context_values.masked_fill(~context_mask, torch.nan)
+        query_mask = torch.zeros(4, F, dtype=torch.bool)
+        query_mask[2] = True
+        query_mask[3] = True
+
+        samples, log_prob_direct = model.sample_and_log_prob(
+            size,
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+        log_prob_via_sample = model.log_prob(
+            samples,
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+
+        torch.testing.assert_close(log_prob_direct, log_prob_via_sample)
 
 
 def test_build_cru_instantiates_from_dataclass_config() -> None:

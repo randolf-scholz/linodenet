@@ -195,6 +195,36 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
         assert isinstance(model.update_cell, GRU_Bayes)
         assert model.update_cell.feature_embedding_size == config.feature_embedding_size
 
+    @pytest.mark.parametrize("size", [(), (5,), (1, 2, 3)])
+    def test_sample_and_log_prob_consistent(self, size: tuple[int, ...]) -> None:
+        torch.manual_seed(0)
+        model = self.make_cru()
+        D = self.STANDARD_CONFIG.input_size
+        times = torch.tensor([0.0, 0.5, 1.0, 1.5])
+        context_values = torch.randn(4, D)
+        context_mask = torch.tensor([[True] * D, [True] * D, [False] * D, [True] * D])
+        context_values = context_values.masked_fill(~context_mask, nan)
+        query_mask = torch.zeros(4, D, dtype=torch.bool)
+        query_mask[2] = True
+        query_mask[3] = True
+
+        samples, log_prob_direct = model.sample_and_log_prob(
+            size,
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+        log_prob_via_sample = model.log_prob(
+            samples,
+            times=times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
+
+        torch.testing.assert_close(log_prob_direct, log_prob_via_sample)
+
 
 class TestGRUODEBayes:
     r"""Tests for the cleaned GRU-ODE-Bayes implementation."""
