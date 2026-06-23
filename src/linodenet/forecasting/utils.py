@@ -681,51 +681,44 @@ class TripletArg:
             raise ValueError("Expected query channel indices below query_dim.")
 
         context_times, context_inverse = torch.unique_consecutive(
-            self.context_times,
-            return_inverse=True,
-        )
-        context_values = scatter_fill(
-            (context_times.shape[0], context_dim),
-            (context_inverse, self.context_channels),
-            self.context_values,
-            fill_value=nan,
-        )
-        context_mask = scatter_fill(
-            (context_times.shape[0], context_dim),
-            (context_inverse, self.context_channels),
-            torch.ones_like(self.context_channels, dtype=torch.bool),
-            fill_value=False,
+            self.context_times, return_inverse=True
         )
 
         query_times, query_inverse = torch.unique_consecutive(
-            self.query_times,
-            return_inverse=True,
-        )
-        query_mask = scatter_fill(
-            (query_times.shape[0], query_dim),
-            (query_inverse, self.query_channels),
-            torch.ones_like(self.query_channels, dtype=torch.bool),
-            fill_value=False,
-        )
-
-        query_values = (
-            None
-            if self.query_values is None
-            else scatter_fill(
-                (query_times.shape[0], query_dim),
-                (query_inverse, self.query_channels),
-                self.query_values,
-                fill_value=nan,
-            )
+            self.query_times, return_inverse=True
         )
 
         return DenseArg(
             context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
+            context_values=scatter_fill(
+                (context_times.shape[0], context_dim),
+                (context_inverse, self.context_channels),
+                self.context_values,
+                fill_value=nan,
+            ),
+            context_mask=scatter_fill(
+                (context_times.shape[0], context_dim),
+                (context_inverse, self.context_channels),
+                torch.ones_like(self.context_channels, dtype=torch.bool),
+                fill_value=False,
+            ),
             query_times=query_times,
-            query_mask=query_mask,
-            query_values=query_values,
+            query_mask=scatter_fill(
+                (query_times.shape[0], query_dim),
+                (query_inverse, self.query_channels),
+                torch.ones_like(self.query_channels, dtype=torch.bool),
+                fill_value=False,
+            ),
+            query_values=(
+                scatter_fill(
+                    (query_times.shape[0], query_dim),
+                    (query_inverse, self.query_channels),
+                    self.query_values,
+                    fill_value=nan,
+                )
+                if self.query_values is not None
+                else None
+            ),
             static_covariates=self.static_covariates,
         )
 
