@@ -884,6 +884,15 @@ class BatchedTripletArgs:
         M = self.query_channels
         Y = self.query_values
 
+        context_dim = (
+            context_dim if context_dim is not None else int(C.max().item()) + 1
+        )
+        query_dim = query_dim if query_dim is not None else int(M.max().item()) + 1
+        if (context_dim <= C).any():
+            raise ValueError("Expected context channel indices below context_dim.")
+        if (query_dim <= M).any():
+            raise ValueError("Expected query channel indices below query_dim.")
+
         batch_shape = T.shape[:-1]
         *_, num_context = T.shape
         *_, num_query = Q.shape
@@ -897,21 +906,6 @@ class BatchedTripletArgs:
         num_batches = T_flat.shape[0]
         context_valid = C_flat.ge(0)
         query_valid = M_flat.ge(0)
-
-        context_dim = (
-            context_dim
-            if context_dim is not None
-            else int(C_flat[context_valid].max().item()) + 1
-        )
-        query_dim = (
-            query_dim
-            if query_dim is not None
-            else int(M_flat[query_valid].max().item()) + 1
-        )
-        if (self.context_channels >= context_dim).any():
-            raise ValueError("Expected context channel indices below context_dim.")
-        if (self.query_channels >= query_dim).any():
-            raise ValueError("Expected query channel indices below query_dim.")
 
         context_inverse, context_lengths = _consecutive_group_indices(
             T_flat, context_valid
