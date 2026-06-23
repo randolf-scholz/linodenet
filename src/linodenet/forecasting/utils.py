@@ -884,13 +884,11 @@ class BatchedTripletArgs:
         M = self.query_channels
         Y = self.query_values
 
-        context_dim = (
-            context_dim if context_dim is not None else int(C.max().item()) + 1
-        )
-        query_dim = query_dim if query_dim is not None else int(M.max().item()) + 1
-        if (context_dim <= C).any():
+        ctx_dim = context_dim if context_dim is not None else int(C.max().item()) + 1
+        qry_dim = query_dim if query_dim is not None else int(M.max().item()) + 1
+        if (ctx_dim <= C).any():
             raise ValueError("Expected context channel indices below context_dim.")
-        if (query_dim <= M).any():
+        if (qry_dim <= M).any():
             raise ValueError("Expected query channel indices below query_dim.")
 
         batch_shape = T.shape[:-1]
@@ -929,17 +927,17 @@ class BatchedTripletArgs:
             fill_value=nan,
         ).reshape(*batch_shape, context_size)
         context_values = scatter_fill(
-            (num_batches, context_size, context_dim),
+            (num_batches, context_size, ctx_dim),
             (*context_indices, C_flat[context_valid]),
             X_flat[context_valid],
             fill_value=nan,
-        ).reshape(*batch_shape, context_size, context_dim)
+        ).reshape(*batch_shape, context_size, ctx_dim)
         context_mask = scatter_fill(
-            (num_batches, context_size, context_dim),
+            (num_batches, context_size, ctx_dim),
             (*context_indices, C_flat[context_valid]),
             torch.ones_like(C_flat[context_valid], dtype=torch.bool),
             fill_value=False,
-        ).reshape(*batch_shape, context_size, context_dim)
+        ).reshape(*batch_shape, context_size, ctx_dim)
 
         query_times = scatter_fill(
             (num_batches, query_size),
@@ -948,18 +946,18 @@ class BatchedTripletArgs:
             fill_value=nan,
         ).reshape(*batch_shape, query_size)
         query_mask = scatter_fill(
-            (num_batches, query_size, query_dim),
+            (num_batches, query_size, qry_dim),
             (*query_indices, query_channels),
             torch.ones_like(query_channels, dtype=torch.bool),
             fill_value=False,
-        ).reshape(*batch_shape, query_size, query_dim)
+        ).reshape(*batch_shape, query_size, qry_dim)
         query_values = (
             scatter_fill(
-                (num_batches, query_size, query_dim),
+                (num_batches, query_size, qry_dim),
                 (*query_indices, query_channels),
                 Y_flat[query_valid],
                 fill_value=nan,
-            ).reshape(*batch_shape, query_size, query_dim)
+            ).reshape(*batch_shape, query_size, qry_dim)
             if Y_flat is not None
             else None
         )
