@@ -9,7 +9,6 @@ __all__ = [
     "DEFAULT_MIN_DERIVATIVE",
     "DEFAULT_MIN_BIN_HEIGHT",
     # Classes
-    "BinWidths",
     "BinKnots",
     "SplineCoefficients",
     # Models
@@ -60,42 +59,6 @@ def _centered_cumulative_knots(widths: Tensor, center: Tensor, /) -> Tensor:
     return cumwidths - center_offset + center.unsqueeze(-1)
 
 
-class BinWidths(NamedTuple):
-    r"""Positive bin parameters that specify a rational linear spline."""
-
-    # widths and heights of the bins as well as derivatives and lambda-parameters
-    w: Tensor  # (..., K)
-    h: Tensor  # (..., K)
-    lambdas: Tensor  # (..., K)
-    derivatives: Tensor  # (..., K+1)
-
-    def to(self, dtype: torch.dtype | None, device: torch.device | None) -> BinWidths:
-        return BinWidths(
-            w=self.w.to(dtype=dtype, device=device),
-            h=self.h.to(dtype=dtype, device=device),
-            lambdas=self.lambdas.to(dtype=dtype, device=device),
-            derivatives=self.derivatives.to(dtype=dtype, device=device),
-        )
-
-    def to_coefficients(self) -> SplineCoefficients:
-        knots = BinKnots.from_widths(self)
-        return SplineCoefficients.from_knots(knots)
-
-    def to_knots(self) -> BinKnots:
-        return BinKnots.from_widths(self)
-
-    @staticmethod
-    def from_knots(bins: BinKnots) -> BinWidths:
-        x = bins.x
-        y = bins.y
-        lambdas = bins.lambdas
-        derivatives = bins.derivatives
-        widths = x.diff(dim=-1)  # (..., K)
-        heights = y.diff(dim=-1)  # (..., K)
-
-        return BinWidths(w=widths, h=heights, lambdas=lambdas, derivatives=derivatives)
-
-
 class BinKnots(NamedTuple):
     r"""Knot parameters that specify a rational linear spline."""
 
@@ -115,55 +78,6 @@ class BinKnots(NamedTuple):
 
     def to_coefficients(self) -> SplineCoefficients:
         return SplineCoefficients.from_knots(self)
-
-    def to_widths(self) -> BinWidths:
-        return BinWidths.from_knots(self)
-
-    @staticmethod
-    def from_widths(
-        bins: BinWidths,
-        *,  # optional arguments
-        left: float = 0.0,
-        bottom: float = 0.0,
-        min_derivative: float = DEFAULT_MIN_DERIVATIVE,
-    ) -> BinKnots:
-        """Determine the spline parameters from the raw inputs.
-
-        Note:
-            Instead of x and y, we expect positive widths and heights together with
-            the x/y center coordinates.
-
-        Note:
-            SplineBinWidths:
-                w: The positive widths of the bins.
-                h: The positive heights of the bins.
-                λ: The raw lambdas of the bins. (λ∈(0,1)ᴷ⁻¹)
-                d: The raw derivatives of the knots. (d>0)
-        """
-        widths = bins.w
-        heights = bins.h
-        derivatives = bins.derivatives
-        lambdas = bins.lambdas
-
-        num_bins = widths.shape[-1]
-        assert num_bins > 0
-        assert (widths > 0.0).all()
-        assert (heights > 0.0).all()
-        assert ((lambdas > 0.0) & (lambdas < 1.0)).all()
-        assert (derivatives > 0.0).all()
-
-        x = _centered_cumulative_knots(
-            widths,
-            torch.as_tensor(left, dtype=widths.dtype, device=widths.device),
-        )
-        y = _centered_cumulative_knots(
-            heights,
-            torch.as_tensor(bottom, dtype=heights.dtype, device=heights.device),
-        )
-
-        derivatives = derivatives.clip(min_derivative)
-
-        return BinKnots(x=x, y=y, lambdas=lambdas, derivatives=derivatives)
 
 
 class SplineCoefficients(NamedTuple):
@@ -237,6 +151,67 @@ class SplineCoefficients(NamedTuple):
         yc = ((1 - λ) * wa * ya + λ * wb * yb) / ((1 - λ) * wa + λ * wb)
 
         return SplineCoefficients(λ, wa, wb, wc, ya, yb, yc, xa, xb, xc)
+
+
+def _lrs_encode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
+    r"""Evaluate the bounded LRS forward map and log|det J| at inputs."""
+    num_bins = knots.x.shape[-1] - 1
+    bin_idx = torch.searchsorted(
+        knots.x[..., 1:-1].contiguous(), inputs.unsqueeze(-1), side="right"
+    ).clip(0, num_bins - 1)
+
+    lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = SplineCoefficients.from_selected_knots(
+        knots, bin_idx
+    )
+
+    phi = (inputs - xa) / (xb - xa)
+    numerator = torch.where(
+        phi <= lam,
+        (lam - phi) * wa * ya + phi * wc * yc,
+        (1 - phi) * wc * yc + (phi - lam) * wb * yb,
+    )
+    denominator = torch.where(
+        phi <= lam,
+        (lam - phi) * wa + phi * wc,
+        (1 - phi) * wc + (phi - lam) * wb,
+    )
+    derivative_numerator = torch.where(
+        phi <= lam,
+        lam * wa * wc * (yc - ya),
+        (1 - lam) * wb * wc * (yb - yc),
+    ) / (xb - xa)  # fmt: skip
+    logabsdet = derivative_numerator.log() - 2 * denominator.abs().log()
+    return numerator / denominator, logabsdet
+
+
+def _lrs_decode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
+    r"""Evaluate the bounded LRS inverse map and log|det J| at inputs."""
+    num_bins = knots.y.shape[-1] - 1
+    bin_idx = torch.searchsorted(
+        knots.y[..., 1:-1].contiguous(), inputs.unsqueeze(-1), side="right"
+    ).clip(0, num_bins - 1)
+
+    lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = SplineCoefficients.from_selected_knots(
+        knots, bin_idx
+    )
+
+    numerator = torch.where(
+        inputs <= yc,
+        lam * wa * (ya - inputs),
+        lam * wb * (yb - inputs) + wc * (inputs - yc),
+    )
+    denominator = torch.where(
+        inputs <= yc,
+        (wc - wa) * inputs + wa * ya - wc * yc,
+        (wc - wb) * inputs + wb * yb - wc * yc,
+    )
+    derivative_numerator = (xb - xa) * torch.where(
+        inputs <= yc,
+        lam * wa * wc * (yc - ya),
+        (1 - lam) * wb * wc * (yb - yc),
+    )
+    logabsdet = derivative_numerator.log() - 2 * denominator.abs().log()
+    return (xb - xa) * (numerator / denominator) + xa, logabsdet
 
 
 class LinearRationalSpline(nn.Module):
@@ -327,9 +302,8 @@ class LinearRationalSpline(nn.Module):
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
         original_dtype = inputs.dtype
-        work_dtype = self.MIN_DERIVATIVE.dtype
-        inputs = inputs.to(dtype=work_dtype)
-        spline_params: BinKnots = self.get_spline_parameters(
+        inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
+        knots = self.get_spline_parameters(
             widths=widths,
             heights=heights,
             lambdas=lambdas,
@@ -337,39 +311,7 @@ class LinearRationalSpline(nn.Module):
             x_center=torch.zeros_like(inputs),
             y_center=torch.zeros_like(inputs),
         )
-        # select the bins
-        num_bins = widths.shape[-1]
-        bin_idx = torch.searchsorted(
-            spline_params.x[..., 1:-1].contiguous(),
-            inputs.unsqueeze(-1),
-            side="right",
-        ).clip(0, num_bins - 1)
-
-        # get the parameters/coefficients for the selected bins
-        coef = SplineCoefficients.from_selected_knots(spline_params, bin_idx)
-        lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = coef
-
-        # calculate return values
-        phi = (inputs - xa) / (xb - xa)
-        numerator = torch.where(
-            phi <= lam,
-            (lam - phi) * wa * ya + phi * wc * yc,
-            (1 - phi) * wc * yc + (phi - lam) * wb * yb,
-        )
-        denominator = torch.where(
-            phi <= lam,
-            (lam - phi) * wa + phi * wc,
-            (1 - phi) * wc + (phi - lam) * wb,
-        )
-        outputs = numerator / denominator
-
-        derivative_numerator = torch.where(
-            phi <= lam,
-            lam * wa * wc * (yc - ya),
-            (1 - lam)  * wb * wc* (yb - yc),
-        ) / (xb - xa)  # fmt: skip
-        logabsdet = derivative_numerator.log() - 2 * denominator.abs().log()
-
+        outputs, logabsdet = _lrs_encode(inputs, knots)
         return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
 
     def decode_and_logabsdet(
@@ -382,49 +324,16 @@ class LinearRationalSpline(nn.Module):
         derivatives: Tensor,  # (..., K+1)
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
         original_dtype = inputs.dtype
-        work_dtype = self.MIN_DERIVATIVE.dtype
-        inputs = inputs.to(dtype=work_dtype)
-        spline_params: BinKnots = self.get_spline_parameters(
+        inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
+        knots = self.get_spline_parameters(
             widths=widths,
             heights=heights,
-            derivatives=derivatives,
             lambdas=lambdas,
+            derivatives=derivatives,
             x_center=torch.zeros_like(inputs),
             y_center=torch.zeros_like(inputs),
         )
-        # select the bins
-        num_knots = heights.shape[-1]
-        bin_idx = torch.searchsorted(
-            spline_params.y[..., 1:-1].contiguous(),
-            inputs.unsqueeze(-1),
-            side="right",
-        ).clip(0, num_knots - 1)
-
-        # get the parameters/coefficients for the selected bins
-        coef = SplineCoefficients.from_selected_knots(spline_params, bin_idx)
-        lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = coef
-
-        # calculate return values
-        numerator = torch.where(  # (...)
-            inputs <= yc,
-            lam * wa * (ya - inputs),
-            lam * wb * (yb - inputs) + wc * (inputs - yc),
-        )
-        denominator = torch.where(  # (...)
-            inputs <= yc,
-            (wc - wa) * inputs + wa * ya - wc * yc,
-            (wc - wb) * inputs + wb * yb - wc * yc,
-        )
-        outputs = (xb - xa) * (numerator / denominator) + xa
-
-        derivative_numerator = (xb - xa) * torch.where(  # (...)
-            inputs <= yc,
-            lam * wa * wc * (yc - ya),
-            (1 - lam) * wb * wc * (yb - yc),
-        )
-
-        logabsdet = derivative_numerator.log() - 2 * denominator.abs().log()
-
+        outputs, logabsdet = _lrs_decode(inputs, knots)
         return outputs.to(dtype=original_dtype), logabsdet.to(dtype=original_dtype)
 
 
@@ -442,38 +351,26 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
         r"""Use linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
-        work_dtype = self.MIN_DERIVATIVE.dtype
-        inputs = inputs.to(dtype=work_dtype)
-
-        outputs, logabsdet = super().encode_and_logabsdet(
-            inputs,
+        inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
+        knots = self.get_spline_parameters(
             widths=widths,
             heights=heights,
-            derivatives=derivatives,
             lambdas=lambdas,
-        )
-
-        spline_params = self.get_spline_parameters(
-            widths=widths,
-            heights=heights,
             derivatives=derivatives,
-            lambdas=lambdas,
             x_center=torch.zeros_like(inputs),
             y_center=torch.zeros_like(inputs),
         )
-        left_x = spline_params.x[..., 0]
-        left_y = spline_params.y[..., 0]
-        left_d = spline_params.derivatives[..., 0]
-        right_x = spline_params.x[..., -1]
-        right_y = spline_params.y[..., -1]
-        right_d = spline_params.derivatives[..., -1]
-        left_mask = inputs < left_x
-        right_mask = inputs > right_x
-        left_linear = left_y + left_d * (inputs - left_x)
-        right_linear = right_y + right_d * (inputs - right_x)
+        outputs, logabsdet = _lrs_encode(inputs, knots)
 
-        outputs = torch.where(left_mask, left_linear, outputs)
-        outputs = torch.where(right_mask, right_linear, outputs)
+        left_x, right_x = knots.x[..., 0], knots.x[..., -1]
+        left_d, right_d = knots.derivatives[..., 0], knots.derivatives[..., -1]
+        left_mask, right_mask = inputs < left_x, inputs > right_x
+        outputs = torch.where(
+            left_mask, knots.y[..., 0] + left_d * (inputs - left_x), outputs
+        )
+        outputs = torch.where(
+            right_mask, knots.y[..., -1] + right_d * (inputs - right_x), outputs
+        )
         logabsdet = torch.where(left_mask, left_d.log(), logabsdet)
         logabsdet = torch.where(right_mask, right_d.log(), logabsdet)
 
@@ -490,38 +387,25 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
     ) -> tuple[Tensor, Tensor]:  # (...), (...)
         r"""Invert the linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
-        work_dtype = self.MIN_DERIVATIVE.dtype
-        inputs = inputs.to(dtype=work_dtype)
-
-        outputs, logabsdet = super().decode_and_logabsdet(
-            inputs,
+        inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
+        knots = self.get_spline_parameters(
             widths=widths,
             heights=heights,
-            derivatives=derivatives,
             lambdas=lambdas,
-        )
-        spline_params = self.get_spline_parameters(
-            widths=widths,
-            heights=heights,
             derivatives=derivatives,
-            lambdas=lambdas,
             x_center=torch.zeros_like(inputs),
             y_center=torch.zeros_like(inputs),
         )
-        left_y = spline_params.y[..., 0]
-        left_x = spline_params.x[..., 0]
-        left_d = spline_params.derivatives[..., 0]
-        right_y = spline_params.y[..., -1]
-        right_x = spline_params.x[..., -1]
-        right_d = spline_params.derivatives[..., -1]
+        outputs, logabsdet = _lrs_decode(inputs, knots)
 
-        left_mask = inputs < left_y
-        right_mask = inputs > right_y
-        left_linear = left_x + (inputs - left_y) / left_d
-        right_linear = right_x + (inputs - right_y) / right_d
-
-        outputs = torch.where(left_mask, left_linear, outputs)
-        outputs = torch.where(right_mask, right_linear, outputs)
+        left_y, right_y = knots.y[..., 0], knots.y[..., -1]
+        left_x, right_x = knots.x[..., 0], knots.x[..., -1]
+        left_d, right_d = knots.derivatives[..., 0], knots.derivatives[..., -1]
+        left_mask, right_mask = inputs < left_y, inputs > right_y
+        outputs = torch.where(left_mask, left_x + (inputs - left_y) / left_d, outputs)
+        outputs = torch.where(
+            right_mask, right_x + (inputs - right_y) / right_d, outputs
+        )
         logabsdet = torch.where(left_mask, -left_d.log(), logabsdet)
         logabsdet = torch.where(right_mask, -right_d.log(), logabsdet)
 
@@ -599,18 +483,20 @@ class LearnableLRS(nn.Module, Transform):
         # Submodules
         self.spline = UnconstrainedLinearRationalSpline(use_fp64=use_fp64)
 
-    def spline_parameters(self, batch_shape: tuple[int, ...], /) -> BinWidths:
+    def spline_parameters(
+        self, batch_shape: tuple[int, ...], /
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         r"""Expand spline parameters to match the batch shape."""
         widths = self.spline.MIN_BIN_WIDTH + F.softplus(self.widths)
         heights = self.spline.MIN_BIN_HEIGHT + F.softplus(self.heights)
         lambdas = torch.sigmoid(self.lambdas)
         derivatives = F.softplus(self.derivatives)
 
-        return BinWidths(
-            w=widths.expand(*batch_shape, *widths.shape),
-            h=heights.expand(*batch_shape, *heights.shape),
-            lambdas=lambdas.expand(*batch_shape, *lambdas.shape),
-            derivatives=derivatives.expand(*batch_shape, *derivatives.shape),
+        return (
+            widths.expand(*batch_shape, *widths.shape),
+            heights.expand(*batch_shape, *heights.shape),
+            lambdas.expand(*batch_shape, *lambdas.shape),
+            derivatives.expand(*batch_shape, *derivatives.shape),
         )
 
     @torch.no_grad()
@@ -666,13 +552,13 @@ class LearnableLRS(nn.Module, Transform):
             ldj (..., *H): log determinant of the Jacobian
         """
         batch_shape = x.shape[: -len(self.n_heads)] if self.n_heads else x.shape
-        params = self.spline_parameters(batch_shape)
+        widths, heights, lambdas, derivatives = self.spline_parameters(batch_shape)
         y, logabsdet = self.spline.encode_and_logabsdet(
             x - self.x_center,
-            widths=params.w,
-            heights=params.h,
-            lambdas=params.lambdas,
-            derivatives=params.derivatives,
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
         )
         y = y + self.y_center
         return y, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
@@ -688,14 +574,14 @@ class LearnableLRS(nn.Module, Transform):
             ldj (..., *H): log determinant of the Jacobian
         """
         batch_shape = y.shape[: -len(self.n_heads)] if self.n_heads else y.shape
-        params = self.spline_parameters(batch_shape)
+        widths, heights, lambdas, derivatives = self.spline_parameters(batch_shape)
         y = y - self.y_center
         x, logabsdet = self.spline.decode_and_logabsdet(
             y,
-            widths=params.w,
-            heights=params.h,
-            lambdas=params.lambdas,
-            derivatives=params.derivatives,
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
         )
         x = x + self.x_center
         return x, logabsdet.sum(dim=-1) if self.n_heads else logabsdet

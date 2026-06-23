@@ -127,12 +127,14 @@ class TestSplineFlow(TestTransform):
             final_loss = torch.mean((final_prediction - y) ** 2)
             max_abs_error = (final_prediction - y).abs().max()
             layer = model[0]
-            params = layer.spline_parameters(torch.Size())
+            widths, heights, lambdas, derivatives = layer.spline_parameters(
+                torch.Size()
+            )
             knots = layer.spline.get_spline_parameters(
-                widths=params.w,
-                heights=params.h,
-                lambdas=params.lambdas,
-                derivatives=params.derivatives,
+                widths=widths,
+                heights=heights,
+                lambdas=lambdas,
+                derivatives=derivatives,
                 x_center=layer.x_center,
                 y_center=layer.y_center,
             )
@@ -179,12 +181,12 @@ class TestSplineFlow(TestTransform):
             use_fp64=False,
         )
         layer = model[0]
-        params = layer.spline_parameters(torch.Size())
+        widths, heights, lambdas, derivatives = layer.spline_parameters(torch.Size())
         knots = layer.spline.get_spline_parameters(
-            widths=params.w,
-            heights=params.h,
-            lambdas=params.lambdas,
-            derivatives=params.derivatives,
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
             x_center=layer.x_center,
             y_center=torch.zeros_like(layer.x_center),
         )
@@ -237,12 +239,12 @@ class TestSplineFlow(TestTransform):
             layer.x_center.fill_(1.5)
             layer.y_center.fill_(1.25)
 
-        params = layer.spline_parameters(torch.Size())
+        widths, heights, lambdas, derivatives = layer.spline_parameters(torch.Size())
         knots = layer.spline.get_spline_parameters(
-            widths=params.w,
-            heights=params.h,
-            lambdas=params.lambdas,
-            derivatives=params.derivatives,
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
             x_center=layer.x_center,
             y_center=torch.zeros_like(layer.x_center),
         )
