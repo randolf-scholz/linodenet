@@ -14,8 +14,8 @@ from linodenet.forecasting.cru import (
     DecoderConfig,
     Encoder,
     EncoderConfig,
-    apply_masked,
     build_cru,
+    update_masked,
 )
 from linodenet.forecasting.utils import BatchedDenseArgs
 
@@ -49,8 +49,8 @@ validate_args: true
 """
 
 
-class TestMaskedApply:
-    r"""Tests for applying functions only to valid batch elements."""
+class TestUpdateMasked:
+    r"""Tests for applying functions only to valid batch elements via update_masked."""
 
     def test_applies_unary_torch_function(self) -> None:
         x = torch.tensor(
@@ -62,7 +62,12 @@ class TestMaskedApply:
         )
         mask = x.isfinite().all(dim=-1)
 
-        result = apply_masked(torch.square, (x,), mask, fill_value=-1.0)
+        (result,) = update_masked(
+            lambda v: (torch.square(v),),
+            (x,),
+            target=(torch.full_like(x, -1.0),),
+            batch_mask=mask,
+        )
 
         expected = torch.tensor(
             [
@@ -90,7 +95,12 @@ class TestMaskedApply:
         )
         mask = x.isfinite().all(dim=-1) & y.isfinite().all(dim=-1)
 
-        result = apply_masked(torch.add, (x, y), mask, fill_value=0.0)
+        (result,) = update_masked(
+            lambda a, b: (torch.add(a, b),),
+            (x, y),
+            target=(torch.zeros_like(x),),
+            batch_mask=mask,
+        )
 
         expected = torch.tensor(
             [
@@ -107,7 +117,12 @@ class TestMaskedApply:
         x[1, 2] = torch.nan
         mask = x.isfinite().all(dim=-1)
 
-        result = apply_masked(torch.sin, (x,), mask)
+        (result,) = update_masked(
+            lambda v: (torch.sin(v),),
+            (x,),
+            target=(torch.full_like(x, torch.nan),),
+            batch_mask=mask,
+        )
 
         assert result.shape == x.shape
         assert torch.allclose(result[mask], torch.sin(x[mask]))
@@ -116,18 +131,25 @@ class TestMaskedApply:
     def test_torch_compile_fullgraph(self) -> None:
         x = torch.arange(12.0).reshape(3, 4)
         x[1] = torch.nan
+        target = torch.full_like(x, torch.nan)
 
         compiled = torch.compile(
-            lambda values: apply_masked(
-                torch.sin,
+            lambda values, t: update_masked(
+                lambda v: (torch.sin(v),),
                 (values,),
-                values.isfinite().all(dim=-1),
+                target=(t,),
+                batch_mask=values.isfinite().all(dim=-1),
             ),
             fullgraph=True,
         )
 
-        result = compiled(x)
-        expected = apply_masked(torch.sin, (x,), x.isfinite().all(dim=-1))
+        (result,) = compiled(x, target)
+        (expected,) = update_masked(
+            lambda v: (torch.sin(v),),
+            (x,),
+            target=(target,),
+            batch_mask=x.isfinite().all(dim=-1),
+        )
         mask = x.isfinite().all(dim=-1)
         assert result.shape == x.shape
         assert torch.allclose(result[mask], expected[mask])
@@ -140,12 +162,17 @@ class TestMaskedApply:
                 self.linear = torch.nn.Linear(4, 3)
 
             def forward(self, values: torch.Tensor) -> torch.Tensor:
-                return apply_masked(
-                    self.linear,
+                (result,) = update_masked(
+                    lambda v: (self.linear(v),),
                     (values,),
-                    values.isfinite().all(dim=-1),
-                    fill_value=0.0,
+                    target=(
+                        torch.zeros(
+                            values.shape[0], 3, dtype=values.dtype, device=values.device
+                        ),
+                    ),
+                    batch_mask=values.isfinite().all(dim=-1),
                 )
+                return result
 
         torch.manual_seed(0)
         model = MaskedLinear()
@@ -170,7 +197,12 @@ class TestMaskedApply:
         x.requires_grad_()
         mask = x.isfinite().all(dim=-1)
 
-        result = apply_masked(linear, (x,), mask, fill_value=0.0)
+        (result,) = update_masked(
+            lambda v: (linear(v),),
+            (x,),
+            target=(torch.zeros(5, 3),),
+            batch_mask=mask,
+        )
         loss = result.sum()
         loss.backward()
 
@@ -184,7 +216,7 @@ class TestMaskedApply:
             assert parameter.grad.isfinite().all()
 
 
-class TestModel(TestForecastingModel):
+class TestCRU(TestForecastingModel[CRU]):
     r"""Tests for direct CRU model construction."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (5,)
@@ -284,26 +316,36 @@ class TestModel(TestForecastingModel):
             query_mask=query_mask,
             query_values=inputs.query_values,
         ).to_combined()
+        assert combined.query_values is not None
 
-        all_pred_means, all_pred_vars = model(
-            combined.times,
-            combined.context_values,
-            combined.context_mask,
-            combined.query_mask,
+        log_prob = model.log_prob(
+            combined.query_values,
+            times=combined.times,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+            query_mask=combined.query_mask,
         )
+        all_pred_means = model.pred_means
+        all_pred_vars = model.pred_variances
 
         # Extract predictions at query steps and scatter into (*, Q, F) output.
         has_query = combined.query_mask.any(dim=-1)
+        query_log_prob = log_prob[has_query]
         pred_mean = torch.full_like(inputs.query_values, torch.nan)
         pred_var = torch.full_like(inputs.query_values, torch.nan)
+        pred_log_prob = inputs.query_values.new_full(
+            inputs.query_times.shape, torch.nan
+        )
         pred_mean[inputs.query_mask] = all_pred_means[has_query]
         pred_var[inputs.query_mask] = all_pred_vars[has_query]
+        pred_log_prob[inputs.query_mask] = query_log_prob
 
         assert pred_mean.shape == inputs.query_values.shape
         assert pred_var.shape == inputs.query_values.shape
         assert pred_mean[inputs.query_mask].isfinite().all()
         assert pred_var[inputs.query_mask].isfinite().all()
-        return pred_mean, pred_var
+        assert pred_log_prob[inputs.query_mask].isfinite().all()
+        return pred_mean, pred_var, pred_log_prob.unsqueeze(-1).expand_as(pred_mean)
 
     def loss(
         self,
@@ -312,8 +354,10 @@ class TestModel(TestForecastingModel):
         targets: torch.Tensor,
     ) -> torch.Tensor:
         r"""Return CRU negative log-likelihood for predictions."""
-        pred_mean, pred_var = predictions
-        return model.nll(targets, pred_mean, pred_var)
+        del model
+        _, _, pred_log_prob = predictions
+        mask = targets.isfinite()
+        return -pred_log_prob[..., 0][mask.any(dim=-1)].sum() / mask.sum()
 
     def test_make_cru_instantiates_standard_model(self) -> None:
         config = self.STANDARD_CONFIG
@@ -378,7 +422,7 @@ class TestModel(TestForecastingModel):
 
 
 def test_build_cru_instantiates_from_dataclass_config() -> None:
-    config = TestModel.STANDARD_CONFIG
+    config = TestCRU.STANDARD_CONFIG
 
     model = build_cru(config)
 

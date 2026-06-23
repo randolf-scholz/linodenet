@@ -9,12 +9,15 @@ __all__ = [
     "update_masked",
 ]
 
+import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Final
 
 import torch
 from torch import Tensor, nan, nn
+
+_LOG2PI = math.log(2.0 * math.pi)
 
 
 class ELU1P(nn.Module):
@@ -251,6 +254,66 @@ def update_masked[R: tuple[Tensor, ...]](
     )
 
 
+def _marginal_var_gaussian_log_prob(
+    values: Tensor,
+    *,
+    mean: Tensor,
+    var: Tensor,
+    mask: Tensor,
+) -> Tensor:
+    r"""Compute log-likelihoods of masked diagonal Gaussian marginals (variance parameterization)."""
+    assert values.shape == mean.shape == var.shape
+    assert mask.shape == values.shape
+    assert mask.dtype == torch.bool
+
+    centered = torch.where(mask, values - mean, torch.zeros_like(values))
+    safe_var = torch.where(mask, var, torch.ones_like(var))
+    log_prob = -0.5 * (centered.square() / safe_var + torch.log(safe_var) + _LOG2PI)
+    return torch.where(mask, log_prob, torch.zeros_like(log_prob)).sum(dim=-1)
+
+
+def _marginal_var_gaussian_sample(
+    size: int | tuple[int, ...] = (),
+    *,
+    mean: Tensor,
+    var: Tensor,
+    mask: Tensor,
+) -> Tensor:
+    r"""Sample from masked diagonal Gaussian marginals (variance parameterization)."""
+    assert mean.shape == var.shape
+    assert mask.shape == mean.shape
+    assert mask.dtype == torch.bool
+
+    sample_shape = (size,) if isinstance(size, int) else size
+    safe_mean = torch.where(mask, mean, torch.zeros_like(mean))
+    safe_std = torch.where(mask, var.sqrt(), torch.zeros_like(var))
+    noise = torch.randn(
+        (*sample_shape, *mean.shape), dtype=mean.dtype, device=mean.device
+    )
+    samples = (
+        safe_mean.expand(*sample_shape, *mean.shape)
+        + safe_std.expand(*sample_shape, *mean.shape) * noise
+    )
+    return samples.masked_fill(~mask.expand(*sample_shape, *mask.shape), nan)
+
+
+def _marginal_var_gaussian_sample_and_log_prob(
+    size: int | tuple[int, ...] = (),
+    *,
+    mean: Tensor,
+    var: Tensor,
+    mask: Tensor,
+) -> tuple[Tensor, Tensor]:
+    r"""Sample from masked diagonal Gaussian marginals and score the samples."""
+    samples = _marginal_var_gaussian_sample(size, mean=mean, var=var, mask=mask)
+    return samples, _marginal_var_gaussian_log_prob(
+        samples,
+        mean=mean.expand(*samples.shape),
+        var=var.expand(*samples.shape),
+        mask=mask.expand(*samples.shape),
+    )
+
+
 class CRU(nn.Module):
     r"""Continuous Recurrent Unit for probabilistic forecasting.
 
@@ -334,6 +397,10 @@ class CRU(nn.Module):
     r"""BUFFER: Posterior mean trajectory from the last forward pass."""
     posterior_variances: Tensor
     r"""BUFFER: Posterior covariance trajectory from the last forward pass."""
+    pred_means: Tensor
+    r"""BUFFER: Predicted means from the last forward pass."""
+    pred_variances: Tensor
+    r"""BUFFER: Predicted variances from the last forward pass."""
 
     @property
     def config(self) -> dict[str, object]:
@@ -345,37 +412,6 @@ class CRU(nn.Module):
             "validate_args": self.validate_args,
             "initial_variance": self.initial_variance,
         }
-
-    @staticmethod
-    def nll(values: Tensor, means: Tensor, variances: Tensor) -> Tensor:
-        r"""Return NaN-aware diagonal Gaussian negative log-likelihood.
-
-        The feature dimension is treated as the event dimension. The returned loss
-        sums over features and averages over valid batch/time points.
-        """
-        assert values.shape == means.shape == variances.shape
-
-        value_is_nan = values.isnan()
-        value_is_observed = values.isfinite().all(dim=-1)
-        value_is_missing = value_is_nan.all(dim=-1)
-        assert (value_is_observed | value_is_missing).all()
-
-        prediction_is_nan = means.isnan() & variances.isnan()
-        assert (~prediction_is_nan | value_is_nan).all()
-
-        assert value_is_observed.any()
-        assert means[value_is_observed].isfinite().all()
-        assert variances[value_is_observed].isfinite().all()
-        assert (variances[value_is_observed] > 0).all()
-
-        return (
-            0.5
-            * (
-                (values[value_is_observed] - means[value_is_observed]).square()
-                / variances[value_is_observed]
-                + torch.log(2 * torch.pi * variances[value_is_observed])
-            ).sum(dim=-1)
-        ).mean()
 
     def __init__(
         self,
@@ -459,6 +495,8 @@ class CRU(nn.Module):
         self.register_buffer("prior_variances", torch.empty(0), persistent=False)
         self.register_buffer("posterior_means", torch.empty(0), persistent=False)
         self.register_buffer("posterior_variances", torch.empty(0), persistent=False)
+        self.register_buffer("pred_means", torch.empty(0), persistent=False)
+        self.register_buffer("pred_variances", torch.empty(0), persistent=False)
 
     def forward(
         self,
@@ -601,7 +639,102 @@ class CRU(nn.Module):
         pred_means = pred_means.masked_fill(~query_out_mask, nan)
         pred_vars = pred_vars.masked_fill(~query_out_mask, nan)
 
+        self.pred_means = pred_means
+        self.pred_variances = pred_vars
+
         return pred_means, pred_vars
+
+    def log_prob(
+        self,
+        values: Tensor,  # (..., $N + $K, F)
+        *,
+        times: Tensor,  # (..., $N + $K)
+        context_values: Tensor,  # (..., $N + $K, D)
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, F), bool
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> Tensor:  # (..., $N + $K)
+        r"""Compute the time-marginal log-likelihood of the model.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        mean, var = self.forward(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        num_extra_dims = values.ndim - mean.ndim
+        if num_extra_dims < 0 or values.shape[num_extra_dims:] != mean.shape:
+            raise ValueError(
+                f"Expected values.shape={mean.shape} with optional leading sample "
+                f"dimensions, got {values.shape}."
+            )
+        return _marginal_var_gaussian_log_prob(
+            values,
+            mean=mean.expand(*values.shape),
+            var=var.expand(*values.shape),
+            mask=query_mask.expand(*values.shape),
+        )
+
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        times: Tensor,  # (..., $N + $K)
+        context_values: Tensor,  # (..., $N + $K, D)
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, F), bool
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> Tensor:  # (*S, ..., $N + $K, F)
+        r"""Sample from the time-marginal distribution.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, var = self.forward(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return _marginal_var_gaussian_sample(
+            sample_shape, mean=mean, var=var, mask=query_mask
+        )
+
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        times: Tensor,  # (..., $N + $K)
+        context_values: Tensor,  # (..., $N + $K, D)
+        context_mask: Tensor,  # (..., $N + $K, D), bool
+        query_mask: Tensor,  # (..., $N + $K, F), bool
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $N + $K, F), (*S, ..., $N + $K)
+        r"""Sample from the time-marginal distribution and yield log-probabilities.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, var = self.forward(
+            times,
+            context_values,
+            context_mask,
+            query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return _marginal_var_gaussian_sample_and_log_prob(
+            sample_shape, mean=mean, var=var, mask=query_mask
+        )
 
     def transition_matrix_model(self, mean: Tensor) -> Tensor:
         """Locally linear transition model.
