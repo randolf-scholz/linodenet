@@ -162,6 +162,11 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         r"""Configuration used to instantiate the Kalman filter under test."""
         return self.STANDARD_CONFIG
 
+    @pytest.fixture(params=[False, True], ids=["no_missingness", "input_missingness"])
+    def input_missingness(self, request: pytest.FixtureRequest) -> bool:
+        r"""Whether to randomly mask half of the context values with NaN."""
+        return request.param
+
     def make_model(self, model_config: object, /) -> ContinuousKalmanFilter:
         r"""Instantiate a continuous Kalman filter from :attr:`STANDARD_CONFIG`."""
         if not isinstance(model_config, KalmanFilterTestConfig):

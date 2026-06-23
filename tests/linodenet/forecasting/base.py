@@ -111,7 +111,20 @@ class SequentialData(NamedTuple):
         context_values, query_values = values
 
         if input_missingness:
-            miss_mask = torch.rand(context_values.shape, generator=generator) < 0.5
+            flat = context_values.reshape(
+                *context_values.shape[: len(batch_shape) + 1], -1
+            )
+            C = flat.shape[-1]
+            random_observed = torch.rand(flat.shape, generator=generator) >= 0.5
+            fallback_idx = torch.randint(
+                0, C, flat.shape[:-1], generator=generator
+            ).unsqueeze(-1)
+            fallback_observed = torch.zeros_like(flat, dtype=torch.bool).scatter_(
+                -1, fallback_idx, True
+            )
+            miss_mask = ~(random_observed | fallback_observed).reshape(
+                context_values.shape
+            )
             context_values = context_values.masked_fill(miss_mask, torch.nan)
 
         context_lengths = context_steps.reshape(batch_shape)
@@ -296,7 +309,20 @@ class TestForecastingModel[M: nn.Module](ABC):
             )
 
         if input_missingness:
-            miss_mask = torch.rand(context_values.shape, generator=generator) < 0.5
+            flat = context_values.reshape(
+                *context_values.shape[: context_values.ndim - len(context_shape)], -1
+            )
+            C = flat.shape[-1]
+            random_observed = torch.rand(flat.shape, generator=generator) >= 0.5
+            fallback_idx = torch.randint(
+                0, C, flat.shape[:-1], generator=generator
+            ).unsqueeze(-1)
+            fallback_observed = torch.zeros_like(flat, dtype=torch.bool).scatter_(
+                -1, fallback_idx, True
+            )
+            miss_mask = ~(random_observed | fallback_observed).reshape(
+                context_values.shape
+            )
             context_values = context_values.masked_fill(miss_mask, torch.nan)
 
         data = SequentialData(
