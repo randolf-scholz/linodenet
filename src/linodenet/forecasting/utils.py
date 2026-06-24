@@ -592,6 +592,15 @@ class EventBatch(NamedTuple):
     context_mask: Tensor  # Bool[(..., $T, D)], padded False
 
     query_mask: Tensor  # Bool[(..., $T, F)], padded False
+    query_indices: tuple[Tensor, ...]
+    r"""Advanced index tuple recovering ``(..., K, F)`` from ``target_values``.
+
+    Usage::
+
+        result = event_batch.target_values[event_batch.query_indices]
+        # result.shape == (*batch_shape, K, F)
+    """
+
     target_values: Tensor | None = None  # Float[(..., $T, F)], padded NaN, sparse
     r"""Only available during training, otherwise None."""
 
@@ -623,6 +632,23 @@ class EventBatch(NamedTuple):
             times.nan_to_num(nan=torch.inf), dim=-1, stable=True
         ).unsqueeze(-1)
 
+        # inv_perm[j] = sorted position of original index j
+        inv_perm = torch.argsort(permutation.squeeze(-1), dim=-1, stable=True)
+        time_idx = inv_perm[..., ctx_size:]  # (*batch_shape, K)
+
+        if batch_shape:
+            grids = torch.meshgrid(
+                *[torch.arange(s, device=T.device) for s in batch_shape],
+                indexing="ij",
+            )
+            batch_idx: tuple[Tensor, ...] = tuple(
+                g.unsqueeze(-1).expand(*batch_shape, q_size) for g in grids
+            )
+        else:
+            batch_idx = ()
+
+        query_indices: tuple[Tensor, ...] = (*batch_idx, time_idx)
+
         return EventBatch(
             timestamps=times.take_along_dim(permutation.squeeze(-1), dim=-1),
             context_values=torch.cat(
@@ -637,6 +663,7 @@ class EventBatch(NamedTuple):
                 [M.new_zeros((*batch_shape, ctx_size, q_dim)), M],
                 dim=-2,
             ).take_along_dim(permutation, dim=-2),
+            query_indices=query_indices,
             target_values=(
                 torch.cat(
                     [Y.new_full((*batch_shape, ctx_size, q_dim), nan), Y],

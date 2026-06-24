@@ -10,6 +10,7 @@ from linodenet.forecasting.utils import (
     BatchedForecastingRequest,
     BatchedTripletArgs,
     CombinedArg,
+    EventBatch,
     ForecastingRequest,
     TripletArg,
 )
@@ -1912,3 +1913,53 @@ class TestTriplet:
         actual = original.to_dense(context_dim=3, query_dim=4).to_triplet()
 
         _assert_batched_triplet_equal(actual, original)
+
+
+class TestEventBatch:
+    def test_query_indices_unbatched(self) -> None:
+        req = ForecastingRequest(
+            context_times=torch.tensor([1.0, 3.0]),
+            context_values=torch.tensor([[10.0, nan], [nan, 30.0]]),
+            context_mask=torch.tensor([[True, False], [False, True]]),
+            query_times=torch.tensor([2.0, 4.0]),
+            query_mask=torch.tensor([[True, False], [True, True]]),
+            target_values=torch.tensor([[20.0, nan], [40.0, 41.0]]),
+        )
+        event = EventBatch.from_request(
+            context_times=req.context_times,
+            context_values=req.context_values,
+            context_mask=req.context_mask,
+            query_times=req.query_times,
+            query_mask=req.query_mask,
+            target_values=req.target_values,
+        )
+        assert event.target_values is not None
+        assert req.target_values is not None
+        assert_close(
+            event.target_values[event.query_indices],
+            req.target_values,
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+
+    @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
+    def test_query_indices_random(self, batch_shape: tuple[int, ...]) -> None:
+        req = _make_random_batched_dense(batch_shape, context_dim=3, query_dim=4)
+        assert req.target_values is not None
+        event = EventBatch.from_request(
+            context_times=req.context_times,
+            context_values=req.context_values,
+            context_mask=req.context_mask,
+            query_times=req.query_times,
+            query_mask=req.query_mask,
+            target_values=req.target_values,
+        )
+        assert event.target_values is not None
+        assert_close(
+            event.target_values[event.query_indices],
+            req.target_values,
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
