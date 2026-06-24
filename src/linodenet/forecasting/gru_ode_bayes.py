@@ -625,105 +625,6 @@ class GRU_ODE_Bayes(nn.Module):
 
         return self.update_cell(prior_state, observation, mean, logvar)
 
-    def sample(
-        self,
-        size: int | tuple[int, ...] = (),  # *S
-        *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
-        initial_state: Tensor | None = None,  # (..., H)
-        initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> Tensor:  # (*S, ..., $K, D)
-        r"""Sample from the time-marginal distribution.
-
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
-        """
-        sample_shape = (size,) if isinstance(size, int) else size
-        mean, logvar = self.forward(
-            query_times=query_times,
-            query_mask=query_mask,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            initial_state=initial_state,
-            initial_time=initial_time,
-        )
-        return _marginal_logvar_gaussian_sample(
-            sample_shape,
-            mean=mean,
-            logvar=logvar,
-            mask=query_mask,
-        )
-
-    def sample_and_log_prob(
-        self,
-        size: int | tuple[int, ...] = (),  # *S
-        *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
-        initial_state: Tensor | None = None,  # (..., H)
-        initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
-        r"""Sample from the time-marginal distribution and yield log-probabilities.
-
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
-        """
-        sample_shape = (size,) if isinstance(size, int) else size
-        mean, logvar = self.forward(
-            query_times=query_times,
-            query_mask=query_mask,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            initial_state=initial_state,
-            initial_time=initial_time,
-        )
-        return _marginal_logvar_gaussian_sample_and_log_prob(
-            sample_shape,
-            mean=mean,
-            logvar=logvar,
-            mask=query_mask,
-        )
-
-    def log_prob(
-        self,
-        values: Tensor,  # (..., $N + $K, D)
-        /,
-        *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
-        initial_state: Tensor | None = None,  # (..., H)
-        initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> Tensor:  # (..., $K)
-        r"""Compute the time-marginal log-likelihood of the model.
-
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
-        """
-        mean, logvar = self.forward(
-            query_times=query_times,
-            query_mask=query_mask,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            initial_state=initial_state,
-            initial_time=initial_time,
-        )
-        return _marginal_logvar_gaussian_log_prob(
-            values,
-            mean=mean.expand(*values.shape),
-            logvar=logvar.expand(*values.shape),
-            mask=query_mask.expand(*values.shape),
-        )
-
     def forward(
         self,
         query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
@@ -836,6 +737,105 @@ class GRU_ODE_Bayes(nn.Module):
         self.pred_means = self.post_means[combined.query_indices]
         self.pred_logvars = self.post_logvars[combined.query_indices]
         return self.pred_means, self.pred_logvars
+
+    def log_prob(
+        self,
+        values: Tensor,  # (..., $N + $K, D)
+        /,
+        *,
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> Tensor:  # (..., $K)
+        r"""Compute the time-marginal log-likelihood of the model.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        mean, logvar = self.forward(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return _marginal_logvar_gaussian_log_prob(
+            values,
+            mean=mean.expand(*values.shape),
+            logvar=logvar.expand(*values.shape),
+            mask=query_mask.expand(*values.shape),
+        )
+
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> Tensor:  # (*S, ..., $K, D)
+        r"""Sample from the time-marginal distribution.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, logvar = self.forward(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return _marginal_logvar_gaussian_sample(
+            sample_shape,
+            mean=mean,
+            logvar=logvar,
+            mask=query_mask,
+        )
+
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
+        r"""Sample from the time-marginal distribution and yield log-probabilities.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, logvar = self.forward(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return _marginal_logvar_gaussian_sample_and_log_prob(
+            sample_shape,
+            mean=mean,
+            logvar=logvar,
+            mask=query_mask,
+        )
 
 
 def gaussian_kl(
