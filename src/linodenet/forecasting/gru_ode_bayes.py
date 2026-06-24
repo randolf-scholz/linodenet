@@ -728,8 +728,9 @@ class GRU_ODE_Bayes(nn.Module):
         Context and query masks explicitly select valid feature-level entries.
         Context values outside ``context_mask`` are ignored.
         """
-        # optional: sanitize values
+        # sanitize values
         context_values = context_values.masked_fill(~context_mask, nan)
+        assert torch.equal(context_values.isfinite(), context_mask)
 
         # initialize mask over valid time steps:
         # those with finite time and at least one observation or query coordinate.
@@ -755,10 +756,10 @@ class GRU_ODE_Bayes(nn.Module):
         post_state = self.initial_state if initial_state is None else initial_state
         post_state = post_state.expand(*batch_shape, self.hidden_size)
 
-        prior_means_list = []
-        prior_logvars_list = []
-        post_means_list = []
-        post_logvars_list = []
+        prior_means_list: list[Tensor] = []
+        prior_logvars_list: list[Tensor] = []
+        post_means_list: list[Tensor] = []
+        post_logvars_list: list[Tensor] = []
 
         for t_obs, observation, ctx_mask, active in zip(
             times,

@@ -42,10 +42,12 @@ class _TargetContext(nn.Module):
         self,
         _time_points: torch.Tensor,
         context_values: torch.Tensor,
-        target_mask: torch.Tensor,
+        *,
+        context_mask: torch.Tensor,  # noqa: ARG002
+        query_mask: torch.Tensor,
     ) -> torch.Tensor:
-        *batch_shape, _, _ = target_mask.shape
-        max_targets = int(target_mask.sum(dim=(-2, -1)).max().item())
+        *batch_shape, _, _ = query_mask.shape
+        max_targets = int(query_mask.sum(dim=(-2, -1)).max().item())
         return context_values.new_zeros(*batch_shape, max_targets, self.hidden_dim)
 
 
@@ -385,6 +387,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             inputs.query_values,
             context_times=inputs.context_times,
             context_values=inputs.context_values,
+            context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
         )
         event_ndim = inputs.query_values.ndim - inputs.query_times.ndim
@@ -452,6 +455,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             5,
             context_times=context_times,
             context_values=context_values,
+            context_mask=context_values.isfinite(),
             query_times=query_times,
             query_mask=query_mask,
         )
@@ -468,6 +472,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
         sample, log_prob = model.sample_and_log_prob(
             context_times=context_times,
             context_values=context_values,
+            context_mask=context_values.isfinite(),
             query_times=query_times,
             query_mask=query_mask,
         )
@@ -508,6 +513,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             (2, 3),
             context_times=context_times,
             context_values=context_values,
+            context_mask=context_values.isfinite(),
             query_times=query_times,
             query_mask=query_mask,
         )
@@ -546,6 +552,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             value,
             context_times=context_times,
             context_values=context_values,
+            context_mask=context_values.isfinite(),
             query_times=query_times,
         )
 
@@ -589,6 +596,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             3,
             context_times=context_times,
             context_values=context_values,
+            context_mask=context_values.isfinite(),
             query_times=query_times,
             query_mask=query_mask,
         )
@@ -596,6 +604,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             samples[0].detach(),
             context_times=context_times,
             context_values=context_values,
+            context_mask=context_values.isfinite(),
             query_times=query_times,
         )
         loss = samples.nansum() + log_prob.nansum() + value_log_prob.nansum()
@@ -631,6 +640,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             size,
             context_times=context_times,
             context_values=context_values,
+            context_mask=context_mask,
             query_times=query_times,
             query_mask=query_mask,
         )
@@ -638,6 +648,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             samples,
             context_times=context_times,
             context_values=context_values,
+            context_mask=context_mask,
             query_times=query_times,
         )
 

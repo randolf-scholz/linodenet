@@ -473,14 +473,17 @@ class Grafiti(nn.Module):
         self,
         time_points: Tensor,  # (..., T), float, padded NaN
         context_values: Tensor,  # (..., T, D), float, padded Nan, sparse
-        target_mask: Tensor,  # (..., T, D), bool, padded False
+        *,
+        context_mask: Tensor,  # (..., T, D), bool, padded False
+        query_mask: Tensor,  # (..., T, D), bool, padded False
     ) -> Tensor:  # (..., T, D) if forecast, (..., K, M) if embeddings
         r"""Process observed values and target queries with GraFITi.
 
         Args:
             time_points: Times for observed and target entries with shape ``(..., time)``.
             context_values: Observed values with shape ``(..., time, dim)``.
-            target_mask: Boolean target-query mask with shape ``(..., time, dim)``.
+            context_mask: Boolean context observation mask with shape ``(..., time, dim)``.
+            query_mask: Boolean target-query mask with shape ``(..., time, dim)``.
 
         Returns:
             Dense predictions with shape ``(..., time, dim)`` in forecast mode,
@@ -492,12 +495,17 @@ class Grafiti(nn.Module):
         #   N: total edges (context or target) across all batch elements.
         #   E: max edges (context or target) across all batch elements.
         #   K: max edges (target only) across all batch elements.
-        assert target_mask.dtype == torch.bool
+
+        # input validation/sanitation
+        assert context_mask.dtype == torch.bool
+        assert query_mask.dtype == torch.bool
+        context_values = context_values.masked_fill(~context_mask, nan)
+        assert torch.equal(context_values.isfinite(), context_mask)
+
         *batch_shape, num_steps, num_channels = context_values.shape
         device = time_points.device
 
-        context_mask = context_values.isfinite()  # (..., T, D)
-        dense_edge_mask = context_mask | target_mask  # (..., T, D)
+        dense_edge_mask = context_mask | query_mask  # (..., T, D)
 
         # nonzero returns one global list of N true entries in row-major batch order.
         # Subtract each batch item's global start offset to get its local slot in E.
@@ -518,7 +526,7 @@ class Grafiti(nn.Module):
         edge_t_indices[edge_indices] = t_idx
         edge_c_indices[edge_indices] = c_idx
         edge_values[edge_indices] = context_values[*batch_idx, t_idx, c_idx]
-        edge_target_mask[edge_indices] = target_mask[*batch_idx, t_idx, c_idx]
+        edge_target_mask[edge_indices] = query_mask[*batch_idx, t_idx, c_idx]
         edge_mask[edge_indices] = True
 
         # Masks route each flattened edge to its incident time and channel nodes.
@@ -581,9 +589,9 @@ class Grafiti(nn.Module):
             )
 
         if self.output_mode == "embeddings":
-            return gather_target_embeddings(
+            return gather_target_embeddings(  # (..., K, M)
                 h_edge, target_mask=edge_target_mask
-            )  # (..., K, M)
+            )
 
         h_t_at_edge = torch.take_along_dim(  # (..., E, M)
             h_time, edge_t_indices.unsqueeze(dim=-1), dim=-2
@@ -596,6 +604,6 @@ class Grafiti(nn.Module):
         ).squeeze(dim=-1)
         return reconstruct_y(
             y_at_edge,
-            target_mask=target_mask,
             edge_mask=edge_target_mask,
+            target_mask=query_mask,
         )

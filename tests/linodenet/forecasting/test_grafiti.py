@@ -65,14 +65,26 @@ class TestModel(TestForecastingModel[Grafiti]):
             nan,
         )
         context_values = torch.cat([inputs.context_values, context_nan], dim=-2)
-        target_mask = torch.cat(
+        context_mask = torch.cat(
+            [
+                inputs.context_values.isfinite(),
+                torch.zeros_like(context_nan, dtype=torch.bool),
+            ],
+            dim=-2,
+        )
+        query_mask = torch.cat(
             [
                 torch.zeros_like(inputs.context_values, dtype=torch.bool),
                 inputs.query_mask.unsqueeze(dim=-1),
             ],
             dim=-2,
         )
-        forecasts = model(time_points, context_values, target_mask)
+        forecasts = model(
+            time_points,
+            context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+        )
         predictions = forecasts[..., inputs.context_values.shape[-2] :, :]
 
         assert predictions.shape == inputs.query_values.shape
@@ -179,7 +191,8 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
     expected = model(
         combined.times,
         combined.context_values,
-        combined.query_mask,
+        context_mask=combined.context_mask,
+        query_mask=combined.query_mask,
     )
     actual = model.forward_triplet(
         args.context_times,
@@ -209,10 +222,20 @@ def test_grafiti_batched_forward_allows_missing_context_values() -> None:
         [[False, False, False], [False, False, False], [False,  True, False], [False, False,  True]],
     ])  # fmt: skip
 
-    actual = model(time_points, context_values, target_mask)
+    actual = model(
+        time_points,
+        context_values,
+        context_mask=context_values.isfinite(),
+        query_mask=target_mask,
+    )
     expected = actual.new_full(actual.shape, nan)
     for k in range(time_points.shape[0]):
-        output = model(time_points[k], context_values[k], target_mask[k])
+        output = model(
+            time_points[k],
+            context_values[k],
+            context_mask=context_values[k].isfinite(),
+            query_mask=target_mask[k],
+        )
         expected[k] = output
 
     assert actual.shape == target_mask.shape

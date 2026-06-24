@@ -405,6 +405,7 @@ class ProFITi(nn.Module):
         size: int | tuple[int, ...] = (),  # *S
         *,
         context_times: Tensor,  # (..., $N), padded NaN
+        context_mask: Tensor,  # (..., $N, D), bool
         context_values: Tensor,  # (..., $N, D), padded NaN, sparse
         query_times: Tensor,  # (..., $K), padded NaN
         query_mask: Tensor,  # (..., $K, D), bool
@@ -416,41 +417,37 @@ class ProFITi(nn.Module):
         #   D: channels.
         #   P: selected target values per batch item
         #   H: latent embedding dimension.
+        sample_shape = (size,) if isinstance(size, int) else size
+        *batch_shape, ctx_size, ctx_dim = context_values.shape  # ..., $N, D
+        qry_size = query_times.shape[-1]  # $K
+        assert context_mask.dtype == torch.bool
+        assert context_mask.shape == (*batch_shape, qry_size, ctx_dim)
+
         T = context_times
+        C = context_mask
         X = context_values
         Q = query_times
         M = query_mask
-        sample_shape = (size,) if isinstance(size, int) else size
-
-        *batch_shape, context_size, context_dim = X.shape  # ..., $N, D
-        query_size = Q.shape[-1]  # $K
-
-        assert M.dtype == torch.bool
-        assert M.shape == (*batch_shape, query_size, context_dim)
-
-        # (..., $K, D)
-        Y = X.new_full((*batch_shape, query_size, context_dim), nan)
-        time_points = torch.cat([T, Q], dim=-1).nan_to_num(0.0)
+        Y = X.new_full((*batch_shape, qry_size, ctx_dim), nan)  # (..., $K, D)
 
         # use grafiti as an encoder (eq 16)
         H = self.context_embedding(
-            time_points,  # (..., $N + $K)
+            torch.cat([T, Q], dim=-1).nan_to_num(0.0),  # (..., $N + $K)
             torch.cat([X, Y], dim=-2),  # (..., $N + $K, D)
-            torch.cat(
-                [  # (..., $N + $K, D)
-                    M.new_zeros((*batch_shape, context_size, context_dim)),
-                    M,
-                ],
-                dim=-2,
-            ),  # fmt: skip,
+            context_mask=torch.cat(  # (..., $N + $K, D)
+                [C, C.new_zeros((*batch_shape, qry_size, ctx_dim))], dim=-2
+            ),
+            query_mask=torch.cat(  # (..., $N + $K, D)
+                [M.new_zeros((*batch_shape, ctx_size, ctx_dim)), M], dim=-2
+            ),
         )  # (..., P, H), P = max_target_count
 
         # sample from the latent distribution
-        Z = torch.randn(
+        Z = torch.randn(  # (*S, ..., P)
             (*sample_shape, *H.shape[:-1]),
             dtype=H.dtype,
             device=H.device,
-        )  # (*S, ..., P)
+        )
 
         # mark samples as NaN if they correspond to non-query values
         valid_mask = H.isfinite().all(dim=-1)  # (..., P)
@@ -464,10 +461,8 @@ class ProFITi(nn.Module):
         )  # (*S, ..., P), (*S, ...)
 
         # reshape sample to (..., $K, D) and fill non-query positions with NaN
-        samples = samples_flat.new_full(
-            (*sample_shape, *M.shape), nan
-        )  # (*S, ..., $K, D)
-        samples[..., M] = samples_flat[..., valid_mask]
+        samples = samples_flat.new_full((*sample_shape, *M.shape), nan)
+        samples[..., M] = samples_flat[..., valid_mask]  # (*S, ..., $K, D)
 
         return samples, log_prob - logabsdet
 
@@ -489,6 +484,7 @@ class ProFITi(nn.Module):
         *,
         context_times: Tensor,  # (..., $N), padded NaN
         context_values: Tensor,  # (..., $N, D), padded NaN, sparse
+        context_mask: Tensor,  # (..., $N, D), bool
         query_times: Tensor,  # (..., $K), padded NaN
     ) -> Tensor:  # (*S, ...)
         r"""Compute the joint log-likelihood of the target values under the model.
@@ -504,6 +500,7 @@ class ProFITi(nn.Module):
         *_, ctx_size, ctx_dim = context_values.shape
 
         T = context_times.broadcast_to(*target_shape, context_times.shape[-1])
+        C = context_mask.broadcast_to(*target_shape, *context_mask.shape[-2:])
         X = context_values.broadcast_to(*target_shape, *context_values.shape[-2:])
         Q = query_times.broadcast_to(*target_shape, query_times.shape[-1])
         M = values.isfinite()
@@ -512,12 +509,11 @@ class ProFITi(nn.Module):
         H = self.context_embedding(  # (..., P, H), P = max_target_count
             torch.cat([T, Q], dim=-1).nan_to_num(0.0),
             torch.cat([X, Y], dim=-2),
-            torch.cat(
-                [
-                    M.new_zeros((*target_shape, ctx_size, ctx_dim)),
-                    M,
-                ],
-                dim=-2,
+            context_mask=torch.cat(
+                [C, C.new_zeros((*target_shape, qry_size, ctx_dim))], dim=-2
+            ),
+            query_mask=torch.cat(
+                [M.new_zeros((*target_shape, ctx_size, ctx_dim)), M], dim=-2
             ),
         )
 
