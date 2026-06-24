@@ -224,7 +224,7 @@ class CRUConfig:
     latent_size: int
     encoder: EncoderConfig
     decoder: DecoderConfig
-    output_size: int | None = None
+    output_size: int
     num_basis: int = 15
     bandwidth: int = 3
     variance_activation: str = "elup1"
