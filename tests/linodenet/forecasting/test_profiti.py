@@ -384,7 +384,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
     ) -> tuple[torch.Tensor, ...]:
         r"""Return ProFITi target log densities for sequential forecasting inputs."""
         ctx_values = inputs.context_values
-        qry_values = inputs.query_values
+        qry_values = inputs.target_values
         ctx_mask = ctx_values.isfinite()
         qry_mask = qry_values.isfinite()
         *batch_shape, ctx_size, D = ctx_values.shape
@@ -413,11 +413,11 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
         )
-        event_ndim = inputs.query_values.ndim - inputs.query_times.ndim
+        event_ndim = inputs.target_values.ndim - inputs.query_times.ndim
         log_prob = log_prob.reshape(*log_prob.shape, *((1,) * (event_ndim + 1)))
-        predictions = torch.where(inputs.query_values.isfinite(), log_prob, torch.nan)
+        predictions = torch.where(inputs.target_values.isfinite(), log_prob, torch.nan)
 
-        assert predictions.shape == inputs.query_values.shape
+        assert predictions.shape == inputs.target_values.shape
         assert predictions[inputs.query_mask].isfinite().all()
         return (predictions,)
 

@@ -302,7 +302,7 @@ def _combined_arg(
     values: Tensor,
     context_mask: Tensor,
     query_mask: Tensor,
-    query_values_available: bool = True,
+    target_values_available: bool = True,
     static_covariates: Tensor | None = None,
 ) -> CombinedArg:
     return CombinedArg(
@@ -311,7 +311,7 @@ def _combined_arg(
         context_mask=context_mask,
         query_mask=query_mask,
         target_values=(
-            values.masked_fill(~query_mask, nan) if query_values_available else None
+            values.masked_fill(~query_mask, nan) if target_values_available else None
         ),
         static_covariates=static_covariates,
     )
@@ -323,7 +323,7 @@ def _batched_combined_args(
     values: Tensor,
     context_mask: Tensor,
     query_mask: Tensor,
-    query_values_available: bool = True,
+    target_values_available: bool = True,
     static_covariates: Tensor | None = None,
 ) -> BatchedCombinedArgs:
     return BatchedCombinedArgs(
@@ -332,7 +332,7 @@ def _batched_combined_args(
         context_mask=context_mask,
         query_mask=query_mask,
         target_values=(
-            values.masked_fill(~query_mask, nan) if query_values_available else None
+            values.masked_fill(~query_mask, nan) if target_values_available else None
         ),
         static_covariates=static_covariates,
     )
@@ -361,7 +361,7 @@ def _make_random_batched_triplet(
     context_values = torch.full((num_samples, num_context), nan)
     query_times = torch.full((num_samples, num_query), nan)
     query_channels = torch.full((num_samples, num_query), -1, dtype=torch.long)
-    query_values = torch.full((num_samples, num_query), nan)
+    target_values = torch.full((num_samples, num_query), nan)
 
     for sample in range(num_samples):
         context_steps = (
@@ -407,7 +407,7 @@ def _make_random_batched_triplet(
             for channel in channels:
                 query_times[sample, index] = float(10 + step)
                 query_channels[sample, index] = channel
-                query_values[sample, index] = float(
+                target_values[sample, index] = float(
                     1000 + sample * 100 + step * 10 + channel
                 )
                 index += 1
@@ -419,7 +419,7 @@ def _make_random_batched_triplet(
         context_values=context_values.reshape(*batch_shape, num_context),
         query_times=query_times.reshape(*batch_shape, num_query),
         query_channels=query_channels.reshape(*batch_shape, num_query),
-        target_values=query_values.reshape(*batch_shape, num_query),
+        target_values=target_values.reshape(*batch_shape, num_query),
         static_covariates=static_covariates.reshape(*batch_shape, 2),
     )
 
@@ -455,7 +455,7 @@ def _make_random_batched_dense(
         (num_samples, num_query_steps, query_dim),
         dtype=torch.bool,
     )
-    query_values = torch.full((num_samples, num_query_steps, query_dim), nan)
+    target_values = torch.full((num_samples, num_query_steps, query_dim), nan)
 
     for sample in range(num_samples):
         context_steps = (
@@ -514,7 +514,7 @@ def _make_random_batched_dense(
 
             query_mask[sample, step, mask] = True
             for channel in mask.nonzero(as_tuple=True)[0]:
-                query_values[sample, step, channel] = float(
+                target_values[sample, step, channel] = float(
                     1000 + sample * 100 + step * 10 + channel
                 )
 
@@ -533,7 +533,7 @@ def _make_random_batched_dense(
         ),
         query_times=query_times.reshape(*batch_shape, num_query_steps),
         query_mask=query_mask.reshape(*batch_shape, num_query_steps, query_dim),
-        target_values=query_values.reshape(*batch_shape, num_query_steps, query_dim),
+        target_values=target_values.reshape(*batch_shape, num_query_steps, query_dim),
         static_covariates=static_covariates.reshape(*batch_shape, 2),
     )
 
@@ -1271,7 +1271,7 @@ class TestCombined:
 
         _assert_dense_equal(actual, expected)
 
-    def test_to_dense_unbatched_without_query_values(self) -> None:
+    def test_to_dense_unbatched_without_target_values(self) -> None:
         original = _combined_arg(
             times=torch.tensor([1.0, 2.0, 3.0, 4.0]),
             values=torch.tensor([
@@ -1292,7 +1292,7 @@ class TestCombined:
                 [False, False],
                 [ True,  True],
             ]),
-            query_values_available=False,
+            target_values_available=False,
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
@@ -1317,7 +1317,7 @@ class TestCombined:
 
         _assert_dense_equal(actual, expected)
 
-    def test_to_dense_batched_without_query_values(self) -> None:
+    def test_to_dense_batched_without_target_values(self) -> None:
         original = _batched_combined_args(
             times=torch.tensor([
                 [1.0, 2.0, 3.0, 4.0],
@@ -1353,7 +1353,7 @@ class TestCombined:
                  [False, False, False],
                  [False, False, False]],
             ]),
-            query_values_available=False,
+            target_values_available=False,
             static_covariates=torch.tensor([
                 [5.0, 6.0],
                 [7.0, 8.0],

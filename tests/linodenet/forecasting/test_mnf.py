@@ -65,13 +65,13 @@ class TestMNF(TestForecastingModel[MarginalizableNormalizingFlow]):
         MNF is a static density model: it evaluates each query time step
         independently, ignoring temporal context.
         """
-        query_values = inputs.query_values  # (*batch_shape, T, D)
+        target_values = inputs.target_values  # (*batch_shape, T, D)
         query_mask = inputs.query_mask  # (*batch_shape, T)
-        batch_shape = query_values.shape[:-2]
-        T = query_values.shape[-2]
-        D = query_values.shape[-1]
+        batch_shape = target_values.shape[:-2]
+        T = target_values.shape[-2]
+        D = target_values.shape[-1]
 
-        flat_values = query_values.reshape(-1, D)  # (B*T, D)
+        flat_values = target_values.reshape(-1, D)  # (B*T, D)
         flat_mask = query_mask.reshape(-1)  # (B*T,)
 
         log_prob_flat = flat_values.new_full((flat_values.shape[0],), torch.nan)
@@ -81,7 +81,7 @@ class TestMNF(TestForecastingModel[MarginalizableNormalizingFlow]):
         log_prob = log_prob_flat.reshape(*batch_shape, T)  # (*batch_shape, T)
         # Expand to (*batch_shape, T, D) to match the output_shape convention used by
         # the base test class (query_axis = ndim - len(output_shape) - 1).
-        return (log_prob.unsqueeze(-1).expand_as(query_values),)
+        return (log_prob.unsqueeze(-1).expand_as(target_values),)
 
     def loss(
         self,

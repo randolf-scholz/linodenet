@@ -17,7 +17,7 @@ class SequentialData(NamedTuple):
     context_values: Tensor
     context_lengths: Tensor
     query_times: Tensor
-    query_values: Tensor
+    target_values: Tensor
     query_lengths: Tensor
 
     @property
@@ -108,7 +108,7 @@ class SequentialData(NamedTuple):
                 )
 
         context_times, query_times = times
-        context_values, query_values = values
+        context_values, target_values = values
 
         if input_missingness:
             flat = context_values.reshape(
@@ -143,13 +143,13 @@ class SequentialData(NamedTuple):
         assert context_times.shape == (*batch_shape, context_length)
         assert context_values.shape == (*batch_shape, context_length, *context_shape)
         assert query_times.shape == (*batch_shape, query_length)
-        assert query_values.shape == (*batch_shape, query_length, *output_shape)
+        assert target_values.shape == (*batch_shape, query_length, *output_shape)
         return SequentialData(
             context_times=context_times,
             context_values=context_values,
             context_lengths=context_lengths,
             query_times=query_times,
-            query_values=query_values,
+            target_values=target_values,
             query_lengths=query_lengths,
         )
 
@@ -288,7 +288,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         context_times = torch.full((2, context_size), torch.nan)
         query_times = torch.full((2, query_size), torch.nan)
         context_values = torch.full((2, context_size, *context_shape), torch.nan)
-        query_values = torch.full((2, query_size, *output_shape), torch.nan)
+        target_values = torch.full((2, query_size, *output_shape), torch.nan)
 
         for k, (context_length_tensor, query_length_tensor) in enumerate(
             zip(context_lengths, query_lengths, strict=True)
@@ -302,7 +302,7 @@ class TestForecastingModel[M: nn.Module](ABC):
                 *context_shape,
                 generator=generator,
             )
-            query_values[k, :query_length] = torch.randn(
+            target_values[k, :query_length] = torch.randn(
                 query_length,
                 *output_shape,
                 generator=generator,
@@ -330,7 +330,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             context_values=context_values,
             context_lengths=context_lengths,
             query_times=query_times,
-            query_values=query_values,
+            target_values=target_values,
             query_lengths=query_lengths,
         )
 
@@ -352,7 +352,7 @@ class TestForecastingModel[M: nn.Module](ABC):
                 context_values=context_values[k : k + 1, :context_length],
                 context_lengths=context_lengths[k : k + 1],
                 query_times=query_times[k : k + 1, :query_length],
-                query_values=query_values[k : k + 1, :query_length],
+                target_values=target_values[k : k + 1, :query_length],
                 query_lengths=query_lengths[k : k + 1],
             )
 
@@ -432,10 +432,10 @@ class TestForecastingModel[M: nn.Module](ABC):
                 ],
                 dim=-1,
             ),
-            query_values=torch.cat(
+            target_values=torch.cat(
                 [
-                    data.query_values,
-                    data.query_values.new_full(
+                    data.target_values,
+                    data.target_values.new_full(
                         (*batch_dims, padding, *output_shape),
                         torch.nan,
                     ),
@@ -501,12 +501,12 @@ class TestForecastingModel[M: nn.Module](ABC):
         }
 
         predictions = self.forecast(model, data)
-        initial_loss = self.loss(model, predictions, data.query_values)
+        initial_loss = self.loss(model, predictions, data.target_values)
 
         for _ in range(3):
             optimizer.zero_grad()
             predictions = self.forecast(model, data)
-            loss = self.loss(model, predictions, data.query_values)
+            loss = self.loss(model, predictions, data.target_values)
             loss.backward()
 
             for name, parameter in model.named_parameters():
@@ -519,7 +519,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             optimizer.step()
 
         predictions = self.forecast(model, data)
-        final_loss = self.loss(model, predictions, data.query_values)
+        final_loss = self.loss(model, predictions, data.target_values)
 
         for name, parameter in model.named_parameters():
             if not parameter.requires_grad:
@@ -557,12 +557,12 @@ class TestForecastingModel[M: nn.Module](ABC):
         }
 
         predictions = self.forecast(model, data)
-        initial_loss = self.loss(model, predictions, data.query_values)
+        initial_loss = self.loss(model, predictions, data.target_values)
 
         for _ in range(3):
             optimizer.zero_grad()
             predictions = self.forecast(model, data)
-            loss = self.loss(model, predictions, data.query_values)
+            loss = self.loss(model, predictions, data.target_values)
             loss.backward()
 
             for name, parameter in model.named_parameters():
@@ -575,7 +575,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             optimizer.step()
 
         predictions = self.forecast(model, data)
-        final_loss = self.loss(model, predictions, data.query_values)
+        final_loss = self.loss(model, predictions, data.target_values)
 
         for name, parameter in model.named_parameters():
             if not parameter.requires_grad:

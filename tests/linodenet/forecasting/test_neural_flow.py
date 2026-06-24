@@ -67,8 +67,8 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
-            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
-            target_values=inputs.query_values,
+            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.target_values),
+            target_values=inputs.target_values,
         )
         combined = dense.to_combined()
         assert combined.target_values is not None
@@ -87,15 +87,15 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
         query_log_prob = log_prob[query_steps]
         query_mean[~combined.query_mask[query_steps]] = nan
         query_logvar[~combined.query_mask[query_steps]] = nan
-        pred_mean = torch.full_like(inputs.query_values, nan)
-        pred_logvar = torch.full_like(inputs.query_values, nan)
-        pred_log_prob = inputs.query_values.new_full(inputs.query_times.shape, nan)
+        pred_mean = torch.full_like(inputs.target_values, nan)
+        pred_logvar = torch.full_like(inputs.target_values, nan)
+        pred_log_prob = inputs.target_values.new_full(inputs.query_times.shape, nan)
         pred_mean[inputs.query_mask] = query_mean
         pred_logvar[inputs.query_mask] = query_logvar
         pred_log_prob[inputs.query_mask] = query_log_prob
 
-        assert pred_mean.shape == inputs.query_values.shape
-        assert pred_logvar.shape == inputs.query_values.shape
+        assert pred_mean.shape == inputs.target_values.shape
+        assert pred_logvar.shape == inputs.target_values.shape
         assert pred_log_prob.shape == inputs.query_times.shape
         assert pred_mean[inputs.query_mask].isfinite().all()
         assert pred_logvar[inputs.query_mask].isfinite().all()

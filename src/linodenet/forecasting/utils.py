@@ -220,7 +220,7 @@ class ForecastingRequest:
 
         if (V := self.target_values) is not None:
             V = V.masked_fill(~M, nan)
-            object.__setattr__(self, "query_values", V)
+            object.__setattr__(self, "target_values", V)
             *_, query_dim = V.shape
             assert V.shape == (query_size, query_dim)
             assert V.isfinite().any(dim=-1).all()  # at least one value per step
@@ -367,7 +367,7 @@ class BatchedForecastingRequest:
 
         if (V := self.target_values) is not None:
             V = V.masked_fill(~M, nan)
-            object.__setattr__(self, "query_values", V)
+            object.__setattr__(self, "target_values", V)
             *_, query_dim = V.shape
             assert V.shape == (*batch_shape, query_size, query_dim)
             V_valid = V.isfinite()
@@ -1019,10 +1019,10 @@ class CombinedArg:
             "context_values",
             self.context_values.masked_fill(~self.context_mask, nan),
         )
-        # sanitize query_values
+        # sanitize target_values
         object.__setattr__(
             self,
-            "query_values",
+            "target_values",
             (
                 self.target_values.masked_fill(~self.query_mask, nan)
                 if self.target_values is not None
@@ -1126,10 +1126,10 @@ class BatchedCombinedArgs:
             "context_values",
             self.context_values.masked_fill(~self.context_mask, nan),
         )
-        # sanitize query_values
+        # sanitize target_values
         object.__setattr__(
             self,
-            "query_values",
+            "target_values",
             (
                 self.target_values.masked_fill(~self.query_mask, nan)
                 if self.target_values is not None

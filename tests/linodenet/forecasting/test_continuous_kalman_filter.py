@@ -200,7 +200,7 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
-            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
+            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.target_values),
         )
         combined = dense.to_combined()
         posterior_mean, posterior_covariance = model(
@@ -241,7 +241,7 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         if pred_mean is None or pred_variance is None:
             raise RuntimeError("Expected Kalman filter query predictions.")
 
-        query_size = inputs.query_values.shape[-2]
+        query_size = inputs.target_values.shape[-2]
         if pred_mean.shape[-2] < query_size:
             padding = query_size - pred_mean.shape[-2]
             pred_mean = torch.cat(
@@ -264,8 +264,8 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
                 dim=-2,
             )
 
-        assert pred_mean.shape == inputs.query_values.shape
-        assert pred_variance.shape == inputs.query_values.shape
+        assert pred_mean.shape == inputs.target_values.shape
+        assert pred_variance.shape == inputs.target_values.shape
         assert pred_mean[inputs.query_mask].isfinite().all()
         assert pred_variance[inputs.query_mask].isfinite().all()
         assert posterior_covariance[combined.query_mask.any(dim=-1)].isfinite().all()

@@ -87,7 +87,7 @@ class TestModel(TestForecastingModel[Grafiti]):
         )
         predictions = forecasts[..., inputs.context_values.shape[-2] :, :]
 
-        assert predictions.shape == inputs.query_values.shape
+        assert predictions.shape == inputs.target_values.shape
         assert predictions[inputs.query_mask].isfinite().all()
         return (predictions,)
 
