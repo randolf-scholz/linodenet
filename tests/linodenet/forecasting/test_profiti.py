@@ -383,13 +383,35 @@ class TestProfiti(TestForecastingModel[ProFITi]):
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return ProFITi target log densities for sequential forecasting inputs."""
+        ctx_values = inputs.context_values
+        qry_values = inputs.query_values
+        ctx_mask = ctx_values.isfinite()
+        qry_mask = qry_values.isfinite()
+        *batch_shape, ctx_size, D = ctx_values.shape
+        *_, qry_size, _ = qry_values.shape
+
+        times = torch.cat([inputs.context_times, inputs.query_times], dim=-1)
+        combined_ctx_values = torch.cat(
+            [ctx_values, ctx_values.new_full((*batch_shape, qry_size, D), torch.nan)],
+            dim=-2,
+        )
+        combined_ctx_mask = torch.cat(
+            [ctx_mask, ctx_mask.new_zeros(*batch_shape, qry_size, D)], dim=-2
+        )
+        combined_qry_mask = torch.cat(
+            [qry_mask.new_zeros(*batch_shape, ctx_size, D), qry_mask], dim=-2
+        )
+        combined_values = torch.cat(
+            [qry_values.new_full((*batch_shape, ctx_size, D), torch.nan), qry_values],
+            dim=-2,
+        )
+
         log_prob = model.log_prob(
-            inputs.query_values,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_values.isfinite(),
-            query_times=inputs.query_times,
-            query_mask=inputs.query_values.isfinite(),
+            combined_values,
+            times=times,
+            context_values=combined_ctx_values,
+            context_mask=combined_ctx_mask,
+            query_mask=combined_qry_mask,
         )
         event_ndim = inputs.query_values.ndim - inputs.query_times.ndim
         log_prob = log_prob.reshape(*log_prob.shape, *((1,) * (event_ndim + 1)))
@@ -452,37 +474,45 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             ]
         )
 
+        # Build combined (context + query) representation
+        times = torch.cat([context_times, query_times])
+        combined_ctx_values = torch.cat(
+            [context_values, context_values.new_full((3, 2), torch.nan)]
+        )
+        combined_ctx_mask = torch.cat(
+            [context_values.isfinite(), torch.zeros(3, 2, dtype=torch.bool)]
+        )
+        combined_qry_mask = torch.cat([torch.zeros(2, 2, dtype=torch.bool), query_mask])
+
         samples, log_prob = model.sample_and_log_prob(
             5,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_values.isfinite(),
-            query_times=query_times,
-            query_mask=query_mask,
+            times=times,
+            context_values=combined_ctx_values,
+            context_mask=combined_ctx_mask,
+            query_mask=combined_qry_mask,
         )
 
-        assert samples.shape == (5, *query_mask.shape)
+        assert samples.shape == (5, *combined_qry_mask.shape)
         assert log_prob.shape == (5,)
-        assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
+        assert torch.equal(samples.isfinite(), combined_qry_mask.expand_as(samples))
 
-        latents = samples[:, query_mask] / scale
+        latents = samples[:, combined_qry_mask] / scale
         expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
         expected = expected - query_mask.sum() * math.log(scale)
         assert_close(log_prob, expected)
 
         sample, log_prob = model.sample_and_log_prob(
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_values.isfinite(),
-            query_times=query_times,
-            query_mask=query_mask,
+            times=times,
+            context_values=combined_ctx_values,
+            context_mask=combined_ctx_mask,
+            query_mask=combined_qry_mask,
         )
 
-        assert sample.shape == query_mask.shape
+        assert sample.shape == combined_qry_mask.shape
         assert log_prob.shape == ()
-        assert torch.equal(sample.isfinite(), query_mask)
+        assert torch.equal(sample.isfinite(), combined_qry_mask)
 
-        latent = sample[query_mask] / scale
+        latent = sample[combined_qry_mask] / scale
         expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
         expected = expected - query_mask.sum() * math.log(scale)
         assert_close(log_prob, expected)
@@ -510,21 +540,35 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             ]
         )
 
+        # Build combined (context + query) representation
+        times = torch.cat([context_times, query_times], dim=-1)  # (2, 5)
+        combined_ctx_values = torch.cat(
+            [context_values, context_values.new_full((2, 3, 2), torch.nan)], dim=-2
+        )  # (2, 5, 2)
+        combined_ctx_mask = torch.cat(
+            [context_values.isfinite(), torch.zeros(2, 3, 2, dtype=torch.bool)], dim=-2
+        )  # (2, 5, 2)
+        combined_qry_mask = torch.cat(
+            [torch.zeros(2, 2, 2, dtype=torch.bool), query_mask], dim=-2
+        )  # (2, 5, 2)
+
         samples, log_prob = model.sample_and_log_prob(
             (2, 3),
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_values.isfinite(),
-            query_times=query_times,
-            query_mask=query_mask,
+            times=times,
+            context_values=combined_ctx_values,
+            context_mask=combined_ctx_mask,
+            query_mask=combined_qry_mask,
         )
 
-        assert samples.shape == (2, 3, *query_mask.shape)
+        assert samples.shape == (2, 3, *combined_qry_mask.shape)
         assert log_prob.shape == (2, 3, 2)
-        assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
+        assert torch.equal(samples.isfinite(), combined_qry_mask.expand_as(samples))
 
         latents = torch.stack(
-            [samples[..., k, :, :][..., query_mask[k]] / scale for k in range(2)],
+            [
+                samples[..., k, :, :][..., combined_qry_mask[k]] / scale
+                for k in range(2)
+            ],
             dim=-2,
         )
         expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
@@ -549,18 +593,29 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             ]
         )
 
-        query_mask = value.isfinite()
-        log_prob = model.log_prob(
-            value,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_values.isfinite(),
-            query_times=query_times,
-            query_mask=query_mask,
+        # Build combined (context + query) representation
+        times = torch.cat([context_times, query_times])
+        combined_ctx_values = torch.cat(
+            [context_values, context_values.new_full((3, 2), torch.nan)]
         )
-        latent = value[query_mask] / scale
+        combined_ctx_mask = torch.cat(
+            [context_values.isfinite(), torch.zeros(3, 2, dtype=torch.bool)]
+        )
+        combined_qry_mask = torch.cat(
+            [torch.zeros(2, 2, dtype=torch.bool), value.isfinite()]
+        )
+        combined_value = torch.cat([value.new_full((2, 2), torch.nan), value])
+
+        log_prob = model.log_prob(
+            combined_value,
+            times=times,
+            context_values=combined_ctx_values,
+            context_mask=combined_ctx_mask,
+            query_mask=combined_qry_mask,
+        )
+        latent = combined_value[combined_qry_mask] / scale
         expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
-        expected = expected - query_mask.sum() * math.log(scale)
+        expected = expected - combined_qry_mask.sum() * math.log(scale)
         assert log_prob.shape == ()
         assert_close(log_prob, expected)
 
@@ -593,29 +648,40 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             ]
         )
 
+        # Build combined (context + query) representation
+        D = config.input_dim
+        times = torch.cat([context_times, query_times], dim=-1)  # (2, 5)
+        combined_ctx_values = torch.cat(
+            [context_values, context_values.new_full((2, 3, D), torch.nan)], dim=-2
+        )  # (2, 5, 2)
+        combined_ctx_mask = torch.cat(
+            [context_values.isfinite(), torch.zeros(2, 3, D, dtype=torch.bool)], dim=-2
+        )  # (2, 5, 2)
+        combined_qry_mask = torch.cat(
+            [torch.zeros(2, 2, D, dtype=torch.bool), query_mask], dim=-2
+        )  # (2, 5, 2)
+
         samples, log_prob = model.sample_and_log_prob(
             3,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_values.isfinite(),
-            query_times=query_times,
-            query_mask=query_mask,
+            times=times,
+            context_values=combined_ctx_values,
+            context_mask=combined_ctx_mask,
+            query_mask=combined_qry_mask,
         )
         value_log_prob = model.log_prob(
             samples[0].detach(),
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_values.isfinite(),
-            query_times=query_times,
-            query_mask=query_mask,
+            times=times,
+            context_values=combined_ctx_values,
+            context_mask=combined_ctx_mask,
+            query_mask=combined_qry_mask,
         )
         loss = samples.nansum() + log_prob.nansum() + value_log_prob.nansum()
         loss.backward()
 
-        assert samples.shape == (3, *query_mask.shape)
+        assert samples.shape == (3, *combined_qry_mask.shape)
         assert log_prob.shape == (3, 2)
         assert value_log_prob.shape == (2,)
-        assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
+        assert torch.equal(samples.isfinite(), combined_qry_mask.expand_as(samples))
         assert value_log_prob.isfinite().all()
         assert context_values.grad is not None
         assert context_values.grad.isfinite().all()
@@ -638,21 +704,29 @@ class TestProfiti(TestForecastingModel[ProFITi]):
         query_mask[2] = True
         query_mask[3] = True
 
+        # Build combined (context + query) representation
+        times = torch.cat([context_times, query_times])
+        combined_ctx_values = torch.cat(
+            [context_values, context_values.new_full((4, D), torch.nan)]
+        )
+        combined_ctx_mask = torch.cat(
+            [context_mask, torch.zeros(4, D, dtype=torch.bool)]
+        )
+        combined_qry_mask = torch.cat([torch.zeros(4, D, dtype=torch.bool), query_mask])
+
         samples, log_prob_direct = model.sample_and_log_prob(
             size,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_times=query_times,
-            query_mask=query_mask,
+            times=times,
+            context_values=combined_ctx_values,
+            context_mask=combined_ctx_mask,
+            query_mask=combined_qry_mask,
         )
         log_prob_via_sample = model.log_prob(
             samples,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_times=query_times,
-            query_mask=query_mask,
+            times=times,
+            context_values=combined_ctx_values,
+            context_mask=combined_ctx_mask,
+            query_mask=combined_qry_mask,
         )
 
         assert_close(log_prob_direct, log_prob_via_sample)

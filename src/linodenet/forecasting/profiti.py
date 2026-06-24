@@ -403,30 +403,16 @@ class ProFITi(nn.Module):
     def _encode(
         self,
         *,
-        context_times: Tensor,  # (..., $N), padded NaN
-        context_values: Tensor,  # (..., $N, D), padded NaN
-        context_mask: Tensor,  # (..., $N, D), bool
-        query_times: Tensor,  # (..., $K), padded NaN
-        query_mask: Tensor,  # (..., $K, D), bool
+        times: Tensor,  # (..., $T), padded NaN
+        context_values: Tensor,  # (..., $T, D), padded NaN
+        context_mask: Tensor,  # (..., $T, D), bool
+        query_mask: Tensor,  # (..., $T, D), bool
     ) -> tuple[Tensor, Tensor]:  # (..., P, latent_dim), (..., P)
-        *batch_shape, ctx_size, ctx_dim = context_values.shape
-        qry_size = query_times.shape[-1]
-        T = context_times
-        C = context_mask
-        X = context_values
-        Q = query_times
-        M = query_mask
-        Y = context_values.new_full((*batch_shape, qry_size, ctx_dim), nan)
-
         H = self.context_embedding(  # (..., P, latent_dim)
-            torch.cat([T, Q], dim=-1).nan_to_num(0.0),
-            torch.cat([X, Y], dim=-2),
-            context_mask=torch.cat(
-                [C, C.new_zeros((*batch_shape, qry_size, ctx_dim))], dim=-2
-            ),
-            query_mask=torch.cat(
-                [M.new_zeros((*batch_shape, ctx_size, ctx_dim)), M], dim=-2
-            ),
+            times.nan_to_num(0.0),
+            context_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
         )
 
         valid_mask = H.isfinite().all(dim=-1)  # (..., P)
@@ -437,20 +423,18 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        context_times: Tensor,  # (..., $N), padded NaN
-        context_mask: Tensor,  # (..., $N, D), bool
-        context_values: Tensor,  # (..., $N, D), padded NaN, sparse
-        query_times: Tensor,  # (..., $K), padded NaN
-        query_mask: Tensor,  # (..., $K, D), bool
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ...)
-        # Shape legend: *S=sample, $N=context steps, $K=query steps, D=channels, P=packed targets
+        times: Tensor,  # (..., $T), padded NaN
+        context_values: Tensor,  # (..., $T, D), padded NaN
+        context_mask: Tensor,  # (..., $T, D), bool
+        query_mask: Tensor,  # (..., $T, D), bool
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $T, D), (*S, ...)
+        # Shape legend: *S=sample, $T=combined steps, D=channels, P=packed targets
         sample_shape = (size,) if isinstance(size, int) else size
 
         H, valid_mask = self._encode(  # (..., P, latent_dim), (..., P)
-            context_times=context_times,
+            times=times,
             context_values=context_values,
             context_mask=context_mask,
-            query_times=query_times,
             query_mask=query_mask,
         )
 
@@ -463,7 +447,7 @@ class ProFITi(nn.Module):
         )  # (*S, ..., P), (*S, ...)
 
         samples = samples_flat.new_full((*sample_shape, *query_mask.shape), nan)
-        samples[..., query_mask] = samples_flat[..., valid_mask]  # (*S, ..., $K, D)
+        samples[..., query_mask] = samples_flat[..., valid_mask]  # (*S, ..., $T, D)
 
         return samples, log_prob - logabsdet
 
@@ -471,50 +455,44 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        context_times: Tensor,  # (..., $N), padded NaN
-        context_mask: Tensor,  # (..., $N, D), bool
-        context_values: Tensor,  # (..., $N, D), padded NaN, sparse
-        query_times: Tensor,  # (..., $K), padded NaN
-        query_mask: Tensor,  # (..., $K, D), bool
-    ) -> Tensor:  # (*S, ..., $K, D)
+        times: Tensor,  # (..., $T), padded NaN
+        context_values: Tensor,  # (..., $T, D), padded NaN
+        context_mask: Tensor,  # (..., $T, D), bool
+        query_mask: Tensor,  # (..., $T, D), bool
+    ) -> Tensor:  # (*S, ..., $T, D)
         return self.sample_and_log_prob(
             size=size,
-            context_times=context_times,
+            times=times,
             context_values=context_values,
             context_mask=context_mask,
-            query_times=query_times,
             query_mask=query_mask,
         )[0]
 
     def log_prob(
         self,
-        values: Tensor,  # (*S, ..., $K, D)
+        values: Tensor,  # (*S, ..., $T, D)
         /,
         *,
-        context_times: Tensor,  # (..., $N), padded NaN
-        context_values: Tensor,  # (..., $N, D), padded NaN, sparse
-        context_mask: Tensor,  # (..., $N, D), bool
-        query_times: Tensor,  # (..., $K), padded NaN
-        query_mask: Tensor,  # (..., $K, D), bool
+        times: Tensor,  # (..., $T), padded NaN
+        context_values: Tensor,  # (..., $T, D), padded NaN
+        context_mask: Tensor,  # (..., $T, D), bool
+        query_mask: Tensor,  # (..., $T, D), bool
     ) -> Tensor:  # (*S, ...)
         r"""Compute the joint log-likelihood of the target values under the model.
 
         .. math:: \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ)))
 
-        The leading ``*S`` dims of ``value`` beyond ``context_values``'s batch
-        shape are treated as sample dims; all samples must share the same
-        query mask (e.g. samples drawn by :meth:`sample_and_log_prob`).
+        The leading ``*S`` dims of ``values`` beyond the batch shape are treated
+        as sample dims; all samples must share the same query mask (e.g. samples
+        drawn by :meth:`sample_and_log_prob`).
         """
-        # target_shape = sample_shape + batch_shape
-        *shape, qry_size, qry_dim = values.shape
-        *_, ctx_size, ctx_dim = context_values.shape
-        M = query_mask.broadcast_to(*shape, qry_size, qry_dim)  # (*S, ..., $K, D)
+        *shape, combined_size, D = values.shape
+        M = query_mask.broadcast_to(*shape, combined_size, D)  # (*S, ..., $T, D)
 
         H, valid_mask = self._encode(  # (*S, ..., P, latent_dim), (*S, ..., P)
-            context_times=context_times.broadcast_to(*shape, ctx_size),
-            context_values=context_values.broadcast_to(*shape, ctx_size, ctx_dim),
-            context_mask=context_mask.broadcast_to(*shape, ctx_size, ctx_dim),
-            query_times=query_times.broadcast_to(*shape, qry_size),
+            times=times.broadcast_to(*shape, combined_size),
+            context_values=context_values.broadcast_to(*shape, combined_size, D),
+            context_mask=context_mask.broadcast_to(*shape, combined_size, D),
             query_mask=M,
         )
 
