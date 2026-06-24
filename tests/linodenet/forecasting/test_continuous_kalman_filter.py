@@ -14,7 +14,7 @@ from linodenet.forecasting.continuous_kalman_filter import (
     marginal_gaussian_sample,
     marginal_gaussian_sample_and_log_prob,
 )
-from linodenet.forecasting.utils import BatchedCombinedArgs, BatchedForecastingRequest
+from linodenet.forecasting.utils import BatchedForecastingRequest
 
 from .base import SequentialData, TestForecastingModel
 
@@ -195,83 +195,33 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return Kalman filter predictions for sequential forecasting inputs."""
-        dense = BatchedForecastingRequest(
+        request = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
             query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.target_values),
+            target_values=inputs.target_values,
         )
-        combined = dense.to_combined()
-        posterior_mean, posterior_covariance = model(
-            combined.times,
-            combined.context_values,
-            combined.context_mask,
-            combined.query_mask,
-        )
-        pred_mean = (
-            BatchedCombinedArgs(
-                times=combined.times,
-                context_values=combined.context_values,
-                context_mask=combined.context_mask,
-                query_mask=combined.query_mask,
-                target_values=posterior_mean.masked_fill(
-                    ~combined.query_mask, torch.nan
-                ),
-            )
-            .to_dense()
-            .target_values
-        )
-        posterior_variance = posterior_covariance.diagonal(dim1=-2, dim2=-1)
-        pred_variance = (
-            BatchedCombinedArgs(
-                times=combined.times,
-                context_values=combined.context_values,
-                context_mask=combined.context_mask,
-                query_mask=combined.query_mask,
-                target_values=posterior_variance.masked_fill(
-                    ~combined.query_mask,
-                    torch.nan,
-                ),
-            )
-            .to_dense()
-            .target_values
+        pred_mean, pred_cov = model(
+            context_times=request.context_times,
+            context_values=request.context_values,
+            context_mask=request.context_mask,
+            query_times=request.query_times,
+            query_mask=request.query_mask,
         )
 
-        if pred_mean is None or pred_variance is None:
-            raise RuntimeError("Expected Kalman filter query predictions.")
+        assert request.target_values is not None
+        *batch_shape, query_size, query_dim = request.target_values.shape
+        assert pred_mean.shape == (*batch_shape, query_size, query_dim)
+        assert pred_cov.shape == (*batch_shape, query_size, query_dim, query_dim)
+        assert pred_mean[request.query_mask].isfinite().all()
+        assert pred_cov[request.query_mask].isfinite().all()
+        # assert posterior_covariance[request.query_mask.any(dim=-1)].isfinite().all()
+        assert pred_mean[~request.query_mask].isnan().all()
+        assert pred_cov[~request.query_mask].isnan().all()
 
-        query_size = inputs.target_values.shape[-2]
-        if pred_mean.shape[-2] < query_size:
-            padding = query_size - pred_mean.shape[-2]
-            pred_mean = torch.cat(
-                [
-                    pred_mean,
-                    pred_mean.new_full(
-                        (*pred_mean.shape[:-2], padding, pred_mean.shape[-1]), torch.nan
-                    ),
-                ],
-                dim=-2,
-            )
-            pred_variance = torch.cat(
-                [
-                    pred_variance,
-                    pred_variance.new_full(
-                        (*pred_variance.shape[:-2], padding, pred_variance.shape[-1]),
-                        torch.nan,
-                    ),
-                ],
-                dim=-2,
-            )
-
-        assert pred_mean.shape == inputs.target_values.shape
-        assert pred_variance.shape == inputs.target_values.shape
-        assert pred_mean[inputs.query_mask].isfinite().all()
-        assert pred_variance[inputs.query_mask].isfinite().all()
-        assert posterior_covariance[combined.query_mask.any(dim=-1)].isfinite().all()
-        assert pred_mean[~inputs.query_mask].isnan().all()
-        assert pred_variance[~inputs.query_mask].isnan().all()
-        return pred_mean, pred_variance
+        return pred_mean, pred_cov
 
     def loss(
         self,
@@ -299,7 +249,15 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         context_mask = torch.zeros_like(values, dtype=torch.bool)
         query_mask = torch.ones_like(values, dtype=torch.bool)
 
-        model(times, values, context_mask, query_mask)
+        ctx_steps = context_mask.any(dim=-1)  # [F, F, F]
+        q_steps = query_mask.any(dim=-1)  # [T, T, T]
+        model(
+            query_times=times[q_steps],
+            query_mask=query_mask[q_steps],
+            context_times=times[ctx_steps],
+            context_values=values[ctx_steps],
+            context_mask=context_mask[ctx_steps],
+        )
 
         assert_close(model.post_latent_means, model.prior_latent_means)
         assert_close(model.post_latent_covs, model.prior_latent_covs)
@@ -324,12 +282,20 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         context_mask = torch.ones_like(values, dtype=torch.bool)
         query_mask = torch.ones_like(values, dtype=torch.bool)
 
-        default_mean, default_cov = model(times, values, context_mask, query_mask)
+        # All steps are both context and query.
+        default_mean, default_cov = model(
+            query_times=times,
+            query_mask=query_mask,
+            context_times=times,
+            context_values=values,
+            context_mask=context_mask,
+        )
         explicit_mean, explicit_cov = model(
-            times,
-            values,
-            context_mask,
-            query_mask,
+            query_times=times,
+            query_mask=query_mask,
+            context_times=times,
+            context_values=values,
+            context_mask=context_mask,
             initial_time=times[0],
         )
 
@@ -362,29 +328,36 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         )
         values = torch.randn(4, dim).masked_fill(~query_mask, torch.nan)
 
+        ctx_steps = context_mask.any(dim=-1)  # [T, T, F, T]
+        q_steps = query_mask.any(dim=-1)  # [F, T, T, F]
+        context_times = times[ctx_steps]
+        query_times = times[q_steps]
+        ctx_values = context_values[ctx_steps]
+        ctx_mask = context_mask[ctx_steps]
+        qry_mask = query_mask[q_steps]
+        qry_values = values[q_steps]
+
         log_prob = model.log_prob(
-            values,
-            times=times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_mask=query_mask,
+            qry_values,
+            query_times=query_times,
+            query_mask=qry_mask,
+            context_times=context_times,
+            context_values=ctx_values,
+            context_mask=ctx_mask,
         )
         mean, cov = model(
-            times,
-            context_values,
-            context_mask,
-            query_mask,
+            query_times=query_times,
+            query_mask=qry_mask,
+            context_times=context_times,
+            context_values=ctx_values,
+            context_mask=ctx_mask,
         )
         expected = marginal_gaussian_log_prob(
-            values,
-            mean=mean,
-            cov=cov,
-            mask=query_mask,
+            qry_values, mean=mean, cov=cov, mask=qry_mask
         )
 
-        assert log_prob.shape == times.shape
+        assert log_prob.shape == query_times.shape
         assert_close(log_prob, expected)
-        assert_close(log_prob[~query_mask.any(dim=-1)], torch.zeros(2))
 
     def test_sample_returns_time_marginal_samples(self) -> None:
         r"""Check Kalman samples have the requested sample and query shape."""
@@ -409,17 +382,26 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
             ]
         )
 
+        ctx_steps = context_mask.any(dim=-1)  # [T, F, T]
+        q_steps = query_mask.any(dim=-1)  # [T, T, F]
+        context_times = times[ctx_steps]
+        query_times = times[q_steps]
+        ctx_values = context_values[ctx_steps]
+        ctx_mask = context_mask[ctx_steps]
+        qry_mask = query_mask[q_steps]
+
         samples = model.sample(
             5,
-            times=times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_mask=query_mask,
+            query_times=query_times,
+            query_mask=qry_mask,
+            context_times=context_times,
+            context_values=ctx_values,
+            context_mask=ctx_mask,
         )
 
-        assert samples.shape == (5, *context_values.shape)
-        assert samples[:, query_mask].isfinite().all()
-        assert samples[:, ~query_mask].isnan().all()
+        assert samples.shape == (5, *qry_mask.shape)
+        assert samples[:, qry_mask].isfinite().all()
+        assert samples[:, ~qry_mask].isnan().all()
 
     def test_sample_and_log_prob_returns_time_marginal_likelihoods(self) -> None:
         r"""Check Kalman samples and sample log-probabilities use query masks."""
@@ -442,29 +424,35 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
             ]
         )
 
+        # Both batches have exactly 2 context steps and 2 query steps.
+        has_context = context_mask.any(dim=-1)  # (2, 3): [[T,F,T],[T,T,F]]
+        has_query = query_mask.any(dim=-1)  # (2, 3): [[T,T,F],[F,T,T]]
+        context_times = times[has_context].reshape(2, 2)
+        query_times = times[has_query].reshape(2, 2)
+        ctx_values = context_values[has_context].reshape(2, 2, dim)
+        ctx_mask = context_mask[has_context].reshape(2, 2, dim)
+        qry_mask = query_mask[has_query].reshape(2, 2, dim)
+
         samples, log_prob = model.sample_and_log_prob(
             (2, 3),
-            times=times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_mask=query_mask,
+            query_times=query_times,
+            query_mask=qry_mask,
+            context_times=context_times,
+            context_values=ctx_values,
+            context_mask=ctx_mask,
         )
         expected = marginal_gaussian_log_prob(
             samples,
-            mean=model.post_target_means.expand(2, 3, *model.post_target_means.shape),
-            cov=model.post_target_covs.expand(2, 3, *model.post_target_covs.shape),
-            mask=query_mask.expand(2, 3, *query_mask.shape),
+            mean=model.pred_means.expand(2, 3, *model.pred_means.shape),
+            cov=model.pred_covs.expand(2, 3, *model.pred_covs.shape),
+            mask=qry_mask.expand(2, 3, *qry_mask.shape),
         )
 
-        assert samples.shape == (2, 3, *context_values.shape)
-        assert log_prob.shape == (2, 3, *times.shape)
-        assert samples[..., query_mask].isfinite().all()
-        assert samples[..., ~query_mask].isnan().all()
+        assert samples.shape == (2, 3, 2, 2, dim)
+        assert log_prob.shape == (2, 3, 2, 2)
+        assert samples[..., qry_mask].isfinite().all()
+        assert samples[..., ~qry_mask].isnan().all()
         assert_close(log_prob, expected)
-        assert_close(
-            log_prob[..., ~query_mask.any(dim=-1)],
-            torch.zeros_like(log_prob[..., ~query_mask.any(dim=-1)]),
-        )
 
     @pytest.mark.parametrize("size", [(), (5,), (1, 2, 3)])
     def test_sample_and_log_prob_consistent(self, size: tuple[int, ...]) -> None:
@@ -479,19 +467,29 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         query_mask[2] = True
         query_mask[3] = True
 
+        ctx_steps = context_mask.any(dim=-1)  # [T, T, F, T]
+        q_steps = query_mask.any(dim=-1)  # [F, F, T, T]
+        context_times = times[ctx_steps]
+        query_times = times[q_steps]
+        ctx_values = context_values[ctx_steps]
+        ctx_mask = context_mask[ctx_steps]
+        qry_mask = query_mask[q_steps]
+
         samples, log_prob_direct = model.sample_and_log_prob(
             size,
-            times=times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_mask=query_mask,
+            query_times=query_times,
+            query_mask=qry_mask,
+            context_times=context_times,
+            context_values=ctx_values,
+            context_mask=ctx_mask,
         )
         log_prob_via_sample = model.log_prob(
             samples,
-            times=times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_mask=query_mask,
+            query_times=query_times,
+            query_mask=qry_mask,
+            context_times=context_times,
+            context_values=ctx_values,
+            context_mask=ctx_mask,
         )
 
         assert_close(log_prob_direct, log_prob_via_sample)

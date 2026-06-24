@@ -15,6 +15,8 @@ from numpy.typing import ArrayLike
 from torch import Tensor, einsum, nan, nn, stack
 from torch.linalg import matrix_exp
 
+from .utils import EventBatch
+
 _LOG2PI = math.log(2.0 * math.pi)
 
 
@@ -346,6 +348,9 @@ class ContinuousKalmanFilter(nn.Module):
         self.register_buffer("post_target_means", None, persistent=False)
         self.register_buffer("post_target_covs", None, persistent=False)
 
+        self.register_buffer("pred_means", None, persistent=False)
+        self.register_buffer("pred_covs", None, persistent=False)
+
         # validate model
         self.validate_parameters()
         self.validate_persistent_buffers()
@@ -438,23 +443,25 @@ class ContinuousKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        times: Tensor,  # (..., $N + $K)
-        context_values: Tensor,  # (..., $N + $K, D)
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, D), bool
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, D)], padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
-    ) -> Tensor:  # (*S, ..., $N + $K, D)
+    ) -> Tensor:  # (*S, ..., $K, D)
         r"""Sample from the time-marginal distribution.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, cov = self.forward(
-            times,
-            context_values,
-            context_mask,
-            query_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
         )
@@ -469,23 +476,25 @@ class ContinuousKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        times: Tensor,  # (..., $N + $K)
-        context_values: Tensor,  # (..., $N + $K, D)
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, D), bool
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, D)], padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $N + $K, D), (*S, ..., $N + $K)
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, cov = self.forward(
-            times,
-            context_values,
-            context_mask,
-            query_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
         )
@@ -498,24 +507,26 @@ class ContinuousKalmanFilter(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (..., $N + $K, D)
+        values: Tensor,  # (..., $K, D)
         *,
-        times: Tensor,  # (..., $N + $K)
-        context_values: Tensor,  # (..., $N + $K, D)
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, D), bool
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, D)], padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
-    ) -> Tensor:  # (..., $N + $K)
+    ) -> Tensor:  # (..., $K)
         r"""Compute the time-marginal log-likelihood of the model.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
         mean, cov = self.forward(
-            times,
-            context_values,
-            context_mask,
-            query_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
         )
@@ -528,21 +539,24 @@ class ContinuousKalmanFilter(nn.Module):
 
     def forward(
         self,
-        times: Tensor,  # (..., $N + $K)
-        context_values: Tensor,  # (..., $N + $K, D)
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, D), bool
-        *,  # μ₀=(..., D) Σ₀=(..., D, D)
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        *,
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # (..., $N + $K, D), (..., $N + $K, D, D)
         r"""Filter and forecast over combined context/query time points.
 
         Args:
-            times: Combined context and query time points.
-            context_values: Sparse observations at context time points.
-            context_mask: Boolean mask selecting observed entries in ``values``.
+            query_times: time points at which to forecast.
             query_mask: Boolean mask selecting requested forecast entries.
+            context_times: time points at which to filter.
+            context_mask: Boolean mask selecting observed entries in ``values``.
+            context_values: Sparse observations at context time points.
             initial_state: Optional initial latent state $(μ₀, Σ₀)$.
                 If omitted, uses the model initial mean and covariance.
             initial_time: Optional initial time $t₀$. If omitted, defaults to
@@ -555,15 +569,27 @@ class ContinuousKalmanFilter(nn.Module):
         # update cached tensors
         self.update_buffers()
 
+        combined = EventBatch.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+        timestamps = combined.timestamps  # (..., $T), padded NaN, non-decreasing
+        context_values = combined.context_values  # (..., $T, D), padded NaN, sparse
+        context_mask = combined.context_mask  # Bool[(..., $T, D)], padded False
+        query_mask = combined.query_mask  # Bool[(..., $T, F)], padded False
+
         # initialize mask over valid time steps:
         # those with finite time and at least one observation or query coordinate.
-        valid_steps = times.isfinite() & (context_mask | query_mask).any(dim=-1)
+        valid_steps = timestamps.isfinite() & (context_mask | query_mask).any(dim=-1)
         mean_mask = valid_steps.unsqueeze(dim=-1)
         cov_mask = mean_mask.unsqueeze(dim=-1)
 
         if self.batch_first:
             # Move the time axis to the front.
-            times = times.moveaxis(-1, 0)
+            timestamps = timestamps.moveaxis(-1, 0)
             context_values = context_values.moveaxis(-2, 0)
             context_mask = context_mask.moveaxis(-2, 0)
             query_mask = query_mask.moveaxis(-2, 0)
@@ -573,7 +599,7 @@ class ContinuousKalmanFilter(nn.Module):
         m = self.input_size
         n = self.hidden_size
         num_steps, *batch_shape, _ = context_values.shape
-        assert times.shape == (num_steps, *batch_shape)
+        assert timestamps.shape == (num_steps, *batch_shape)
         assert context_values.shape == (num_steps, *batch_shape, m)
         assert context_mask.shape == (num_steps, *batch_shape, m)
         assert query_mask.shape == (num_steps, *batch_shape, m)
@@ -582,7 +608,7 @@ class ContinuousKalmanFilter(nn.Module):
         assert query_mask.dtype == torch.bool
 
         # initialize the state
-        t = times[0] if initial_time is None else initial_time
+        t = timestamps[0] if initial_time is None else initial_time
         x_pre, P_pre = (
             (self.initial_mean, self.initial_cov)
             if initial_state is None
@@ -604,7 +630,7 @@ class ContinuousKalmanFilter(nn.Module):
         post_predicted_covs: list[Tensor] = []
 
         for t_obs, y_obs, mask, active in zip(
-            times,
+            timestamps,
             context_values,
             context_mask,
             valid_steps,
@@ -661,7 +687,10 @@ class ContinuousKalmanFilter(nn.Module):
 
         self.validate_buffers()
 
-        return self.post_target_means, self.post_target_covs
+        self.pred_means = self.post_target_means[combined.query_indices]
+        self.pred_covs = self.post_target_covs[combined.query_indices]
+
+        return self.pred_means, self.pred_covs
 
     def update_buffers(self) -> None:
         r"""Refresh derived buffers from current parameters."""
