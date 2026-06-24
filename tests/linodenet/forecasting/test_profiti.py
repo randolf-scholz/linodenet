@@ -389,6 +389,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
+            query_mask=inputs.query_values.isfinite(),
         )
         event_ndim = inputs.query_values.ndim - inputs.query_times.ndim
         log_prob = log_prob.reshape(*log_prob.shape, *((1,) * (event_ndim + 1)))
@@ -530,8 +531,8 @@ class TestProfiti(TestForecastingModel[ProFITi]):
         expected = expected - query_mask[0].sum() * math.log(scale)
         assert_close(log_prob, expected)
 
-    def test_log_prob_uses_finite_value_mask(self) -> None:
-        r"""Check ProFITi log_prob infers the target mask from finite values."""
+    def test_log_prob_with_explicit_query_mask(self) -> None:
+        r"""Check ProFITi log_prob evaluates correctly with an explicit query mask."""
         scale = 2.0
         model = ProFITi(
             context_embedding=_TargetContext(hidden_dim=3),
@@ -548,15 +549,15 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             ]
         )
 
+        query_mask = value.isfinite()
         log_prob = model.log_prob(
             value,
             context_times=context_times,
             context_values=context_values,
             context_mask=context_values.isfinite(),
             query_times=query_times,
+            query_mask=query_mask,
         )
-
-        query_mask = value.isfinite()
         latent = value[query_mask] / scale
         expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
         expected = expected - query_mask.sum() * math.log(scale)
@@ -606,6 +607,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             context_values=context_values,
             context_mask=context_values.isfinite(),
             query_times=query_times,
+            query_mask=query_mask,
         )
         loss = samples.nansum() + log_prob.nansum() + value_log_prob.nansum()
         loss.backward()
@@ -650,6 +652,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             context_values=context_values,
             context_mask=context_mask,
             query_times=query_times,
+            query_mask=query_mask,
         )
 
         assert_close(log_prob_direct, log_prob_via_sample)
