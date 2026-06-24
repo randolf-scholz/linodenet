@@ -2,10 +2,10 @@ r"""Utility classes for forecasting."""
 
 __all__ = [
     "BatchedCombinedArgs",
-    "BatchedDenseArgs",
+    "BatchedForecastingRequest",
     "BatchedTripletArgs",
     "TripletArg",
-    "DenseArg",
+    "ForecastingRequest",
     "CombinedArg",
     # functions
     "is_prefix_mask",
@@ -152,8 +152,8 @@ def scatter_fill(
 
 
 @dataclass(frozen=True)
-class DenseArg:
-    r"""Dense representation of forecasting arguments.
+class ForecastingRequest:
+    r"""Default representation of forecasting arguments.
 
     Assumptions:
         - context time stamps are finite and non-decreasing
@@ -177,15 +177,17 @@ class DenseArg:
     static_covariates: Tensor | None = None  # Float[(M)], sparse
 
     @classmethod
-    def from_triplet(cls, arg: TripletArg, /) -> DenseArg:
+    def from_triplet(cls, arg: TripletArg, /) -> ForecastingRequest:
         return arg.to_dense()
 
     @classmethod
-    def from_combined(cls, arg: CombinedArg, /) -> DenseArg:
+    def from_combined(cls, arg: CombinedArg, /) -> ForecastingRequest:
         return arg.to_dense()
 
     @classmethod
-    def from_batched(cls, arg: BatchedDenseArgs, /) -> list[DenseArg]:
+    def from_batched(
+        cls, arg: BatchedForecastingRequest, /
+    ) -> list[ForecastingRequest]:
         return arg.unbatch()
 
     def __post_init__(self) -> None:
@@ -287,7 +289,7 @@ class DenseArg:
 
 
 @dataclass(frozen=True)
-class BatchedDenseArgs:
+class BatchedForecastingRequest:
     r"""Batched forecasting arguments.
 
     Shapes:
@@ -318,11 +320,11 @@ class BatchedDenseArgs:
     static_covariates: Tensor | None = None  # Float[(..., M)]  padded NaN, sparse
 
     @classmethod
-    def from_combined(cls, arg: BatchedCombinedArgs, /) -> BatchedDenseArgs:
+    def from_combined(cls, arg: BatchedCombinedArgs, /) -> BatchedForecastingRequest:
         return arg.to_dense()
 
     @classmethod
-    def from_triplet(cls, arg: BatchedTripletArgs, /) -> BatchedDenseArgs:
+    def from_triplet(cls, arg: BatchedTripletArgs, /) -> BatchedForecastingRequest:
         return arg.to_dense()
 
     def __post_init__(self) -> None:
@@ -377,7 +379,9 @@ class BatchedDenseArgs:
             assert S.shape == (*batch_shape, static_dim)
 
     @classmethod
-    def from_unbatched(cls, args: Sequence[DenseArg], /) -> BatchedDenseArgs:
+    def from_unbatched(
+        cls, args: Sequence[ForecastingRequest], /
+    ) -> BatchedForecastingRequest:
         if not args:
             raise ValueError("Expected at least one DenseArg.")
 
@@ -420,7 +424,7 @@ class BatchedDenseArgs:
             ),
         )
 
-    def unbatch(self) -> list[DenseArg]:
+    def unbatch(self) -> list[ForecastingRequest]:
         T = self.context_times.unsqueeze(0).flatten(end_dim=-2)
         X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
@@ -432,7 +436,7 @@ class BatchedDenseArgs:
         num_samples = T.shape[0]
 
         return [
-            DenseArg(
+            ForecastingRequest(
                 context_times=c_time,
                 context_values=c_value,
                 context_mask=c_mask,
@@ -601,7 +605,7 @@ class TripletArg:
     static_covariates: Tensor | None = None  # Float[(M)], sparse
 
     @classmethod
-    def from_dense(cls, arg: DenseArg, /) -> TripletArg:
+    def from_dense(cls, arg: ForecastingRequest, /) -> TripletArg:
         return arg.to_triplet()
 
     @classmethod
@@ -652,7 +656,7 @@ class TripletArg:
         *,
         context_dim: int | None = None,
         query_dim: int | None = None,
-    ) -> DenseArg:
+    ) -> ForecastingRequest:
         C = self.context_channels
         M = self.query_channels
 
@@ -674,7 +678,7 @@ class TripletArg:
             self.query_times, return_inverse=True
         )
 
-        return DenseArg(
+        return ForecastingRequest(
             context_times=context_times,
             context_values=scatter_fill(
                 (context_times.shape[0], context_dim),
@@ -784,7 +788,7 @@ class BatchedTripletArgs:
         return arg.to_triplet()
 
     @classmethod
-    def from_dense(cls, arg: BatchedDenseArgs, /) -> BatchedTripletArgs:
+    def from_dense(cls, arg: BatchedForecastingRequest, /) -> BatchedTripletArgs:
         return arg.to_triplet()
 
     @classmethod
@@ -881,7 +885,7 @@ class BatchedTripletArgs:
         *,
         context_dim: int | None = None,
         query_dim: int | None = None,
-    ) -> BatchedDenseArgs:
+    ) -> BatchedForecastingRequest:
         T = self.context_times
         C = self.context_channels
         X = self.context_values
@@ -932,7 +936,7 @@ class BatchedTripletArgs:
         qry_indices = (qry_batch[qry_valid], qry_inverse[qry_valid])
         qry_channels = M_flat[qry_valid]
 
-        return BatchedDenseArgs(
+        return BatchedForecastingRequest(
             context_times=scatter_fill(
                 (num_batches, ctx_size),
                 ctx_indices,
@@ -1054,7 +1058,7 @@ class CombinedArg:
             assert torch.equal(Y.isfinite(), Q)
 
     @classmethod
-    def from_dense(cls, arg: DenseArg, /) -> CombinedArg:
+    def from_dense(cls, arg: ForecastingRequest, /) -> CombinedArg:
         return arg.to_combined()
 
     @classmethod
@@ -1065,10 +1069,10 @@ class CombinedArg:
     def from_batched(cls, arg: BatchedCombinedArgs, /) -> list[CombinedArg]:
         return arg.unbatch()
 
-    def to_dense(self) -> DenseArg:
+    def to_dense(self) -> ForecastingRequest:
         context_filter = self.context_mask.any(dim=-1)
         query_filter = self.query_mask.any(dim=-1)
-        return DenseArg(
+        return ForecastingRequest(
             context_times=self.times[..., context_filter],
             context_values=self.context_values[..., context_filter, :],
             context_mask=self.context_mask[..., context_filter, :],
@@ -1175,7 +1179,7 @@ class BatchedCombinedArgs:
             assert times[query].diff(dim=-1).gt(0.0).all()
 
     @classmethod
-    def from_dense(cls, arg: BatchedDenseArgs, /) -> BatchedCombinedArgs:
+    def from_dense(cls, arg: BatchedForecastingRequest, /) -> BatchedCombinedArgs:
         return arg.to_combined()
 
     @classmethod
@@ -1260,7 +1264,7 @@ class BatchedCombinedArgs:
             )
         ]
 
-    def to_dense(self) -> BatchedDenseArgs:
+    def to_dense(self) -> BatchedForecastingRequest:
         T = self.times
         X = self.context_values
         C = self.context_mask
@@ -1284,7 +1288,7 @@ class BatchedCombinedArgs:
         qry_perm = torch.argsort(~qry_valid, dim=-1, stable=True)[..., :qry_size]
         qry_keep = torch.arange(qry_size, device=T.device) < qry_count[..., None]
 
-        return BatchedDenseArgs(
+        return BatchedForecastingRequest(
             context_times=T.take_along_dim(ctx_perm, dim=-1).masked_fill(
                 ~ctx_keep, nan
             ),

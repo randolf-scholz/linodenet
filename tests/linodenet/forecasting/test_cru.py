@@ -17,7 +17,7 @@ from linodenet.forecasting.cru import (
     build_cru,
     update_masked,
 )
-from linodenet.forecasting.utils import BatchedDenseArgs
+from linodenet.forecasting.utils import BatchedForecastingRequest
 
 from .base import SequentialData, TestForecastingModel
 
@@ -310,7 +310,7 @@ class TestCRU(TestForecastingModel[CRU]):
             inputs.context_values
         )
         query_mask = inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values)
-        combined = BatchedDenseArgs(
+        combined = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=context_mask,

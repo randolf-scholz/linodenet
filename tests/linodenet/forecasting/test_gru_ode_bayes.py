@@ -18,7 +18,7 @@ from linodenet.forecasting.gru_ode_bayes import (
     gaussian_kl_logvar,
     update_masked,
 )
-from linodenet.forecasting.utils import BatchedDenseArgs
+from linodenet.forecasting.utils import BatchedForecastingRequest
 
 from .base import SequentialData, TestForecastingModel
 
@@ -87,7 +87,7 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
         self, model: GRU_ODE_Bayes, inputs: SequentialData, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GRU-ODE-Bayes predictions for sequential forecasting inputs."""
-        dense = BatchedDenseArgs(
+        dense = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
@@ -268,7 +268,7 @@ class TestGRUODEBayes:
         ])  # fmt: skip
         query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-        combined = BatchedDenseArgs(
+        combined = BatchedForecastingRequest(
             context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
@@ -349,7 +349,7 @@ class TestGRUODEBayes:
         context_values[1, 1] = nan
         query_times = torch.tensor([[0.75, 1.0], [0.25, nan]])
         query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
-        combined = BatchedDenseArgs(
+        combined = BatchedForecastingRequest(
             context_times=context_times,
             context_values=context_values,
             context_mask=context_values.isfinite(),

@@ -8,7 +8,7 @@ from torch import nan
 from torch.nn import functional as F
 
 from linodenet.forecasting.gru_d import GRU_D
-from linodenet.forecasting.utils import BatchedDenseArgs
+from linodenet.forecasting.utils import BatchedForecastingRequest
 
 from .base import SequentialData, TestForecastingModel
 
@@ -61,7 +61,7 @@ class TestGRU_D(TestForecastingModel[GRU_D]):
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GRU-D predictions for sequential forecasting inputs."""
         query_mask_nd = inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values)
-        dense = BatchedDenseArgs(
+        dense = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),

@@ -15,7 +15,7 @@ from linodenet.forecasting.neural_flow import (
     NeuralFlowConfig,
     ResNetFlow,
 )
-from linodenet.forecasting.utils import BatchedDenseArgs
+from linodenet.forecasting.utils import BatchedForecastingRequest
 
 from .base import SequentialData, TestForecastingModel
 
@@ -62,7 +62,7 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
         r"""Return NeuralFlow predictions for sequential forecasting inputs."""
         if not isinstance(model, NeuralFlow):
             raise TypeError("model must be a NeuralFlow.")
-        dense = BatchedDenseArgs(
+        dense = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
@@ -214,7 +214,7 @@ def test_flow_layers(
     query_times = torch.tensor([[1.0, 1.4], [0.8, nan]])
     query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-    combined = BatchedDenseArgs(
+    combined = BatchedForecastingRequest(
         context_times=context_times,
         context_values=context_values,
         context_mask=context_values.isfinite(),

@@ -14,7 +14,7 @@ from linodenet.forecasting.continuous_kalman_filter import (
     marginal_gaussian_sample,
     marginal_gaussian_sample_and_log_prob,
 )
-from linodenet.forecasting.utils import BatchedCombinedArgs, BatchedDenseArgs
+from linodenet.forecasting.utils import BatchedCombinedArgs, BatchedForecastingRequest
 
 from .base import SequentialData, TestForecastingModel
 
@@ -195,7 +195,7 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return Kalman filter predictions for sequential forecasting inputs."""
-        dense = BatchedDenseArgs(
+        dense = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
