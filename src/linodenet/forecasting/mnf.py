@@ -7,6 +7,7 @@ __all__ = [
     "DEFAULT_MIN_DERIVATIVE",
     # classes
     "MarginalizableNormalizingFlow",
+    "Moses",
     "BinKnots",
     "LearnableLRS",
     "LinearRationalSpline",
@@ -25,13 +26,16 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Final, NamedTuple, Optional, overload
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor, nan, nn
 from torch.linalg import cholesky, solve_triangular
 from torch.nn import functional as F
+
+from .grafiti import Grafiti
 
 DEFAULT_MIN_BIN_WIDTH: Final[float] = 1e-3
 DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3
 DEFAULT_MIN_DERIVATIVE: Final[float] = 1e-3
+_LOG2PI: Final[float] = math.log(2.0 * math.pi)
 
 
 class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
@@ -964,7 +968,7 @@ class MultiHeadGaussian(nn.Module):
 
 
 class MarginalizableNormalizingFlow(nn.Module):
-    r"""Implements a Marginalizable Normalizing Flow."""
+    r"""Implements a Marginalizable Normalizing Flow (unconditional density model)."""
 
     num_features: Final[int]
     r"""Number of features in input."""
@@ -1191,3 +1195,221 @@ class MarginalizableNormalizingFlow(nn.Module):
         cond_model.base = self.base.condition(variables, latent_values)
 
         return cond_model
+
+
+class Moses(nn.Module):
+    r"""Context-conditioned mixture normalizing flow for irregular time-series forecasting.
+
+    Combines a GraFITi encoder with a per-query mixture of spline flows.  The
+    encoder maps context observations and query positions to per-query
+    embeddings ``H (..., K, M)``, which are projected to per-query mixture
+    logits and Gaussian means.  One learned spline flow per mixture component
+    maps Gaussian latents to the data space.
+
+    Since the spline flows have context-independent parameters, the analytical
+    marginalisation property of :class:`MarginalizableNormalizingFlow` is
+    preserved (though not yet exposed on this class).
+
+    Args:
+        input_dim: Number of observed channels ``D``.
+        latent_dim: GraFITi / linear-projection embedding size ``M``.
+        num_components: Number of mixture components ``C``.
+        num_flow_layers: Number of spline layers per component.
+        num_bins: Number of rational-spline bins.
+        bounds: Symmetric spline input/output domain ``(lo, hi)``.
+        num_encoder_layers: Number of GraFITi attention layers.
+        num_encoder_heads: Number of GraFITi attention heads.
+    """
+
+    num_components: Final[int]
+    num_bins: Final[int]
+    bounds: Final[tuple[float, float]]
+
+    # sub-modules / parameters
+    encoder: Grafiti
+    mixture_proj: nn.Linear  # M → C  (mixture logits)
+    mean_proj: nn.Linear  # M → C  (Gaussian mean per component)
+    log_std: Tensor  # (C,), nn.Parameter — shared log-std per component
+    component_flows: ModuleSequence[SplineFlow]  # C × SplineFlow, each n_heads=()
+
+    def __init__(
+        self,
+        *,
+        input_dim: int,
+        latent_dim: int = 128,
+        num_components: int = 4,
+        num_flow_layers: int = 3,
+        num_bins: int = 16,
+        bounds: tuple[float, float] = (-5.0, 5.0),
+        num_encoder_layers: int = 3,
+        num_encoder_heads: int = 4,
+    ) -> None:
+        super().__init__()
+
+        self.num_components = num_components
+        self.num_bins = num_bins
+        self.bounds = bounds
+
+        self.encoder = Grafiti(
+            input_dim=input_dim,
+            latent_dim=latent_dim,
+            num_layers=num_encoder_layers,
+            num_heads=num_encoder_heads,
+            output_mode="embeddings",
+        )
+        self.mixture_proj = nn.Linear(latent_dim, num_components)
+        self.mean_proj = nn.Linear(latent_dim, num_components)
+        self.log_std = nn.Parameter(torch.zeros(num_components))
+
+        # One scalar SplineFlow per component (n_heads=() → elementwise 1-D flow).
+        self.component_flows = ModuleSequence(
+            [
+                SplineFlow(
+                    n_heads=(),
+                    num_flow_layers=num_flow_layers,
+                    num_bins=num_bins,
+                    x_bounds=bounds,
+                    y_bounds=bounds,
+                )
+                for _ in range(num_components)
+            ]
+        )
+
+    def _encode(
+        self,
+        time_points: Tensor,  # (..., T)
+        context_values: Tensor,  # (..., T, D)
+        query_mask: Tensor,  # (..., T, D), bool
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        r"""Run encoder and compute per-query mixture parameters.
+
+        Returns:
+            H: Per-query embeddings ``(..., K, M)``.
+            log_w: Per-query log mixture weights ``(..., K, C)``.
+            mu: Per-query Gaussian means ``(..., K, C)``.
+            sigma: Shared std per component ``(C,)``.
+        """
+        H = self.encoder(time_points, context_values, query_mask)  # (..., K, M)
+        log_w = self.mixture_proj(H).log_softmax(dim=-1)  # (..., K, C)
+        mu = self.mean_proj(H)  # (..., K, C)
+        sigma = F.softplus(self.log_std) + 1e-6  # (C,)
+        return H, log_w, mu, sigma
+
+    def log_prob(
+        self,
+        values: Tensor,  # (..., T, D)
+        *,
+        time_points: Tensor,  # (..., T)
+        context_values: Tensor,  # (..., T, D)
+        query_mask: Tensor,  # (..., T, D), bool
+    ) -> Tensor:  # (...,)
+        r"""Compute the joint log-likelihood of the target values.
+
+        Evaluates the marginal mixture-flow log-prob at each query position
+        and sums across query positions (joint under independence).
+
+        Args:
+            values: Observed target values; finite at every ``True`` position
+                in ``query_mask``.
+            time_points: Sorted time stamps for all time steps.
+            context_values: Context observations; ``NaN`` at unobserved positions.
+            query_mask: Boolean mask selecting query (target) positions.
+
+        Returns:
+            Joint log-likelihood with shape ``(...,)``.
+        """
+        *batch_shape, _, _ = context_values.shape
+
+        H, log_w, mu, sigma = self._encode(time_points, context_values, query_mask)
+        valid_mask = H.isfinite().all(dim=-1)  # (..., K)
+        max_K = H.shape[-2]
+
+        # Pack query values: (..., T, D) → (..., K), NaN at unused K slots.
+        # query_mask and valid_mask have the same True count per batch element
+        # (GraFITi packs targets in row-major time-sorted order).
+        y_flat = values.new_full((*batch_shape, max_K), nan)
+        y_safe = torch.where(valid_mask, y_flat, 0.0)  # avoid NaN in flow inputs
+        y_safe[valid_mask] = values[query_mask]
+
+        # Per-component flow: encode each scalar independently.
+        z_list: list[Tensor] = []
+        ldj_list: list[Tensor] = []
+        for flow in self.component_flows:
+            z_c, ldj_c = flow.encode_and_logabsdet(y_safe)  # (..., K), (..., K)
+            z_list.append(z_c)
+            ldj_list.append(ldj_c)
+        z = torch.stack(z_list, dim=-1)  # (..., K, C)
+        ldj = torch.stack(ldj_list, dim=-1)  # (..., K, C)
+
+        # Gaussian log-prob per (query, component).
+        log_p_z = (
+            -0.5 * ((z - mu) / sigma).square() - sigma.log() - 0.5 * _LOG2PI
+        )  # (..., K, C)
+
+        # Mixture combination → per-query marginal log-prob.
+        log_p = (log_w + log_p_z + ldj).logsumexp(dim=-1)  # (..., K)
+
+        # Sum over valid query slots; zero-out padding.
+        return torch.where(valid_mask, log_p, 0.0).sum(dim=-1)  # (...,)
+
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),
+        *,
+        time_points: Tensor,  # (..., T)
+        context_values: Tensor,  # (..., T, D)
+        query_mask: Tensor,  # (..., T, D), bool
+    ) -> Tensor:  # (*S, ..., T, D)
+        r"""Sample from the conditional marginal distribution at each query position.
+
+        Args:
+            size: Number of samples (leading sample dimensions ``*S``).
+            time_points: Sorted time stamps for all time steps.
+            context_values: Context observations; ``NaN`` at unobserved positions.
+            query_mask: Boolean mask selecting query (target) positions.
+
+        Returns:
+            Samples with shape ``(*S, ..., T, D)``, ``NaN`` at non-query positions.
+        """
+        *batch_shape, num_steps, num_channels = context_values.shape
+        sample_shape = (size,) if isinstance(size, int) else tuple(size)
+
+        H, log_w, mu, sigma = self._encode(time_points, context_values, query_mask)
+        valid_mask = H.isfinite().all(dim=-1)  # (..., K)
+        max_K = H.shape[-2]
+
+        # Expand mixture parameters to sample shape.
+        log_w_s = log_w.expand(*sample_shape, *log_w.shape)  # (*S, ..., K, C)
+        mu_s = mu.expand(*sample_shape, *mu.shape)  # (*S, ..., K, C)
+
+        # Sample a mixture component per query point.
+        probs_flat = log_w_s.exp().reshape(-1, self.num_components)  # (N, C)
+        c_idx = (
+            torch.multinomial(probs_flat, num_samples=1)
+            .squeeze(-1)
+            .reshape(*sample_shape, *batch_shape, max_K)
+        )  # (*S, ..., K)
+
+        # Draw from the selected Gaussian component.
+        mu_sel = mu_s.gather(-1, c_idx.unsqueeze(-1)).squeeze(-1)  # (*S, ..., K)
+        sigma_sel = sigma[c_idx]  # (*S, ..., K)
+        z = mu_sel + sigma_sel * torch.randn_like(mu_sel)  # (*S, ..., K)
+
+        # Invert all component flows on z, then select the drawn component.
+        y_per_comp = torch.stack(
+            [flow.decode_and_logabsdet(z)[0] for flow in self.component_flows],
+            dim=-1,
+        )  # (*S, ..., K, C)
+        y_flat = y_per_comp.gather(-1, c_idx.unsqueeze(-1)).squeeze(-1)  # (*S, ..., K)
+
+        # Mask padding slots and unpack from (..., K) → (..., T, D).
+        valid_mask_s = valid_mask.expand(*sample_shape, *valid_mask.shape)
+        y_flat = torch.where(valid_mask_s, y_flat, nan)
+
+        samples = y_flat.new_full(
+            (*sample_shape, *batch_shape, num_steps, num_channels), nan
+        )
+        query_mask_s = query_mask.expand(*sample_shape, *query_mask.shape)
+        samples[query_mask_s] = y_flat[valid_mask_s]
+
+        return samples  # (*S, ..., T, D)
