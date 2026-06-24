@@ -7,6 +7,7 @@ __all__ = [
     "TripletArg",
     "ForecastingRequest",
     "CombinedArg",
+    "EventBatch",
     # functions
     "is_prefix_mask",
     "scatter_fill",
@@ -17,6 +18,7 @@ __all__ = [
 import math
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from typing import NamedTuple
 
 import torch
 from torch import Tensor, nan
@@ -575,6 +577,75 @@ class BatchedForecastingRequest:
                 dim=-2,
             ).take_along_dim(permutation, dim=-2),
             static_covariates=self.static_covariates,
+        )
+
+
+class EventBatch(NamedTuple):
+    r"""Represents a batch of events.
+
+    Other than ForecastingRequest, this class does not perform any validation.
+    """
+
+    timestamps: Tensor  # Float[(..., $T)], padded NaN, non-decreasing
+
+    context_values: Tensor  # Float[(..., $T, D)], padded NaN, sparse
+    context_mask: Tensor  # Bool[(..., $T, D)], padded False
+
+    query_mask: Tensor  # Bool[(..., $T, F)], padded False
+    target_values: Tensor | None = None  # Float[(..., $T, F)], padded NaN, sparse
+    r"""Only available during training, otherwise None."""
+
+    static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
+
+    @staticmethod
+    def from_request(
+        *,
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        target_values: Tensor | None = None,  # Float[(..., K, F)]  padded NaN, sparse
+        static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
+    ) -> EventBatch:
+        T = context_times
+        X = context_values
+        C = context_mask
+        Q = query_times
+        M = query_mask
+        Y = target_values
+
+        *batch_shape, ctx_size, ctx_dim = X.shape
+        *_, q_size, q_dim = M.shape
+
+        times = torch.cat([T, Q], dim=-1)
+        permutation = torch.argsort(
+            times.nan_to_num(nan=torch.inf), dim=-1, stable=True
+        ).unsqueeze(-1)
+
+        return EventBatch(
+            timestamps=times.take_along_dim(permutation.squeeze(-1), dim=-1),
+            context_values=torch.cat(
+                [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
+                dim=-2,
+            ).take_along_dim(permutation, dim=-2),
+            context_mask=torch.cat(
+                [C, C.new_zeros((*batch_shape, q_size, ctx_dim))],
+                dim=-2,
+            ).take_along_dim(permutation, dim=-2),
+            query_mask=torch.cat(
+                [M.new_zeros((*batch_shape, ctx_size, q_dim)), M],
+                dim=-2,
+            ).take_along_dim(permutation, dim=-2),
+            target_values=(
+                torch.cat(
+                    [Y.new_full((*batch_shape, ctx_size, q_dim), nan), Y],
+                    dim=-2,
+                ).take_along_dim(permutation, dim=-2)
+                if Y is not None
+                else None
+            ),
+            static_covariates=static_covariates,
         )
 
 
