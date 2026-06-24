@@ -636,18 +636,15 @@ class EventBatch(NamedTuple):
         inv_perm = torch.argsort(permutation.squeeze(-1), dim=-1, stable=True)
         time_idx = inv_perm[..., ctx_size:]  # (*batch_shape, K)
 
-        if batch_shape:
-            grids = torch.meshgrid(
-                *[torch.arange(s, device=T.device) for s in batch_shape],
-                indexing="ij",
-            )
-            batch_idx: tuple[Tensor, ...] = tuple(
-                g.unsqueeze(-1).expand(*batch_shape, q_size) for g in grids
-            )
-        else:
-            batch_idx = ()
-
-        query_indices: tuple[Tensor, ...] = (*batch_idx, time_idx)
+        query_indices: tuple[Tensor, ...] = (
+            *(
+                torch.arange(size, device=time_idx.device).reshape(
+                    *(size if j == i else 1 for j in range(len(batch_shape))), 1
+                )
+                for i, size in enumerate(batch_shape)
+            ),
+            time_idx,
+        )
 
         return EventBatch(
             timestamps=times.take_along_dim(permutation.squeeze(-1), dim=-1),
