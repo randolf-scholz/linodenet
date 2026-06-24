@@ -62,7 +62,7 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
         r"""Return NeuralFlow predictions for sequential forecasting inputs."""
         if not isinstance(model, NeuralFlow):
             raise TypeError("model must be a NeuralFlow.")
-        dense = BatchedForecastingRequest(
+        request = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
@@ -70,23 +70,23 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
             query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.target_values),
             target_values=inputs.target_values,
         )
-        combined = dense.to_combined()
-        assert combined.target_values is not None
+        assert request.target_values is not None
         log_prob = model.log_prob(
-            combined.target_values,
-            times=combined.times,
-            context_values=combined.context_values,
-            context_mask=combined.context_mask,
-            query_mask=combined.query_mask,
+            request.target_values,
+            query_times=request.query_times,
+            query_mask=request.query_mask,
+            context_times=request.context_times,
+            context_mask=request.context_mask,
+            context_values=request.context_values,
         )
-        posterior_mean = model.post_means
-        posterior_logvar = model.post_logvars
-        query_steps = combined.query_mask.any(dim=-1)
+        posterior_mean = model.pred_means
+        posterior_logvar = model.pred_logvars
+        query_steps = request.query_mask.any(dim=-1)
         query_mean = posterior_mean[query_steps]
         query_logvar = posterior_logvar[query_steps]
         query_log_prob = log_prob[query_steps]
-        query_mean[~combined.query_mask[query_steps]] = nan
-        query_logvar[~combined.query_mask[query_steps]] = nan
+        query_mean[~request.query_mask[query_steps]] = nan
+        query_logvar[~request.query_mask[query_steps]] = nan
         pred_mean = torch.full_like(inputs.target_values, nan)
         pred_logvar = torch.full_like(inputs.target_values, nan)
         pred_log_prob = inputs.target_values.new_full(inputs.query_times.shape, nan)
@@ -214,24 +214,25 @@ def test_flow_layers(
     query_times = torch.tensor([[1.0, 1.4], [0.8, nan]])
     query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-    combined = BatchedForecastingRequest(
+    request = BatchedForecastingRequest(
         context_times=context_times,
         context_values=context_values,
         context_mask=context_values.isfinite(),
         query_times=query_times,
         query_mask=query_mask,
-    ).to_combined()
-    posterior_mean, posterior_logvar = model(
-        combined.times,
-        combined.context_values,
-        combined.context_mask,
-        combined.query_mask,
     )
-    query_steps = combined.query_mask.any(dim=-1)
+    posterior_mean, posterior_logvar = model(
+        query_times=request.query_times,
+        query_mask=request.query_mask,
+        context_times=request.context_times,
+        context_mask=request.context_mask,
+        context_values=request.context_values,
+    )
+    query_steps = request.query_mask.any(dim=-1)
     query_mean = posterior_mean[query_steps]
     query_logvar = posterior_logvar[query_steps]
-    query_mean[~combined.query_mask[query_steps]] = nan
-    query_logvar[~combined.query_mask[query_steps]] = nan
+    query_mean[~request.query_mask[query_steps]] = nan
+    query_logvar[~request.query_mask[query_steps]] = nan
     pred_mean = context_values.new_full((2, 2, 3), nan)
     pred_logvar = context_values.new_full((2, 2, 3), nan)
     pred_mean[query_mask.any(dim=-1)] = query_mean

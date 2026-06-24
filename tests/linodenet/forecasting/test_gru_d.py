@@ -69,16 +69,16 @@ class TestGRU_D(TestForecastingModel[GRU_D]):
             query_mask=query_mask_nd,
             target_values=inputs.target_values,
         )
-        combined = dense.to_combined()
 
-        combined_pred = model(
-            combined.times,
-            combined.context_values,
-            combined.context_mask,
-            combined.query_mask,
+        combined_pred = model.forward(
+            context_times=dense.context_times,
+            context_values=dense.context_values,
+            context_mask=dense.context_mask,
+            query_times=dense.query_times,
+            query_mask=dense.query_mask,
         )  # (..., N+K, F)
 
-        query_steps = combined.query_mask.any(dim=-1)  # (..., N+K)
+        query_steps = dense.query_mask.any(dim=-1)  # (..., N+K)
         pred = torch.full_like(inputs.target_values, nan)
         pred[inputs.query_mask] = combined_pred[query_steps]
 

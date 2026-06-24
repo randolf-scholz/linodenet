@@ -17,6 +17,8 @@ from typing import Final
 import torch
 from torch import Tensor, nan, nn
 
+from .utils import EventBatch
+
 _LOG2PI = math.log(2.0 * math.pi)
 
 
@@ -500,14 +502,15 @@ class CRU(nn.Module):
 
     def forward(
         self,
-        times: Tensor,  # (..., $N + $K), possibly with trailing NaNs (padding)
-        context_values: Tensor,  # (..., $N + $K, D), possibly with NaNs
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, F), bool
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
         *,
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
         initial_state: tuple[Tensor, Tensor] | None = None,  # ((..., 2d), (..., d, 3))
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> tuple[Tensor, Tensor]:  # (..., $N + $K, F), (..., $N + $K, F)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (..., $K, F)
         r"""Filter and forecast over combined context/query time points.
 
         Context and query masks explicitly select valid feature-level entries.
@@ -516,10 +519,11 @@ class CRU(nn.Module):
         observed or fully missing (all context features present or none).
 
         Args:
-            times: Combined context and query time points, sorted non-decreasing.
+            query_times: Time points of requested forecasts.
+            query_mask: Boolean mask selecting requested forecast entries.
+            context_times: Time points of observed context/query time points.
             context_values: Sparse observations at context/query time points.
             context_mask: Boolean mask selecting observed context entries.
-            query_mask: Boolean mask selecting requested forecast entries.
             initial_state: Optional initial latent state ``(mean, cov)`` where
                 ``mean`` has shape ``(..., 2d)`` and ``cov`` has shape
                 ``(..., d, 3)``.
@@ -531,12 +535,24 @@ class CRU(nn.Module):
             pred_vars: Posterior predicted variances, same shape. NaN at
                 non-query positions.
         """
+        combined = EventBatch.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+        timestamps = combined.timestamps  # (..., $T), padded NaN, non-decreasing
+        context_values = combined.context_values  # (..., $T, D), padded NaN, sparse
+        context_mask = combined.context_mask  # Bool[(..., $T, D)], padded False
+        query_mask = combined.query_mask  # Bool[(..., $T, F)], padded False
+
         d = self.latent_size
 
         # Step-level masks derived from feature-level masks.
         has_context = context_mask.any(dim=-1)  # (..., $N+$K)
         has_query = query_mask.any(dim=-1)  # (..., $N+$K)
-        valid_steps = times.isfinite() & (has_context | has_query)
+        valid_steps = timestamps.isfinite() & (has_context | has_query)
         has_query = has_query.unsqueeze(-1)  # (..., $N+$K, 1)
 
         # CRU does not support feature-level missingness.
@@ -544,11 +560,11 @@ class CRU(nn.Module):
             "CRU requires all context features present or none per step."
         )
         # Observations must align with finite time stamps.
-        assert (~has_context | times.isfinite()).all(), (
+        assert (~has_context | timestamps.isfinite()).all(), (
             "context_mask is True at a time step with non-finite time."
         )
 
-        *batch_shape, _ = times.shape
+        *batch_shape, _ = timestamps.shape
 
         y_means = context_values.new_full((*context_values.shape[:-1], d), nan)
         y_variances = context_values.new_full((*context_values.shape[:-1], d), nan)
@@ -560,14 +576,14 @@ class CRU(nn.Module):
         )
 
         if self.batch_first:
-            times = times.moveaxis(-1, 0)
+            timestamps = timestamps.moveaxis(-1, 0)
             y_means = y_means.moveaxis(-2, 0)
             y_variances = y_variances.moveaxis(-2, 0)
             has_context = has_context.moveaxis(-1, 0)
             valid_steps = valid_steps.moveaxis(-1, 0)
 
         # Initialize state (mean: (..., 2d), cov: (..., d, 3)).
-        t = times[0] if initial_time is None else initial_time
+        t = timestamps[0] if initial_time is None else initial_time
         if initial_state is None:
             cov_u = self.initial_covariance[:d, :d].diagonal()
             cov_l = self.initial_covariance[d:, d:].diagonal()
@@ -590,7 +606,7 @@ class CRU(nn.Module):
         pred_vars_list: list[Tensor] = []
 
         for t_obs, y, y_var, ctx_mask, active in zip(
-            times,
+            timestamps,
             y_means,
             y_variances,
             has_context,
@@ -638,31 +654,34 @@ class CRU(nn.Module):
         pred_means = pred_means.masked_fill(~has_query, nan)
         pred_vars = pred_vars.masked_fill(~has_query, nan)
 
-        self.pred_means = pred_means
-        self.pred_variances = pred_vars
+        self.pred_means = pred_means[combined.query_indices]
+        self.pred_variances = pred_vars[combined.query_indices]
 
-        return pred_means, pred_vars
+        return self.pred_means, self.pred_variances
 
     def log_prob(
         self,
-        values: Tensor,  # (..., $N + $K, F)
+        values: Tensor,  # (..., $K, F)
+        /,
         *,
-        times: Tensor,  # (..., $N + $K)
-        context_values: Tensor,  # (..., $N + $K, D)
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, F), bool
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
-    ) -> Tensor:  # (..., $N + $K)
+    ) -> Tensor:  # (..., $K)
         r"""Compute the time-marginal log-likelihood of the model.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
         mean, var = self.forward(
-            times,
-            context_values,
-            context_mask,
-            query_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
         )
@@ -677,23 +696,25 @@ class CRU(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        times: Tensor,  # (..., $N + $K)
-        context_values: Tensor,  # (..., $N + $K, D)
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, F), bool
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
-    ) -> Tensor:  # (*S, ..., $N + $K, F)
+    ) -> Tensor:  # (*S, ..., $K, F)
         r"""Sample from the time-marginal distribution.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, var = self.forward(
-            times,
-            context_values,
-            context_mask,
-            query_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
         )
@@ -705,23 +726,25 @@ class CRU(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        times: Tensor,  # (..., $N + $K)
-        context_values: Tensor,  # (..., $N + $K, D)
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, F), bool
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $N + $K, F), (*S, ..., $N + $K)
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, F), (*S, ..., $K)
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, var = self.forward(
-            times,
-            context_values,
-            context_mask,
-            query_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
         )

@@ -310,28 +310,29 @@ class TestCRU(TestForecastingModel[CRU]):
             inputs.context_values
         )
         query_mask = inputs.query_mask.unsqueeze(-1).expand_as(inputs.target_values)
-        combined = BatchedForecastingRequest(
+        request = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=context_mask,
             query_times=inputs.query_times,
             query_mask=query_mask,
             target_values=inputs.target_values,
-        ).to_combined()
-        assert combined.target_values is not None
+        )
+        assert request.target_values is not None
 
         log_prob = model.log_prob(
-            combined.target_values,
-            times=combined.times,
-            context_values=combined.context_values,
-            context_mask=combined.context_mask,
-            query_mask=combined.query_mask,
+            request.target_values,
+            query_times=request.query_times,
+            query_mask=request.query_mask,
+            context_times=request.context_times,
+            context_values=request.context_values,
+            context_mask=request.context_mask,
         )
         all_pred_means = model.pred_means
         all_pred_vars = model.pred_variances
 
         # Extract predictions at query steps and scatter into (*, Q, F) output.
-        has_query = combined.query_mask.any(dim=-1)
+        has_query = request.query_mask.any(dim=-1)
         query_log_prob = log_prob[has_query]
         pred_mean = torch.full_like(inputs.target_values, torch.nan)
         pred_var = torch.full_like(inputs.target_values, torch.nan)

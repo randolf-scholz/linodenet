@@ -11,6 +11,8 @@ from typing import Final
 import torch
 from torch import Tensor, nan, nn
 
+from .utils import EventBatch
+
 
 class GRU_DCell(nn.Module):
     r"""Modified GRU cell for GRU-D."""
@@ -80,6 +82,11 @@ class GRU_D(nn.Module):
 
     empirical_mean: Tensor
 
+    posterior_states: Tensor
+    r"""BUFFER: Stores latent states for visualization."""
+    predictions: Tensor
+    r"""BUFFER: Stores predictions for visualization."""
+
     def __init__(
         self,
         input_size: int,
@@ -105,51 +112,69 @@ class GRU_D(nn.Module):
         self.gru_d_cell = GRU_DCell(self.input_size, self.hidden_size)
         self.decoder = nn.Linear(self.hidden_size, self.output_size)
 
+        self.register_buffer("posterior_states", None, persistent=False)
+        self.register_buffer("predictions", None, persistent=False)
+
     def forward(
         self,
-        times: Tensor,  # (..., $N + $K), possibly with trailing NaNs (padding)
-        context_values: Tensor,  # (..., $N + $K, D), possibly with NaNs
-        context_mask: Tensor,  # (..., $N + $K, D), bool
-        query_mask: Tensor,  # (..., $N + $K, F), bool
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
         *,
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
     ) -> Tensor:  # (..., $N + $K, F)
         r"""Filter and forecast over combined context/query time points."""
-        # optional: sanitize values
+        combined = EventBatch.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+        timestamps = combined.timestamps  # (..., $T), padded NaN, non-decreasing
+        context_values = combined.context_values  # (..., $T, D), padded NaN, sparse
+        context_mask = combined.context_mask  # Bool[(..., $T, D)], padded False
+        query_mask = combined.query_mask  # Bool[(..., $T, F)], padded False
+
+        # sanitize values
         context_values = context_values.masked_fill(~context_mask, nan)
+        assert torch.equal(context_values.isfinite(), context_mask)
 
         # initialize mask over valid time steps
-        valid_steps = times.isfinite() & (context_mask | query_mask).any(dim=-1)
+        valid_steps = timestamps.isfinite() & (context_mask | query_mask).any(dim=-1)
         result_mask = query_mask
 
         if self.batch_first:
-            times = times.moveaxis(-1, 0)
+            timestamps = timestamps.moveaxis(-1, 0)
             context_values = context_values.moveaxis(-2, 0)
             context_mask = context_mask.moveaxis(-2, 0)
             query_mask = query_mask.moveaxis(-2, 0)
             valid_steps = valid_steps.moveaxis(-1, 0)
 
-        num_steps, *batch_shape = times.shape
+        num_steps, *batch_shape = timestamps.shape
         assert context_values.shape == (num_steps, *batch_shape, self.input_size)
         assert context_mask.shape == (num_steps, *batch_shape, self.input_size)
         assert query_mask.shape == (num_steps, *batch_shape, self.input_size)
         assert valid_steps.shape == (num_steps, *batch_shape)
 
         # get initial state
-        t = times[0] if initial_time is None else initial_time  # (...)
+        t = timestamps[0] if initial_time is None else initial_time  # (...)
         h = (  # (..., H)
             self.h0.expand(*batch_shape, self.hidden_size)
             if initial_state is None
             else initial_state.expand(*batch_shape, self.hidden_size)
         )
         x = self.empirical_mean.expand(*batch_shape, self.input_size)  # (..., D)
-        delta = times.new_zeros(*batch_shape, self.input_size)  # (..., D)
+        delta = timestamps.new_zeros(*batch_shape, self.input_size)  # (..., D)
 
         predictions_list: list[Tensor] = []
+        post_state_list: list[Tensor] = []
 
-        for t_obs, ctx_vals, ctx_mask, active in zip(
-            times,
+        for t_obs, x_obs, obs_mask, active in zip(
+            timestamps,
             context_values,
             context_mask,
             valid_steps,
@@ -163,7 +188,7 @@ class GRU_D(nn.Module):
             # per-feature delta: reset if observed, accumulate if not; unchanged if inactive
             delta = torch.where(  # (..., D)
                 active[..., None],
-                torch.where(ctx_mask, inc, delta + inc),
+                torch.where(obs_mask, inc, delta + inc),
                 delta,
             )
 
@@ -171,21 +196,30 @@ class GRU_D(nn.Module):
             gamma_x = torch.exp(-torch.relu(self.gamma_x_linear(delta)))  # (..., D)
             gamma_h = torch.exp(-torch.relu(self.gamma_h_linear(delta)))  # (..., H)
 
-            x = torch.where(active[..., None] & ctx_mask, ctx_vals, x)  # (..., D)
+            # decay the latent state
+            h_hat = gamma_h * h  # (..., H)
+
+            # update the latent state
+            x = torch.where(active[..., None] & obs_mask, x_obs, x)  # (..., D)
             x_hat = torch.where(  # (..., D)
-                ctx_mask,
-                ctx_vals,
+                obs_mask,
+                x_obs,
                 gamma_x * x + (1 - gamma_x) * self.empirical_mean,
             )
-            h_hat = gamma_h * h  # (..., H)
-            h_candidate = self.gru_d_cell(x_hat, h_hat, ctx_mask)  # (..., H)
+            h_candidate = self.gru_d_cell(x_hat, h_hat, obs_mask)  # (..., H)
             h = torch.where(active[..., None], h_candidate, h)  # (..., H)
 
             # make prediction
             y = self.decoder(h)
 
             predictions_list.append(y)  # (..., F)
+            post_state_list.append(h)
 
         stack_dim = -2 if self.batch_first else 0
-        result = torch.stack(predictions_list, dim=stack_dim)  # (..., N+K, F)
-        return result.masked_fill(~result_mask, nan)
+        self.posterior_states = torch.stack(post_state_list, dim=stack_dim)
+        self.predictions = torch.stack(  # (..., N+K, F)
+            predictions_list,
+            dim=stack_dim,
+        ).masked_fill(~result_mask, nan)  # sanitize result
+
+        return self.predictions[combined.query_indices]  # (..., K, F)

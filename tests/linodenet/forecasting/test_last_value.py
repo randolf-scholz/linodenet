@@ -26,7 +26,12 @@ def test_last_value_carries_features_independently() -> None:
         ]
     )
 
-    actual = model(query_times, context_times, context_values)
+    actual = model(
+        query_times,
+        context_times=context_times,
+        context_values=context_values,
+        context_mask=context_values.isfinite(),
+    )
     expected = torch.tensor(
         [
             [1.0, nan],
@@ -51,7 +56,12 @@ def test_last_value_supports_batched_inputs() -> None:
         ]
     )
 
-    actual = model(query_times, context_times, context_values)
+    actual = model(
+        query_times,
+        context_times=context_times,
+        context_values=context_values,
+        context_mask=context_values.isfinite(),
+    )
     expected = torch.tensor(
         [
             [[1.0, nan], [1.0, 2.0]],
@@ -77,8 +87,9 @@ def test_last_value_uses_initial_state_before_observations() -> None:
 
     actual = model(
         query_times,
-        context_times,
-        context_values,
+        context_times=context_times,
+        context_values=context_values,
+        context_mask=context_values.isfinite(),
         initial_state=initial_state,
     )
     expected = torch.tensor(
@@ -100,7 +111,12 @@ def test_last_value_defaults_to_nan_initial_state() -> None:
     context_times = torch.tensor([0.0])
     context_values = torch.tensor([[1.0, nan]])
 
-    actual = model(query_times, context_times, context_values)
+    actual = model(
+        query_times,
+        context_times=context_times,
+        context_values=context_values,
+        context_mask=context_values.isfinite(),
+    )
     expected = torch.tensor(
         [
             [nan, nan],
@@ -128,8 +144,9 @@ def test_last_value_supports_trailing_nan_padding() -> None:
 
     actual = model(
         query_times,
-        context_times,
-        context_values,
+        context_times=context_times,
+        context_values=context_values,
+        context_mask=context_values.isfinite(),
         initial_state=initial_state,
     )
     expected = torch.tensor(
@@ -171,8 +188,9 @@ def test_last_value_visual_forecast() -> None:
     query_times = torch.linspace(0.0, horizon, 1000)
     forecast = model(
         query_times,
-        context_times,
-        context_values,
+        context_times=context_times,
+        context_values=context_values,
+        context_mask=context_values.isfinite(),
         initial_state=torch.randn(num_channels),
     )
 

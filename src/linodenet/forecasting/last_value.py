@@ -17,9 +17,10 @@ class LastValue(nn.Module):
     def forward(
         self,
         query_times: Tensor,  # (..., $K)
-        context_times: Tensor,  # (..., $N)
-        context_values: Tensor,  # (..., $N, D)
         *,
+        context_times: Tensor,  # (..., $N)        context_mask: Tensor,  # (..., $N, D), bool
+        context_mask: Tensor,  # (..., $N, D), bool
+        context_values: Tensor,  # (..., $N, D)
         initial_state: Tensor | None = None,  # (...?, D)
     ) -> Tensor:  # (..., $K, D)
         r"""Compute last-value forecasts.
@@ -27,6 +28,7 @@ class LastValue(nn.Module):
         Args:
             query_times: Query times with shape ``(..., num_queries)``.
             context_times: Context times with shape ``(..., num_context)``.
+            context_mask: Boolean mask selecting observed entries in ``values``.
             context_values: Context values with shape ``(..., num_context, dim)``.
                 Use ``NaN`` to indicate missing feature values.
             initial_state: Optional initial state with shape ``(..., dim)``. This
@@ -36,7 +38,14 @@ class LastValue(nn.Module):
         Returns:
             Forecasts with shape ``(..., num_queries, dim)``.
         """
-        Q, T, X, X0 = query_times, context_times, context_values, initial_state
+        # sanitize arguments
+        context_values = context_values.masked_fill(~context_mask, torch.nan)
+        assert torch.equal(context_values.isfinite(), context_mask)
+
+        Q = query_times
+        T = context_times
+        X = context_values
+        X0 = initial_state
 
         # check that Q and T are sorted per batch element.
         # note that they may contain trailing NaN values.
