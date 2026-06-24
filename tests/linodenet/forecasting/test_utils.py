@@ -48,12 +48,12 @@ def _assert_dense_equal(actual: DenseArg, expected: DenseArg, /) -> None:
         query_times=actual.query_times,
     )
 
-    if actual.query_values is None or expected.query_values is None:
-        assert actual.query_values is expected.query_values
+    if actual.target_values is None or expected.target_values is None:
+        assert actual.target_values is expected.target_values
     else:
         assert_close(
-            actual.query_values,
-            expected.query_values,
+            actual.target_values,
+            expected.target_values,
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
@@ -97,12 +97,12 @@ def _assert_batched_dense_equal(
         query_times=actual.query_times,
     )
 
-    if actual.query_values is None or expected.query_values is None:
-        assert actual.query_values is expected.query_values
+    if actual.target_values is None or expected.target_values is None:
+        assert actual.target_values is expected.target_values
     else:
         assert_close(
-            actual.query_values,
-            expected.query_values,
+            actual.target_values,
+            expected.target_values,
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
@@ -147,12 +147,12 @@ def _assert_triplet_equal(actual: TripletArg, expected: TripletArg, /) -> None:
     assert expected.query_channels is not None
     assert torch.equal(actual.query_channels, expected.query_channels)
 
-    if actual.query_values is None or expected.query_values is None:
-        assert actual.query_values is expected.query_values
+    if actual.target_values is None or expected.target_values is None:
+        assert actual.target_values is expected.target_values
     else:
         assert_close(
-            actual.query_values,
-            expected.query_values,
+            actual.target_values,
+            expected.target_values,
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
@@ -180,12 +180,12 @@ def _assert_combined_equal(actual: CombinedArg, expected: CombinedArg, /) -> Non
         equal_nan=True,
     )
     assert torch.equal(actual.context_mask, expected.context_mask)
-    if actual.query_values is None or expected.query_values is None:
-        assert actual.query_values is expected.query_values
+    if actual.target_values is None or expected.target_values is None:
+        assert actual.target_values is expected.target_values
     else:
         assert_close(
-            actual.query_values,
-            expected.query_values,
+            actual.target_values,
+            expected.target_values,
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
@@ -218,12 +218,12 @@ def _assert_batched_combined_equal(
         equal_nan=True,
     )
     assert torch.equal(actual.context_mask, expected.context_mask)
-    if actual.query_values is None or expected.query_values is None:
-        assert actual.query_values is expected.query_values
+    if actual.target_values is None or expected.target_values is None:
+        assert actual.target_values is expected.target_values
     else:
         assert_close(
-            actual.query_values,
-            expected.query_values,
+            actual.target_values,
+            expected.target_values,
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
@@ -271,12 +271,12 @@ def _assert_batched_triplet_equal(
     )
     assert torch.equal(actual.query_channels, expected.query_channels)
 
-    if actual.query_values is None or expected.query_values is None:
-        assert actual.query_values is expected.query_values
+    if actual.target_values is None or expected.target_values is None:
+        assert actual.target_values is expected.target_values
     else:
         assert_close(
-            actual.query_values,
-            expected.query_values,
+            actual.target_values,
+            expected.target_values,
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
@@ -308,7 +308,7 @@ def _combined_arg(
         context_values=values.masked_fill(~context_mask, nan),
         context_mask=context_mask,
         query_mask=query_mask,
-        query_values=(
+        target_values=(
             values.masked_fill(~query_mask, nan) if query_values_available else None
         ),
         static_covariates=static_covariates,
@@ -329,7 +329,7 @@ def _batched_combined_args(
         context_values=values.masked_fill(~context_mask, nan),
         context_mask=context_mask,
         query_mask=query_mask,
-        query_values=(
+        target_values=(
             values.masked_fill(~query_mask, nan) if query_values_available else None
         ),
         static_covariates=static_covariates,
@@ -417,7 +417,7 @@ def _make_random_batched_triplet(
         context_values=context_values.reshape(*batch_shape, num_context),
         query_times=query_times.reshape(*batch_shape, num_query),
         query_channels=query_channels.reshape(*batch_shape, num_query),
-        query_values=query_values.reshape(*batch_shape, num_query),
+        target_values=query_values.reshape(*batch_shape, num_query),
         static_covariates=static_covariates.reshape(*batch_shape, 2),
     )
 
@@ -531,7 +531,7 @@ def _make_random_batched_dense(
         ),
         query_times=query_times.reshape(*batch_shape, num_query_steps),
         query_mask=query_mask.reshape(*batch_shape, num_query_steps, query_dim),
-        query_values=query_values.reshape(*batch_shape, num_query_steps, query_dim),
+        target_values=query_values.reshape(*batch_shape, num_query_steps, query_dim),
         static_covariates=static_covariates.reshape(*batch_shape, 2),
     )
 
@@ -544,9 +544,9 @@ class TestDense:
             context_mask=torch.tensor([[True, True]]),
             query_times=torch.tensor([2.0]),
             query_mask=torch.tensor([[True, False]]),
-            query_values=torch.tensor([[20.0, 21.0]]),
+            target_values=torch.tensor([[20.0, 21.0]]),
         )
-        assert_close(arg.query_values, torch.tensor([[20.0, nan]]), equal_nan=True)
+        assert_close(arg.target_values, torch.tensor([[20.0, nan]]), equal_nan=True)
 
         batched = BatchedDenseArgs(
             context_times=torch.tensor([[1.0]]),
@@ -554,10 +554,10 @@ class TestDense:
             context_mask=torch.tensor([[[True, True]]]),
             query_times=torch.tensor([[2.0, nan]]),
             query_mask=torch.tensor([[[True, False], [False, False]]]),
-            query_values=torch.tensor([[[20.0, 21.0], [nan, nan]]]),
+            target_values=torch.tensor([[[20.0, 21.0], [nan, nan]]]),
         )
         assert_close(
-            batched.query_values,
+            batched.target_values,
             torch.tensor([[[20.0, nan], [nan, nan]]]),
             equal_nan=True,
         )
@@ -586,7 +586,7 @@ class TestDense:
             ]),
             query_times=torch.tensor([3.0, 4.0]),
             query_mask=torch.tensor([[True, False], [True, True]]),
-            query_values=torch.tensor([[30.0, nan], [40.0, 41.0]]),
+            target_values=torch.tensor([[30.0, nan], [40.0, 41.0]]),
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
@@ -597,7 +597,7 @@ class TestDense:
             context_values=torch.tensor([10.0, 11.0, 20.0, 21.0]),
             query_times=torch.tensor([3.0, 4.0, 4.0]),
             query_channels=torch.tensor([0, 0, 1]),
-            query_values=torch.tensor([30.0, 40.0, 41.0]),
+            target_values=torch.tensor([30.0, 40.0, 41.0]),
             static_covariates=torch.tensor([5.0, 6.0]),
         )
 
@@ -618,7 +618,7 @@ class TestDense:
             ]),
             query_times=torch.tensor([4.0, 5.0]),
             query_mask=torch.tensor([[True, True], [True, True]]),
-            query_values=torch.tensor([[40.0, 41.0], [50.0, 51.0]]),
+            target_values=torch.tensor([[40.0, 41.0], [50.0, 51.0]]),
             static_covariates=torch.tensor([7.0]),
         )  # fmt: skip
 
@@ -649,7 +649,7 @@ class TestDense:
                 [True, False],
                 [True,  True],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [20.0,  nan],
                 [40.0, 41.0],
             ]),
@@ -698,7 +698,7 @@ class TestDense:
                 [True, False],
                 [True,  True],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [20.0,  nan],
                 [40.0, 41.0],
             ]),
@@ -725,7 +725,7 @@ class TestDense:
                 [ True, False,  True],
                 [False,  True,  True],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [20.0,  nan, 22.0],
                 [ nan, 41.0, 42.0],
             ]),
@@ -747,7 +747,7 @@ class TestDense:
                 context_mask=torch.tensor([[True, False], [True, True]]),
                 query_times=torch.tensor([5.0]),
                 query_mask=torch.tensor([[True, False]]),
-                query_values=torch.tensor([[9.0, nan]]),
+                target_values=torch.tensor([[9.0, nan]]),
                 static_covariates=torch.tensor([1.0, 2.0]),
             ),
             DenseArg(
@@ -756,7 +756,7 @@ class TestDense:
                 context_mask=torch.tensor([[True, True]]),
                 query_times=torch.tensor([6.0, 7.0, 8.0]),
                 query_mask=torch.tensor([[False, True], [True, False], [True, True]]),
-                query_values=torch.tensor([[nan, 6.0], [7.0, nan], [8.0, 9.0]]),
+                target_values=torch.tensor([[nan, 6.0], [7.0, nan], [8.0, 9.0]]),
                 static_covariates=torch.tensor([3.0, 4.0]),
             ),
         ]
@@ -783,7 +783,7 @@ class TestDense:
                 [[ True, False], [False, False], [False, False]],
                 [[False,  True], [ True, False], [ True,  True]],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [[9.0, nan], [nan, nan], [nan, nan]],
                 [[nan, 6.0], [7.0, nan], [8.0, 9.0]],
             ]),
@@ -829,7 +829,7 @@ class TestDense:
                 [[ True, False], [False, False]],
                 [[False,  True], [ True,  True]],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [[30.0,  nan], [ nan,  nan]],
                 [[ nan, 40.0], [50.0, 60.0]],
             ]),
@@ -857,7 +857,7 @@ class TestDense:
                 [0, -1, -1],
                 [1,  0,  1]
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [30.0,  nan,  nan],
                 [40.0, 50.0, 60.0],
             ]),
@@ -925,7 +925,7 @@ class TestDense:
                  [False,  True,  True],
                  [False, False, False]],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [[50.0,  nan,  nan],
                  [ nan, 61.0,  nan],
                  [70.0,  nan, 72.0]],
@@ -966,7 +966,7 @@ class TestDense:
                  [False,  True,  True],
                  [False, False, False]],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [[50.0,  nan,  nan],
                  [ nan, 61.0,  nan],
                  [70.0,  nan, 72.0]],
@@ -1021,7 +1021,7 @@ class TestDense:
                 [[False,  True,  True],
                  [ True, False,  True]],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [[20.0,  nan, 22.0],
                  [40.0, 41.0, 42.0]],
                 [[ nan, 51.0, 52.0],
@@ -1260,7 +1260,7 @@ class TestCombined:
                 [True, False],
                 [True,  True],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [20.0,  nan],
                 [40.0, 41.0],
             ]),
@@ -1570,7 +1570,7 @@ class TestTriplet:
             context_values=torch.tensor([10.0, 11.0, 20.0, 21.0]),
             query_times=torch.tensor([3.0, 4.0, 4.0]),
             query_channels=torch.tensor([0, 0, 1]),
-            query_values=torch.tensor([30.0, 40.0, 41.0]),
+            target_values=torch.tensor([30.0, 40.0, 41.0]),
             static_covariates=torch.tensor([5.0, 6.0]),
         )
 
@@ -1587,7 +1587,7 @@ class TestTriplet:
             ]),
             query_times=torch.tensor([3.0, 4.0]),
             query_mask=torch.tensor([[True, False], [True, True]]),
-            query_values=torch.tensor([[30.0, nan], [40.0, 41.0]]),
+            target_values=torch.tensor([[30.0, nan], [40.0, 41.0]]),
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
@@ -1600,7 +1600,7 @@ class TestTriplet:
             context_values=torch.tensor([10.0, 20.0]),
             query_times=torch.tensor([3.0]),
             query_channels=torch.tensor([1]),
-            query_values=torch.tensor([30.0]),
+            target_values=torch.tensor([30.0]),
         )
 
         actual = original.to_dense(context_dim=3, query_dim=4)
@@ -1616,7 +1616,7 @@ class TestTriplet:
             ]),
             query_times=torch.tensor([3.0]),
             query_mask=torch.tensor([[False, True, False, False]]),
-            query_values=torch.tensor([[nan, 30.0, nan, nan]]),
+            target_values=torch.tensor([[nan, 30.0, nan, nan]]),
         )  # fmt: skip
 
         _assert_dense_equal(actual, expected)
@@ -1628,7 +1628,7 @@ class TestTriplet:
             context_values=torch.tensor([10.0, 12.0, 30.0, 32.0]),
             query_times=torch.tensor([2.0, 2.0, 4.0, 4.0, 4.0]),
             query_channels=torch.tensor([0, 2, 0, 1, 2]),
-            query_values=torch.tensor([20.0, 22.0, 40.0, 41.0, 42.0]),
+            target_values=torch.tensor([20.0, 22.0, 40.0, 41.0, 42.0]),
             static_covariates=torch.tensor([5.0, 6.0]),
         )
 
@@ -1644,7 +1644,7 @@ class TestTriplet:
                 context_values=torch.tensor([10.0, 11.0, 20.0]),
                 query_times=torch.tensor([3.0, 4.0]),
                 query_channels=torch.tensor([0, 1]),
-                query_values=torch.tensor([30.0, 40.0]),
+                target_values=torch.tensor([30.0, 40.0]),
                 static_covariates=torch.tensor([1.0, 2.0]),
             ),
             TripletArg(
@@ -1653,7 +1653,7 @@ class TestTriplet:
                 context_values=torch.tensor([50.0]),
                 query_times=torch.tensor([6.0, 6.0, 7.0]),
                 query_channels=torch.tensor([0, 2, 1]),
-                query_values=torch.tensor([60.0, 62.0, 71.0]),
+                target_values=torch.tensor([60.0, 62.0, 71.0]),
                 static_covariates=torch.tensor([3.0, 4.0]),
             ),
         ]
@@ -1680,7 +1680,7 @@ class TestTriplet:
                 [0,  1, -1],
                 [0,  2,  1],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [30.0, 40.0,  nan],
                 [60.0, 62.0, 71.0],
             ]),
@@ -1770,7 +1770,7 @@ class TestTriplet:
                 [0, 1, -1],
                 [1, 0,  1],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [30.0, 40.0,  nan],
                 [51.0, 50.0, 61.0],
             ]),
@@ -1802,7 +1802,7 @@ class TestTriplet:
                 [[ True, False], [False,  True]],
                 [[ True,  True], [False,  True]],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [[30.0,  nan], [ nan, 40.0]],
                 [[50.0, 51.0], [ nan, 61.0]],
             ]),
@@ -1886,7 +1886,7 @@ class TestTriplet:
                 [0, 2, 0, 1, 2],
                 [1, 2, -1, -1, -1],
             ]),
-            query_values=torch.tensor([
+            target_values=torch.tensor([
                 [20.0, 22.0, 40.0, 41.0, 42.0],
                 [51.0, 52.0,  nan,  nan,  nan],
             ]),

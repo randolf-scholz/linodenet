@@ -316,12 +316,12 @@ class TestCRU(TestForecastingModel[CRU]):
             context_mask=context_mask,
             query_times=inputs.query_times,
             query_mask=query_mask,
-            query_values=inputs.query_values,
+            target_values=inputs.query_values,
         ).to_combined()
-        assert combined.query_values is not None
+        assert combined.target_values is not None
 
         log_prob = model.log_prob(
-            combined.query_values,
+            combined.target_values,
             times=combined.times,
             context_values=combined.context_values,
             context_mask=combined.context_mask,

@@ -67,7 +67,7 @@ class TestGRU_D(TestForecastingModel[GRU_D]):
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
             query_mask=query_mask_nd,
-            query_values=inputs.query_values,
+            target_values=inputs.query_values,
         )
         combined = dense.to_combined()
 

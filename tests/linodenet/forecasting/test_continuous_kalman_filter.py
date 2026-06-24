@@ -215,12 +215,12 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
                 context_values=combined.context_values,
                 context_mask=combined.context_mask,
                 query_mask=combined.query_mask,
-                query_values=posterior_mean.masked_fill(
+                target_values=posterior_mean.masked_fill(
                     ~combined.query_mask, torch.nan
                 ),
             )
             .to_dense()
-            .query_values
+            .target_values
         )
         posterior_variance = posterior_covariance.diagonal(dim1=-2, dim2=-1)
         pred_variance = (
@@ -229,13 +229,13 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
                 context_values=combined.context_values,
                 context_mask=combined.context_mask,
                 query_mask=combined.query_mask,
-                query_values=posterior_variance.masked_fill(
+                target_values=posterior_variance.masked_fill(
                     ~combined.query_mask,
                     torch.nan,
                 ),
             )
             .to_dense()
-            .query_values
+            .target_values
         )
 
         if pred_mean is None or pred_variance is None:

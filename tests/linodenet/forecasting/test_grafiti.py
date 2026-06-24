@@ -179,7 +179,7 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
                 [0, 1, 2, 1],
             ]
         ),
-        query_values=torch.tensor(
+        target_values=torch.tensor(
             [
                 [200.0, 410.0, 620.0, nan],
                 [100.0, 310.0, 520.0, 710.0],

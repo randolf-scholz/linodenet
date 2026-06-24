@@ -161,8 +161,8 @@ class DenseArg:
         - query time stamps are finite and strictly increasing
         - if query values are given, they are finite exactly at entries selected by the query mask
         - there is at least one context value observed per time stamp
-        - there is at least one query value observed per time stamp
-        - there is at least on query mask selected per time stamp
+        - there is at least one target value observed per time stamp
+        - there is at least one target mask selected per time stamp
     """
 
     context_times: Tensor  # Float[(N)], finite, non-decreasing
@@ -171,7 +171,8 @@ class DenseArg:
 
     query_times: Tensor  # Float[(K)], finite, strictly increasing
     query_mask: Tensor  # Bool[(K, F)]
-    query_values: Tensor | None = None  # Float[(K, F)], sparse
+    target_values: Tensor | None = None  # Float[(K, F)], sparse
+    r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(M)], sparse
 
@@ -215,7 +216,7 @@ class DenseArg:
         assert M.shape == (query_size, query_dim)
         assert M.any(dim=-1).all()  # at least one value per step
 
-        if (V := self.query_values) is not None:
+        if (V := self.target_values) is not None:
             V = V.masked_fill(~M, nan)
             object.__setattr__(self, "query_values", V)
             *_, query_dim = V.shape
@@ -230,7 +231,7 @@ class DenseArg:
         C = self.context_mask
         Q = self.query_times
         M = self.query_mask
-        Y = self.query_values
+        Y = self.target_values
 
         time_indices, context_channels = C.nonzero(as_tuple=True)  # O×2
         query_indices, query_channels = M.nonzero(as_tuple=True)
@@ -241,7 +242,7 @@ class DenseArg:
             context_values=X[time_indices, context_channels],
             query_times=Q[query_indices],
             query_channels=query_channels,
-            query_values=Y[query_indices, query_channels] if Y is not None else None,
+            target_values=Y[query_indices, query_channels] if Y is not None else None,
             static_covariates=self.static_covariates,
         )
 
@@ -249,7 +250,7 @@ class DenseArg:
         X = self.context_values
         C = self.context_mask
         M = self.query_mask
-        Y = self.query_values
+        Y = self.target_values
         T = self.context_times
         Q = self.query_times
 
@@ -269,7 +270,7 @@ class DenseArg:
                 [C, C.new_zeros((q_size, ctx_dim))],
                 dim=-2,
             ).take_along_dim(perm, dim=-2),
-            query_values=(
+            target_values=(
                 torch.cat(
                     [Y.new_full((ctx_size, q_dim), nan), Y],
                     dim=-2,
@@ -302,7 +303,7 @@ class BatchedDenseArgs:
         - query time stamps are finite and strictly increasing
         - if query values are given, they are finite exactly at entries selected by the query mask
         - there is at least one context value observed per time stamp
-        - there is at least one query value observed per time stamp
+        - there is at least one target value observed per time stamp
     """
 
     context_times: Tensor  # Float[(..., N)], padded NaN, non-decreasing
@@ -311,7 +312,8 @@ class BatchedDenseArgs:
 
     query_times: Tensor  # Float[(..., K)], padded NaN, strictly increasing
     query_mask: Tensor  # Bool[(..., K, F)]  padded False
-    query_values: Tensor | None = None  # Float[(..., K, F)]  padded NaN, sparse
+    target_values: Tensor | None = None  # Float[(..., K, F)]  padded NaN, sparse
+    r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(..., M)]  padded NaN, sparse
 
@@ -361,7 +363,7 @@ class BatchedDenseArgs:
 
         assert torch.equal(M.any(dim=-1), Q_valid)
 
-        if (V := self.query_values) is not None:
+        if (V := self.target_values) is not None:
             V = V.masked_fill(~M, nan)
             object.__setattr__(self, "query_values", V)
             *_, query_dim = V.shape
@@ -405,9 +407,9 @@ class BatchedDenseArgs:
                 batch_first=True,
                 padding_value=False,
             ),
-            query_values=(
+            target_values=(
                 pad_sequence(V, batch_first=True, padding_value=nan)
-                if (V := _all_or_none(arg.query_values for arg in args)) is not None
+                if (V := _all_or_none(arg.target_values for arg in args)) is not None
                 else None
             ),
             static_covariates=(
@@ -436,7 +438,7 @@ class BatchedDenseArgs:
                 context_mask=c_mask,
                 query_times=q_time,
                 query_mask=q_mask,
-                query_values=q_value,
+                target_values=q_value,
                 static_covariates=static_arg,
             )
             for c_time, c_mask, c_value, q_time, q_mask, q_value, static_arg in zip(
@@ -447,11 +449,11 @@ class BatchedDenseArgs:
                 unpad_sequence(M, query_lengths, batch_first=True),
                 (
                     unpad_sequence(
-                        self.query_values.unsqueeze(0).flatten(end_dim=-3),
+                        self.target_values.unsqueeze(0).flatten(end_dim=-3),
                         query_lengths,
                         batch_first=True,
                     )
-                    if self.query_values is not None
+                    if self.target_values is not None
                     else [None] * num_samples
                 ),
                 (
@@ -468,7 +470,7 @@ class BatchedDenseArgs:
         X = self.context_values
         C = self.context_mask
         Q = self.query_times
-        Y = self.query_values
+        Y = self.target_values
         M = self.query_mask
         batch_shape = X.shape[:-2]
 
@@ -517,7 +519,7 @@ class BatchedDenseArgs:
                 q_channel,
                 fill_value=-1,
             ),
-            query_values=(
+            target_values=(
                 scatter_fill(
                     (*batch_shape, num_query),
                     query_indices,
@@ -536,7 +538,7 @@ class BatchedDenseArgs:
         C = self.context_mask
         Q = self.query_times
         M = self.query_mask
-        Y = self.query_values
+        Y = self.target_values
 
         *batch_shape, ctx_size, ctx_dim = X.shape
         *_, q_size, q_dim = M.shape
@@ -556,7 +558,7 @@ class BatchedDenseArgs:
                 [C, C.new_zeros((*batch_shape, q_size, ctx_dim))],
                 dim=-2,
             ).take_along_dim(permutation, dim=-2),
-            query_values=(
+            target_values=(
                 torch.cat(
                     [Y.new_full((*batch_shape, ctx_size, q_dim), nan), Y],
                     dim=-2,
@@ -593,7 +595,8 @@ class TripletArg:
 
     query_times: Tensor  # Float[(Qᵢ)], finite, non-decreasing
     query_channels: Tensor  # Long[(Qᵢ)]
-    query_values: Tensor | None = None  # Float[(Qᵢ)], finite
+    target_values: Tensor | None = None  # Float[(Qᵢ)], finite
+    r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(M)], sparse
 
@@ -639,7 +642,7 @@ class TripletArg:
         query_pairs = torch.stack([Q, M], dim=-1)  # (Q, 2)
         assert (unique_count(query_pairs.unsqueeze(0)) == num_query).all()
 
-        if (V := self.query_values) is not None:
+        if (V := self.target_values) is not None:
             assert V.shape == (num_query,)
             assert V.isfinite().all()
 
@@ -692,14 +695,14 @@ class TripletArg:
                 torch.ones_like(self.query_channels, dtype=torch.bool),
                 fill_value=False,
             ),
-            query_values=(
+            target_values=(
                 scatter_fill(
                     (query_times.shape[0], query_dim),
                     (query_inverse, self.query_channels),
-                    self.query_values,
+                    self.target_values,
                     fill_value=nan,
                 )
-                if self.query_values is not None
+                if self.target_values is not None
                 else None
             ),
             static_covariates=self.static_covariates,
@@ -734,7 +737,8 @@ class BatchedTripletArgs:
 
     query_times: Tensor  # Float[(..., Q)], padded NaN, non-decreasing
     query_channels: Tensor  # Long[(..., Q)], padded -1
-    query_values: Tensor | None = None  # Float[(..., Q)], padded NaN
+    target_values: Tensor | None = None  # Float[(..., Q)], padded NaN
+    r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
 
@@ -770,7 +774,7 @@ class BatchedTripletArgs:
         query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), nan)
         assert torch.equal(unique_count(query_pairs), M_valid.sum(dim=-1))
 
-        if (V := self.query_values) is not None:
+        if (V := self.target_values) is not None:
             V_valid = V.isfinite()
             assert V.shape == (*batch_shape, num_query)
             assert torch.equal(V_valid, M_valid)
@@ -814,9 +818,9 @@ class BatchedTripletArgs:
                 batch_first=True,
                 padding_value=-1,
             ),
-            query_values=(
+            target_values=(
                 pad_sequence(V, batch_first=True, padding_value=nan)
-                if (V := _all_or_none(arg.query_values for arg in args)) is not None
+                if (V := _all_or_none(arg.target_values for arg in args)) is not None
                 else None
             ),
             static_covariates=(
@@ -844,7 +848,7 @@ class BatchedTripletArgs:
                 context_values=c_value,
                 query_times=q_time,
                 query_channels=q_channel,
-                query_values=q_value,
+                target_values=q_value,
                 static_covariates=static_arg,
             )
             for c_time, c_channel, c_value, q_time, q_channel, q_value, static_arg in zip(
@@ -855,11 +859,11 @@ class BatchedTripletArgs:
                 unpad_sequence(M, query_lengths, batch_first=True),
                 (
                     unpad_sequence(
-                        self.query_values.unsqueeze(0).flatten(end_dim=-2),
+                        self.target_values.unsqueeze(0).flatten(end_dim=-2),
                         query_lengths,
                         batch_first=True,
                     )
-                    if self.query_values is not None
+                    if self.target_values is not None
                     else [None] * len(Q)
                 ),
                 (
@@ -883,7 +887,7 @@ class BatchedTripletArgs:
         X = self.context_values
         Q = self.query_times
         M = self.query_channels
-        Y = self.query_values
+        Y = self.target_values
 
         ctx_dim = context_dim if context_dim is not None else int(C.max().item()) + 1
         qry_dim = query_dim if query_dim is not None else int(M.max().item()) + 1
@@ -959,7 +963,7 @@ class BatchedTripletArgs:
                 torch.ones_like(qry_channels, dtype=torch.bool),
                 fill_value=False,
             ).reshape(*batch_shape, qry_size, qry_dim),
-            query_values=(
+            target_values=(
                 scatter_fill(
                     (num_batches, qry_size, qry_dim),
                     (*qry_indices, qry_channels),
@@ -999,7 +1003,8 @@ class CombinedArg:
     context_values: Tensor  # Float[($N + $K, D)], sparse
     context_mask: Tensor  # Bool[($N + $K, D)]
     query_mask: Tensor  # Bool[($N + $K, E)]
-    query_values: Tensor | None = None  # Float[($N + $K, E)], sparse
+    target_values: Tensor | None = None  # Float[($N + $K, E)], sparse
+    r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(M)], sparse
 
@@ -1015,8 +1020,8 @@ class CombinedArg:
             self,
             "query_values",
             (
-                self.query_values.masked_fill(~self.query_mask, nan)
-                if self.query_values is not None
+                self.target_values.masked_fill(~self.query_mask, nan)
+                if self.target_values is not None
                 else None
             ),
         )
@@ -1024,7 +1029,7 @@ class CombinedArg:
         T = self.times
         X = self.context_values
         C = self.context_mask
-        Y = self.query_values
+        Y = self.target_values
         Q = self.query_mask
 
         *_, num_combined, context_dim = X.shape
@@ -1069,9 +1074,9 @@ class CombinedArg:
             context_mask=self.context_mask[..., context_filter, :],
             query_times=self.times[..., query_filter],
             query_mask=self.query_mask[..., query_filter, :],
-            query_values=(
-                self.query_values[..., query_filter, :]
-                if self.query_values is not None
+            target_values=(
+                self.target_values[..., query_filter, :]
+                if self.target_values is not None
                 else None
             ),
             static_covariates=self.static_covariates,
@@ -1105,7 +1110,8 @@ class BatchedCombinedArgs:
     context_values: Tensor  # Float[(..., $N + $K, D)], padded NaN, sparse
     context_mask: Tensor  # Bool[(..., $N + $K, D)], padded False
     query_mask: Tensor  # Bool[(..., $N + $K, E)], padded False
-    query_values: Tensor | None = None  # Float[(..., $N + $K, E)], padded NaN, sparse
+    target_values: Tensor | None = None  # Float[(..., $N + $K, E)], padded NaN, sparse
+    r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
 
@@ -1121,8 +1127,8 @@ class BatchedCombinedArgs:
             self,
             "query_values",
             (
-                self.query_values.masked_fill(~self.query_mask, nan)
-                if self.query_values is not None
+                self.target_values.masked_fill(~self.query_mask, nan)
+                if self.target_values is not None
                 else None
             ),
         )
@@ -1130,7 +1136,7 @@ class BatchedCombinedArgs:
         T = self.times
         X = self.context_values
         C = self.context_mask
-        Y = self.query_values
+        Y = self.target_values
         Q = self.query_mask
 
         *batch_shape, num_combined, context_dim = X.shape
@@ -1202,9 +1208,9 @@ class BatchedCombinedArgs:
                 batch_first=True,
                 padding_value=False,
             ),
-            query_values=(
+            target_values=(
                 pad_sequence(V, batch_first=True, padding_value=nan)
-                if (V := _all_or_none(arg.query_values for arg in args)) is not None
+                if (V := _all_or_none(arg.target_values for arg in args)) is not None
                 else None
             ),
             static_covariates=(
@@ -1227,7 +1233,7 @@ class BatchedCombinedArgs:
                 times=time,
                 context_values=c_value,
                 context_mask=c_mask,
-                query_values=q_value,
+                target_values=q_value,
                 query_mask=q_mask,
                 static_covariates=static_arg,
             )
@@ -1238,11 +1244,11 @@ class BatchedCombinedArgs:
                 unpad_sequence(M, lengths, batch_first=True),
                 (
                     unpad_sequence(
-                        self.query_values.unsqueeze(0).flatten(end_dim=-3),
+                        self.target_values.unsqueeze(0).flatten(end_dim=-3),
                         lengths,
                         batch_first=True,
                     )
-                    if self.query_values is not None
+                    if self.target_values is not None
                     else [None] * len(T)
                 ),
                 (
@@ -1258,7 +1264,7 @@ class BatchedCombinedArgs:
         T = self.times
         X = self.context_values
         C = self.context_mask
-        Y = self.query_values
+        Y = self.target_values
         M = self.query_mask
 
         # Gather the selected steps to the front of each batch item: a stable sort
@@ -1286,7 +1292,7 @@ class BatchedCombinedArgs:
             context_values=X.take_along_dim(ctx_perm[..., None], dim=-2),
             query_times=T.take_along_dim(qry_perm, dim=-1).masked_fill(~qry_keep, nan),
             query_mask=M.take_along_dim(qry_perm[..., None], dim=-2),
-            query_values=(
+            target_values=(
                 Y.take_along_dim(qry_perm[..., None], dim=-2) if Y is not None else None
             ),
             static_covariates=self.static_covariates,

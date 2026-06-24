@@ -93,12 +93,12 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
             query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.query_values),
-            query_values=inputs.query_values,
+            target_values=inputs.query_values,
         )
         combined = dense.to_combined()
-        assert combined.query_values is not None
+        assert combined.target_values is not None
         log_prob = model.log_prob(
-            combined.query_values,
+            combined.target_values,
             times=combined.times,
             context_values=combined.context_values,
             context_mask=combined.context_mask,
