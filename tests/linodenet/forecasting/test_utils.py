@@ -1963,3 +1963,35 @@ class TestEventBatch:
             rtol=0.0,
             equal_nan=True,
         )
+
+    @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
+    def test_query_indices_batch_last(self, batch_shape: tuple[int, ...]) -> None:
+        req = _make_random_batched_dense(batch_shape, context_dim=3, query_dim=4)
+        assert req.target_values is not None
+
+        # Rearrange to batch_first=False layout: seq dim moves from position -1/-2 to 0.
+        # Shapes: (*batch_shape, N) -> (N, *batch_shape), (*batch_shape, N, D) -> (N, *batch_shape, D)
+        ctx_times = req.context_times.movedim(-1, 0)  # (N, *batch_shape)
+        ctx_values = req.context_values.movedim(-2, 0)  # (N, *batch_shape, D)
+        ctx_mask = req.context_mask.movedim(-2, 0)  # (N, *batch_shape, D)
+        qry_times = req.query_times.movedim(-1, 0)  # (K, *batch_shape)
+        qry_mask = req.query_mask.movedim(-2, 0)  # (K, *batch_shape, F)
+        tgt_values = req.target_values.movedim(-2, 0)  # (K, *batch_shape, F)
+
+        event = EventBatch.from_request(
+            context_times=ctx_times,
+            context_values=ctx_values,
+            context_mask=ctx_mask,
+            query_times=qry_times,
+            query_mask=qry_mask,
+            target_values=tgt_values,
+            batch_first=False,
+        )
+        assert event.target_values is not None
+        assert_close(
+            event.target_values[event.query_indices],
+            tgt_values,
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )

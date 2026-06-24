@@ -609,13 +609,14 @@ class EventBatch(NamedTuple):
     @staticmethod
     def from_request(
         *,
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
         query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
         query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
         target_values: Tensor | None = None,  # Float[(..., K, F)]  padded NaN, sparse
         static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
+        batch_first: bool = True,
     ) -> EventBatch:
         T = context_times
         X = context_values
@@ -624,48 +625,73 @@ class EventBatch(NamedTuple):
         M = query_mask
         Y = target_values
 
-        *batch_shape, ctx_size, ctx_dim = X.shape
-        *_, q_size, q_dim = M.shape
+        time_seq_dim = -1 if batch_first else 0
+        mask_seq_dim = -2 if batch_first else 0
 
-        times = torch.cat([T, Q], dim=-1)
+        if batch_first:
+            *batch_shape, ctx_size, ctx_dim = X.shape
+            *_, q_size, q_dim = M.shape
+            ctx_pad_shape = (*batch_shape, q_size, ctx_dim)
+            qry_pad_shape = (*batch_shape, ctx_size, q_dim)
+        else:
+            ctx_size, *batch_shape, ctx_dim = X.shape
+            q_size, *_, q_dim = M.shape
+            ctx_pad_shape = (q_size, *batch_shape, ctx_dim)
+            qry_pad_shape = (ctx_size, *batch_shape, q_dim)
+
+        times = torch.cat([T, Q], dim=time_seq_dim)
         permutation = torch.argsort(
-            times.nan_to_num(nan=torch.inf), dim=-1, stable=True
+            times.nan_to_num(nan=torch.inf),
+            dim=time_seq_dim,
+            stable=True,
         ).unsqueeze(-1)
 
         # inv_perm[j] = sorted position of original index j
-        inv_perm = torch.argsort(permutation.squeeze(-1), dim=-1, stable=True)
-        time_idx = inv_perm[..., ctx_size:]  # (*batch_shape, K)
+        inv_perm = torch.argsort(permutation.squeeze(-1), dim=time_seq_dim, stable=True)
 
-        query_indices: tuple[Tensor, ...] = (
-            *(
-                torch.arange(size, device=time_idx.device).reshape(
-                    *(size if j == i else 1 for j in range(len(batch_shape))), 1
-                )
-                for i, size in enumerate(batch_shape)
-            ),
-            time_idx,
-        )
+        if batch_first:
+            time_idx = inv_perm[..., ctx_size:]  # (*batch_shape, K)
+            query_indices: tuple[Tensor, ...] = (
+                *(
+                    torch.arange(size, device=time_idx.device).reshape(
+                        *(size if j == i else 1 for j in range(len(batch_shape))), 1
+                    )
+                    for i, size in enumerate(batch_shape)
+                ),
+                time_idx,
+            )
+        else:
+            time_idx = inv_perm[ctx_size:]  # (K, *batch_shape)
+            query_indices = (
+                time_idx,
+                *(
+                    torch.arange(size, device=time_idx.device).reshape(
+                        1, *(size if j == i else 1 for j in range(len(batch_shape)))
+                    )
+                    for i, size in enumerate(batch_shape)
+                ),
+            )
 
         return EventBatch(
-            timestamps=times.take_along_dim(permutation.squeeze(-1), dim=-1),
+            timestamps=times.take_along_dim(permutation.squeeze(-1), dim=time_seq_dim),
             context_values=torch.cat(
-                [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
-                dim=-2,
-            ).take_along_dim(permutation, dim=-2),
+                [X, X.new_full(ctx_pad_shape, nan)],
+                dim=mask_seq_dim,
+            ).take_along_dim(permutation, dim=mask_seq_dim),
             context_mask=torch.cat(
-                [C, C.new_zeros((*batch_shape, q_size, ctx_dim))],
-                dim=-2,
-            ).take_along_dim(permutation, dim=-2),
+                [C, C.new_zeros(ctx_pad_shape)],
+                dim=mask_seq_dim,
+            ).take_along_dim(permutation, dim=mask_seq_dim),
             query_mask=torch.cat(
-                [M.new_zeros((*batch_shape, ctx_size, q_dim)), M],
-                dim=-2,
-            ).take_along_dim(permutation, dim=-2),
+                [M.new_zeros(qry_pad_shape), M],
+                dim=mask_seq_dim,
+            ).take_along_dim(permutation, dim=mask_seq_dim),
             query_indices=query_indices,
             target_values=(
                 torch.cat(
-                    [Y.new_full((*batch_shape, ctx_size, q_dim), nan), Y],
-                    dim=-2,
-                ).take_along_dim(permutation, dim=-2)
+                    [Y.new_full(qry_pad_shape, nan), Y],
+                    dim=mask_seq_dim,
+                ).take_along_dim(permutation, dim=mask_seq_dim)
                 if Y is not None
                 else None
             ),
