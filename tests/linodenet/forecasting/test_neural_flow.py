@@ -231,7 +231,7 @@ def test_flow_layers(
         query_times=query_times,
         query_mask=query_mask,
     )
-    posterior_mean, posterior_logvar = model(
+    posterior_mean, posterior_logvar = model.predict(
         query_times=request.query_times,
         query_mask=request.query_mask,
         context_times=request.context_times,
