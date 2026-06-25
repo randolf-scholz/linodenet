@@ -611,6 +611,38 @@ class ContinuousKalmanFilter(nn.Module):
 
         return self.post_target_means, self.post_target_covs
 
+    def log_prob(
+        self,
+        values: Tensor,  # (..., $K, D)
+        *,
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, D)], padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,  # t₀, ()
+    ) -> Tensor:  # (..., $K)
+        r"""Compute the time-marginal log-likelihood of the model.
+
+        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        """
+        mean, cov = self.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return marginal_gaussian_log_prob(
+            values,
+            mean=mean.expand(*values.shape),
+            cov=cov.expand(*values.shape[:-1], *cov.shape[-2:]),
+            mask=query_mask.expand(*values.shape),
+        )
+
     def sample(
         self,
         size: int | tuple[int, ...] = (),  # *S
@@ -675,38 +707,6 @@ class ContinuousKalmanFilter(nn.Module):
             mean=mean,
             cov=cov,
             mask=query_mask,
-        )
-
-    def log_prob(
-        self,
-        values: Tensor,  # (..., $K, D)
-        *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, D)], padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
-        initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_time: Tensor | None = None,  # t₀, ()
-    ) -> Tensor:  # (..., $K)
-        r"""Compute the time-marginal log-likelihood of the model.
-
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
-        """
-        mean, cov = self.predict(
-            query_times=query_times,
-            query_mask=query_mask,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            initial_state=initial_state,
-            initial_time=initial_time,
-        )
-        return marginal_gaussian_log_prob(
-            values,
-            mean=mean.expand(*values.shape),
-            cov=cov.expand(*values.shape[:-1], *cov.shape[-2:]),
-            mask=query_mask.expand(*values.shape),
         )
 
     def update_buffers(self) -> None:
