@@ -31,6 +31,7 @@ from torch.linalg import cholesky, solve_triangular
 from torch.nn import functional as F
 
 from .grafiti import Grafiti
+from .utils import EventBatch
 
 DEFAULT_MIN_BIN_WIDTH: Final[float] = 1e-3
 DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3

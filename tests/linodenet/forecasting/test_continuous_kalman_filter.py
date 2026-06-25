@@ -200,7 +200,7 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
-            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.target_values),
+            query_mask=inputs.query_valid.unsqueeze(-1).expand_as(inputs.target_values),
             target_values=inputs.target_values,
         )
         pred_mean, pred_cov = model(

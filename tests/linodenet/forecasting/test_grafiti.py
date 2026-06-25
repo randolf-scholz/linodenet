@@ -75,7 +75,7 @@ class TestGrafiti(TestForecastingModel[Grafiti]):
         query_mask = torch.cat(
             [
                 torch.zeros_like(inputs.context_values, dtype=torch.bool),
-                inputs.query_mask.unsqueeze(dim=-1),
+                inputs.query_valid.unsqueeze(dim=-1),
             ],
             dim=-2,
         )
@@ -88,7 +88,7 @@ class TestGrafiti(TestForecastingModel[Grafiti]):
         predictions = forecasts[..., inputs.context_values.shape[-2] :, :]
 
         assert predictions.shape == inputs.target_values.shape
-        assert predictions[inputs.query_mask].isfinite().all()
+        assert predictions[inputs.query_valid].isfinite().all()
         return (predictions,)
 
     def loss(

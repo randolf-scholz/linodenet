@@ -67,7 +67,7 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
             context_values=inputs.context_values,
             context_mask=inputs.context_values.isfinite(),
             query_times=inputs.query_times,
-            query_mask=inputs.query_mask.unsqueeze(-1).expand_as(inputs.target_values),
+            query_mask=inputs.query_valid.unsqueeze(-1).expand_as(inputs.target_values),
             target_values=inputs.target_values,
         )
         assert request.target_values is not None
@@ -90,16 +90,16 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
         pred_mean = torch.full_like(inputs.target_values, nan)
         pred_logvar = torch.full_like(inputs.target_values, nan)
         pred_log_prob = inputs.target_values.new_full(inputs.query_times.shape, nan)
-        pred_mean[inputs.query_mask] = query_mean
-        pred_logvar[inputs.query_mask] = query_logvar
-        pred_log_prob[inputs.query_mask] = query_log_prob
+        pred_mean[inputs.query_valid] = query_mean
+        pred_logvar[inputs.query_valid] = query_logvar
+        pred_log_prob[inputs.query_valid] = query_log_prob
 
         assert pred_mean.shape == inputs.target_values.shape
         assert pred_logvar.shape == inputs.target_values.shape
         assert pred_log_prob.shape == inputs.query_times.shape
-        assert pred_mean[inputs.query_mask].isfinite().all()
-        assert pred_logvar[inputs.query_mask].isfinite().all()
-        assert pred_log_prob[inputs.query_mask].isfinite().all()
+        assert pred_mean[inputs.query_valid].isfinite().all()
+        assert pred_logvar[inputs.query_valid].isfinite().all()
+        assert pred_log_prob[inputs.query_valid].isfinite().all()
         return pred_mean, pred_logvar, pred_log_prob.unsqueeze(-1).expand_as(pred_mean)
 
     def loss(

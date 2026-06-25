@@ -404,16 +404,26 @@ class ProFITi(nn.Module):
     def _encode(
         self,
         *,
-        timestamps: Tensor,  # (..., $T), padded NaN
-        context_values: Tensor,  # (..., $T, D), padded NaN
-        context_mask: Tensor,  # (..., $T, D), bool
-        query_mask: Tensor,  # (..., $T, D), bool
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
     ) -> tuple[Tensor, Tensor]:  # (..., P, latent_dim), (..., P)
-        H = self.context_embedding(  # (..., P, latent_dim)
-            timestamps=timestamps.nan_to_num(0.0),
-            context_values=context_values,
-            context_mask=context_mask,
+        request = EventBatch.from_request(
+            query_times=query_times,
             query_mask=query_mask,
+            context_times=context_times,
+            context_mask=context_mask,
+            context_values=context_values,
+        )
+
+        H = self.context_embedding(  # (..., P, latent_dim)
+            # TODO: can we get rid of this nan_to_num?
+            timestamps=request.timestamps.nan_to_num(0.0),
+            context_values=request.context_values,
+            context_mask=request.context_mask,
+            query_mask=request.query_mask,
         )
 
         valid_mask = H.isfinite().all(dim=-1)  # (..., P)
@@ -422,13 +432,14 @@ class ProFITi(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (*S, ..., $T, D)
+        values: Tensor,  # (*S, ..., $K, F)
         /,
         *,
-        timestamps: Tensor,  # (..., $T), padded NaN
-        context_values: Tensor,  # (..., $T, D), padded NaN
-        context_mask: Tensor,  # (..., $T, D), bool
-        query_mask: Tensor,  # (..., $T, D), bool
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
     ) -> Tensor:  # (*S, ...)
         r"""Compute the joint log-likelihood of the target values under the model.
 
@@ -438,14 +449,20 @@ class ProFITi(nn.Module):
         as sample dims; all samples must share the same query mask (e.g. samples
         drawn by :meth:`sample_and_log_prob`).
         """
-        *shape, combined_size, D = values.shape
-        M = query_mask.broadcast_to(*shape, combined_size, D)  # (*S, ..., $T, D)
+        *shape, qry_size, qry_dim = values.shape  # shape = sample_shape + batch_shape
+        *_, ctx_size, ctx_dim = context_values.shape
 
+        M = query_mask.broadcast_to(*shape, qry_size, qry_dim)  # (*S, ..., $K, D)
         H, valid_mask = self._encode(  # (*S, ..., P, latent_dim), (*S, ..., P)
-            timestamps=timestamps.broadcast_to(*shape, combined_size),
-            context_values=context_values.broadcast_to(*shape, combined_size, D),
-            context_mask=context_mask.broadcast_to(*shape, combined_size, D),
-            query_mask=M,
+            query_times=query_times.broadcast_to(*shape, qry_size),
+            query_mask=query_mask.broadcast_to(*shape, qry_size, qry_dim),
+            context_times=context_times.broadcast_to(*shape, ctx_size),
+            context_mask=context_mask.broadcast_to(*shape, ctx_size, ctx_dim),
+            context_values=context_values.broadcast_to(*shape, ctx_size, ctx_dim),
+            # timestamps=timestamps.broadcast_to(*shape, combined_size),
+            # context_values=context_values.broadcast_to(*shape, combined_size, D),
+            # context_mask=context_mask.broadcast_to(*shape, combined_size, D),
+            # query_mask=M,
         )
 
         value_flat = values.new_full(H.shape[:-1], nan)  # (*S, ..., P)
@@ -459,19 +476,21 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        timestamps: Tensor,  # (..., $T), padded NaN
-        context_values: Tensor,  # (..., $T, D), padded NaN
-        context_mask: Tensor,  # (..., $T, D), bool
-        query_mask: Tensor,  # (..., $T, D), bool
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $T, D), (*S, ...)
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ...)
         # Shape legend: *S=sample, $T=combined steps, D=channels, P=packed targets
         sample_shape = (size,) if isinstance(size, int) else size
 
         H, valid_mask = self._encode(  # (..., P, latent_dim), (..., P)
-            timestamps=timestamps,
-            context_values=context_values,
-            context_mask=context_mask,
+            query_times=query_times,
             query_mask=query_mask,
+            context_times=context_times,
+            context_mask=context_mask,
+            context_values=context_values,
         )
 
         Z = torch.randn((*sample_shape, *H.shape[:-1]), dtype=H.dtype, device=H.device)
@@ -491,15 +510,17 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        timestamps: Tensor,  # (..., $T), padded NaN
-        context_values: Tensor,  # (..., $T, D), padded NaN
-        context_mask: Tensor,  # (..., $T, D), bool
-        query_mask: Tensor,  # (..., $T, D), bool
-    ) -> Tensor:  # (*S, ..., $T, D)
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+    ) -> Tensor:  # (*S, ..., $K, D)
         return self.sample_and_log_prob(
             size=size,
-            timestamps=timestamps,
-            context_values=context_values,
-            context_mask=context_mask,
+            query_times=query_times,
             query_mask=query_mask,
+            context_times=context_times,
+            context_mask=context_mask,
+            context_values=context_values,
         )[0]

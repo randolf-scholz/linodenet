@@ -306,10 +306,10 @@ class TestCRU(TestForecastingModel[CRU]):
         self, model: CRU, inputs: SequentialData, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return CRU predictions for sequential forecasting inputs."""
-        context_mask = inputs.context_mask.unsqueeze(-1).expand_as(
+        context_mask = inputs.context_valid.unsqueeze(-1).expand_as(
             inputs.context_values
         )
-        query_mask = inputs.query_mask.unsqueeze(-1).expand_as(inputs.target_values)
+        query_mask = inputs.query_valid.unsqueeze(-1).expand_as(inputs.target_values)
         request = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
@@ -339,15 +339,15 @@ class TestCRU(TestForecastingModel[CRU]):
         pred_log_prob = inputs.target_values.new_full(
             inputs.query_times.shape, torch.nan
         )
-        pred_mean[inputs.query_mask] = all_pred_means[has_query]
-        pred_var[inputs.query_mask] = all_pred_vars[has_query]
-        pred_log_prob[inputs.query_mask] = query_log_prob
+        pred_mean[inputs.query_valid] = all_pred_means[has_query]
+        pred_var[inputs.query_valid] = all_pred_vars[has_query]
+        pred_log_prob[inputs.query_valid] = query_log_prob
 
         assert pred_mean.shape == inputs.target_values.shape
         assert pred_var.shape == inputs.target_values.shape
-        assert pred_mean[inputs.query_mask].isfinite().all()
-        assert pred_var[inputs.query_mask].isfinite().all()
-        assert pred_log_prob[inputs.query_mask].isfinite().all()
+        assert pred_mean[inputs.query_valid].isfinite().all()
+        assert pred_var[inputs.query_valid].isfinite().all()
+        assert pred_log_prob[inputs.query_valid].isfinite().all()
         return pred_mean, pred_var, pred_log_prob.unsqueeze(-1).expand_as(pred_mean)
 
     def loss(

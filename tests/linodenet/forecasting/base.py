@@ -21,7 +21,7 @@ class SequentialData(NamedTuple):
     query_lengths: Tensor
 
     @property
-    def context_mask(self) -> Tensor:
+    def context_valid(self) -> Tensor:  # (..., $N)
         r"""Boolean mask for valid context sequence entries."""
         return (
             torch.arange(
@@ -31,12 +31,22 @@ class SequentialData(NamedTuple):
         )
 
     @property
-    def query_mask(self) -> Tensor:
+    def context_mask(self) -> Tensor:  # (..., $N, D)
+        r"""Boolean mask for valid context sequence entries."""
+        return self.context_values.isfinite()
+
+    @property
+    def query_valid(self) -> Tensor:  # (..., $K)
         r"""Boolean mask for valid query sequence entries."""
         return (
             torch.arange(self.query_times.shape[-1], device=self.query_lengths.device)
             < self.query_lengths[..., None]
         )
+
+    @property
+    def query_mask(self) -> Tensor:  # (..., $K, D)
+        r"""Boolean mask for valid query sequence entries."""
+        return self.target_values.isfinite()
 
     @classmethod
     def new_sample(
@@ -363,7 +373,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             ):
                 prediction[k : k + 1, :query_length] = single_prediction
 
-        query_mask = data.query_mask
+        query_mask = data.query_valid
         for prediction, expected in zip(
             batched_predictions,
             expected_predictions,
@@ -450,7 +460,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         predictions = self.forecast(model, data)
         padded_predictions = self.forecast(model, padded_data)
 
-        query_mask = data.query_mask
+        query_mask = data.query_valid
         for prediction, padded_prediction in zip(
             predictions,
             padded_predictions,

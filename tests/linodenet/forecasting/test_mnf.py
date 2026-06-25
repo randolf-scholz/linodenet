@@ -66,7 +66,7 @@ class TestMNF(TestForecastingModel[MarginalizableNormalizingFlow]):
         independently, ignoring temporal context.
         """
         target_values = inputs.target_values  # (*batch_shape, T, D)
-        query_mask = inputs.query_mask  # (*batch_shape, T)
+        query_mask = inputs.query_valid  # (*batch_shape, T)
         batch_shape = target_values.shape[:-2]
         T = target_values.shape[-2]
         D = target_values.shape[-1]

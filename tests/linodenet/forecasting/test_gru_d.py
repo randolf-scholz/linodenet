@@ -60,7 +60,7 @@ class TestGRU_D(TestForecastingModel[GRU_D]):
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GRU-D predictions for sequential forecasting inputs."""
-        query_mask_nd = inputs.query_mask.unsqueeze(-1).expand_as(inputs.target_values)
+        query_mask_nd = inputs.query_valid.unsqueeze(-1).expand_as(inputs.target_values)
         dense = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
@@ -80,11 +80,11 @@ class TestGRU_D(TestForecastingModel[GRU_D]):
 
         query_steps = dense.query_mask.any(dim=-1)  # (..., N+K)
         pred = torch.full_like(inputs.target_values, nan)
-        pred[inputs.query_mask] = combined_pred[query_steps]
+        pred[inputs.query_valid] = combined_pred[query_steps]
 
         assert pred.shape == inputs.target_values.shape
-        assert pred[inputs.query_mask].isfinite().all()
-        assert pred[~inputs.query_mask].isnan().all()
+        assert pred[inputs.query_valid].isfinite().all()
+        assert pred[~inputs.query_valid].isnan().all()
         return (pred,)
 
     def loss(
