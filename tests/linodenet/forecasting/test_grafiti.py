@@ -23,7 +23,7 @@ class GrafitiTestConfig(NamedTuple):
     num_heads: int
 
 
-class TestModel(TestForecastingModel[Grafiti]):
+class TestGrafiti(TestForecastingModel[Grafiti]):
     r"""Shared forecasting-model tests for GraFITi."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
@@ -79,9 +79,9 @@ class TestModel(TestForecastingModel[Grafiti]):
             ],
             dim=-2,
         )
-        forecasts = model(
-            time_points,
-            context_values,
+        forecasts = model.forward(
+            timestamps=time_points,
+            context_values=context_values,
             context_mask=context_mask,
             query_mask=query_mask,
         )
@@ -188,9 +188,9 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
     )
     combined = args.to_combined()
 
-    expected = model(
-        combined.times,
-        combined.context_values,
+    expected = model.forward(
+        timestamps=combined.times,
+        context_values=combined.context_values,
         context_mask=combined.context_mask,
         query_mask=combined.query_mask,
     )
@@ -222,17 +222,17 @@ def test_grafiti_batched_forward_allows_missing_context_values() -> None:
         [[False, False, False], [False, False, False], [False,  True, False], [False, False,  True]],
     ])  # fmt: skip
 
-    actual = model(
-        time_points,
-        context_values,
+    actual = model.forward(
+        timestamps=time_points,
+        context_values=context_values,
         context_mask=context_values.isfinite(),
         query_mask=target_mask,
     )
     expected = actual.new_full(actual.shape, nan)
     for k in range(time_points.shape[0]):
-        output = model(
-            time_points[k],
-            context_values[k],
+        output = model.forward(
+            timestamps=time_points[k],
+            context_values=context_values[k],
             context_mask=context_values[k].isfinite(),
             query_mask=target_mask[k],
         )

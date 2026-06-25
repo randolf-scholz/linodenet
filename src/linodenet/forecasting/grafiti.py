@@ -14,6 +14,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nan, nn
 
+from .utils import EventBatch
+
 
 class MAB(nn.Module):
     r"""Multi-head attention block with configurable hidden dimension."""
@@ -247,24 +249,21 @@ class Grafiti(nn.Module):
         channel_index = torch.arange(num_channels, device=device)  # (D)
 
         time_edge_mask = (  # (..., T, E)
-            edge_mask.unsqueeze(dim=-2)  # (..., 1, E)
+            edge_mask[..., None, :]  # (..., 1, E)
             # (..., 1, E) == (..., T, 1) -> (..., T, E)
-            & (edge_time_indices.unsqueeze(dim=-2) == time_index.unsqueeze(dim=-1))
+            & (edge_time_indices[..., None, :] == time_index[..., :, None])
         )
         channel_edge_mask = (  # (..., D, E)
-            edge_mask.unsqueeze(dim=-2)  # (..., 1, E)
+            edge_mask[..., None, :]  # (..., 1, E)
             # (..., 1, E) == (..., D, 1) -> (..., D, E)
-            & (
-                edge_channel_indices.unsqueeze(dim=-2)
-                == channel_index.unsqueeze(dim=-1)
-            )
+            & (edge_channel_indices[..., None, :] == channel_index[..., :, None])
         )
         return time_edge_mask, channel_edge_mask  # (..., T, E), (..., D, E)
 
     def _encode_features(
         self,
-        *,
         t: Tensor,  # (..., T)
+        *,
         num_channels: int,
         edge_values: Tensor,  # (..., E)
         edge_target_mask: Tensor,  # (..., E)
@@ -285,7 +284,7 @@ class Grafiti(nn.Module):
         *batch_shape, _ = t.shape
 
         # encode time
-        t_encoded = torch.sin(self.time_init(t.unsqueeze(dim=-1)))  # (..., T, M)
+        t_encoded = torch.sin(self.time_init(t[..., None]))  # (..., T, M)
 
         # encode channels
         channel_indices = torch.arange(num_channels, device=t.device)  # (D)
@@ -303,7 +302,7 @@ class Grafiti(nn.Module):
             dim=-1,
         )
         e_encoded = torch.where(  # (..., E, M)
-            edge_mask.unsqueeze(dim=-1),
+            edge_mask[..., None],
             torch.relu(self.edge_init(edge_input)),
             0.0,
         )
@@ -429,10 +428,10 @@ class Grafiti(nn.Module):
             strict=True,
         ):
             time_emb_at_edges = torch.take_along_dim(  # (..., O+Q, M)
-                t_emb, edge_time_indices.unsqueeze(dim=-1), dim=-2
+                t_emb, edge_time_indices[..., None], dim=-2
             )
             channel_emb_at_edges = torch.take_along_dim(  # (..., O+Q, M)
-                c_emb, edge_channel_indices.unsqueeze(dim=-1), dim=-2
+                c_emb, edge_channel_indices[..., None], dim=-2
             )
 
             channel_context = torch.cat(
@@ -460,7 +459,7 @@ class Grafiti(nn.Module):
                 dim=-1,
             )
             edge_emb = torch.where(  # (..., O+Q, M)
-                valid_edge_mask.unsqueeze(dim=-1),
+                valid_edge_mask[..., None],
                 torch.relu(edge_emb + edge_nn(edge_update)),
                 0.0,
             )
@@ -469,18 +468,42 @@ class Grafiti(nn.Module):
             edge_emb, target_mask=edge_target_mask
         )  # (..., K, M)
 
+    def predict(
+        self,
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        *,
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+    ) -> Tensor:  # (..., $K, F)
+        combined = EventBatch.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+        result = self.forward(
+            timestamps=combined.timestamps,
+            query_mask=combined.query_mask,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+        )
+        return result[combined.query_indices]
+
     def forward(
         self,
-        time_points: Tensor,  # (..., T), float, padded NaN
-        context_values: Tensor,  # (..., T, D), float, padded Nan, sparse
         *,
-        context_mask: Tensor,  # (..., T, D), bool, padded False
-        query_mask: Tensor,  # (..., T, D), bool, padded False
-    ) -> Tensor:  # (..., T, D) if forecast, (..., K, M) if embeddings
+        timestamps: Tensor,  # (..., $T), float, padded NaN
+        query_mask: Tensor,  # (..., $T, D), bool, padded False
+        context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
+        context_mask: Tensor,  # (..., $T, D), bool, padded False
+    ) -> Tensor:  # (..., $T, D) if forecast, (..., $K, M) if embeddings
         r"""Process observed values and target queries with GraFITi.
 
         Args:
-            time_points: Times for observed and target entries with shape ``(..., time)``.
+            timestamps: Times for observed and target entries with shape ``(..., time)``.
             context_values: Observed values with shape ``(..., time, dim)``.
             context_mask: Boolean context observation mask with shape ``(..., time, dim)``.
             query_mask: Boolean target-query mask with shape ``(..., time, dim)``.
@@ -503,7 +526,7 @@ class Grafiti(nn.Module):
         assert torch.equal(context_values.isfinite(), context_mask)
 
         *batch_shape, num_steps, num_channels = context_values.shape
-        device = time_points.device
+        device = timestamps.device
 
         dense_edge_mask = context_mask | query_mask  # (..., T, D)
 
@@ -541,7 +564,7 @@ class Grafiti(nn.Module):
         )
         h_edge, h_time, h_channel = (  # (..., E, M), (..., T, M), (..., D, M)
             self._encode_features(
-                t=time_points,
+                t=timestamps,
                 num_channels=num_channels,
                 edge_values=edge_values,
                 edge_target_mask=edge_target_mask,
@@ -556,10 +579,10 @@ class Grafiti(nn.Module):
             strict=True,
         ):
             h_t_at_edge = torch.take_along_dim(  # (..., E, M)
-                h_time, edge_t_indices.unsqueeze(dim=-1), dim=-2
+                h_time, edge_t_indices[..., None], dim=-2
             )
             h_c_at_edge = torch.take_along_dim(  # (..., E, M)
-                h_channel, edge_c_indices.unsqueeze(dim=-1), dim=-2
+                h_channel, edge_c_indices[..., None], dim=-2
             )
 
             time_context = torch.cat([h_c_at_edge, h_edge], dim=-1)  # (..., E, 2M)
@@ -583,7 +606,7 @@ class Grafiti(nn.Module):
                 dim=-1,
             )
             h_edge = torch.where(  # (..., E, M)
-                edge_mask.unsqueeze(dim=-1),
+                edge_mask[..., None],
                 torch.relu(h_edge + edge_nn(edge_context)),
                 0.0,
             )
@@ -594,10 +617,10 @@ class Grafiti(nn.Module):
             )
 
         h_t_at_edge = torch.take_along_dim(  # (..., E, M)
-            h_time, edge_t_indices.unsqueeze(dim=-1), dim=-2
+            h_time, edge_t_indices[..., None], dim=-2
         )
         h_c_at_edge = torch.take_along_dim(  # (..., E, M)
-            h_channel, edge_c_indices.unsqueeze(dim=-1), dim=-2
+            h_channel, edge_c_indices[..., None], dim=-2
         )
         y_at_edge = self.output(  # (..., E)
             torch.cat([h_edge, h_t_at_edge, h_c_at_edge], dim=-1)
