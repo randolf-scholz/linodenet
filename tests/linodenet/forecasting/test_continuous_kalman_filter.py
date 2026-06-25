@@ -203,7 +203,7 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
             query_mask=inputs.query_valid.unsqueeze(-1).expand_as(inputs.target_values),
             target_values=inputs.target_values,
         )
-        pred_mean, pred_cov = model(
+        pred_mean, pred_cov = model.predict(
             context_times=request.context_times,
             context_values=request.context_values,
             context_mask=request.context_mask,
@@ -251,7 +251,7 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
 
         ctx_steps = context_mask.any(dim=-1)  # [F, F, F]
         q_steps = query_mask.any(dim=-1)  # [T, T, T]
-        model(
+        model.predict(
             query_times=times[q_steps],
             query_mask=query_mask[q_steps],
             context_times=times[ctx_steps],
@@ -283,14 +283,14 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         query_mask = torch.ones_like(values, dtype=torch.bool)
 
         # All steps are both context and query.
-        default_mean, default_cov = model(
+        default_mean, default_cov = model.predict(
             query_times=times,
             query_mask=query_mask,
             context_times=times,
             context_values=values,
             context_mask=context_mask,
         )
-        explicit_mean, explicit_cov = model(
+        explicit_mean, explicit_cov = model.predict(
             query_times=times,
             query_mask=query_mask,
             context_times=times,
@@ -345,7 +345,7 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
             context_values=ctx_values,
             context_mask=ctx_mask,
         )
-        mean, cov = model(
+        mean, cov = model.predict(
             query_times=query_times,
             query_mask=qry_mask,
             context_times=context_times,
