@@ -198,9 +198,6 @@ class EventBatch(NamedTuple):
         M = query_mask
         Y = target_values
 
-        time_seq_dim = -1 if batch_first else 0
-        mask_seq_dim = -2 if batch_first else 0
-
         if batch_first:
             *batch_shape, ctx_size, ctx_dim = X.shape
             *_, q_size, q_dim = M.shape
@@ -212,6 +209,9 @@ class EventBatch(NamedTuple):
             ctx_pad_shape = (q_size, *batch_shape, ctx_dim)
             qry_pad_shape = (ctx_size, *batch_shape, q_dim)
 
+        time_seq_dim = -1 if batch_first else 0
+        mask_seq_dim = -2 if batch_first else 0
+
         times = torch.cat([T, Q], dim=time_seq_dim)
         permutation = torch.argsort(
             times.nan_to_num(nan=torch.inf),
@@ -221,29 +221,21 @@ class EventBatch(NamedTuple):
 
         # inv_perm[j] = sorted position of original index j
         inv_perm = torch.argsort(permutation.squeeze(-1), dim=time_seq_dim, stable=True)
+        batch_idx = tuple(
+            torch.arange(size, device=times.device)
+            .reshape(
+                *(size if j == i else 1 for j in range(len(batch_shape))),
+            )
+            .unsqueeze(time_seq_dim)
+            for i, size in enumerate(batch_shape)
+        )
 
         if batch_first:
             time_idx = inv_perm[..., ctx_size:]  # (*batch_shape, K)
-            query_indices: tuple[Tensor, ...] = (
-                *(
-                    torch.arange(size, device=time_idx.device).reshape(
-                        *(size if j == i else 1 for j in range(len(batch_shape))), 1
-                    )
-                    for i, size in enumerate(batch_shape)
-                ),
-                time_idx,
-            )
+            query_indices: tuple[Tensor, ...] = (*batch_idx, time_idx)
         else:
             time_idx = inv_perm[ctx_size:]  # (K, *batch_shape)
-            query_indices = (
-                time_idx,
-                *(
-                    torch.arange(size, device=time_idx.device).reshape(
-                        1, *(size if j == i else 1 for j in range(len(batch_shape)))
-                    )
-                    for i, size in enumerate(batch_shape)
-                ),
-            )
+            query_indices = (time_idx, *batch_idx)
 
         return EventBatch(
             timestamps=times.take_along_dim(permutation.squeeze(-1), dim=time_seq_dim),
