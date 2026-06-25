@@ -172,7 +172,7 @@ class TestMHA:
             ]
         )
 
-        masked = model(q, k, v, mask=mask)
+        masked = model(q, k, v, key_mask=mask)
         expected = masked.new_empty(masked.shape)
         for idx in range(q.shape[0]):
             expected[idx] = model(q[idx], k[idx, mask[idx]], v[idx, mask[idx]])
@@ -194,6 +194,25 @@ class TestMHA:
         actual_finite = actual.isfinite().all(dim=-3).all(dim=-1)
 
         assert torch.equal(actual_finite, expected_finite)
+
+    def test_nan_padded_queries_nansum_backward_keeps_parameter_gradients_finite(
+        self,
+    ) -> None:
+        r"""NaN-padded query rows should not poison attention parameter gradients."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        q, k, v = self.make_inputs((2,))
+        q = q.requires_grad_()
+        k = k.requires_grad_()
+        v = v.requires_grad_()
+        q.data[0, 2:] = torch.nan
+
+        actual = model(q, k, v)
+        actual.nansum().backward()
+
+        for parameter in model.parameters():
+            assert parameter.grad is not None
+            assert parameter.grad.isfinite().all()
 
     def test_backward_produces_finite_gradients(
         self, batch_shape: tuple[int, ...]

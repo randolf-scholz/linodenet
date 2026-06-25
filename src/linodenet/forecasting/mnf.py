@@ -1377,27 +1377,38 @@ class MultiHeadAttention(nn.Module):
         v: Tensor,  # (..., $X, d_v)
         /,
         *,
-        mask: Tensor | None = None,  # Bool[(..., $X)]
+        query_mask: Tensor | None = None,  # Bool[(..., $Q)]
+        key_mask: Tensor | None = None,  # Bool[(..., $X)]
     ) -> Tensor:  # (..., H, $Q, d_out)
-        q = self.q_proj(q)  # (..., $Q, H×d_h)
-        k = self.k_proj(k)  # (..., $X, H×d_h)
-        v = self.v_proj(v)  # (..., $X, H×d_out)
+        query_mask = (
+            # broadcast (..., $Q) -> (..., H, $Q, d_out)
+            query_mask[..., None, :, None]
+            if query_mask is not None
+            else ~q.isnan().any(dim=-1).unsqueeze(-2).unsqueeze(-1)
+        )
+        key_mask = (
+            # broadcast (..., $X) -> (..., H, $Q, $X)
+            key_mask[..., None, None, :]
+            if key_mask is not None
+            else ~k.isnan().any(dim=-1).unsqueeze(-2).unsqueeze(-2)
+        )
+
+        q = self.q_proj(q.nan_to_num(0.0))  # (..., $Q, H×d_h)
+        k = self.k_proj(k.nan_to_num(0.0))  # (..., $X, H×d_h)
+        v = self.v_proj(v.nan_to_num(0.0))  # (..., $X, H×d_out)
 
         q = q.unflatten(-1, (self.num_heads, self.dim_hidden))  # (..., $Q, H, d_h)
         k = k.unflatten(-1, (self.num_heads, self.dim_hidden))  # (..., $X, H, d_h)
         v = v.unflatten(-1, (self.num_heads, self.dim_output))  # (..., $X, H, d_out)
 
-        if mask is not None:
-            # broadcast mask to (..., H, $Q, $X)
-            mask = mask[..., None, None, :]  # (..., 1, 1, $X)
-
-        return F.scaled_dot_product_attention(  # (..., H, $Q, d_out)
-            q.swapaxes(-2, -3),
-            k.swapaxes(-2, -3),
-            v.swapaxes(-2, -3),
-            attn_mask=mask,
+        r = F.scaled_dot_product_attention(  # (..., H, $Q, d_out)
+            q.swapaxes(-2, -3),  # (..., H, $Q, d_h)
+            k.swapaxes(-2, -3),  # (..., H, $X, d_h)
+            v.swapaxes(-2, -3),  # (..., H, $X, d_out)
+            attn_mask=key_mask,  # (..., H, $Q, $X)
             dropout_p=0.0,
         )
+        return torch.where(query_mask, r, nan)
 
 
 class SeparableEncoder(nn.Module):
