@@ -1248,7 +1248,9 @@ class MixtureWeightsModel(nn.Module):
         self.dim_input = dim_input
         self.dim_hidden = dim_hidden
 
-        self.mixture_queries = nn.Parameter(torch.empty(num_components, dim_hidden))
+        self.mixture_queries = nn.Parameter(  # (C, M)
+            torch.empty(num_components, dim_hidden),
+        )
         nn.init.xavier_normal_(self.mixture_queries)
 
         # Each learned query corresponds to one mixture component; ``num_heads``
@@ -1288,9 +1290,13 @@ class MixtureWeightsModel(nn.Module):
         embeddings = torch.where(valid_mask[..., None], embeddings, 0.0)
         flat_embeddings = embeddings.reshape(-1, seq_len, dim)
         flat_valid_mask = valid_mask.reshape(-1, seq_len)
+        queries = self.mixture_queries.expand(  # (B, C, H)
+            flat_embeddings.shape[0],
+            self.num_components,
+            self.dim_hidden,
+        )
 
-        queries = self.mixture_queries.expand(flat_embeddings.shape[0], -1, -1)
-        attended, _ = self.attention(
+        attended, _ = self.attention(  # (B, C, H)
             queries,
             flat_embeddings,
             flat_embeddings,
@@ -1298,8 +1304,8 @@ class MixtureWeightsModel(nn.Module):
             need_weights=False,
         )
 
-        logits = self.output_proj(attended).squeeze(dim=-1)
-        weights = logits.softmax(dim=-1)
+        logits = self.output_proj(attended).squeeze(dim=-1)  # (B, C)
+        weights = logits.softmax(dim=-1)  # (B, C)
         return weights.reshape(*batch_shape, self.num_components)
 
 
