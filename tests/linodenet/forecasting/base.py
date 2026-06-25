@@ -456,13 +456,11 @@ class TestForecastingModel[M: nn.Module](ABC):
             padded_predictions,
             strict=True,
         ):
-            query_axis = prediction.ndim - len(output_shape) - 1
-            index = [slice(None)] * padded_prediction.ndim
-            index[query_axis] = slice(None, query_size)
-            padded_window = padded_prediction[tuple(index)]
+            query_axis = query_mask.ndim - 1
             mask = query_mask
             while mask.ndim < prediction.ndim:
                 mask = mask.unsqueeze(dim=-1)
+            padded_window = padded_prediction.narrow(query_axis, 0, query_size)
             mask = mask.expand_as(prediction)
             assert_close(
                 prediction.masked_fill(~mask, torch.nan),
