@@ -1,15 +1,78 @@
 r"""Tests for last-value forecasting."""
 
 from math import nan
+from typing import ClassVar
 
 import matplotlib.pyplot as plt
+import pytest
 import torch
+from torch.nn import functional as F
 from torch.testing import assert_close
 
 from linodenet.forecasting import LastValue
 from tests.testing import PROJECT
 
+from .base import SequentialData, TestForecastingModel
+
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
+
+
+class TestLastValue(TestForecastingModel[LastValue]):
+    r"""Shared forecasting-model tests for LastValue."""
+
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (4,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+
+    @pytest.fixture(params=[False, True], ids=["no_missingness", "input_missingness"])
+    def input_missingness(self, request: pytest.FixtureRequest) -> bool:
+        r"""Whether to randomly mask half of the context values with NaN."""
+        return request.param
+
+    def make_model(self, model_config: object, /) -> LastValue:
+        r"""Instantiate the LastValue model under test."""
+        del model_config
+        return LastValue()
+
+    def forecast(
+        self,
+        model: LastValue,
+        inputs: SequentialData,
+        /,
+    ) -> tuple[torch.Tensor, ...]:
+        r"""Return LastValue predictions for sequential forecasting inputs."""
+        initial_state = inputs.context_values.new_zeros(
+            inputs.context_values.shape[:-2] + (1,) + inputs.context_values.shape[-1:]
+        )
+        pred = model(
+            query_times=inputs.query_times,
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            context_mask=inputs.context_values.isfinite(),
+            initial_state=initial_state,
+        )
+
+        assert pred.shape == inputs.target_values.shape
+        assert pred[inputs.query_valid].isfinite().all()
+        assert pred[~inputs.query_valid].isnan().all()
+        return (pred,)
+
+    def loss(
+        self,
+        model: LastValue,
+        predictions: tuple[torch.Tensor, ...],
+        targets: torch.Tensor,
+    ) -> torch.Tensor:
+        r"""Return mean squared error for LastValue predictions."""
+        del model
+        (forecast,) = predictions
+        mask = targets.isfinite()
+        return F.mse_loss(forecast[mask], targets[mask])
+
+    def test_training_unbatched(self, *_arg: object, **_kwargs: object) -> None:
+        r"""LastValue is stateless and has no trainable parameters."""
+
+    def test_training_batched(self, *_arg: object, **_kwargs: object) -> None:
+        r"""LastValue is stateless and has no trainable parameters."""
 
 
 def test_last_value_carries_features_independently() -> None:
