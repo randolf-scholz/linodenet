@@ -1278,11 +1278,11 @@ class Moses(nn.Module):
 
     def _encode(
         self,
-        time_points: Tensor,  # (..., T)
-        context_values: Tensor,  # (..., T, D)
         *,
-        context_mask: Tensor,  # (..., T, D), bool
-        query_mask: Tensor,  # (..., T, D), bool
+        time_points: Tensor,  # (..., $T)
+        context_values: Tensor,  # (..., $T, D)
+        context_mask: Tensor,  # (..., $T, D), bool
+        query_mask: Tensor,  # (..., $T, D), bool
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         r"""Run encoder and compute per-query mixture parameters.
 
@@ -1303,14 +1303,50 @@ class Moses(nn.Module):
         sigma = F.softplus(self.log_std) + 1e-6  # (C,)
         return H, log_w, mu, sigma
 
+    def _predict(
+        self,
+        *,
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        r"""Run encoder and compute per-query mixture parameters.
+
+        Returns:
+            H: Per-query embeddings ``(..., K, M)``.
+            log_w: Per-query log mixture weights ``(..., K, C)``.
+            mu: Per-query Gaussian means ``(..., K, C)``.
+            sigma: Shared std per component ``(C,)``.
+        """
+        request = EventBatch.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+        H = self.encoder.forward(  # (..., K, M)
+            timestamps=request.timestamps,
+            context_values=request.context_values,
+            context_mask=request.context_mask,
+            query_mask=request.query_mask,
+        )
+        log_w = self.mixture_proj(H).log_softmax(dim=-1)  # (..., K, C)
+        mu = self.mean_proj(H)  # (..., K, C)
+        sigma = F.softplus(self.log_std) + 1e-6  # (C,)
+        return H, log_w, mu, sigma
+
     def log_prob(
         self,
-        values: Tensor,  # (..., T, D)
+        values: Tensor,  # (..., $T, D)
         *,
-        time_points: Tensor,  # (..., T)
-        context_values: Tensor,  # (..., T, D)
-        context_mask: Tensor,  # (..., T, D), bool
-        query_mask: Tensor,  # (..., T, D), bool
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
     ) -> Tensor:  # (...,)
         r"""Compute the joint log-likelihood of the target values.
 
@@ -1320,21 +1356,23 @@ class Moses(nn.Module):
         Args:
             values: Observed target values; finite at every ``True`` position
                 in ``query_mask``.
-            time_points: Sorted time stamps for all time steps.
+            query_times: Sorted time stamps for all query time steps.
+            query_mask: Boolean mask selecting query (target) positions.
+            context_times: Sorted time stamps for all context time steps.
             context_values: Context observations; ``NaN`` at unobserved positions.
             context_mask: Boolean mask selecting observed context positions.
-            query_mask: Boolean mask selecting query (target) positions.
 
         Returns:
             Joint log-likelihood with shape ``(...,)``.
         """
         *batch_shape, _, _ = context_values.shape
 
-        H, log_w, mu, sigma = self._encode(
-            time_points,
-            context_values,
-            context_mask=context_mask,
+        H, log_w, mu, sigma = self._predict(
+            query_times=query_times,
             query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
         )
         valid_mask = H.isfinite().all(dim=-1)  # (..., K)
         max_K = H.shape[-2]
@@ -1371,19 +1409,21 @@ class Moses(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        time_points: Tensor,  # (..., T)
-        context_values: Tensor,  # (..., T, D)
-        context_mask: Tensor,  # (..., T, D), bool
-        query_mask: Tensor,  # (..., T, D), bool
-    ) -> Tensor:  # (*S, ..., T, D)
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+    ) -> Tensor:  # (*S, ..., $K, D)
         r"""Sample from the conditional marginal distribution at each query position.
 
         Args:
             size: Number of samples (leading sample dimensions ``*S``).
-            time_points: Sorted time stamps for all time steps.
+            query_times: Sorted time stamps for all query time steps.
+            query_mask: Boolean mask selecting query (target) positions.
+            context_times: Sorted time stamps for all context time steps.
             context_values: Context observations; ``NaN`` at unobserved positions.
             context_mask: Boolean mask selecting observed context positions.
-            query_mask: Boolean mask selecting query (target) positions.
 
         Returns:
             Samples with shape ``(*S, ..., T, D)``, ``NaN`` at non-query positions.
@@ -1391,11 +1431,12 @@ class Moses(nn.Module):
         *batch_shape, num_steps, num_channels = context_values.shape
         sample_shape = (size,) if isinstance(size, int) else tuple(size)
 
-        H, log_w, mu, sigma = self._encode(
-            time_points,
-            context_values,
-            context_mask=context_mask,
+        H, log_w, mu, sigma = self._predict(
+            query_times=query_times,
             query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
         )
         valid_mask = H.isfinite().all(dim=-1)  # (..., K)
         max_K = H.shape[-2]
