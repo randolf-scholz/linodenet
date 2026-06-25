@@ -627,9 +627,9 @@ class GRU_ODE_Bayes(nn.Module):
 
     def predict(
         self,
+        *,
         query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
         query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        *,
         context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[(..., N, D)], padded False
         context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse

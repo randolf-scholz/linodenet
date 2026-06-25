@@ -290,8 +290,8 @@ class TestGRUODEBayes:
         combined_step_mask = (combined.context_mask | combined.query_mask).any(dim=-1)
 
         posterior_mean, posterior_logvar = model.predict(
-            query_times,
-            query_mask,
+            query_times=query_times,
+            query_mask=query_mask,
             context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,

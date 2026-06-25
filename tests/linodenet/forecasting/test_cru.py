@@ -411,9 +411,9 @@ class TestCRU(TestForecastingModel[CRU]):
         query_times = times[q_steps]
 
         with pytest.raises((AssertionError, ValueError)):
-            model(
-                query_times,
-                query_mask[q_steps],
+            model.predict(
+                query_times=query_times,
+                query_mask=query_mask[q_steps],
                 context_times=context_times,
                 context_values=context_values[ctx_steps],
                 context_mask=context_mask[ctx_steps],
@@ -438,9 +438,9 @@ class TestCRU(TestForecastingModel[CRU]):
         query_times = times[q_steps]  # [2.0]
 
         with pytest.raises((AssertionError, ValueError)):
-            model(
-                query_times,
-                query_mask[q_steps],
+            model.predict(
+                query_times=query_times,
+                query_mask=query_mask[q_steps],
                 context_times=context_times,
                 context_values=context_values[ctx_steps],
                 context_mask=context_mask[ctx_steps],
