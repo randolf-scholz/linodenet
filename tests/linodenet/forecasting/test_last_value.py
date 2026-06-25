@@ -27,7 +27,7 @@ def test_last_value_carries_features_independently() -> None:
     )
 
     actual = model(
-        query_times,
+        query_times=query_times,
         context_times=context_times,
         context_values=context_values,
         context_mask=context_values.isfinite(),
@@ -57,7 +57,7 @@ def test_last_value_supports_batched_inputs() -> None:
     )
 
     actual = model(
-        query_times,
+        query_times=query_times,
         context_times=context_times,
         context_values=context_values,
         context_mask=context_values.isfinite(),
@@ -86,7 +86,7 @@ def test_last_value_uses_initial_state_before_observations() -> None:
     initial_state = torch.tensor([0.0, -1.0])
 
     actual = model(
-        query_times,
+        query_times=query_times,
         context_times=context_times,
         context_values=context_values,
         context_mask=context_values.isfinite(),
@@ -112,7 +112,7 @@ def test_last_value_defaults_to_nan_initial_state() -> None:
     context_values = torch.tensor([[1.0, nan]])
 
     actual = model(
-        query_times,
+        query_times=query_times,
         context_times=context_times,
         context_values=context_values,
         context_mask=context_values.isfinite(),
@@ -143,7 +143,7 @@ def test_last_value_supports_trailing_nan_padding() -> None:
     initial_state = torch.tensor([0.0, -1.0])
 
     actual = model(
-        query_times,
+        query_times=query_times,
         context_times=context_times,
         context_values=context_values,
         context_mask=context_values.isfinite(),
@@ -187,7 +187,7 @@ def test_last_value_visual_forecast() -> None:
 
     query_times = torch.linspace(0.0, horizon, 1000)
     forecast = model(
-        query_times,
+        query_times=query_times,
         context_times=context_times,
         context_values=context_values,
         context_mask=context_values.isfinite(),

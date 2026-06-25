@@ -16,8 +16,8 @@ class LastValue(nn.Module):
 
     def forward(
         self,
-        query_times: Tensor,  # (..., $K)
         *,
+        query_times: Tensor,  # (..., $K)
         context_times: Tensor,  # (..., $N)        context_mask: Tensor,  # (..., $N, D), bool
         context_mask: Tensor,  # (..., $N, D), bool
         context_values: Tensor,  # (..., $N, D)
