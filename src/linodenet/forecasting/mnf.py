@@ -1351,6 +1351,51 @@ class ChannelEmbedding(nn.Module):
         return torch.where(valid[..., None], e, nan)
 
 
+class MultiHeadAttention(nn.Module):
+    def __init__(
+        self,
+        q_dim: int,
+        k_dim: int,
+        v_dim: int,
+        *,
+        dim_hidden: int,
+        dim_output: int,
+        num_heads: int,
+    ) -> None:
+        super().__init__()
+        self.dim_hidden = dim_hidden
+        self.dim_output = dim_output
+        self.num_heads = num_heads
+        self.q_proj = nn.Linear(q_dim, num_heads * dim_hidden)
+        self.k_proj = nn.Linear(k_dim, num_heads * dim_hidden)
+        self.v_proj = nn.Linear(v_dim, num_heads * dim_output)
+
+    def forward(
+        self,
+        q: Tensor,  # (..., $Q, d_q)
+        k: Tensor,  # (..., $X, d_k)
+        v: Tensor,  # (..., $X, d_v)
+        /,
+        *,
+        mask: Tensor | None = None,  # Bool[(..., $X)]
+    ) -> Tensor:  # (..., H, $Q, d_out)
+        q = self.q_proj(q)  # (..., $Q, H×d_h)
+        k = self.k_proj(k)  # (..., $X, H×d_h)
+        v = self.v_proj(v)  # (..., $X, H×d_out)
+
+        q = q.unflatten(-1, (self.num_heads, self.dim_hidden))  # (..., $Q, H, d_h)
+        k = k.unflatten(-1, (self.num_heads, self.dim_hidden))  # (..., $X, H, d_h)
+        v = v.unflatten(-1, (self.num_heads, self.dim_output))  # (..., $X, H, d_out)
+
+        return F.scaled_dot_product_attention(
+            q.swapaxes(-2, -3),
+            k.swapaxes(-2, -3),
+            v.swapaxes(-2, -3),
+            attn_mask=mask,
+            dropout_p=0.0,
+        )
+
+
 class SeparableEncoder(nn.Module):
     r"""Implements the encoder used by moses.
 
