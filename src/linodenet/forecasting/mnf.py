@@ -1343,8 +1343,12 @@ class ChannelEmbedding(nn.Module):
         super().__init__()
         self.num_channels = num_channels
 
+    # (...) -> (..., C)
     def forward(self, c: Tensor, /) -> Tensor:
-        return F.one_hot(c, num_classes=self.num_channels).float()
+        valid = c >= 0  # invalid values marked with -1
+        c = torch.where(valid, c, 0)
+        e = F.one_hot(c, num_classes=self.num_channels).float()
+        return torch.where(valid[..., None], e, nan)
 
 
 class SeparableEncoder(nn.Module):
@@ -1373,7 +1377,8 @@ class SeparableEncoder(nn.Module):
         self.num_heads = num_heads
         self.num_channels = num_channels
         self.num_frequencies = num_frequencies
-        self.pos_embed_dim = (num_frequencies + 1) + num_channels + 1
+        self.ctx_embed_dim = (num_frequencies + 1) + num_channels + 1
+        self.qry_embed_dim = (num_frequencies + 1) + num_channels
 
         self.positional_embedding = PositionalEmbedding(num_frequencies)
         self.channel_embedding = ChannelEmbedding(num_channels)
@@ -1381,15 +1386,15 @@ class SeparableEncoder(nn.Module):
         self.context_self_attention = nn.MultiheadAttention(
             embed_dim=dim_hidden,
             num_heads=num_heads,
-            kdim=dim_input,
-            vdim=dim_input,
+            kdim=self.ctx_embed_dim,
+            vdim=self.ctx_embed_dim,
             batch_first=True,
         )
         self.cross_attention = nn.MultiheadAttention(
-            embed_dim=dim_hidden,
+            embed_dim=dim_hidden * num_components,
             num_heads=num_heads,
-            kdim=dim_input,
-            vdim=dim_input,
+            kdim=dim_hidden,
+            vdim=dim_hidden,
             batch_first=True,
         )
 
@@ -1417,30 +1422,30 @@ class SeparableEncoder(nn.Module):
         """
         *batch_shape, qry_size = query_channels.shape
         *_, ctx_size = context_channels.shape
+        D = self.num_components
+        M = self.dim_hidden
 
         x = torch.cat(  # (B, $X, D)
             [
                 self.positional_embedding(context_times),
                 self.channel_embedding(context_channels),
-                context_values,
+                context_values.unsqueeze(-1),
             ],
             dim=-1,
-        ).reshape(-1, ctx_size, self.pos_embed_dim)
+        ).reshape(-1, ctx_size, self.ctx_embed_dim)
 
-        q = torch.cat(  # (B, $Q, D)
+        q = torch.cat(  # (B, $Q, F)
             [
                 self.positional_embedding(query_times),
                 self.channel_embedding(query_channels),
             ],
             dim=-1,
-        ).reshape(-1, qry_size, self.pos_embed_dim)
+        ).reshape(-1, qry_size, self.qry_embed_dim)
 
         h_obs = self.context_self_attention(x, x, x)  # (B, $X, M)
         h_mix = self.cross_attention(q, h_obs, h_obs)  # (B, $Q, D×M)
-        h_obs = h_obs.reshape(*batch_shape, ctx_size, self.dim_hidden)  # (..., $X, M)
-        h_mix = h_mix.reshape(
-            *batch_shape, qry_size, self.num_components, self.dim_hidden
-        )  # (..., $Q, D, M)
+        h_obs = h_obs.reshape(*batch_shape, ctx_size, M)  # (..., $X, M)
+        h_mix = h_mix.reshape(*batch_shape, qry_size, D, M)  # (..., $Q, D, M)
         h_mix = h_mix.swapaxes(-2, -3)  # (..., D, $Q, M)
         return h_obs, h_mix
 

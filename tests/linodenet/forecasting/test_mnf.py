@@ -6,7 +6,11 @@ import pytest
 import torch
 from torch import Tensor
 
-from linodenet.forecasting.mnf import MarginalizableNormalizingFlow, MixtureWeightsModel
+from linodenet.forecasting.mnf import (
+    MarginalizableNormalizingFlow,
+    MixtureWeightsModel,
+    SeparableEncoder,
+)
 
 from .base import SequentialData, TestForecastingModel
 
@@ -97,6 +101,148 @@ class TestMNF(TestForecastingModel[MarginalizableNormalizingFlow]):
         log_prob = log_prob_expanded[..., 0]  # (*batch_shape, T)
         valid = log_prob.isfinite()
         return -log_prob[valid].sum() / valid.sum()
+
+
+class TestSeparableEncoder:
+    r"""Tests for the separable Moses encoder."""
+
+    DIM_HIDDEN: ClassVar[int] = 8
+    NUM_COMPONENTS: ClassVar[int] = 3
+    NUM_FREQUENCIES: ClassVar[int] = 2
+    NUM_CHANNELS: ClassVar[int] = 3
+    CONTEXT_SIZE: ClassVar[int] = 5
+    QUERY_SIZE: ClassVar[int] = 4
+    CONTEXT_LENGTHS: ClassVar[tuple[int, ...]] = (3, 2, 4, 1)
+    QUERY_LENGTHS: ClassVar[tuple[int, ...]] = (3, 1, 4, 2)
+
+    @pytest.fixture(
+        params=[(), (4,), (2, 3)],
+        ids=["batch_shape=()", "batch_shape=(4,)", "batch_shape=(2,3)"],
+    )
+    def batch_shape(self, request: pytest.FixtureRequest) -> tuple[int, ...]:
+        r"""Batch shapes used to exercise flatten/unflatten logic."""
+        return request.param
+
+    def make_model(self) -> SeparableEncoder:
+        r"""Instantiate a separable encoder with scalar context values."""
+        dim_input = (self.NUM_FREQUENCIES + 1) + self.NUM_CHANNELS + 1
+        return SeparableEncoder(
+            dim_input=dim_input,
+            dim_hidden=self.DIM_HIDDEN,
+            num_heads=2,
+            num_components=self.NUM_COMPONENTS,
+            num_frequencies=self.NUM_FREQUENCIES,
+            num_channels=self.NUM_CHANNELS,
+        )
+
+    def make_inputs(self, batch_shape: tuple[int, ...]) -> dict[str, Tensor]:
+        r"""Create padded triplet inputs with varied valid lengths per batch item."""
+        batch_shape = torch.Size(batch_shape)
+        num_batches = batch_shape.numel() or 1
+
+        context_times = torch.full((num_batches, self.CONTEXT_SIZE), torch.nan)
+        context_channels = torch.full(
+            (num_batches, self.CONTEXT_SIZE), -1, dtype=torch.long
+        )
+        context_values = torch.full((num_batches, self.CONTEXT_SIZE), torch.nan)
+        query_times = torch.full((num_batches, self.QUERY_SIZE), torch.nan)
+        query_channels = torch.full(
+            (num_batches, self.QUERY_SIZE), -1, dtype=torch.long
+        )
+
+        base_context_channels = torch.tensor([0, 2, 1, 0, 2], dtype=torch.long)
+        base_query_channels = torch.tensor([1, 0, 2, 1], dtype=torch.long)
+        for idx in range(num_batches):
+            context_len = self.CONTEXT_LENGTHS[idx % len(self.CONTEXT_LENGTHS)]
+            query_len = self.QUERY_LENGTHS[idx % len(self.QUERY_LENGTHS)]
+            offset = float(idx) / 10.0
+            context_times[idx, :context_len] = (
+                torch.arange(context_len, dtype=torch.float32) + offset
+            )
+            context_channels[idx, :context_len] = base_context_channels[:context_len]
+            context_values[idx, :context_len] = (
+                torch.arange(context_len, dtype=torch.float32) + 1.0 + idx
+            )
+            query_times[idx, :query_len] = (
+                torch.arange(query_len, dtype=torch.float32) + 0.5 + offset
+            )
+            query_channels[idx, :query_len] = base_query_channels[:query_len]
+
+        if batch_shape == ():
+            return {
+                "query_times": query_times[0],
+                "query_channels": query_channels[0],
+                "context_times": context_times[0],
+                "context_channels": context_channels[0],
+                "context_values": context_values[0],
+            }
+
+        return {
+            "query_times": query_times.reshape(*batch_shape, self.QUERY_SIZE),
+            "query_channels": query_channels.reshape(*batch_shape, self.QUERY_SIZE),
+            "context_times": context_times.reshape(*batch_shape, self.CONTEXT_SIZE),
+            "context_channels": context_channels.reshape(
+                *batch_shape, self.CONTEXT_SIZE
+            ),
+            "context_values": context_values.reshape(*batch_shape, self.CONTEXT_SIZE),
+        }
+
+    def test_forward_returns_expected_shapes_and_nan_padding(
+        self, batch_shape: tuple[int, ...]
+    ) -> None:
+        r"""Valid tokens should produce finite outputs and padded tokens NaNs."""
+        model = self.make_model()
+        inputs = self.make_inputs(batch_shape)
+
+        h_obs, h_mix = model(**inputs)
+
+        assert h_obs.shape == (*batch_shape, self.CONTEXT_SIZE, self.DIM_HIDDEN)
+        assert h_mix.shape == (
+            *batch_shape,
+            self.NUM_COMPONENTS,
+            self.QUERY_SIZE,
+            self.DIM_HIDDEN,
+        )
+
+        context_valid = inputs["context_times"].isfinite()
+        query_valid = inputs["query_times"].isfinite()
+        h_mix_valid = (
+            query_valid.unsqueeze(dim=-2)
+            .unsqueeze(dim=-1)
+            .expand(
+                *batch_shape,
+                self.NUM_COMPONENTS,
+                self.QUERY_SIZE,
+                self.DIM_HIDDEN,
+            )
+        )
+
+        assert h_obs[context_valid].isfinite().all()
+        assert h_obs[~context_valid].isnan().all()
+        assert h_mix[h_mix_valid].isfinite().all()
+        assert h_mix[~h_mix_valid].isnan().all()
+
+    def test_backward_produces_finite_gradients(
+        self, batch_shape: tuple[int, ...]
+    ) -> None:
+        r"""Backward pass should propagate finite gradients through valid entries."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        inputs = self.make_inputs(batch_shape)
+        context_values = inputs["context_values"].clone().requires_grad_()
+        inputs["context_values"] = context_values
+
+        h_obs, h_mix = model(**inputs)
+        loss = h_obs.nansum() + h_mix.nansum()
+
+        loss.backward()
+
+        assert context_values.grad is not None
+        valid_context = context_values.isfinite()
+        assert context_values.grad[valid_context].isfinite().all()
+        for parameter in model.parameters():
+            if parameter.grad is not None:
+                assert parameter.grad.isfinite().all()
 
 
 class TestMixtureWeightsModel:
