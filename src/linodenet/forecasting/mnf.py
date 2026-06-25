@@ -1336,6 +1336,17 @@ class PositionalEmbedding(nn.Module):
         return torch.cat([t, z.sin()], dim=-1)
 
 
+class ChannelEmbedding(nn.Module):
+    r"""Channel embedding (one-hot)."""
+
+    def __init__(self, num_channels: int) -> None:
+        super().__init__()
+        self.num_channels = num_channels
+
+    def forward(self, c: Tensor, /) -> Tensor:
+        return F.one_hot(c, num_classes=self.num_channels).float()
+
+
 class SeparableEncoder(nn.Module):
     r"""Implements the encoder used by moses.
 
@@ -1365,7 +1376,7 @@ class SeparableEncoder(nn.Module):
         self.pos_embed_dim = (num_frequencies + 1) + num_channels + 1
 
         self.positional_embedding = PositionalEmbedding(num_frequencies)
-        self.channel_embedding = nn.Embedding(num_channels, num_channels)
+        self.channel_embedding = ChannelEmbedding(num_channels)
 
         self.context_self_attention = nn.MultiheadAttention(
             embed_dim=dim_hidden,
