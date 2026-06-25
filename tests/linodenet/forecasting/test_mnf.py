@@ -9,6 +9,7 @@ from torch import Tensor
 from linodenet.forecasting.mnf import (
     MarginalizableNormalizingFlow,
     MixtureWeightsModel,
+    MultiHeadAttention,
     SeparableEncoder,
 )
 
@@ -101,6 +102,108 @@ class TestMNF(TestForecastingModel[MarginalizableNormalizingFlow]):
         log_prob = log_prob_expanded[..., 0]  # (*batch_shape, T)
         valid = log_prob.isfinite()
         return -log_prob[valid].sum() / valid.sum()
+
+
+class TestMHA:
+    r"""Tests for the custom multi-head attention module."""
+
+    Q_DIM: ClassVar[int] = 5
+    K_DIM: ClassVar[int] = 7
+    V_DIM: ClassVar[int] = 11
+    DIM_HIDDEN: ClassVar[int] = 4
+    DIM_OUTPUT: ClassVar[int] = 3
+    NUM_HEADS: ClassVar[int] = 2
+    QUERY_SIZE: ClassVar[int] = 4
+    KEY_SIZE: ClassVar[int] = 5
+
+    @pytest.fixture(
+        params=[(), (4,), (2, 3)],
+        ids=["batch_shape=()", "batch_shape=(4,)", "batch_shape=(2,3)"],
+    )
+    def batch_shape(self, request: pytest.FixtureRequest) -> tuple[int, ...]:
+        r"""Batch shapes used to exercise batched attention behavior."""
+        return request.param
+
+    def make_model(self) -> MultiHeadAttention:
+        r"""Instantiate the attention module under test."""
+        return MultiHeadAttention(
+            self.Q_DIM,
+            self.K_DIM,
+            self.V_DIM,
+            dim_hidden=self.DIM_HIDDEN,
+            dim_output=self.DIM_OUTPUT,
+            num_heads=self.NUM_HEADS,
+        )
+
+    def make_inputs(
+        self, batch_shape: tuple[int, ...]
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        r"""Create random query/key/value tensors with the requested batch shape."""
+        q = torch.randn(*batch_shape, self.QUERY_SIZE, self.Q_DIM)
+        k = torch.randn(*batch_shape, self.KEY_SIZE, self.K_DIM)
+        v = torch.randn(*batch_shape, self.KEY_SIZE, self.V_DIM)
+        return q, k, v
+
+    def test_forward_returns_expected_shape(self, batch_shape: tuple[int, ...]) -> None:
+        r"""Forward pass should preserve batch axes and expose head outputs."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        q, k, v = self.make_inputs(batch_shape)
+
+        actual = model(q, k, v)
+
+        assert actual.shape == (
+            *batch_shape,
+            self.NUM_HEADS,
+            self.QUERY_SIZE,
+            self.DIM_OUTPUT,
+        )
+        assert actual.isfinite().all()
+
+    def test_masked_forward_matches_truncated_inputs(self) -> None:
+        r"""Masking invalid keys should match attending over the kept keys only."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        q, k, v = self.make_inputs((2,))
+        mask = torch.tensor(
+            [
+                [True, False, True, False, True],
+                [False, True, True, False, False],
+            ]
+        )
+
+        masked = model(q, k, v, mask=mask)
+        expected = masked.new_empty(masked.shape)
+        for idx in range(q.shape[0]):
+            expected[idx] = model(q[idx], k[idx, mask[idx]], v[idx, mask[idx]])
+
+        torch.testing.assert_close(masked, expected)
+
+    def test_backward_produces_finite_gradients(
+        self, batch_shape: tuple[int, ...]
+    ) -> None:
+        r"""Backward pass should yield finite gradients for inputs and parameters."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        q, k, v = self.make_inputs(batch_shape)
+        q = q.requires_grad_()
+        k = k.requires_grad_()
+        v = v.requires_grad_()
+
+        actual = model(q, k, v)
+        loss = actual.square().sum()
+
+        loss.backward()
+
+        assert q.grad is not None
+        assert k.grad is not None
+        assert v.grad is not None
+        assert q.grad.isfinite().all()
+        assert k.grad.isfinite().all()
+        assert v.grad.isfinite().all()
+        for parameter in model.parameters():
+            assert parameter.grad is not None
+            assert parameter.grad.isfinite().all()
 
 
 class TestSeparableEncoder:

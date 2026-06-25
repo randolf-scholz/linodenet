@@ -1387,7 +1387,11 @@ class MultiHeadAttention(nn.Module):
         k = k.unflatten(-1, (self.num_heads, self.dim_hidden))  # (..., $X, H, d_h)
         v = v.unflatten(-1, (self.num_heads, self.dim_output))  # (..., $X, H, d_out)
 
-        return F.scaled_dot_product_attention(
+        if mask is not None:
+            # broadcast mask to (..., H, $Q, $X)
+            mask = mask[..., None, None, :]  # (..., 1, 1, $X)
+
+        return F.scaled_dot_product_attention(  # (..., H, $Q, d_out)
             q.swapaxes(-2, -3),
             k.swapaxes(-2, -3),
             v.swapaxes(-2, -3),
