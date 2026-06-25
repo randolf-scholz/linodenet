@@ -179,6 +179,22 @@ class TestMHA:
 
         torch.testing.assert_close(masked, expected)
 
+    def test_nan_padded_queries_produce_nan_outputs_only_at_padded_queries(
+        self,
+    ) -> None:
+        r"""NaN-padded query rows should stay localized to the corresponding outputs."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        q, k, v = self.make_inputs((2,))
+        q[0, 2:] = torch.nan
+
+        actual = model(q, k, v)  # (..., H, $Q, D)
+
+        expected_finite = q.isfinite().all(dim=-1)
+        actual_finite = actual.isfinite().all(dim=-3).all(dim=-1)
+
+        assert torch.equal(actual_finite, expected_finite)
+
     def test_backward_produces_finite_gradients(
         self, batch_shape: tuple[int, ...]
     ) -> None:
