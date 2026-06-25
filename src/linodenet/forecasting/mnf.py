@@ -1266,7 +1266,7 @@ class MixtureWeightsModel(nn.Module):
         self,
         embeddings: Tensor,  # (..., $N, D)
         *,
-        valid_mask: Tensor | None = None,  # Bool[(..., $N)]
+        valid_mask: Tensor,  # Bool[(..., $N)]
     ) -> Tensor:  # (..., C), one normalized weight vector per batch element
         r"""Compute one mixture-weight vector per batch element.
 
@@ -1280,9 +1280,7 @@ class MixtureWeightsModel(nn.Module):
             1 across the mixture-query axis.
         """
         *batch_shape, seq_len, dim = embeddings.shape
-        valid_mask = (
-            valid_mask if valid_mask is not None else embeddings.isfinite().all(dim=-1)
-        )
+
         assert dim == self.dim_input
         assert valid_mask.dtype == torch.bool
         assert valid_mask.shape == (*batch_shape, seq_len)

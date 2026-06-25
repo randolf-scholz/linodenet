@@ -117,7 +117,7 @@ class TestMixtureWeightsModel:
         )
         embeddings = embeddings.masked_fill(~valid_mask.unsqueeze(-1), torch.nan)
 
-        weights = model(embeddings)
+        weights = model(embeddings, valid_mask=valid_mask)
 
         assert weights.shape == (2, 3)
         assert weights.isfinite().all()
@@ -137,8 +137,9 @@ class TestMixtureWeightsModel:
             dim_hidden=6,
         )
         embeddings = torch.full((1, 3, 4), torch.nan)
+        valid_mask = embeddings.isfinite().all(dim=-1)
 
-        weights = model(embeddings)
+        weights = model(embeddings, valid_mask=valid_mask)
 
         assert weights.shape == (1, 2)
         assert weights.isfinite().all()
