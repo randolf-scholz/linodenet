@@ -23,6 +23,7 @@ from torch.linalg import solve_triangular
 from torch.nn import functional as F
 
 from .grafiti import Grafiti
+from .utils import EventBatch
 
 _LOG2PI = math.log(2.0 * math.pi)
 
@@ -403,14 +404,14 @@ class ProFITi(nn.Module):
     def _encode(
         self,
         *,
-        times: Tensor,  # (..., $T), padded NaN
+        timestamps: Tensor,  # (..., $T), padded NaN
         context_values: Tensor,  # (..., $T, D), padded NaN
         context_mask: Tensor,  # (..., $T, D), bool
         query_mask: Tensor,  # (..., $T, D), bool
     ) -> tuple[Tensor, Tensor]:  # (..., P, latent_dim), (..., P)
         H = self.context_embedding(  # (..., P, latent_dim)
-            times.nan_to_num(0.0),
-            context_values,
+            timestamps=timestamps.nan_to_num(0.0),
+            context_values=context_values,
             context_mask=context_mask,
             query_mask=query_mask,
         )
@@ -419,11 +420,46 @@ class ProFITi(nn.Module):
         H = torch.where(valid_mask.unsqueeze(-1), H, nan)
         return H, valid_mask
 
+    def log_prob(
+        self,
+        values: Tensor,  # (*S, ..., $T, D)
+        /,
+        *,
+        timestamps: Tensor,  # (..., $T), padded NaN
+        context_values: Tensor,  # (..., $T, D), padded NaN
+        context_mask: Tensor,  # (..., $T, D), bool
+        query_mask: Tensor,  # (..., $T, D), bool
+    ) -> Tensor:  # (*S, ...)
+        r"""Compute the joint log-likelihood of the target values under the model.
+
+        .. math:: \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ)))
+
+        The leading ``*S`` dims of ``values`` beyond the batch shape are treated
+        as sample dims; all samples must share the same query mask (e.g. samples
+        drawn by :meth:`sample_and_log_prob`).
+        """
+        *shape, combined_size, D = values.shape
+        M = query_mask.broadcast_to(*shape, combined_size, D)  # (*S, ..., $T, D)
+
+        H, valid_mask = self._encode(  # (*S, ..., P, latent_dim), (*S, ..., P)
+            timestamps=timestamps.broadcast_to(*shape, combined_size),
+            context_values=context_values.broadcast_to(*shape, combined_size, D),
+            context_mask=context_mask.broadcast_to(*shape, combined_size, D),
+            query_mask=M,
+        )
+
+        value_flat = values.new_full(H.shape[:-1], nan)  # (*S, ..., P)
+        value_flat[valid_mask] = values[M]
+
+        Z, logabsdet = self.conditional_flow.encode_and_logabsdet(value_flat, H)
+        log_prob = -0.5 * (Z.square() + _LOG2PI).nansum(dim=-1)
+        return log_prob + logabsdet
+
     def sample_and_log_prob(
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        times: Tensor,  # (..., $T), padded NaN
+        timestamps: Tensor,  # (..., $T), padded NaN
         context_values: Tensor,  # (..., $T, D), padded NaN
         context_mask: Tensor,  # (..., $T, D), bool
         query_mask: Tensor,  # (..., $T, D), bool
@@ -432,7 +468,7 @@ class ProFITi(nn.Module):
         sample_shape = (size,) if isinstance(size, int) else size
 
         H, valid_mask = self._encode(  # (..., P, latent_dim), (..., P)
-            times=times,
+            timestamps=timestamps,
             context_values=context_values,
             context_mask=context_mask,
             query_mask=query_mask,
@@ -455,50 +491,15 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        times: Tensor,  # (..., $T), padded NaN
+        timestamps: Tensor,  # (..., $T), padded NaN
         context_values: Tensor,  # (..., $T, D), padded NaN
         context_mask: Tensor,  # (..., $T, D), bool
         query_mask: Tensor,  # (..., $T, D), bool
     ) -> Tensor:  # (*S, ..., $T, D)
         return self.sample_and_log_prob(
             size=size,
-            times=times,
+            timestamps=timestamps,
             context_values=context_values,
             context_mask=context_mask,
             query_mask=query_mask,
         )[0]
-
-    def log_prob(
-        self,
-        values: Tensor,  # (*S, ..., $T, D)
-        /,
-        *,
-        times: Tensor,  # (..., $T), padded NaN
-        context_values: Tensor,  # (..., $T, D), padded NaN
-        context_mask: Tensor,  # (..., $T, D), bool
-        query_mask: Tensor,  # (..., $T, D), bool
-    ) -> Tensor:  # (*S, ...)
-        r"""Compute the joint log-likelihood of the target values under the model.
-
-        .. math:: \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ)))
-
-        The leading ``*S`` dims of ``values`` beyond the batch shape are treated
-        as sample dims; all samples must share the same query mask (e.g. samples
-        drawn by :meth:`sample_and_log_prob`).
-        """
-        *shape, combined_size, D = values.shape
-        M = query_mask.broadcast_to(*shape, combined_size, D)  # (*S, ..., $T, D)
-
-        H, valid_mask = self._encode(  # (*S, ..., P, latent_dim), (*S, ..., P)
-            times=times.broadcast_to(*shape, combined_size),
-            context_values=context_values.broadcast_to(*shape, combined_size, D),
-            context_mask=context_mask.broadcast_to(*shape, combined_size, D),
-            query_mask=M,
-        )
-
-        value_flat = values.new_full(H.shape[:-1], nan)  # (*S, ..., P)
-        value_flat[valid_mask] = values[M]
-
-        Z, logabsdet = self.conditional_flow.encode_and_logabsdet(value_flat, H)
-        log_prob = -0.5 * (Z.square() + _LOG2PI).nansum(dim=-1)
-        return log_prob + logabsdet

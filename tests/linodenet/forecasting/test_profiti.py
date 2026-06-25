@@ -40,9 +40,9 @@ class _TargetContext(nn.Module):
 
     def forward(
         self,
-        _time_points: torch.Tensor,
-        context_values: torch.Tensor,
         *,
+        timestamps: torch.Tensor,  # noqa: ARG002
+        context_values: torch.Tensor,
         context_mask: torch.Tensor,  # noqa: ARG002
         query_mask: torch.Tensor,
     ) -> torch.Tensor:
@@ -408,7 +408,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
 
         log_prob = model.log_prob(
             combined_values,
-            times=times,
+            timestamps=times,
             context_values=combined_ctx_values,
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
@@ -486,7 +486,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
 
         samples, log_prob = model.sample_and_log_prob(
             5,
-            times=times,
+            timestamps=times,
             context_values=combined_ctx_values,
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
@@ -502,7 +502,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
         assert_close(log_prob, expected)
 
         sample, log_prob = model.sample_and_log_prob(
-            times=times,
+            timestamps=times,
             context_values=combined_ctx_values,
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
@@ -554,7 +554,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
 
         samples, log_prob = model.sample_and_log_prob(
             (2, 3),
-            times=times,
+            timestamps=times,
             context_values=combined_ctx_values,
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
@@ -608,7 +608,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
 
         log_prob = model.log_prob(
             combined_value,
-            times=times,
+            timestamps=times,
             context_values=combined_ctx_values,
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
@@ -663,14 +663,14 @@ class TestProfiti(TestForecastingModel[ProFITi]):
 
         samples, log_prob = model.sample_and_log_prob(
             3,
-            times=times,
+            timestamps=times,
             context_values=combined_ctx_values,
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
         )
         value_log_prob = model.log_prob(
             samples[0].detach(),
-            times=times,
+            timestamps=times,
             context_values=combined_ctx_values,
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
@@ -716,14 +716,14 @@ class TestProfiti(TestForecastingModel[ProFITi]):
 
         samples, log_prob_direct = model.sample_and_log_prob(
             size,
-            times=times,
+            timestamps=times,
             context_values=combined_ctx_values,
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
         )
         log_prob_via_sample = model.log_prob(
             samples,
-            times=times,
+            timestamps=times,
             context_values=combined_ctx_values,
             context_mask=combined_ctx_mask,
             query_mask=combined_qry_mask,
