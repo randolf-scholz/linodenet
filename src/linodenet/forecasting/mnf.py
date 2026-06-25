@@ -17,6 +17,8 @@ __all__ = [
     "SplineCoefficients",
     "SplineFlow",
     "UnconstrainedLinearRationalSpline",
+    "PositionalEmbedding",
+    "SeparableEncoder",
     # functions
     "inverse_softplus",
 ]
@@ -1309,6 +1311,129 @@ class MixtureWeightsModel(nn.Module):
         return weights.reshape(*batch_shape, self.num_components)
 
 
+class PositionalEmbedding(nn.Module):
+    r"""Time2Vec positional embedding.
+
+    References:
+        Time2Vec: Learning a Vector Representation of Time
+        https://arxiv.org/abs/1907.05321
+    """
+
+    def __init__(self, num_frequencies: int) -> None:
+        super().__init__()
+        self.num_freq = num_frequencies
+        self.frequencies = nn.Parameter(
+            torch.logspace(0, num_frequencies - 1, num_frequencies, base=2.0)
+        )
+        self.offsets = nn.Parameter(torch.zeros(num_frequencies))
+
+    # (...,) -> (..., F+1)
+    def forward(self, t: Tensor, /) -> Tensor:
+        r"""Compute the positional embedding for the given time step."""
+        # sin(at+b)
+        t = t.unsqueeze(-1)  # (..., 1)
+        z = F.linear(t, self.frequencies[..., None], self.offsets)  # (..., F)
+        return torch.cat([t, z.sin()], dim=-1)
+
+
+class SeparableEncoder(nn.Module):
+    r"""Implements the encoder used by moses.
+
+    .. math::
+        𝐱 = [pos_embed(t), one-hot(c), v]
+        𝐪 = [pos_embed(t), one-hot(c)]
+        𝐡ᵒᵇˢ = MHA(𝐱, 𝐱, 𝐱)
+        𝐡 = MHA(𝐪, 𝐡ᵒᵇˢ, 𝐡ᵒᵇˢ)
+    """
+
+    def __init__(
+        self,
+        *,
+        dim_input: int,
+        dim_hidden: int,
+        num_heads: int,
+        num_components: int,
+        num_frequencies: int,
+        num_channels: int,
+    ) -> None:
+        super().__init__()
+        self.dim_hidden = dim_hidden
+        self.num_components = num_components
+        self.num_heads = num_heads
+        self.num_channels = num_channels
+        self.num_frequencies = num_frequencies
+        self.pos_embed_dim = (num_frequencies + 1) + num_channels + 1
+
+        self.positional_embedding = PositionalEmbedding(num_frequencies)
+        self.channel_embedding = nn.Embedding(num_channels, num_channels)
+
+        self.context_self_attention = nn.MultiheadAttention(
+            embed_dim=dim_hidden,
+            num_heads=num_heads,
+            kdim=dim_input,
+            vdim=dim_input,
+            batch_first=True,
+        )
+        self.cross_attention = nn.MultiheadAttention(
+            embed_dim=dim_hidden,
+            num_heads=num_heads,
+            kdim=dim_input,
+            vdim=dim_input,
+            batch_first=True,
+        )
+
+    def forward(
+        self,
+        *,
+        query_times,  # Float[(..., $Q)], padded with NaN
+        query_channels,  # Long[(..., $Q)], padded with -1
+        context_times,  # Float[(..., $X)], padded with NaN
+        context_channels,  # Long[(..., $X)], padded with -1
+        context_values,  # Float[(..., $X)], padded with NaN
+    ) -> tuple[Tensor, Tensor]:  # (..., $X, M), (..., D, $X, M), padded with NaN
+        r"""Compute per-query embeddings and mixture weights.
+
+        Args:
+            query_times:
+            query_channels:
+            context_times:
+            context_channels:
+            context_values:
+
+        Returns:
+            𝐡ᵒᵇˢ: Context embeddings with shape ``(..., $X, M)``.
+            𝐡: Per-query embeddings with shape ``(..., D, $Q, M)``.
+        """
+        *batch_shape, qry_size = query_channels.shape
+        *_, ctx_size = context_channels.shape
+
+        x = torch.cat(  # (B, $X, D)
+            [
+                self.positional_embedding(context_times),
+                self.channel_embedding(context_channels),
+                context_values,
+            ],
+            dim=-1,
+        ).reshape(-1, ctx_size, self.pos_embed_dim)
+
+        q = torch.cat(  # (B, $Q, D)
+            [
+                self.positional_embedding(query_times),
+                self.channel_embedding(query_channels),
+            ],
+            dim=-1,
+        ).reshape(-1, qry_size, self.pos_embed_dim)
+
+        h_obs = self.context_self_attention(x, x, x)  # (B, $X, M)
+        h_mix = self.cross_attention(q, h_obs, h_obs)  # (B, $Q, D×M)
+        h_obs = h_obs.reshape(*batch_shape, ctx_size, self.dim_hidden)  # (..., $X, M)
+        h_mix = h_mix.reshape(
+            *batch_shape, qry_size, self.num_components, self.dim_hidden
+        )  # (..., $Q, D, M)
+        h_mix = h_mix.swapaxes(-2, -3)  # (..., D, $Q, M)
+        return h_obs, h_mix
+
+
 class Moses(nn.Module):
     r"""Context-conditioned mixture normalizing flow for irregular time-series forecasting.
 
@@ -1347,6 +1472,7 @@ class Moses(nn.Module):
     @classmethod
     def from_config(
         cls,
+        *,
         input_dim: int,
         latent_dim: int = 128,
         num_components: int = 4,
