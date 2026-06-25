@@ -464,11 +464,11 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             context_values=context_values,
         )
 
-        assert samples.shape == (5, *combined_qry_mask.shape)
+        assert samples.shape == (5, *query_mask.shape)
         assert log_prob.shape == (5,)
-        assert torch.equal(samples.isfinite(), combined_qry_mask.expand_as(samples))
+        assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
 
-        latents = samples[:, combined_qry_mask] / scale
+        latents = samples[:, query_mask] / scale
         expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
         expected = expected - query_mask.sum() * math.log(scale)
         assert_close(log_prob, expected)
@@ -481,11 +481,11 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             context_values=context_values,
         )
 
-        assert sample.shape == combined_qry_mask.shape
+        assert sample.shape == query_mask.shape
         assert log_prob.shape == ()
-        assert torch.equal(sample.isfinite(), combined_qry_mask)
+        assert torch.equal(sample.isfinite(), query_mask)
 
-        latent = sample[combined_qry_mask] / scale
+        latent = sample[query_mask] / scale
         expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
         expected = expected - query_mask.sum() * math.log(scale)
         assert_close(log_prob, expected)
@@ -523,19 +523,19 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             context_values=context_values,
         )
 
-        assert samples.shape == (2, 3, *combined_qry_mask.shape)
+        assert samples.shape == (2, 3, *query_mask.shape)
         assert log_prob.shape == (2, 3, 2)
-        assert torch.equal(samples.isfinite(), combined_qry_mask.expand_as(samples))
+        assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
 
         latents = torch.stack(
             [
-                samples[..., k, :, :][..., combined_qry_mask[k]] / scale
-                for k in range(2)
+                samples[..., k, :, :][..., query_mask[k]] / scale
+                for k in range(query_mask.shape[0])
             ],
             dim=-2,
         )
         expected = -0.5 * (latents.square() + math.log(2.0 * math.pi)).sum(dim=-1)
-        expected = expected - query_mask[0].sum() * math.log(scale)
+        expected = expected - query_mask.sum(dim=(-2, -1)) * math.log(scale)
         assert_close(log_prob, expected)
 
     def test_log_prob_with_explicit_query_mask(self) -> None:
@@ -567,9 +567,9 @@ class TestProfiti(TestForecastingModel[ProFITi]):
             context_mask=context_mask,
             context_values=context_values,
         )
-        latent = combined_value[combined_qry_mask] / scale
+        latent = values[query_mask] / scale
         expected = -0.5 * (latent.square() + math.log(2.0 * math.pi)).sum()
-        expected = expected - combined_qry_mask.sum() * math.log(scale)
+        expected = expected - query_mask.sum() * math.log(scale)
         assert log_prob.shape == ()
         assert_close(log_prob, expected)
 
@@ -622,10 +622,10 @@ class TestProfiti(TestForecastingModel[ProFITi]):
         loss = samples.nansum() + log_prob.nansum() + value_log_prob.nansum()
         loss.backward()
 
-        assert samples.shape == (3, *combined_qry_mask.shape)
+        assert samples.shape == (3, *query_mask.shape)
         assert log_prob.shape == (3, 2)
         assert value_log_prob.shape == (2,)
-        assert torch.equal(samples.isfinite(), combined_qry_mask.expand_as(samples))
+        assert torch.equal(samples.isfinite(), query_mask.expand_as(samples))
         assert value_log_prob.isfinite().all()
         assert context_values.grad is not None
         assert context_values.grad.isfinite().all()
