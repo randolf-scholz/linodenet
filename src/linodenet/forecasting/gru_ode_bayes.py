@@ -625,7 +625,7 @@ class GRU_ODE_Bayes(nn.Module):
 
         return self.update_cell(prior_state, observation, mean, logvar)
 
-    def forward(
+    def predict(
         self,
         query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
         query_mask: Tensor,  # Bool[(..., K, F)]  padded False
@@ -636,11 +636,6 @@ class GRU_ODE_Bayes(nn.Module):
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
     ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
-        r"""Filter and forecast over combined context/query time points.
-
-        Context and query masks explicitly select valid feature-level entries.
-        Context values outside ``context_mask`` are ignored.
-        """
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -649,11 +644,34 @@ class GRU_ODE_Bayes(nn.Module):
             query_mask=query_mask,
             batch_first=self.batch_first,
         )
-        timestamps = combined.timestamps  # (..., $T), padded NaN, non-decreasing
-        context_values = combined.context_values  # (..., $T, D), padded NaN, sparse
-        context_mask = combined.context_mask  # Bool[(..., $T, D)], padded False
-        query_mask = combined.query_mask  # Bool[(..., $T, F)], padded False
+        post_means, post_logvars = self.forward(
+            timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
+            context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
+            context_mask=combined.context_mask,  # Bool[(..., $T, D)], padded False
+            query_mask=combined.query_mask,  # Bool[(..., $T, F)], padded False
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
 
+        self.pred_means = post_means[combined.query_indices]
+        self.pred_logvars = post_logvars[combined.query_indices]
+        return self.pred_means, self.pred_logvars
+
+    def forward(
+        self,
+        *,
+        timestamps: Tensor,  # (..., $T), float, padded NaN
+        query_mask: Tensor,  # (..., $T, D), bool, padded False
+        context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
+        context_mask: Tensor,  # (..., $T, D), bool, padded False
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
+        r"""Filter and forecast over combined context/query time points.
+
+        Context and query masks explicitly select valid feature-level entries.
+        Context values outside ``context_mask`` are ignored.
+        """
         # sanitize values
         context_values = context_values.masked_fill(~context_mask, nan)
         assert torch.equal(context_values.isfinite(), context_mask)
@@ -734,9 +752,7 @@ class GRU_ODE_Bayes(nn.Module):
         self.post_means = self.post_means.masked_fill(~mean_mask, nan)
         self.post_logvars = self.post_logvars.masked_fill(~mean_mask, nan)
 
-        self.pred_means = self.post_means[combined.query_indices]
-        self.pred_logvars = self.post_logvars[combined.query_indices]
-        return self.pred_means, self.pred_logvars
+        return self.post_means, self.post_logvars
 
     def log_prob(
         self,
@@ -755,7 +771,7 @@ class GRU_ODE_Bayes(nn.Module):
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
-        mean, logvar = self.forward(
+        mean, logvar = self.predict(
             query_times=query_times,
             query_mask=query_mask,
             context_times=context_times,
@@ -788,7 +804,7 @@ class GRU_ODE_Bayes(nn.Module):
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
         sample_shape = (size,) if isinstance(size, int) else size
-        mean, logvar = self.forward(
+        mean, logvar = self.predict(
             query_times=query_times,
             query_mask=query_mask,
             context_times=context_times,
@@ -821,7 +837,7 @@ class GRU_ODE_Bayes(nn.Module):
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
         """
         sample_shape = (size,) if isinstance(size, int) else size
-        mean, logvar = self.forward(
+        mean, logvar = self.predict(
             query_times=query_times,
             query_mask=query_mask,
             context_times=context_times,

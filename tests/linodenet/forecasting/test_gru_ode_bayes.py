@@ -289,7 +289,7 @@ class TestGRUODEBayes:
         ).to_combined()
         combined_step_mask = (combined.context_mask | combined.query_mask).any(dim=-1)
 
-        posterior_mean, posterior_logvar = model(
+        posterior_mean, posterior_logvar = model.predict(
             query_times,
             query_mask,
             context_times=context_times,
@@ -355,17 +355,17 @@ class TestGRUODEBayes:
         query_times = torch.tensor([[0.75, 1.0], [0.25, nan]])
         query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-        batch_mean, batch_logvar = batch_model(
-            query_times,
-            query_mask,
+        batch_mean, batch_logvar = batch_model.predict(
+            query_times=query_times,
+            query_mask=query_mask,
             context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
         )
         # batch_first=False model expects time-major inputs and returns (K, *batch, D)
-        time_mean, time_logvar = time_model(
-            query_times.mT,
-            query_mask.moveaxis(-2, 0),
+        time_mean, time_logvar = time_model.predict(
+            query_times=query_times.mT,
+            query_mask=query_mask.moveaxis(-2, 0),
             context_times=context_times.mT,
             context_values=context_values.moveaxis(-2, 0),
             context_mask=context_mask.moveaxis(-2, 0),
@@ -433,9 +433,9 @@ class TestGRUODEBayes:
             context_values=context_values,
             context_mask=context_mask,
         )
-        mean, logvar = model(
-            query_times,
-            query_mask,
+        mean, logvar = model.predict(
+            query_times=query_times,
+            query_mask=query_mask,
             context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
