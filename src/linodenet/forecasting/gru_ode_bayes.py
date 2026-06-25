@@ -628,14 +628,14 @@ class GRU_ODE_Bayes(nn.Module):
     def predict(
         self,
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (..., $K, F)
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,

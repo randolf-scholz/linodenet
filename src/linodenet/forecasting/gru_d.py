@@ -115,30 +115,47 @@ class GRU_D(nn.Module):
         self.register_buffer("posterior_states", None, persistent=False)
         self.register_buffer("predictions", None, persistent=False)
 
-    def forward(
+    def predict(
         self,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
         *,
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> Tensor:  # (..., $N + $K, F)
-        r"""Filter and forecast over combined context/query time points."""
+    ) -> Tensor:  # (..., $K, F)
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
             query_times=query_times,
             query_mask=query_mask,
+            batch_first=self.batch_first,
         )
-        timestamps = combined.timestamps  # (..., $T), padded NaN, non-decreasing
-        context_values = combined.context_values  # (..., $T, D), padded NaN, sparse
-        context_mask = combined.context_mask  # Bool[(..., $T, D)], padded False
-        query_mask = combined.query_mask  # Bool[(..., $T, F)], padded False
+        predictions = self.forward(
+            timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
+            context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
+            context_mask=combined.context_mask,  # Bool[(..., $T, D)], padded False
+            query_mask=combined.query_mask,  # Bool[(..., $T, F)], padded False
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
 
+        return predictions[combined.query_indices]
+
+    def forward(
+        self,
+        *,
+        timestamps: Tensor,  # (..., $T), float, padded NaN
+        query_mask: Tensor,  # (..., $T, D), bool, padded False
+        context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
+        context_mask: Tensor,  # (..., $T, D), bool, padded False
+        initial_state: Tensor | None = None,  # (..., H)
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> Tensor:  # (..., $T, F)
+        r"""Filter and forecast over combined context/query time points."""
         # sanitize values
         context_values = context_values.masked_fill(~context_mask, nan)
         assert torch.equal(context_values.isfinite(), context_mask)
@@ -222,4 +239,4 @@ class GRU_D(nn.Module):
             dim=stack_dim,
         ).masked_fill(~result_mask, nan)  # sanitize result
 
-        return self.predictions[combined.query_indices]  # (..., K, F)
+        return self.predictions  # (..., K, F)

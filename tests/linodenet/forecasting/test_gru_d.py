@@ -70,7 +70,7 @@ class TestGRU_D(TestForecastingModel[GRU_D]):
             target_values=inputs.target_values,
         )
 
-        combined_pred = model.forward(
+        combined_pred = model.predict(
             context_times=dense.context_times,
             context_values=dense.context_values,
             context_mask=dense.context_mask,
