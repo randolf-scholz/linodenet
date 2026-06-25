@@ -6,7 +6,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from linodenet.forecasting.mnf import MarginalizableNormalizingFlow
+from linodenet.forecasting.mnf import MarginalizableNormalizingFlow, MixtureWeightsModel
 
 from .base import SequentialData, TestForecastingModel
 
@@ -97,3 +97,52 @@ class TestMNF(TestForecastingModel[MarginalizableNormalizingFlow]):
         log_prob = log_prob_expanded[..., 0]  # (*batch_shape, T)
         valid = log_prob.isfinite()
         return -log_prob[valid].sum() / valid.sum()
+
+
+class TestMixtureWeightsModel:
+    def test_mixture_weights_model_returns_one_weight_vector_per_batch_element(
+        self,
+    ) -> None:
+        r"""Each learned mixture query should produce a normalized weight vector."""
+        torch.manual_seed(0)
+        model = MixtureWeightsModel(
+            num_components=3,
+            num_heads=2,
+            dim_input=5,
+            dim_hidden=8,
+        )
+        embeddings = torch.randn(2, 4, 5)
+        valid_mask = torch.tensor(
+            [[True, True, False, True], [True, False, False, False]]
+        )
+        embeddings = embeddings.masked_fill(~valid_mask.unsqueeze(-1), torch.nan)
+
+        weights = model(embeddings)
+
+        assert weights.shape == (2, 3)
+        assert weights.isfinite().all()
+        torch.testing.assert_close(
+            weights.sum(dim=-1),
+            torch.ones(2, dtype=weights.dtype, device=weights.device),
+        )
+
+    def test_mixture_weights_model_returns_zero_for_fully_masked_sequences(
+        self,
+    ) -> None:
+        r"""A fully padded sequence should still yield a finite normalized vector."""
+        model = MixtureWeightsModel(
+            num_components=2,
+            num_heads=2,
+            dim_input=4,
+            dim_hidden=6,
+        )
+        embeddings = torch.full((1, 3, 4), torch.nan)
+
+        weights = model(embeddings)
+
+        assert weights.shape == (1, 2)
+        assert weights.isfinite().all()
+        torch.testing.assert_close(
+            weights.sum(dim=-1),
+            torch.ones(1, dtype=weights.dtype, device=weights.device),
+        )

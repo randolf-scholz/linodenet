@@ -11,6 +11,7 @@ __all__ = [
     "BinKnots",
     "LearnableLRS",
     "LinearRationalSpline",
+    "MixtureWeightsModel",
     "ModuleSequence",
     "MultiHeadGaussian",
     "SplineCoefficients",
@@ -1198,6 +1199,112 @@ class MarginalizableNormalizingFlow(nn.Module):
         return cond_model
 
 
+class MixtureWeightsModel(nn.Module):
+    r"""Implements the mixture model used by moses.
+
+    Given mixture-query embeddings ``β ∈ ℝᶜˣᴹ`` and a sequence of encoder
+    embeddings ``h ∈ ℝᴺˣᴰ``, this module returns one mixture-weight vector per
+    batch element.
+
+    The paper writes
+
+    .. math:: w = softmax(MHA(β, 𝐡, 𝐡)).
+
+    We interpret this as a shorthand for the attention map induced by the
+    learned queries ``β`` over the sequence ``h``: multi-head attention
+    produces one attended embedding per query, which is then projected to a
+    scalar logit and normalized across the query axis.
+    """
+
+    num_components: Final[int]
+    num_heads: Final[int]
+    dim_input: Final[int]
+    dim_hidden: Final[int]
+    mixture_queries: Tensor
+    attention: nn.MultiheadAttention
+    output_proj: nn.Linear
+
+    def __init__(
+        self,
+        num_components: int,
+        num_heads: int,
+        dim_input: int,
+        dim_hidden: int,
+    ) -> None:
+        super().__init__()
+        if num_components <= 0:
+            raise ValueError(f"{num_components=} must be positive.")
+        if num_heads <= 0:
+            raise ValueError(f"{num_heads=} must be positive.")
+        if dim_input <= 0:
+            raise ValueError(f"{dim_input=} must be positive.")
+        if dim_hidden <= 0:
+            raise ValueError(f"{dim_hidden=} must be positive.")
+        if dim_hidden % num_heads != 0:
+            raise ValueError(f"{dim_hidden=} must be divisible by {num_heads=}.")
+
+        self.num_components = num_components
+        self.num_heads = num_heads
+        self.dim_input = dim_input
+        self.dim_hidden = dim_hidden
+
+        self.mixture_queries = nn.Parameter(torch.empty(num_components, dim_hidden))
+        nn.init.xavier_normal_(self.mixture_queries)
+
+        # Each learned query corresponds to one mixture component; ``num_heads``
+        # controls the internal attention factorization.
+        self.attention = nn.MultiheadAttention(
+            embed_dim=dim_hidden,
+            num_heads=num_heads,
+            kdim=dim_input,
+            vdim=dim_input,
+            batch_first=True,
+        )
+        self.output_proj = nn.Linear(dim_hidden, 1)
+
+    def forward(
+        self,
+        embeddings: Tensor,  # (..., $N, D)
+        *,
+        valid_mask: Tensor | None = None,  # Bool[(..., $N)]
+    ) -> Tensor:  # (..., C), one normalized weight vector per batch element
+        r"""Compute one mixture-weight vector per batch element.
+
+        Args:
+            embeddings: Sequence embeddings with shape ``(..., N, D)``.
+            valid_mask: Optional boolean mask selecting valid sequence entries.
+                If omitted, it is inferred from finite rows of ``embeddings``.
+
+        Returns:
+            Mixture weights with shape ``(..., C)``. Each batch element sums to
+            1 across the mixture-query axis.
+        """
+        *batch_shape, seq_len, dim = embeddings.shape
+        valid_mask = (
+            valid_mask if valid_mask is not None else embeddings.isfinite().all(dim=-1)
+        )
+        assert dim == self.dim_input
+        assert valid_mask.dtype == torch.bool
+        assert valid_mask.shape == (*batch_shape, seq_len)
+
+        embeddings = torch.where(valid_mask[..., None], embeddings, 0.0)
+        flat_embeddings = embeddings.reshape(-1, seq_len, dim)
+        flat_valid_mask = valid_mask.reshape(-1, seq_len)
+
+        queries = self.mixture_queries.expand(flat_embeddings.shape[0], -1, -1)
+        attended, _ = self.attention(
+            queries,
+            flat_embeddings,
+            flat_embeddings,
+            key_padding_mask=~flat_valid_mask,
+            need_weights=False,
+        )
+
+        logits = self.output_proj(attended).squeeze(dim=-1)
+        weights = logits.softmax(dim=-1)
+        return weights.reshape(*batch_shape, self.num_components)
+
+
 class Moses(nn.Module):
     r"""Context-conditioned mixture normalizing flow for irregular time-series forecasting.
 
@@ -1228,10 +1335,24 @@ class Moses(nn.Module):
 
     # sub-modules / parameters
     encoder: Grafiti
-    mixture_proj: nn.Linear  # M → C  (mixture logits)
+    mixture_weight_model: nn.Linear  # M → C  (mixture logits)
     mean_proj: nn.Linear  # M → C  (Gaussian mean per component)
     log_std: Tensor  # (C,), nn.Parameter — shared log-std per component
     component_flows: ModuleSequence[SplineFlow]  # C × SplineFlow, each n_heads=()
+
+    @classmethod
+    def from_config(
+        cls,
+        input_dim: int,
+        latent_dim: int = 128,
+        num_components: int = 4,
+        num_flow_layers: int = 3,
+        num_bins: int = 16,
+        bounds: tuple[float, float] = (-5.0, 5.0),
+        num_encoder_layers: int = 3,
+        num_encoder_heads: int = 4,
+    ) -> Moses:
+        raise NotImplementedError
 
     def __init__(
         self,
@@ -1244,6 +1365,7 @@ class Moses(nn.Module):
         bounds: tuple[float, float] = (-5.0, 5.0),
         num_encoder_layers: int = 3,
         num_encoder_heads: int = 4,
+        mixture_weight_model: nn.Module,
     ) -> None:
         super().__init__()
 
@@ -1258,22 +1380,18 @@ class Moses(nn.Module):
             num_heads=num_encoder_heads,
             output_mode="embeddings",
         )
-        self.mixture_proj = nn.Linear(latent_dim, num_components)
+        # X -> w(X)
+        self.mixture_weight_model = nn.Linear(latent_dim, num_components)
         self.mean_proj = nn.Linear(latent_dim, num_components)
         self.log_std = nn.Parameter(torch.zeros(num_components))
 
         # One scalar SplineFlow per component (n_heads=() → elementwise 1-D flow).
-        self.component_flows = ModuleSequence(
-            [
-                SplineFlow(
-                    n_heads=(),
-                    num_flow_layers=num_flow_layers,
-                    num_bins=num_bins,
-                    x_bounds=bounds,
-                    y_bounds=bounds,
-                )
-                for _ in range(num_components)
-            ]
+        self.component_flows = SplineFlow(
+            n_heads=num_components,
+            num_flow_layers=num_flow_layers,
+            num_bins=num_bins,
+            x_bounds=bounds,
+            y_bounds=bounds,
         )
 
     def _encode(
@@ -1298,7 +1416,7 @@ class Moses(nn.Module):
             context_mask=context_mask,
             query_mask=query_mask,
         )
-        log_w = self.mixture_proj(H).log_softmax(dim=-1)  # (..., K, C)
+        log_w = self.mixture_weight_model(H).log_softmax(dim=-1)  # (..., K, C)
         mu = self.mean_proj(H)  # (..., K, C)
         sigma = F.softplus(self.log_std) + 1e-6  # (C,)
         return H, log_w, mu, sigma
@@ -1333,7 +1451,7 @@ class Moses(nn.Module):
             context_mask=request.context_mask,
             query_mask=request.query_mask,
         )
-        log_w = self.mixture_proj(H).log_softmax(dim=-1)  # (..., K, C)
+        log_w = self.mixture_weight_model(H).log_softmax(dim=-1)  # (..., K, C)
         mu = self.mean_proj(H)  # (..., K, C)
         sigma = F.softplus(self.log_std) + 1e-6  # (C,)
         return H, log_w, mu, sigma
