@@ -508,7 +508,7 @@ class CRU(nn.Module):
         context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[(..., N, D)], padded False
         context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        initial_state: Tensor | None = None,  # (..., H)
+        initial_state: tuple[Tensor, Tensor] | None = None,  # (..., 2d), (..., d, 3)
         initial_time: Tensor | None = None,  # t₀, () or (...)
     ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
         combined = EventBatch.from_request(
@@ -539,7 +539,7 @@ class CRU(nn.Module):
         query_mask: Tensor,  # (..., $T, D), bool, padded False
         context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
         context_mask: Tensor,  # (..., $T, D), bool, padded False
-        initial_state: tuple[Tensor, Tensor] | None = None,  # ((..., 2d), (..., d, 3))
+        initial_state: tuple[Tensor, Tensor] | None = None,  # (..., 2d), (..., d, 3)
         initial_time: Tensor | None = None,  # t₀, () or (...)
     ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (..., $K, F)
         r"""Filter and forecast over combined context/query time points.
