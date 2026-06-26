@@ -199,25 +199,6 @@ def make_forecasting_request(
     ctx_values = torch.randn(*seq_shape, *context_shape, generator=rng)
     tgt_values = torch.randn(*seq_shape, *output_shape, generator=rng)
 
-    # mask by feature missingness
-    ctx_mask = (2 * torch.rand_like(ctx_values)) >= float(input_missingness)
-    qry_mask = (2 * torch.rand_like(tgt_values)) >= float(target_missingness)
-
-    # sample one value per time stamp that is always observed
-    ctx_mask = ctx_mask.scatter(
-        -1,
-        torch.randint(0, math.prod(context_shape), size=(*seq_shape, 1), generator=rng),
-        True,
-    )
-    qry_mask = qry_mask.scatter(
-        -1,
-        torch.randint(0, math.prod(output_shape), size=(*seq_shape, 1), generator=rng),
-        True,
-    )
-
-    ctx_values = ctx_values.masked_fill(~ctx_mask, nan)
-    tgt_values = tgt_values.masked_fill(~qry_mask, nan)
-
     # mask by sequence length
     ctx_valid = torch.arange(max_steps) < ctx_lengths[..., None]
     qry_valid = torch.arange(max_steps) < qry_lengths[..., None]
@@ -226,8 +207,26 @@ def make_forecasting_request(
     ctx_values = ctx_values.masked_fill(~ctx_valid[..., None], nan)
     tgt_values = tgt_values.masked_fill(~qry_valid[..., None], nan)
 
-    ctx_mask = ctx_mask & ctx_valid[..., None]
-    qry_mask = qry_mask & qry_valid[..., None]
+    # mask by feature missingness
+    # sample one value per time stamp that is always observed
+    ctx_safe = torch.randint(
+        0, math.prod(context_shape), size=(*seq_shape, 1), generator=rng
+    )
+    qry_safe = torch.randint(
+        0, math.prod(output_shape), size=(*seq_shape, 1), generator=rng
+    )
+    ctx_mask = ctx_valid[..., None] & (
+        torch.ones_like(ctx_values, dtype=torch.bool)
+        if not input_missingness
+        else torch.rand_like(ctx_values, generator=rng) > 0.5
+    ).scatter(-1, ctx_safe, True)
+    qry_mask = qry_valid[..., None] & (
+        torch.ones_like(tgt_values, dtype=torch.bool)
+        if not target_missingness
+        else torch.rand_like(tgt_values, generator=rng) > 0.5
+    ).scatter(-1, qry_safe, True)
+    ctx_values = ctx_values.masked_fill(~ctx_mask, nan)
+    tgt_values = tgt_values.masked_fill(~qry_mask, nan)
 
     return BatchedForecastingRequest(
         context_times=ctx_times.requires_grad_(),
