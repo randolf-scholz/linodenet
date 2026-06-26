@@ -402,6 +402,48 @@ class TestSeparableEncoder:
             assert parameter.grad.isfinite().all()
             assert not parameter.grad.eq(0.0).all()
 
+    def test_permutation_variance(self, batch_shape: tuple[int, ...]) -> None:
+        r"""Query and context permutations should induce the expected symmetries."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        inputs = self.make_inputs(batch_shape)
+
+        h_obs, h_mix = model(**inputs)
+
+        query_perm = torch.randperm(self.QUERY_SIZE)
+        context_perm = torch.randperm(self.CONTEXT_SIZE)
+
+        query_permuted_inputs = {
+            **inputs,
+            "query_times": inputs["query_times"].index_select(-1, query_perm),
+            "query_channels": inputs["query_channels"].index_select(-1, query_perm),
+        }
+        h_obs_query_perm, h_mix_query_perm = model(**query_permuted_inputs)
+
+        torch.testing.assert_close(h_obs_query_perm, h_obs, equal_nan=True)
+        torch.testing.assert_close(
+            h_mix_query_perm,
+            h_mix.index_select(-2, query_perm),
+            equal_nan=True,
+        )
+
+        context_permuted_inputs = {
+            **inputs,
+            "context_times": inputs["context_times"].index_select(-1, context_perm),
+            "context_channels": inputs["context_channels"].index_select(
+                -1, context_perm
+            ),
+            "context_values": inputs["context_values"].index_select(-1, context_perm),
+        }
+        h_obs_context_perm, h_mix_context_perm = model(**context_permuted_inputs)
+
+        torch.testing.assert_close(
+            h_obs_context_perm,
+            h_obs.index_select(-2, context_perm),
+            equal_nan=True,
+        )
+        torch.testing.assert_close(h_mix_context_perm, h_mix, equal_nan=True)
+
 
 class TestMixtureWeightsModel:
     def test_mixture_weights_model_returns_one_weight_vector_per_batch_element(
