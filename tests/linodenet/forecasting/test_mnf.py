@@ -5,6 +5,7 @@ from typing import ClassVar, NamedTuple
 import pytest
 import torch
 from torch import Tensor
+from torch.testing import assert_close
 
 from linodenet.forecasting.mnf import (
     MarginalizableNormalizingFlow,
@@ -194,7 +195,7 @@ class TestMHA:
         for idx in range(q.shape[0]):
             expected[idx] = model(q[idx], k[idx, mask[idx]], v[idx, mask[idx]])
 
-        torch.testing.assert_close(masked, expected)
+        assert_close(masked, expected)
 
     def test_nan_padded_queries_produce_nan_outputs_only_at_padded_queries(
         self,
@@ -420,8 +421,8 @@ class TestSeparableEncoder:
         }
         h_obs_query_perm, h_mix_query_perm = model(**query_permuted_inputs)
 
-        torch.testing.assert_close(h_obs_query_perm, h_obs, equal_nan=True)
-        torch.testing.assert_close(
+        assert_close(h_obs_query_perm, h_obs, equal_nan=True)
+        assert_close(
             h_mix_query_perm,
             h_mix.index_select(-2, query_perm),
             equal_nan=True,
@@ -437,17 +438,26 @@ class TestSeparableEncoder:
         }
         h_obs_context_perm, h_mix_context_perm = model(**context_permuted_inputs)
 
-        torch.testing.assert_close(
+        assert_close(
             h_obs_context_perm,
             h_obs.index_select(-2, context_perm),
             equal_nan=True,
         )
-        torch.testing.assert_close(h_mix_context_perm, h_mix, equal_nan=True)
+        assert_close(h_mix_context_perm, h_mix, equal_nan=True)
 
 
 class TestMixtureWeightsModel:
+    @pytest.mark.parametrize(
+        "batch_shape",
+        [
+            pytest.param((), id="batch_shape=()"),
+            pytest.param((2,), id="batch_shape=(2,)"),
+            pytest.param((2, 3), id="batch_shape=(2,3)"),
+        ],
+    )
     def test_mixture_weights_model_returns_one_weight_vector_per_batch_element(
         self,
+        batch_shape: tuple[int, ...],
     ) -> None:
         r"""Each learned mixture query should produce a normalized weight vector."""
         torch.manual_seed(0)
@@ -457,20 +467,15 @@ class TestMixtureWeightsModel:
             dim_input=5,
             dim_hidden=8,
         )
-        embeddings = torch.randn(2, 4, 5)
-        valid_mask = torch.tensor(
-            [[True, True, False, True], [True, False, False, False]]
-        )
+        embeddings = torch.randn(*batch_shape, 4, 5)
+        valid_mask = torch.rand(*batch_shape, 4) > 0.4
         embeddings = embeddings.masked_fill(~valid_mask.unsqueeze(-1), torch.nan)
 
         weights = model(embeddings, valid_mask=valid_mask)
 
-        assert weights.shape == (2, 3)
+        assert weights.shape == (*batch_shape, 3)
         assert weights.isfinite().all()
-        torch.testing.assert_close(
-            weights.sum(dim=-1),
-            torch.ones(2, dtype=weights.dtype, device=weights.device),
-        )
+        assert_close(weights.sum(dim=-1), torch.ones_like(weights.sum(dim=-1)))
 
     def test_mixture_weights_model_returns_zero_for_fully_masked_sequences(
         self,
@@ -489,7 +494,4 @@ class TestMixtureWeightsModel:
 
         assert weights.shape == (1, 2)
         assert weights.isfinite().all()
-        torch.testing.assert_close(
-            weights.sum(dim=-1),
-            torch.ones(1, dtype=weights.dtype, device=weights.device),
-        )
+        assert_close(weights.sum(dim=-1), weights.new_ones((1,)))

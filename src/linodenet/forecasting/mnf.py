@@ -1336,7 +1336,7 @@ class MixtureWeightsModel(nn.Module):
     dim_input: Final[int]
     dim_hidden: Final[int]
     mixture_queries: Tensor
-    attention: nn.MultiheadAttention
+    attention: MultiHeadAttention
     output_proj: nn.Linear
 
     def __init__(
@@ -1368,14 +1368,13 @@ class MixtureWeightsModel(nn.Module):
         )
         nn.init.xavier_normal_(self.mixture_queries)
 
-        # Each learned query corresponds to one mixture component; ``num_heads``
-        # controls the internal attention factorization.
-        self.attention = nn.MultiheadAttention(
-            embed_dim=dim_hidden,
+        self.attention = MultiHeadAttention(
+            q_dim=dim_hidden,
+            k_dim=dim_input,
+            v_dim=dim_input,
+            dim_head=dim_hidden // num_heads,
             num_heads=num_heads,
-            kdim=dim_input,
-            vdim=dim_input,
-            batch_first=True,
+            dim_output=dim_hidden,
         )
         self.output_proj = nn.Linear(dim_hidden, 1)
 
@@ -1402,26 +1401,19 @@ class MixtureWeightsModel(nn.Module):
         assert valid_mask.dtype == torch.bool
         assert valid_mask.shape == (*batch_shape, seq_len)
 
-        embeddings = torch.where(valid_mask[..., None], embeddings, 0.0)
-        flat_embeddings = embeddings.reshape(-1, seq_len, dim)
-        flat_valid_mask = valid_mask.reshape(-1, seq_len)
-        queries = self.mixture_queries.expand(  # (B, C, H)
-            flat_embeddings.shape[0],
+        queries = self.mixture_queries.expand(
+            *batch_shape,
             self.num_components,
             self.dim_hidden,
         )
-
-        attended, _ = self.attention(  # (B, C, H)
+        attended = self.attention(
             queries,
-            flat_embeddings,
-            flat_embeddings,
-            key_padding_mask=~flat_valid_mask,
-            need_weights=False,
+            embeddings,
+            embeddings,
+            key_mask=valid_mask,
         )
-
-        logits = self.output_proj(attended).squeeze(dim=-1)  # (B, C)
-        weights = logits.softmax(dim=-1)  # (B, C)
-        return weights.reshape(*batch_shape, self.num_components)
+        logits = self.output_proj(attended).squeeze(dim=-1)  # (..., C)
+        return logits.softmax(dim=-1)
 
 
 class SeparableEncoder(nn.Module):
