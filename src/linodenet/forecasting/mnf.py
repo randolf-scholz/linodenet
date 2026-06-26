@@ -1390,10 +1390,10 @@ class MultiHeadAttention(nn.Module):
         query_mask: Tensor | None = None,  # Bool[(..., $Q)]
         key_mask: Tensor | None = None,  # Bool[(..., $X)]
     ) -> Tensor:  # (..., $Q, d_out)
-        query_mask = (  # broadcast (..., $Q) -> (..., H, $Q, d_out)
-            query_mask[..., None, :, None]
+        query_mask = (  # broadcast (..., $Q) -> (..., $Q, d_out)
+            query_mask[..., :, None]
             if query_mask is not None
-            else ~q.isnan().any(dim=-1).unsqueeze(-2).unsqueeze(-1)
+            else ~q.isnan().any(dim=-1).unsqueeze(-1)
         )
         key_mask = (  # broadcast (..., $X) -> (..., H, $Q, $X)
             key_mask[..., None, None, :]
@@ -1436,7 +1436,7 @@ class SeparableEncoder(nn.Module):
         self,
         *,
         dim_output: int,
-        dim_hidden: int,
+        dim_head: int,
         num_heads: int,
         num_components: int,
         num_frequencies: int,
@@ -1458,7 +1458,7 @@ class SeparableEncoder(nn.Module):
             q_dim=self.ctx_embed_dim,
             k_dim=self.ctx_embed_dim,
             v_dim=self.ctx_embed_dim,
-            dim_hidden=dim_hidden,
+            dim_head=dim_head,
             dim_output=dim_output,
             num_heads=num_heads,
         )
@@ -1466,7 +1466,7 @@ class SeparableEncoder(nn.Module):
             q_dim=self.qry_embed_dim,
             k_dim=dim_output,
             v_dim=dim_output,
-            dim_hidden=dim_hidden,
+            dim_head=dim_head,
             dim_output=num_components * dim_output,
             num_heads=num_heads,
         )

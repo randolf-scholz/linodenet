@@ -110,7 +110,7 @@ class TestMHA:
     Q_DIM: ClassVar[int] = 5
     K_DIM: ClassVar[int] = 7
     V_DIM: ClassVar[int] = 11
-    DIM_HIDDEN: ClassVar[int] = 4
+    DIM_HEAD: ClassVar[int] = 4
     DIM_OUTPUT: ClassVar[int] = 3
     NUM_HEADS: ClassVar[int] = 2
     QUERY_SIZE: ClassVar[int] = 4
@@ -130,7 +130,7 @@ class TestMHA:
             self.Q_DIM,
             self.K_DIM,
             self.V_DIM,
-            dim_hidden=self.DIM_HIDDEN,
+            dim_head=self.DIM_HEAD,
             dim_output=self.DIM_OUTPUT,
             num_heads=self.NUM_HEADS,
         )
@@ -145,19 +145,14 @@ class TestMHA:
         return q, k, v
 
     def test_forward_returns_expected_shape(self, batch_shape: tuple[int, ...]) -> None:
-        r"""Forward pass should preserve batch axes and expose head outputs."""
+        r"""Forward pass should preserve batch axes and return projected outputs."""
         torch.manual_seed(0)
         model = self.make_model()
         q, k, v = self.make_inputs(batch_shape)
 
         actual = model(q, k, v)
 
-        assert actual.shape == (
-            *batch_shape,
-            self.NUM_HEADS,
-            self.QUERY_SIZE,
-            self.DIM_OUTPUT,
-        )
+        assert actual.shape == (*batch_shape, self.QUERY_SIZE, self.DIM_OUTPUT)
         assert actual.isfinite().all()
 
     def test_masked_forward_matches_truncated_inputs(self) -> None:
@@ -188,10 +183,10 @@ class TestMHA:
         q, k, v = self.make_inputs((2,))
         q[0, 2:] = torch.nan
 
-        actual = model(q, k, v)  # (..., H, $Q, D)
+        actual = model(q, k, v)  # (..., $Q, D)
 
         expected_finite = q.isfinite().all(dim=-1)
-        actual_finite = actual.isfinite().all(dim=-3).all(dim=-1)
+        actual_finite = actual.isfinite().all(dim=-1)
 
         assert torch.equal(actual_finite, expected_finite)
 
