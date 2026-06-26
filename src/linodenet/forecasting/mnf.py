@@ -1352,23 +1352,33 @@ class ChannelEmbedding(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
+    r"""Computes multi-head attention.
+
+    .. math:: hᵢ = Attn(QWᵢ𐞥, KWᵢᵏ, VWᵢᵛ), r = concat(h₁, …, h_H)Wᵒ
+    """
+
     def __init__(
         self,
         q_dim: int,
         k_dim: int,
         v_dim: int,
         *,
-        dim_hidden: int,
-        dim_output: int,
+        dim_head: int,
         num_heads: int,
+        dim_output: int,
+        bias: bool = True,
     ) -> None:
         super().__init__()
-        self.dim_hidden = dim_hidden
+
+        self.dim_head = dim_head
+        self.dim_hidden = dim_head * num_heads
         self.dim_output = dim_output
         self.num_heads = num_heads
-        self.q_proj = nn.Linear(q_dim, num_heads * dim_hidden)
-        self.k_proj = nn.Linear(k_dim, num_heads * dim_hidden)
-        self.v_proj = nn.Linear(v_dim, num_heads * dim_output)
+
+        self.q_proj = nn.Linear(q_dim, self.dim_hidden, bias=bias)
+        self.k_proj = nn.Linear(k_dim, self.dim_hidden, bias=bias)
+        self.v_proj = nn.Linear(v_dim, self.dim_hidden, bias=bias)
+        self.out_proj = nn.Linear(self.dim_hidden, dim_output, bias=bias)
 
     def forward(
         self,
@@ -1379,15 +1389,13 @@ class MultiHeadAttention(nn.Module):
         *,
         query_mask: Tensor | None = None,  # Bool[(..., $Q)]
         key_mask: Tensor | None = None,  # Bool[(..., $X)]
-    ) -> Tensor:  # (..., H, $Q, d_out)
-        query_mask = (
-            # broadcast (..., $Q) -> (..., H, $Q, d_out)
+    ) -> Tensor:  # (..., $Q, d_out)
+        query_mask = (  # broadcast (..., $Q) -> (..., H, $Q, d_out)
             query_mask[..., None, :, None]
             if query_mask is not None
             else ~q.isnan().any(dim=-1).unsqueeze(-2).unsqueeze(-1)
         )
-        key_mask = (
-            # broadcast (..., $X) -> (..., H, $Q, $X)
+        key_mask = (  # broadcast (..., $X) -> (..., H, $Q, $X)
             key_mask[..., None, None, :]
             if key_mask is not None
             else ~k.isnan().any(dim=-1).unsqueeze(-2).unsqueeze(-2)
@@ -1395,20 +1403,23 @@ class MultiHeadAttention(nn.Module):
 
         q = self.q_proj(q.nan_to_num(0.0))  # (..., $Q, H×d_h)
         k = self.k_proj(k.nan_to_num(0.0))  # (..., $X, H×d_h)
-        v = self.v_proj(v.nan_to_num(0.0))  # (..., $X, H×d_out)
+        v = self.v_proj(v.nan_to_num(0.0))  # (..., $X, H×d_h)
 
-        q = q.unflatten(-1, (self.num_heads, self.dim_hidden))  # (..., $Q, H, d_h)
-        k = k.unflatten(-1, (self.num_heads, self.dim_hidden))  # (..., $X, H, d_h)
-        v = v.unflatten(-1, (self.num_heads, self.dim_output))  # (..., $X, H, d_out)
+        q = q.unflatten(-1, (self.num_heads, self.dim_head))  # (..., $Q, H, d_h)
+        k = k.unflatten(-1, (self.num_heads, self.dim_head))  # (..., $X, H, d_h)
+        v = v.unflatten(-1, (self.num_heads, self.dim_head))  # (..., $X, H, d_h)
 
-        r = F.scaled_dot_product_attention(  # (..., H, $Q, d_out)
+        h = F.scaled_dot_product_attention(  # (..., H, $Q, d_h)
             q.swapaxes(-2, -3),  # (..., H, $Q, d_h)
             k.swapaxes(-2, -3),  # (..., H, $X, d_h)
-            v.swapaxes(-2, -3),  # (..., H, $X, d_out)
+            v.swapaxes(-2, -3),  # (..., H, $X, d_h)
             attn_mask=key_mask,  # (..., H, $Q, $X)
             dropout_p=0.0,
         )
-        return torch.where(query_mask, r, nan)
+        # recombine heads
+        h = h.swapaxes(-2, -3).flatten(-2)  # (..., $Q, H×d_h)
+        y = self.out_proj(h)  # (..., $Q, d_out)
+        return torch.where(query_mask, y, nan)  # mask out invalid queries
 
 
 class SeparableEncoder(nn.Module):
@@ -1424,7 +1435,7 @@ class SeparableEncoder(nn.Module):
     def __init__(
         self,
         *,
-        dim_input: int,
+        dim_output: int,
         dim_hidden: int,
         num_heads: int,
         num_components: int,
@@ -1432,7 +1443,7 @@ class SeparableEncoder(nn.Module):
         num_channels: int,
     ) -> None:
         super().__init__()
-        self.dim_hidden = dim_hidden
+        self.dim_output = dim_output
         self.num_components = num_components
         self.num_heads = num_heads
         self.num_channels = num_channels
@@ -1443,19 +1454,21 @@ class SeparableEncoder(nn.Module):
         self.positional_embedding = PositionalEmbedding(num_frequencies)
         self.channel_embedding = ChannelEmbedding(num_channels)
 
-        self.context_self_attention = nn.MultiheadAttention(
-            embed_dim=dim_hidden,
+        self.context_self_attention = MultiHeadAttention(
+            q_dim=self.ctx_embed_dim,
+            k_dim=self.ctx_embed_dim,
+            v_dim=self.ctx_embed_dim,
+            dim_hidden=dim_hidden,
+            dim_output=dim_output,
             num_heads=num_heads,
-            kdim=self.ctx_embed_dim,
-            vdim=self.ctx_embed_dim,
-            batch_first=True,
         )
-        self.cross_attention = nn.MultiheadAttention(
-            embed_dim=dim_hidden * num_components,
+        self.cross_attention = MultiHeadAttention(
+            q_dim=self.qry_embed_dim,
+            k_dim=dim_output,
+            v_dim=dim_output,
+            dim_hidden=dim_hidden,
+            dim_output=num_components * dim_output,
             num_heads=num_heads,
-            kdim=dim_hidden,
-            vdim=dim_hidden,
-            batch_first=True,
         )
 
     def forward(
@@ -1483,7 +1496,7 @@ class SeparableEncoder(nn.Module):
         *batch_shape, qry_size = query_channels.shape
         *_, ctx_size = context_channels.shape
         D = self.num_components
-        M = self.dim_hidden
+        M = self.dim_output
 
         x = torch.cat(  # (B, $X, D)
             [
@@ -1502,7 +1515,8 @@ class SeparableEncoder(nn.Module):
             dim=-1,
         ).reshape(-1, qry_size, self.qry_embed_dim)
 
-        h_obs = self.context_self_attention(x, x, x)  # (B, $X, M)
+        h_obs = self.context_self_attention(x, x, x)  # (B, 1, $X, M)
+        h_obs = h_obs.squeeze(dim=-3)  # (B, $X, M)
         h_mix = self.cross_attention(q, h_obs, h_obs)  # (B, $Q, D×M)
         h_obs = h_obs.reshape(*batch_shape, ctx_size, M)  # (..., $X, M)
         h_mix = h_mix.reshape(*batch_shape, qry_size, D, M)  # (..., $Q, D, M)

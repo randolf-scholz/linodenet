@@ -266,7 +266,7 @@ class TestSeparableEncoder:
         dim_input = (self.NUM_FREQUENCIES + 1) + self.NUM_CHANNELS + 1
         return SeparableEncoder(
             dim_input=dim_input,
-            dim_hidden=self.DIM_HIDDEN,
+            dim_output=self.DIM_HIDDEN,
             num_heads=2,
             num_components=self.NUM_COMPONENTS,
             num_frequencies=self.NUM_FREQUENCIES,
