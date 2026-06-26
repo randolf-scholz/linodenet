@@ -1,5 +1,6 @@
 r"""Base test classes for forecasting models."""
 
+import math
 from abc import ABC, abstractmethod
 from typing import ClassVar, NamedTuple
 
@@ -201,6 +202,19 @@ def make_forecasting_request(
     # mask by feature missingness
     ctx_mask = (2 * torch.rand_like(ctx_values)) >= float(input_missingness)
     qry_mask = (2 * torch.rand_like(tgt_values)) >= float(target_missingness)
+
+    # sample one value per time stamp that is always observed
+    ctx_mask = ctx_mask.scatter(
+        -1,
+        torch.randint(0, math.prod(context_shape), size=(*seq_shape, 1), generator=rng),
+        True,
+    )
+    qry_mask = qry_mask.scatter(
+        -1,
+        torch.randint(0, math.prod(output_shape), size=(*seq_shape, 1), generator=rng),
+        True,
+    )
+
     ctx_values = ctx_values.masked_fill(~ctx_mask, nan)
     tgt_values = tgt_values.masked_fill(~qry_mask, nan)
 
@@ -212,8 +226,8 @@ def make_forecasting_request(
     ctx_values = ctx_values.masked_fill(~ctx_valid[..., None], nan)
     tgt_values = tgt_values.masked_fill(~qry_valid[..., None], nan)
 
-    ctx_mask = ctx_mask | ctx_valid[..., None]
-    qry_mask = qry_mask | qry_valid[..., None]
+    ctx_mask = ctx_mask & ctx_valid[..., None]
+    qry_mask = qry_mask & qry_valid[..., None]
 
     return BatchedForecastingRequest(
         context_times=ctx_times.requires_grad_(),
