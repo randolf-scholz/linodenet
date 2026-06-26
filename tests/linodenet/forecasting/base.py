@@ -5,9 +5,11 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
-from torch import Tensor, nn
+from torch import Tensor, nan, nn
 from torch.nn.utils.rnn import pad_sequence
 from torch.testing import assert_close
+
+from linodenet.forecasting.utils import BatchedForecastingRequest
 
 
 class SequentialData(NamedTuple):
@@ -106,14 +108,14 @@ class SequentialData(NamedTuple):
                     pad_sequence(
                         time_sequences,
                         batch_first=True,
-                        padding_value=torch.nan,
+                        padding_value=nan,
                     ).reshape(*batch_shape, -1)
                 )
                 values.append(
                     pad_sequence(
                         value_sequences,
                         batch_first=True,
-                        padding_value=torch.nan,
+                        padding_value=nan,
                     ).reshape(*batch_shape, -1, *value_shape)
                 )
 
@@ -135,7 +137,7 @@ class SequentialData(NamedTuple):
             miss_mask = ~(random_observed | fallback_observed).reshape(
                 context_values.shape
             )
-            context_values = context_values.masked_fill(miss_mask, torch.nan)
+            context_values = context_values.masked_fill(miss_mask, nan)
 
         context_lengths = context_steps.reshape(batch_shape)
         query_lengths = query_steps.reshape(batch_shape)
@@ -164,6 +166,63 @@ class SequentialData(NamedTuple):
             target_values=target_values,
             query_lengths=query_lengths,
         )
+
+
+def make_forecasting_request(
+    *,
+    seed: int,
+    batch_shape: int | tuple[int, ...],
+    min_steps: int,
+    max_steps: int,
+    context_shape: tuple[int, ...],
+    output_shape: tuple[int, ...] | None = None,
+    input_missingness: bool = False,
+    target_missingness: bool = False,
+) -> BatchedForecastingRequest:
+    r"""Sample random dense forecasting inputs for a forecasting model."""
+    rng = torch.Generator().manual_seed(seed)
+    batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
+    output_shape = output_shape if output_shape is not None else context_shape
+    seq_shape = (*batch_shape, max_steps)
+
+    ctx_lengths = torch.randint(
+        min_steps, max_steps + 1, size=batch_shape, generator=rng
+    )
+    qry_lengths = torch.randint(
+        min_steps, max_steps + 1, size=batch_shape, generator=rng
+    )
+    ctx_times = torch.sort(torch.rand(seq_shape, generator=rng), dim=-1).values
+    qry_times = torch.sort(torch.rand(seq_shape, generator=rng), dim=-1).values
+    qry_times = qry_times + ctx_times[..., [-1]]
+
+    ctx_values = torch.randn(*seq_shape, *context_shape, generator=rng)
+    tgt_values = torch.randn(*seq_shape, *output_shape, generator=rng)
+
+    # mask by feature missingness
+    ctx_mask = (2 * torch.rand_like(ctx_values)) >= float(input_missingness)
+    qry_mask = (2 * torch.rand_like(tgt_values)) >= float(target_missingness)
+    ctx_values = ctx_values.masked_fill(~ctx_mask, nan)
+    tgt_values = tgt_values.masked_fill(~qry_mask, nan)
+
+    # mask by sequence length
+    ctx_valid = torch.arange(max_steps) < ctx_lengths[..., None]
+    qry_valid = torch.arange(max_steps) < qry_lengths[..., None]
+    ctx_times = ctx_times.masked_fill(~ctx_valid, nan)
+    qry_times = qry_times.masked_fill(~qry_valid, nan)
+    ctx_values = ctx_values.masked_fill(~ctx_valid[..., None], nan)
+    tgt_values = tgt_values.masked_fill(~qry_valid[..., None], nan)
+
+    ctx_mask = ctx_mask | ctx_valid[..., None]
+    qry_mask = qry_mask | qry_valid[..., None]
+
+    return BatchedForecastingRequest(
+        context_times=ctx_times.requires_grad_(),
+        context_values=ctx_values.requires_grad_(),
+        context_mask=ctx_mask,
+        query_times=qry_times.requires_grad_(),
+        query_mask=qry_mask,
+        target_values=tgt_values.requires_grad_(),
+    )
 
 
 class TestForecastingModel[M: nn.Module](ABC):
@@ -297,10 +356,10 @@ class TestForecastingModel[M: nn.Module](ABC):
         context_size = int(context_lengths.max().item())
         query_size = int(query_lengths.max().item())
 
-        context_times = torch.full((2, context_size), torch.nan)
-        query_times = torch.full((2, query_size), torch.nan)
-        context_values = torch.full((2, context_size, *context_shape), torch.nan)
-        target_values = torch.full((2, query_size, *output_shape), torch.nan)
+        context_times = torch.full((2, context_size), nan)
+        query_times = torch.full((2, query_size), nan)
+        context_values = torch.full((2, context_size, *context_shape), nan)
+        target_values = torch.full((2, query_size, *output_shape), nan)
 
         for k, (context_length_tensor, query_length_tensor) in enumerate(
             zip(context_lengths, query_lengths, strict=True)
@@ -335,7 +394,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             miss_mask = ~(random_observed | fallback_observed).reshape(
                 context_values.shape
             )
-            context_values = context_values.masked_fill(miss_mask, torch.nan)
+            context_values = context_values.masked_fill(miss_mask, nan)
 
         data = SequentialData(
             context_times=context_times,
@@ -350,7 +409,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         model = self.make_model(model_config)
         batched_predictions = self.forecast(model, data)
         expected_predictions = [
-            prediction.new_full(prediction.shape, torch.nan)
+            prediction.new_full(prediction.shape, nan)
             for prediction in batched_predictions
         ]
 
@@ -386,7 +445,7 @@ class TestForecastingModel[M: nn.Module](ABC):
                 mask = mask.unsqueeze(dim=-1)
             mask = mask.expand_as(prediction)
             assert_close(
-                prediction.masked_fill(~mask, torch.nan),
+                prediction.masked_fill(~mask, nan),
                 expected,
                 equal_nan=True,
                 rtol=1e-6,
@@ -422,7 +481,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             context_times=torch.cat(
                 [
                     data.context_times,
-                    data.context_times.new_full((*batch_dims, padding), torch.nan),
+                    data.context_times.new_full((*batch_dims, padding), nan),
                 ],
                 dim=-1,
             ),
@@ -431,7 +490,7 @@ class TestForecastingModel[M: nn.Module](ABC):
                     data.context_values,
                     data.context_values.new_full(
                         (*batch_dims, padding, *context_shape),
-                        torch.nan,
+                        nan,
                     ),
                 ],
                 dim=-1 - len(context_shape),
@@ -440,7 +499,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             query_times=torch.cat(
                 [
                     data.query_times,
-                    data.query_times.new_full((*batch_dims, padding), torch.nan),
+                    data.query_times.new_full((*batch_dims, padding), nan),
                 ],
                 dim=-1,
             ),
@@ -449,7 +508,7 @@ class TestForecastingModel[M: nn.Module](ABC):
                     data.target_values,
                     data.target_values.new_full(
                         (*batch_dims, padding, *output_shape),
-                        torch.nan,
+                        nan,
                     ),
                 ],
                 dim=-1 - len(output_shape),
@@ -475,8 +534,8 @@ class TestForecastingModel[M: nn.Module](ABC):
             padded_window = padded_prediction.narrow(query_axis, 0, query_size)
             mask = mask.expand_as(prediction)
             assert_close(
-                prediction.masked_fill(~mask, torch.nan),
-                padded_window.masked_fill(~mask, torch.nan),
+                prediction.masked_fill(~mask, nan),
+                padded_window.masked_fill(~mask, nan),
                 equal_nan=True,
                 rtol=0.0,
                 atol=1e-4,
