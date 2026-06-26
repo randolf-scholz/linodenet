@@ -308,35 +308,27 @@ class TestCRU(TestForecastingModel[CRU]):
         r"""Return CRU predictions for sequential forecasting inputs."""
         assert inputs.target_values is not None
         query_valid = inputs.query_mask.any(dim=-1)
-        context_mask = (
-            inputs.context_times.isfinite()
-            .unsqueeze(-1)
-            .expand_as(inputs.context_values)
+        context_mask = inputs.context_times.isfinite().unsqueeze(-1)
+        assert torch.equal(
+            inputs.context_mask, context_mask.expand_as(inputs.context_mask)
         )
-        query_mask = query_valid.unsqueeze(-1).expand_as(inputs.target_values)
-        request = BatchedForecastingRequest(
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=context_mask,
-            query_times=inputs.query_times,
-            query_mask=query_mask,
-            target_values=inputs.target_values,
+        assert torch.equal(
+            inputs.query_mask, query_valid.unsqueeze(-1).expand_as(inputs.query_mask)
         )
-        assert request.target_values is not None
 
         log_prob = model.log_prob(
-            request.target_values,
-            query_times=request.query_times,
-            query_mask=request.query_mask,
-            context_times=request.context_times,
-            context_values=request.context_values,
-            context_mask=request.context_mask,
+            inputs.target_values,
+            query_times=inputs.query_times,
+            query_mask=inputs.query_mask,
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            context_mask=inputs.context_mask,
         )
         all_pred_means = model.pred_means
         all_pred_vars = model.pred_variances
 
         # Extract predictions at query steps and scatter into (*, Q, F) output.
-        has_query = request.query_mask.any(dim=-1)
+        has_query = inputs.query_mask.any(dim=-1)
         query_log_prob = log_prob[has_query]
         pred_mean = torch.full_like(inputs.target_values, torch.nan)
         pred_var = torch.full_like(inputs.target_values, torch.nan)
