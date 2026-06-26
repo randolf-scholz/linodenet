@@ -192,10 +192,12 @@ class EventBatch(NamedTuple):
         static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
         batch_first: bool = True,
     ) -> EventBatch:
-        T = context_times
-        X = context_values
+        seq_dim = -2 if batch_first else 0
+
+        T = context_times.unsqueeze(-1)
         C = context_mask
-        Q = query_times
+        X = context_values
+        Q = query_times.unsqueeze(-1)
         M = query_mask
         Y = target_values
 
@@ -210,58 +212,63 @@ class EventBatch(NamedTuple):
             ctx_pad_shape = (q_size, *batch_shape, ctx_dim)
             qry_pad_shape = (ctx_size, *batch_shape, q_dim)
 
-        time_seq_dim = -1 if batch_first else 0
-        mask_seq_dim = -2 if batch_first else 0
-
-        times = torch.cat([T, Q], dim=time_seq_dim)
-        permutation = torch.argsort(
+        times = torch.cat([T, Q], dim=seq_dim)  # (..., $N+$K, 1)
+        permutation = torch.argsort(  # (..., $N+$K, 1)
             times.nan_to_num(nan=torch.inf),
-            dim=time_seq_dim,
+            dim=seq_dim,
             stable=True,
-        ).unsqueeze(-1)
+        )
 
         # inv_perm[j] = sorted position of original index j
-        inv_perm = torch.argsort(permutation.squeeze(-1), dim=time_seq_dim, stable=True)
+        inv_perm = torch.argsort(  # (..., $N+$K, 1)
+            permutation, dim=seq_dim, stable=True
+        )
         batch_idx = tuple(
             torch.arange(size, device=times.device)
             .reshape(
                 *(size if j == i else 1 for j in range(len(batch_shape))),
             )
-            .unsqueeze(time_seq_dim)
+            .unsqueeze(-1 if batch_first else 0)
             for i, size in enumerate(batch_shape)
         )
 
         if batch_first:
-            time_idx = inv_perm[..., ctx_size:]  # (*batch_shape, K)
+            time_idx = inv_perm[..., ctx_size:, :].squeeze(-1)  # (*batch_shape, K)
             query_indices: tuple[Tensor, ...] = (*batch_idx, time_idx)
         else:
-            time_idx = inv_perm[ctx_size:]  # (K, *batch_shape)
+            time_idx = inv_perm[ctx_size:].squeeze(-1)  # (K, *batch_shape)
             query_indices = (time_idx, *batch_idx)
 
         return EventBatch(
-            timestamps=times.take_along_dim(permutation.squeeze(-1), dim=time_seq_dim),
-            context_values=torch.cat(
-                [X, X.new_full(ctx_pad_shape, nan)],
-                dim=mask_seq_dim,
-            ).take_along_dim(permutation, dim=mask_seq_dim),
-            context_mask=torch.cat(
-                [C, C.new_zeros(ctx_pad_shape)],
-                dim=mask_seq_dim,
-            ).take_along_dim(permutation, dim=mask_seq_dim),
-            query_mask=torch.cat(
-                [M.new_zeros(qry_pad_shape), M],
-                dim=mask_seq_dim,
-            ).take_along_dim(permutation, dim=mask_seq_dim),
-            query_indices=query_indices,
+            timestamps=times.take_along_dim(permutation, dim=seq_dim).squeeze(-1),
+            context_values=(
+                torch.cat(
+                    [X, X.new_full(ctx_pad_shape, nan)],
+                    dim=seq_dim,
+                ).take_along_dim(permutation, dim=seq_dim)
+            ),
+            context_mask=(
+                torch.cat(
+                    [C, C.new_zeros(ctx_pad_shape)],
+                    dim=seq_dim,
+                ).take_along_dim(permutation, dim=seq_dim)
+            ),
+            query_mask=(
+                torch.cat(
+                    [M.new_zeros(qry_pad_shape), M],
+                    dim=seq_dim,
+                ).take_along_dim(permutation, dim=seq_dim)
+            ),
             target_values=(
                 torch.cat(
                     [Y.new_full(qry_pad_shape, nan), Y],
-                    dim=mask_seq_dim,
-                ).take_along_dim(permutation, dim=mask_seq_dim)
+                    dim=seq_dim,
+                ).take_along_dim(permutation, dim=seq_dim)
                 if Y is not None
                 else None
             ),
             static_covariates=static_covariates,
+            query_indices=query_indices,
         )
 
 
