@@ -13,6 +13,7 @@ from linodenet.forecasting.utils import (
     EventBatch,
     ForecastingRequest,
     TripletArg,
+    TripletBatch,
 )
 
 
@@ -1994,4 +1995,89 @@ class TestEventBatch:
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
+        )
+
+
+class TestTripletBatch:
+    def test_from_request_unbatched(self) -> None:
+        req = ForecastingRequest(
+            context_times=torch.tensor([1.0, 3.0]),
+            context_values=torch.tensor([[10.0, nan], [nan, 30.0]]),
+            context_mask=torch.tensor([[True, False], [False, True]]),
+            query_times=torch.tensor([2.0, 4.0]),
+            query_mask=torch.tensor([[True, False], [True, True]]),
+            target_values=torch.tensor([[20.0, nan], [40.0, 41.0]]),
+            static_covariates=torch.tensor([5.0, 6.0]),
+        )
+
+        actual = TripletBatch.from_request(
+            context_times=req.context_times,
+            context_values=req.context_values,
+            context_mask=req.context_mask,
+            query_times=req.query_times,
+            query_mask=req.query_mask,
+            target_values=req.target_values,
+            static_covariates=req.static_covariates,
+        )
+        expected = req.to_triplet()
+
+        _assert_triplet_equal(actual, expected)
+
+    @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
+    def test_from_request_random(self, batch_shape: tuple[int, ...]) -> None:
+        req = _make_random_batched_dense(batch_shape, context_dim=3, query_dim=4)
+
+        actual = TripletBatch.from_request(
+            context_times=req.context_times,
+            context_values=req.context_values,
+            context_mask=req.context_mask,
+            query_times=req.query_times,
+            query_mask=req.query_mask,
+            target_values=req.target_values,
+            static_covariates=req.static_covariates,
+        )
+        expected = req.to_triplet()
+
+        _assert_batched_triplet_equal(actual, expected)
+
+    @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
+    def test_from_request_batch_last(self, batch_shape: tuple[int, ...]) -> None:
+        req = _make_random_batched_dense(batch_shape, context_dim=3, query_dim=4)
+
+        ctx_times = req.context_times.movedim(-1, 0)
+        ctx_values = req.context_values.movedim(-2, 0)
+        ctx_mask = req.context_mask.movedim(-2, 0)
+        qry_times = req.query_times.movedim(-1, 0)
+        qry_mask = req.query_mask.movedim(-2, 0)
+        tgt_values = (
+            req.target_values.movedim(-2, 0) if req.target_values is not None else None
+        )
+
+        actual = TripletBatch.from_request(
+            context_times=ctx_times,
+            context_values=ctx_values,
+            context_mask=ctx_mask,
+            query_times=qry_times,
+            query_mask=qry_mask,
+            target_values=tgt_values,
+            static_covariates=req.static_covariates,
+            batch_first=False,
+        )
+        expected = req.to_triplet()
+
+        _assert_batched_triplet_equal(
+            BatchedTripletArgs(
+                context_times=actual.context_times.movedim(0, -1),
+                context_channels=actual.context_channels.movedim(0, -1),
+                context_values=actual.context_values.movedim(0, -1),
+                query_times=actual.query_times.movedim(0, -1),
+                query_channels=actual.query_channels.movedim(0, -1),
+                target_values=(
+                    actual.target_values.movedim(0, -1)
+                    if actual.target_values is not None
+                    else None
+                ),
+                static_covariates=actual.static_covariates,
+            ),
+            expected,
         )

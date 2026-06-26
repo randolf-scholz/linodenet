@@ -8,6 +8,7 @@ __all__ = [
     "ForecastingRequest",
     "CombinedArg",
     "EventBatch",
+    "TripletBatch",
     # functions
     "is_prefix_mask",
     "scatter_fill",
@@ -261,6 +262,126 @@ class EventBatch(NamedTuple):
                 else None
             ),
             static_covariates=static_covariates,
+        )
+
+
+class TripletBatch(NamedTuple):
+    r"""Represents a batch of triplets.
+
+    Other than BatchedTripletArgs, this class does not perform any validation.
+    """
+
+    context_times: Tensor  # Float[(..., O)] or Float[(O, ...)], padded NaN
+    context_channels: Tensor  # Long[(..., O)] or Long[(O, ...)], padded -1
+    context_values: Tensor  # Float[(..., O)] or Float[(O, ...)], padded NaN
+
+    query_times: Tensor  # Float[(..., Q)] or Float[(Q, ...)], padded NaN
+    query_channels: Tensor  # Long[(..., Q)] or Long[(Q, ...)], padded -1
+    target_values: Tensor | None = None  # Float[(..., Q)] or Float[(Q, ...)]
+    r"""Only available during training, otherwise None."""
+
+    static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
+
+    @staticmethod
+    def from_request(
+        *,
+        query_times: Tensor,  # Float[(..., K)] or Float[(K, ...)], padded NaN
+        query_mask: Tensor,  # Bool[(..., K, F)] or Bool[(K, ..., F)]
+        context_times: Tensor,  # Float[(..., N)] or Float[(N, ...)], padded NaN
+        context_mask: Tensor,  # Bool[(..., N, D)] or Bool[(N, ..., D)]
+        context_values: Tensor,  # Float[(..., N, D)] or Float[(N, ..., D)]
+        target_values: Tensor | None = None,  # Float[(..., K, F)] or Float[(K, ..., F)]
+        static_covariates: Tensor | None = None,  # Float[(..., M)], padded NaN, sparse
+        batch_first: bool = True,
+    ) -> TripletBatch:
+        if not batch_first:
+            context_times = context_times.movedim(0, -1)
+            context_mask = context_mask.movedim(0, -2)
+            context_values = context_values.movedim(0, -2)
+            query_times = query_times.movedim(0, -1)
+            query_mask = query_mask.movedim(0, -2)
+            if target_values is not None:
+                target_values = target_values.movedim(0, -2)
+
+        *batch_shape, _, _ = context_values.shape
+
+        *ctx_batch_idx, ctx_time, ctx_channel = context_mask.nonzero(as_tuple=True)
+        ctx_counts = context_mask.sum(dim=(-2, -1))
+        ctx_positions = torch.arange(ctx_time.numel(), device=ctx_time.device)
+        ctx_offsets = (
+            ctx_counts.flatten().cumsum(dim=0).reshape(batch_shape) - ctx_counts
+        )
+        context_indices = (*ctx_batch_idx, ctx_positions - ctx_offsets[*ctx_batch_idx])
+        num_context = int(ctx_counts.max().item())
+
+        *qry_batch_idx, qry_time, qry_channel = query_mask.nonzero(as_tuple=True)
+        qry_counts = query_mask.sum(dim=(-2, -1))
+        qry_positions = torch.arange(qry_time.numel(), device=qry_time.device)
+        qry_offsets = (
+            qry_counts.flatten().cumsum(dim=0).reshape(batch_shape) - qry_counts
+        )
+        query_indices = (*qry_batch_idx, qry_positions - qry_offsets[*qry_batch_idx])
+        num_query = int(qry_counts.max().item())
+
+        packed = TripletBatch(
+            context_times=scatter_fill(
+                (*batch_shape, num_context),
+                context_indices,
+                context_times[*ctx_batch_idx, ctx_time],
+                fill_value=nan,
+            ),
+            context_channels=scatter_fill(
+                (*batch_shape, num_context),
+                context_indices,
+                ctx_channel,
+                fill_value=-1,
+            ),
+            context_values=scatter_fill(
+                (*batch_shape, num_context),
+                context_indices,
+                context_values[*ctx_batch_idx, ctx_time, ctx_channel],
+                fill_value=nan,
+            ),
+            query_times=scatter_fill(
+                (*batch_shape, num_query),
+                query_indices,
+                query_times[*qry_batch_idx, qry_time],
+                fill_value=nan,
+            ),
+            query_channels=scatter_fill(
+                (*batch_shape, num_query),
+                query_indices,
+                qry_channel,
+                fill_value=-1,
+            ),
+            target_values=(
+                scatter_fill(
+                    (*batch_shape, num_query),
+                    query_indices,
+                    target_values[*qry_batch_idx, qry_time, qry_channel],
+                    fill_value=nan,
+                )
+                if target_values is not None
+                else None
+            ),
+            static_covariates=static_covariates,
+        )
+
+        if batch_first:
+            return packed
+
+        return TripletBatch(
+            context_times=packed.context_times.movedim(-1, 0),
+            context_channels=packed.context_channels.movedim(-1, 0),
+            context_values=packed.context_values.movedim(-1, 0),
+            query_times=packed.query_times.movedim(-1, 0),
+            query_channels=packed.query_channels.movedim(-1, 0),
+            target_values=(
+                packed.target_values.movedim(-1, 0)
+                if packed.target_values is not None
+                else None
+            ),
+            static_covariates=packed.static_covariates,
         )
 
 
