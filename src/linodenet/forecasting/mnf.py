@@ -1487,18 +1487,34 @@ class SeparableEncoder(nn.Module):
         r"""Compute per-query embeddings and mixture weights.
 
         Args:
-            query_times:
-            query_channels:
-            context_times:
-            context_channels:
-            context_values:
+            query_times: Query timestamps with shape ``(..., $Q)``.
+                Invalid or padded positions should be encoded as ``NaN``
+                when ``query_valid`` is omitted.
+            query_channels: Query channel indices with shape ``(..., $Q)``.
+                Invalid or padded positions should be encoded as ``-1``.
+            query_valid: Optional boolean mask with shape ``(..., $Q)`` marking
+                valid query positions. If omitted, validity is inferred from ``query_times``.
+            context_times: Context timestamps with shape ``(..., $X)``.
+                Invalid or padded positions should be encoded as ``NaN``
+                when ``context_valid`` is omitted.
+            context_channels: Context channel indices with shape ``(..., $X)``.
+                Invalid or padded positions should be encoded as ``-1``.
+            context_values: Context values with shape ``(..., $X)``.
+                Invalid or padded positions should be encoded as ``NaN``.
+            context_valid: Optional boolean mask with shape ``(..., $X)``
+                marking valid context positions. If omitted, validity is
+                inferred from ``context_times`` and ``context_values``.
 
         Returns:
             𝐡ᵒᵇˢ: Context embeddings with shape ``(..., $X, M)``.
             𝐡: Per-query embeddings with shape ``(..., D, $Q, M)``.
         """
-        ctx_valid = ~context_times.isnan() if context_valid is None else context_valid
         qry_valid = ~query_times.isnan() if query_valid is None else query_valid
+        ctx_valid = (
+            ~(context_times.isnan() | context_values.isnan())
+            if context_valid is None
+            else context_valid
+        )
 
         context_times = context_times.masked_fill(~ctx_valid, 0.0)
         query_times = query_times.masked_fill(~qry_valid, 0.0)
