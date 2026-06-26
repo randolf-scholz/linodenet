@@ -446,7 +446,7 @@ class BatchedForecastingRequest:
         Q = self.query_times
         M = self.query_mask
         X = self.context_values.masked_fill(~C, nan)
-        object.__setattr__(self, "context_values", X)
+        object.__setattr__(self, "context_values", X.detach().requires_grad_())
 
         # check shapes
         *batch_shape, context_size, _ = X.shape
@@ -480,7 +480,7 @@ class BatchedForecastingRequest:
 
         if (V := self.target_values) is not None:
             V = V.masked_fill(~M, nan)
-            object.__setattr__(self, "target_values", V)
+            object.__setattr__(self, "target_values", V.detach().requires_grad_())
             *_, query_dim = V.shape
             assert V.shape == (*batch_shape, query_size, query_dim)
             V_valid = V.isfinite()

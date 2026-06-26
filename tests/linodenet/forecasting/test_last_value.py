@@ -10,9 +10,10 @@ from torch.nn import functional as F
 from torch.testing import assert_close
 
 from linodenet.forecasting import LastValue
+from linodenet.forecasting.utils import BatchedForecastingRequest
 from tests.testing import PROJECT
 
-from .base import SequentialData, TestForecastingModel
+from .base import TestForecastingModel
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
@@ -36,10 +37,12 @@ class TestLastValue(TestForecastingModel[LastValue]):
     def forecast(
         self,
         model: LastValue,
-        inputs: SequentialData,
+        inputs: BatchedForecastingRequest,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return LastValue predictions for sequential forecasting inputs."""
+        assert inputs.target_values is not None
+        query_valid = inputs.query_mask.any(dim=-1)
         initial_state = inputs.context_values.new_zeros(
             inputs.context_values.shape[:-2] + (1,) + inputs.context_values.shape[-1:]
         )
@@ -47,13 +50,13 @@ class TestLastValue(TestForecastingModel[LastValue]):
             query_times=inputs.query_times,
             context_times=inputs.context_times,
             context_values=inputs.context_values,
-            context_mask=inputs.context_values.isfinite(),
+            context_mask=inputs.context_mask,
             initial_state=initial_state,
         )
 
         assert pred.shape == inputs.target_values.shape
-        assert pred[inputs.query_valid].isfinite().all()
-        assert pred[~inputs.query_valid].isnan().all()
+        assert pred[query_valid].isfinite().all()
+        assert pred[~query_valid].isnan().all()
         return (pred,)
 
     def loss(

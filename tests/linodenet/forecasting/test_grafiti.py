@@ -9,9 +9,12 @@ from torch.nn import functional as F
 from torch.testing import assert_close
 
 from linodenet.forecasting.grafiti import Grafiti, gather_target_embeddings
-from linodenet.forecasting.utils import BatchedTripletArgs
+from linodenet.forecasting.utils import (
+    BatchedForecastingRequest,
+    BatchedTripletArgs,
+)
 
-from .base import SequentialData, TestForecastingModel
+from .base import TestForecastingModel
 
 
 class GrafitiTestConfig(NamedTuple):
@@ -54,10 +57,12 @@ class TestGrafiti(TestForecastingModel[Grafiti]):
     def forecast(
         self,
         model: Grafiti,
-        inputs: SequentialData,
+        inputs: BatchedForecastingRequest,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GraFITi predictions for sequential forecasting inputs."""
+        assert inputs.target_values is not None
+        query_valid = inputs.query_mask.any(dim=-1)
         time_points = torch.cat([inputs.context_times, inputs.query_times], dim=-1)
         time_points = time_points.nan_to_num(0.0)
         context_nan = inputs.context_values.new_full(
@@ -67,7 +72,7 @@ class TestGrafiti(TestForecastingModel[Grafiti]):
         context_values = torch.cat([inputs.context_values, context_nan], dim=-2)
         context_mask = torch.cat(
             [
-                inputs.context_values.isfinite(),
+                inputs.context_mask,
                 torch.zeros_like(context_nan, dtype=torch.bool),
             ],
             dim=-2,
@@ -75,7 +80,7 @@ class TestGrafiti(TestForecastingModel[Grafiti]):
         query_mask = torch.cat(
             [
                 torch.zeros_like(inputs.context_values, dtype=torch.bool),
-                inputs.query_valid.unsqueeze(dim=-1),
+                inputs.query_mask,
             ],
             dim=-2,
         )
@@ -88,7 +93,7 @@ class TestGrafiti(TestForecastingModel[Grafiti]):
         predictions = forecasts[..., inputs.context_values.shape[-2] :, :]
 
         assert predictions.shape == inputs.target_values.shape
-        assert predictions[inputs.query_valid].isfinite().all()
+        assert predictions[query_valid].isfinite().all()
         return (predictions,)
 
     def loss(

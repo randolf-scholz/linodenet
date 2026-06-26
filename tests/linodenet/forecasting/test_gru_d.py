@@ -10,7 +10,7 @@ from torch.nn import functional as F
 from linodenet.forecasting.gru_d import GRU_D
 from linodenet.forecasting.utils import BatchedForecastingRequest
 
-from .base import SequentialData, TestForecastingModel
+from .base import TestForecastingModel
 
 
 class GRUDTestConfig(NamedTuple):
@@ -56,35 +56,28 @@ class TestGRU_D(TestForecastingModel[GRU_D]):
     def forecast(
         self,
         model: GRU_D,
-        inputs: SequentialData,
+        inputs: BatchedForecastingRequest,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GRU-D predictions for sequential forecasting inputs."""
-        query_mask_nd = inputs.query_valid.unsqueeze(-1).expand_as(inputs.target_values)
-        dense = BatchedForecastingRequest(
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_values.isfinite(),
-            query_times=inputs.query_times,
-            query_mask=query_mask_nd,
-            target_values=inputs.target_values,
-        )
+        assert inputs.target_values is not None
+        query_valid = inputs.query_mask.any(dim=-1)
 
         combined_pred = model.predict(
-            context_times=dense.context_times,
-            context_values=dense.context_values,
-            context_mask=dense.context_mask,
-            query_times=dense.query_times,
-            query_mask=dense.query_mask,
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            context_mask=inputs.context_mask,
+            query_times=inputs.query_times,
+            query_mask=inputs.query_mask,
         )  # (..., N+K, F)
 
-        query_steps = dense.query_mask.any(dim=-1)  # (..., N+K)
+        query_steps = inputs.query_mask.any(dim=-1)  # (..., N+K)
         pred = torch.full_like(inputs.target_values, nan)
-        pred[inputs.query_valid] = combined_pred[query_steps]
+        pred[query_valid] = combined_pred[query_steps]
 
         assert pred.shape == inputs.target_values.shape
-        assert pred[inputs.query_valid].isfinite().all()
-        assert pred[~inputs.query_valid].isnan().all()
+        assert pred[query_valid].isfinite().all()
+        assert pred[~query_valid].isnan().all()
         return (pred,)
 
     def loss(

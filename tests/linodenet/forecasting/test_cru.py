@@ -19,7 +19,7 @@ from linodenet.forecasting.cru import (
 )
 from linodenet.forecasting.utils import BatchedForecastingRequest
 
-from .base import SequentialData, TestForecastingModel
+from .base import TestForecastingModel
 
 # language=yaml
 CRU_CONFIG_YAML = r"""
@@ -303,13 +303,17 @@ class TestCRU(TestForecastingModel[CRU]):
         return self.make_model(self.STANDARD_CONFIG)
 
     def forecast(
-        self, model: CRU, inputs: SequentialData, /
+        self, model: CRU, inputs: BatchedForecastingRequest, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return CRU predictions for sequential forecasting inputs."""
-        context_mask = inputs.context_valid.unsqueeze(-1).expand_as(
-            inputs.context_values
+        assert inputs.target_values is not None
+        query_valid = inputs.query_mask.any(dim=-1)
+        context_mask = (
+            inputs.context_times.isfinite()
+            .unsqueeze(-1)
+            .expand_as(inputs.context_values)
         )
-        query_mask = inputs.query_valid.unsqueeze(-1).expand_as(inputs.target_values)
+        query_mask = query_valid.unsqueeze(-1).expand_as(inputs.target_values)
         request = BatchedForecastingRequest(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
@@ -339,15 +343,15 @@ class TestCRU(TestForecastingModel[CRU]):
         pred_log_prob = inputs.target_values.new_full(
             inputs.query_times.shape, torch.nan
         )
-        pred_mean[inputs.query_valid] = all_pred_means[has_query]
-        pred_var[inputs.query_valid] = all_pred_vars[has_query]
-        pred_log_prob[inputs.query_valid] = query_log_prob
+        pred_mean[query_valid] = all_pred_means[has_query]
+        pred_var[query_valid] = all_pred_vars[has_query]
+        pred_log_prob[query_valid] = query_log_prob
 
         assert pred_mean.shape == inputs.target_values.shape
         assert pred_var.shape == inputs.target_values.shape
-        assert pred_mean[inputs.query_valid].isfinite().all()
-        assert pred_var[inputs.query_valid].isfinite().all()
-        assert pred_log_prob[inputs.query_valid].isfinite().all()
+        assert pred_mean[query_valid].isfinite().all()
+        assert pred_var[query_valid].isfinite().all()
+        assert pred_log_prob[query_valid].isfinite().all()
         return pred_mean, pred_var, pred_log_prob.unsqueeze(-1).expand_as(pred_mean)
 
     def loss(

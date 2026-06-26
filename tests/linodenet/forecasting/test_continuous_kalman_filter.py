@@ -16,7 +16,7 @@ from linodenet.forecasting.continuous_kalman_filter import (
 )
 from linodenet.forecasting.utils import BatchedForecastingRequest
 
-from .base import SequentialData, TestForecastingModel
+from .base import TestForecastingModel
 
 
 def test_marginal_gaussian_log_prob_matches_explicit_subvectors() -> None:
@@ -191,35 +191,27 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
     def forecast(
         self,
         model: ContinuousKalmanFilter,
-        inputs: SequentialData,
+        inputs: BatchedForecastingRequest,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return Kalman filter predictions for sequential forecasting inputs."""
-        request = BatchedForecastingRequest(
+        assert inputs.target_values is not None
+        pred_mean, pred_cov = model.predict(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
-            context_mask=inputs.context_values.isfinite(),
+            context_mask=inputs.context_mask,
             query_times=inputs.query_times,
-            query_mask=inputs.query_valid.unsqueeze(-1).expand_as(inputs.target_values),
-            target_values=inputs.target_values,
-        )
-        pred_mean, pred_cov = model.predict(
-            context_times=request.context_times,
-            context_values=request.context_values,
-            context_mask=request.context_mask,
-            query_times=request.query_times,
-            query_mask=request.query_mask,
+            query_mask=inputs.query_mask,
         )
 
-        assert request.target_values is not None
-        *batch_shape, query_size, query_dim = request.target_values.shape
+        *batch_shape, query_size, query_dim = inputs.target_values.shape
         assert pred_mean.shape == (*batch_shape, query_size, query_dim)
         assert pred_cov.shape == (*batch_shape, query_size, query_dim, query_dim)
-        assert pred_mean[request.query_mask].isfinite().all()
-        assert pred_cov[request.query_mask].isfinite().all()
-        # assert posterior_covariance[request.query_mask.any(dim=-1)].isfinite().all()
-        assert pred_mean[~request.query_mask].isnan().all()
-        assert pred_cov[~request.query_mask].isnan().all()
+        assert pred_mean[inputs.query_mask].isfinite().all()
+        assert pred_cov[inputs.query_mask].isfinite().all()
+        # assert posterior_covariance[inputs.query_mask.any(dim=-1)].isfinite().all()
+        assert pred_mean[~inputs.query_mask].isnan().all()
+        assert pred_cov[~inputs.query_mask].isnan().all()
 
         return pred_mean, pred_cov
 

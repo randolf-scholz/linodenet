@@ -2,171 +2,14 @@ r"""Base test classes for forecasting models."""
 
 import math
 from abc import ABC, abstractmethod
-from typing import ClassVar, NamedTuple
+from typing import ClassVar
 
 import pytest
 import torch
 from torch import Tensor, nan, nn
-from torch.nn.utils.rnn import pad_sequence
 from torch.testing import assert_close
 
 from linodenet.forecasting.utils import BatchedForecastingRequest
-
-
-class SequentialData(NamedTuple):
-    r"""Random forecasting input/output data with original sequence lengths."""
-
-    context_times: Tensor
-    context_values: Tensor
-    context_lengths: Tensor
-    query_times: Tensor
-    target_values: Tensor
-    query_lengths: Tensor
-
-    @property
-    def context_valid(self) -> Tensor:  # (..., $N)
-        r"""Boolean mask for valid context sequence entries."""
-        return (
-            torch.arange(
-                self.context_times.shape[-1], device=self.context_lengths.device
-            )
-            < self.context_lengths[..., None]
-        )
-
-    @property
-    def context_mask(self) -> Tensor:  # (..., $N, D)
-        r"""Boolean mask for valid context sequence entries."""
-        return self.context_values.isfinite()
-
-    @property
-    def query_valid(self) -> Tensor:  # (..., $K)
-        r"""Boolean mask for valid query sequence entries."""
-        return (
-            torch.arange(self.query_times.shape[-1], device=self.query_lengths.device)
-            < self.query_lengths[..., None]
-        )
-
-    @property
-    def query_mask(self) -> Tensor:  # (..., $K, D)
-        r"""Boolean mask for valid query sequence entries."""
-        return self.target_values.isfinite()
-
-    @classmethod
-    def new_sample(
-        cls,
-        *,
-        seed: int,
-        batch_shape: int | tuple[int, ...],
-        min_steps: int,
-        max_steps: int,
-        context_shape: tuple[int, ...],
-        output_shape: tuple[int, ...] | None = None,
-        input_missingness: bool = False,
-    ) -> SequentialData:
-        r"""Sample random context and query data for a forecasting model."""
-        if min_steps < 1:
-            raise ValueError("min_steps must be positive.")
-        if max_steps < min_steps:
-            raise ValueError("max_steps must be greater than or equal to min_steps.")
-        if output_shape is None:
-            output_shape = context_shape
-
-        generator = torch.Generator().manual_seed(seed)
-        batch_shape = torch.Size(
-            (batch_shape,) if isinstance(batch_shape, int) else batch_shape
-        )
-        if any(size < 1 for size in batch_shape):
-            raise ValueError("batch_shape entries must be positive.")
-
-        num_batches = max(batch_shape.numel(), 1)
-        context_steps = torch.randint(
-            min_steps, max_steps + 1, (num_batches,), generator=generator
-        )
-        query_steps = torch.randint(
-            min_steps, max_steps + 1, (num_batches,), generator=generator
-        )
-
-        times = []
-        values = []
-        for steps, value_shape in (
-            (context_steps, context_shape),
-            (query_steps, output_shape),
-        ):
-            time_sequences = [
-                torch.sort(torch.rand(int(num_steps), generator=generator)).values
-                for num_steps in steps
-            ]
-            value_sequences = [
-                torch.randn(int(num_steps), *value_shape, generator=generator)
-                for num_steps in steps
-            ]
-
-            if batch_shape == ():
-                times.append(time_sequences[0])
-                values.append(value_sequences[0])
-            else:
-                times.append(
-                    pad_sequence(
-                        time_sequences,
-                        batch_first=True,
-                        padding_value=nan,
-                    ).reshape(*batch_shape, -1)
-                )
-                values.append(
-                    pad_sequence(
-                        value_sequences,
-                        batch_first=True,
-                        padding_value=nan,
-                    ).reshape(*batch_shape, -1, *value_shape)
-                )
-
-        context_times, query_times = times
-        context_values, target_values = values
-
-        if input_missingness:
-            flat = context_values.reshape(
-                *context_values.shape[: len(batch_shape) + 1], -1
-            )
-            C = flat.shape[-1]
-            random_observed = torch.rand(flat.shape, generator=generator) >= 0.5
-            fallback_idx = torch.randint(
-                0, C, flat.shape[:-1], generator=generator
-            ).unsqueeze(-1)
-            fallback_observed = torch.zeros_like(flat, dtype=torch.bool).scatter_(
-                -1, fallback_idx, True
-            )
-            miss_mask = ~(random_observed | fallback_observed).reshape(
-                context_values.shape
-            )
-            context_values = context_values.masked_fill(miss_mask, nan)
-
-        context_lengths = context_steps.reshape(batch_shape)
-        query_lengths = query_steps.reshape(batch_shape)
-        context_length = int(context_steps.max())
-        query_length = int(query_steps.max())
-        context_end_times = torch.take_along_dim(
-            context_times,
-            (context_lengths - 1).unsqueeze(-1),
-            dim=-1,
-        ).squeeze(-1)
-        query_times = query_times + context_end_times[..., None]
-
-        assert context_lengths.shape == batch_shape
-        assert query_lengths.shape == batch_shape
-        assert context_times.shape == (*batch_shape, context_length)
-        assert context_values.shape == (*batch_shape, context_length, *context_shape)
-        assert query_times.shape == (*batch_shape, query_length)
-        assert target_values.shape == (*batch_shape, query_length, *output_shape)
-        context_values = context_values.requires_grad_()
-        target_values = target_values.requires_grad_()
-        return SequentialData(
-            context_times=context_times,
-            context_values=context_values,
-            context_lengths=context_lengths,
-            query_times=query_times,
-            target_values=target_values,
-            query_lengths=query_lengths,
-        )
 
 
 def make_forecasting_request(
@@ -228,7 +71,7 @@ def make_forecasting_request(
     ctx_values = ctx_values.masked_fill(~ctx_mask, nan)
     tgt_values = tgt_values.masked_fill(~qry_mask, nan)
 
-    return BatchedForecastingRequest(
+    request = BatchedForecastingRequest(
         context_times=ctx_times.requires_grad_(),
         context_values=ctx_values.requires_grad_(),
         context_mask=ctx_mask,
@@ -236,6 +79,7 @@ def make_forecasting_request(
         query_mask=qry_mask,
         target_values=tgt_values.requires_grad_(),
     )
+    return request
 
 
 class TestForecastingModel[M: nn.Module](ABC):
@@ -253,7 +97,9 @@ class TestForecastingModel[M: nn.Module](ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def forecast(self, model: M, inputs: SequentialData, /) -> tuple[Tensor, ...]:
+    def forecast(
+        self, model: M, inputs: BatchedForecastingRequest, /
+    ) -> tuple[Tensor, ...]:
         r"""Return model predictions for sequential forecasting inputs."""
         raise NotImplementedError
 
@@ -317,7 +163,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         output_shape: tuple[int, ...],
         input_missingness: bool,
     ) -> None:
-        data = SequentialData.new_sample(
+        data = make_forecasting_request(
             seed=seed,
             batch_shape=(),
             min_steps=min_steps,
@@ -341,7 +187,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         batch_shape: tuple[int, ...],
         input_missingness: bool,
     ) -> None:
-        data = SequentialData.new_sample(
+        data = make_forecasting_request(
             seed=seed,
             batch_shape=batch_shape,
             min_steps=min_steps,
@@ -409,13 +255,15 @@ class TestForecastingModel[M: nn.Module](ABC):
             )
             context_values = context_values.masked_fill(miss_mask, nan)
 
-        data = SequentialData(
+        context_mask = context_values.isfinite()
+        query_mask = target_values.isfinite()
+        data = BatchedForecastingRequest(
             context_times=context_times,
             context_values=context_values,
-            context_lengths=context_lengths,
+            context_mask=context_mask,
             query_times=query_times,
+            query_mask=query_mask,
             target_values=target_values,
-            query_lengths=query_lengths,
         )
 
         torch.manual_seed(seed)
@@ -431,13 +279,13 @@ class TestForecastingModel[M: nn.Module](ABC):
         ):
             context_length = int(context_length_tensor.item())
             query_length = int(query_length_tensor.item())
-            single_data = SequentialData(
+            single_data = BatchedForecastingRequest(
                 context_times=context_times[k : k + 1, :context_length],
                 context_values=context_values[k : k + 1, :context_length],
-                context_lengths=context_lengths[k : k + 1],
+                context_mask=context_mask[k : k + 1, :context_length],
                 query_times=query_times[k : k + 1, :query_length],
+                query_mask=query_mask[k : k + 1, :query_length],
                 target_values=target_values[k : k + 1, :query_length],
-                query_lengths=query_lengths[k : k + 1],
             )
 
             for prediction, single_prediction in zip(
@@ -447,13 +295,13 @@ class TestForecastingModel[M: nn.Module](ABC):
             ):
                 prediction[k : k + 1, :query_length] = single_prediction
 
-        query_mask = data.query_valid
+        query_valid = data.query_mask.any(dim=-1)
         for prediction, expected in zip(
             batched_predictions,
             expected_predictions,
             strict=True,
         ):
-            mask = query_mask
+            mask = query_valid
             while mask.ndim < prediction.ndim:
                 mask = mask.unsqueeze(dim=-1)
             mask = mask.expand_as(prediction)
@@ -477,7 +325,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         input_missingness: bool,
     ) -> None:
         r"""Check predictions are unchanged by extra NaN tail padding."""
-        data = SequentialData.new_sample(
+        data = make_forecasting_request(
             seed=seed,
             batch_shape=batch_shape,
             min_steps=min_steps,
@@ -487,10 +335,11 @@ class TestForecastingModel[M: nn.Module](ABC):
             input_missingness=input_missingness,
         )
         padding = 32
+        assert data.target_values is not None
         batch_dims = data.context_times.shape[:-1]
         query_size = data.query_times.shape[-1]
 
-        padded_data = SequentialData(
+        padded_data = BatchedForecastingRequest(
             context_times=torch.cat(
                 [
                     data.context_times,
@@ -508,7 +357,13 @@ class TestForecastingModel[M: nn.Module](ABC):
                 ],
                 dim=-1 - len(context_shape),
             ),
-            context_lengths=data.context_lengths,
+            context_mask=torch.cat(
+                [
+                    data.context_mask,
+                    data.context_mask.new_zeros((*batch_dims, padding, *context_shape)),
+                ],
+                dim=-1 - len(context_shape),
+            ),
             query_times=torch.cat(
                 [
                     data.query_times,
@@ -526,7 +381,13 @@ class TestForecastingModel[M: nn.Module](ABC):
                 ],
                 dim=-1 - len(output_shape),
             ),
-            query_lengths=data.query_lengths,
+            query_mask=torch.cat(
+                [
+                    data.query_mask,
+                    data.query_mask.new_zeros((*batch_dims, padding, *output_shape)),
+                ],
+                dim=-1 - len(output_shape),
+            ),
         )
 
         torch.manual_seed(seed)
@@ -534,14 +395,14 @@ class TestForecastingModel[M: nn.Module](ABC):
         predictions = self.forecast(model, data)
         padded_predictions = self.forecast(model, padded_data)
 
-        query_mask = data.query_valid
+        query_valid = data.query_mask.any(dim=-1)
         for prediction, padded_prediction in zip(
             predictions,
             padded_predictions,
             strict=True,
         ):
-            query_axis = query_mask.ndim - 1
-            mask = query_mask
+            query_axis = query_valid.ndim - 1
+            mask = query_valid
             while mask.ndim < prediction.ndim:
                 mask = mask.unsqueeze(dim=-1)
             padded_window = padded_prediction.narrow(query_axis, 0, query_size)
@@ -565,7 +426,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         input_missingness: bool,
     ) -> None:
         torch.manual_seed(seed)
-        data = SequentialData.new_sample(
+        data = make_forecasting_request(
             seed=seed,
             batch_shape=(),
             min_steps=min_steps,
@@ -575,6 +436,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             input_missingness=input_missingness,
         )
         context_values = data.context_values
+        assert data.target_values is not None
         model = self.make_model(model_config)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
         initial_parameters = {
@@ -627,7 +489,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         input_missingness: bool,
     ) -> None:
         torch.manual_seed(seed)
-        data = SequentialData.new_sample(
+        data = make_forecasting_request(
             seed=seed,
             batch_shape=batch_shape,
             min_steps=min_steps,
@@ -637,6 +499,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             input_missingness=input_missingness,
         )
         context_values = data.context_values
+        assert data.target_values is not None
         model = self.make_model(model_config)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
         initial_parameters = {

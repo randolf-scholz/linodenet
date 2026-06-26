@@ -17,7 +17,7 @@ from linodenet.forecasting.neural_flow import (
 )
 from linodenet.forecasting.utils import BatchedForecastingRequest
 
-from .base import SequentialData, TestForecastingModel
+from .base import TestForecastingModel
 
 
 class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
@@ -57,49 +57,42 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
         return NeuralFlow.from_config(model_config)
 
     def forecast(
-        self, model: NeuralFlow, inputs: SequentialData, /
+        self, model: NeuralFlow, inputs: BatchedForecastingRequest, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return NeuralFlow predictions for sequential forecasting inputs."""
         if not isinstance(model, NeuralFlow):
             raise TypeError("model must be a NeuralFlow.")
-        request = BatchedForecastingRequest(
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_values.isfinite(),
-            query_times=inputs.query_times,
-            query_mask=inputs.query_valid.unsqueeze(-1).expand_as(inputs.target_values),
-            target_values=inputs.target_values,
-        )
-        assert request.target_values is not None
+        assert inputs.target_values is not None
+        query_valid = inputs.query_mask.any(dim=-1)
         log_prob = model.log_prob(
-            request.target_values,
-            query_times=request.query_times,
-            query_mask=request.query_mask,
-            context_times=request.context_times,
-            context_mask=request.context_mask,
-            context_values=request.context_values,
+            inputs.target_values,
+            query_times=inputs.query_times,
+            query_mask=inputs.query_mask,
+            context_times=inputs.context_times,
+            context_mask=inputs.context_mask,
+            context_values=inputs.context_values,
         )
         posterior_mean = model.pred_means
         posterior_logvar = model.pred_logvars
-        query_steps = request.query_mask.any(dim=-1)
+        query_steps = inputs.query_mask.any(dim=-1)
         query_mean = posterior_mean[query_steps]
         query_logvar = posterior_logvar[query_steps]
         query_log_prob = log_prob[query_steps]
-        query_mean[~request.query_mask[query_steps]] = nan
-        query_logvar[~request.query_mask[query_steps]] = nan
+        query_mean[~inputs.query_mask[query_steps]] = nan
+        query_logvar[~inputs.query_mask[query_steps]] = nan
         pred_mean = torch.full_like(inputs.target_values, nan)
         pred_logvar = torch.full_like(inputs.target_values, nan)
         pred_log_prob = inputs.target_values.new_full(inputs.query_times.shape, nan)
-        pred_mean[inputs.query_valid] = query_mean
-        pred_logvar[inputs.query_valid] = query_logvar
-        pred_log_prob[inputs.query_valid] = query_log_prob
+        pred_mean[query_valid] = query_mean
+        pred_logvar[query_valid] = query_logvar
+        pred_log_prob[query_valid] = query_log_prob
 
         assert pred_mean.shape == inputs.target_values.shape
         assert pred_logvar.shape == inputs.target_values.shape
         assert pred_log_prob.shape == inputs.query_times.shape
-        assert pred_mean[inputs.query_valid].isfinite().all()
-        assert pred_logvar[inputs.query_valid].isfinite().all()
-        assert pred_log_prob[inputs.query_valid].isfinite().all()
+        assert pred_mean[query_valid].isfinite().all()
+        assert pred_logvar[query_valid].isfinite().all()
+        assert pred_log_prob[query_valid].isfinite().all()
         return pred_mean, pred_logvar, pred_log_prob.unsqueeze(-1).expand_as(pred_mean)
 
     def loss(

@@ -18,8 +18,9 @@ from linodenet.forecasting.profiti import (
     Shiesh,
     TriangularAttention,
 )
+from linodenet.forecasting.utils import BatchedForecastingRequest
 
-from .base import SequentialData, TestForecastingModel
+from .base import TestForecastingModel
 
 
 class ProFITiTestConfig(NamedTuple):
@@ -379,10 +380,12 @@ class TestProfiti(TestForecastingModel[ProFITi]):
     def forecast(
         self,
         model: ProFITi,
-        inputs: SequentialData,
+        inputs: BatchedForecastingRequest,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return ProFITi target log densities for sequential forecasting inputs."""
+        assert inputs.target_values is not None
+        query_valid = inputs.query_mask.any(dim=-1)
         target_values = inputs.target_values
 
         log_prob = model.log_prob(
@@ -398,7 +401,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
         predictions = torch.where(inputs.target_values.isfinite(), log_prob, torch.nan)
 
         assert predictions.shape == target_values.shape
-        assert predictions[inputs.query_valid].isfinite().all()
+        assert predictions[query_valid].isfinite().all()
         return (predictions,)
 
     def loss(
