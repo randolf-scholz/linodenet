@@ -1519,33 +1519,29 @@ class SeparableEncoder(nn.Module):
         context_times = context_times.masked_fill(~ctx_valid, 0.0)
         query_times = query_times.masked_fill(~qry_valid, 0.0)
 
-        *batch_shape, qry_size = query_channels.shape
-        *_, ctx_size = context_channels.shape
         D = self.num_components
         M = self.dim_output
 
-        x = torch.cat(  # (B, $X, D)
+        x = torch.cat(  # (..., $X, D)
             [
                 self.positional_embedding(context_times),
                 self.channel_embedding(context_channels),
                 context_values.unsqueeze(-1),
             ],
             dim=-1,
-        ).reshape(-1, ctx_size, self.ctx_embed_dim)
+        )
 
-        q = torch.cat(  # (B, $Q, F)
+        q = torch.cat(  # (..., $Q, F)
             [
                 self.positional_embedding(query_times),
                 self.channel_embedding(query_channels),
             ],
             dim=-1,
-        ).reshape(-1, qry_size, self.qry_embed_dim)
+        )
 
-        h_obs = self.context_self_attention(x, x, x)  # (B, 1, $X, M)
-        h_obs = h_obs.squeeze(dim=-3)  # (B, $X, M)
-        h_mix = self.cross_attention(q, h_obs, h_obs)  # (B, $Q, D×M)
-        h_obs = h_obs.reshape(*batch_shape, ctx_size, M)  # (..., $X, M)
-        h_mix = h_mix.reshape(*batch_shape, qry_size, D, M)  # (..., $Q, D, M)
+        h_obs = self.context_self_attention(x, x, x)  # (..., $X, M)
+        h_mix = self.cross_attention(q, h_obs, h_obs)  # (..., $Q, D×M)
+        h_mix = h_mix.reshape(*query_times.shape, D, M)  # (..., $Q, D, M)
         h_mix = h_mix.swapaxes(-2, -3)  # (..., D, $Q, M)
         return (
             h_obs.masked_fill(~ctx_valid[..., None], nan),
