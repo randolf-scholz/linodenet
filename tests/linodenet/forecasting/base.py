@@ -154,6 +154,8 @@ class SequentialData(NamedTuple):
         assert context_values.shape == (*batch_shape, context_length, *context_shape)
         assert query_times.shape == (*batch_shape, query_length)
         assert target_values.shape == (*batch_shape, query_length, *output_shape)
+        context_values = context_values.requires_grad_()
+        target_values = target_values.requires_grad_()
         return SequentialData(
             context_times=context_times,
             context_values=context_values,
@@ -500,6 +502,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             output_shape=output_shape,
             input_missingness=input_missingness,
         )
+        context_values = data.context_values
         model = self.make_model(model_config)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
         initial_parameters = {
@@ -516,6 +519,11 @@ class TestForecastingModel[M: nn.Module](ABC):
             predictions = self.forecast(model, data)
             loss = self.loss(model, predictions, data.target_values)
             loss.backward()
+
+            assert context_values.grad is not None
+            valid_context = data.context_mask
+            assert context_values.grad[valid_context].isfinite().all()
+            assert context_values.grad[valid_context].abs().sum() > 0
 
             for name, parameter in model.named_parameters():
                 if not parameter.requires_grad:
@@ -556,6 +564,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             output_shape=output_shape,
             input_missingness=input_missingness,
         )
+        context_values = data.context_values
         model = self.make_model(model_config)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
         initial_parameters = {
@@ -572,6 +581,11 @@ class TestForecastingModel[M: nn.Module](ABC):
             predictions = self.forecast(model, data)
             loss = self.loss(model, predictions, data.target_values)
             loss.backward()
+
+            assert context_values.grad is not None
+            valid_context = data.context_mask
+            assert context_values.grad[valid_context].isfinite().all()
+            assert context_values.grad[valid_context].abs().sum() > 0
 
             for name, parameter in model.named_parameters():
                 if not parameter.requires_grad:

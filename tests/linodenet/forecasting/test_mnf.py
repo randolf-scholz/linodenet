@@ -1,4 +1,4 @@
-r"""Tests for Marginalizable Normalizing Flow forecasting."""
+r"""Tests for Marginalizable Normalizing Flow components."""
 
 from typing import ClassVar, NamedTuple
 
@@ -13,8 +13,6 @@ from linodenet.forecasting.mnf import (
     SeparableEncoder,
 )
 
-from .base import SequentialData, TestForecastingModel
-
 
 class MNFConfig(NamedTuple):
     r"""Configuration for a MarginalizableNormalizingFlow."""
@@ -26,11 +24,11 @@ class MNFConfig(NamedTuple):
     bounds: tuple[float, float] = (-5.0, 5.0)
 
 
-class TestMNF(TestForecastingModel[MarginalizableNormalizingFlow]):
-    r"""Tests for the MarginalizableNormalizingFlow density model."""
+class TestMarginalizableNormalizingFlow:
+    r"""Tests for the unconditional MarginalizableNormalizingFlow density model."""
 
-    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
-    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    NUM_FEATURES: ClassVar[int] = 3
+    NUM_SAMPLES: ClassVar[int] = 5
     STANDARD_CONFIG: ClassVar[MNFConfig] = MNFConfig(
         n_feats=3,
         n_heads=4,
@@ -43,9 +41,12 @@ class TestMNF(TestForecastingModel[MarginalizableNormalizingFlow]):
         r"""Configuration used to instantiate the MNF model under test."""
         return self.STANDARD_CONFIG
 
-    @pytest.fixture(params=[False, True], ids=["no_missingness", "input_missingness"])
-    def input_missingness(self, request: pytest.FixtureRequest) -> bool:
-        r"""Whether to randomly mask half of the context values with NaN."""
+    @pytest.fixture(
+        params=[(), (8,), (1, 2, 3)],
+        ids=["batch_shape=()", "batch_shape=(8,)", "batch_shape=(1,2,3)"],
+    )
+    def batch_shape(self, request: pytest.FixtureRequest) -> tuple[int, ...]:
+        r"""Batch shapes used to exercise broadcasted density evaluation."""
         return request.param
 
     def make_model(self, model_config: object, /) -> MarginalizableNormalizingFlow:
@@ -62,46 +63,67 @@ class TestMNF(TestForecastingModel[MarginalizableNormalizingFlow]):
             bounds=model_config.bounds,
         )
 
-    def forecast(
-        self, model: MarginalizableNormalizingFlow, inputs: SequentialData, /
-    ) -> tuple[Tensor, ...]:
-        r"""Return per-query-step log-probabilities under the MNF density.
-
-        MNF is a static density model: it evaluates each query time step
-        independently, ignoring temporal context.
-        """
-        target_values = inputs.target_values  # (*batch_shape, T, D)
-        query_mask = inputs.query_valid  # (*batch_shape, T)
-        batch_shape = target_values.shape[:-2]
-        T = target_values.shape[-2]
-        D = target_values.shape[-1]
-
-        flat_values = target_values.reshape(-1, D)  # (B*T, D)
-        flat_mask = query_mask.reshape(-1)  # (B*T,)
-
-        log_prob_flat = flat_values.new_full((flat_values.shape[0],), torch.nan)
-        if flat_mask.any():
-            log_prob_flat[flat_mask] = model.log_prob(flat_values[flat_mask])
-
-        log_prob = log_prob_flat.reshape(*batch_shape, T)  # (*batch_shape, T)
-        # Expand to (*batch_shape, T, D) to match the output_shape convention used by
-        # the base test class (query_axis = ndim - len(output_shape) - 1).
-        return (log_prob.unsqueeze(-1).expand_as(target_values),)
-
-    def loss(
+    def test_log_prob_returns_expected_shape(
         self,
-        model: MarginalizableNormalizingFlow,
-        predictions: tuple[Tensor, ...],
-        targets: Tensor,
-    ) -> Tensor:
-        r"""Return mean negative log-likelihood over valid query positions."""
-        del model, targets
-        (log_prob_expanded,) = (
-            predictions  # (*batch_shape, T, D) — all D slices identical
-        )
-        log_prob = log_prob_expanded[..., 0]  # (*batch_shape, T)
-        valid = log_prob.isfinite()
-        return -log_prob[valid].sum() / valid.sum()
+        model_config: MNFConfig,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Log-probabilities should preserve all batch axes except the feature axis."""
+        torch.manual_seed(0)
+        model = self.make_model(model_config)
+        target_values = torch.randn(*batch_shape, self.NUM_SAMPLES, self.NUM_FEATURES)
+
+        log_prob = model.log_prob(target_values)
+
+        assert log_prob.shape == (*batch_shape, self.NUM_SAMPLES)
+        assert log_prob.isfinite().all()
+
+    def test_log_prob_training_produces_finite_target_gradients(
+        self,
+        model_config: MNFConfig,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Training on unconditional targets should differentiate through values."""
+        torch.manual_seed(0)
+        model = self.make_model(model_config)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+        target_values = torch.randn(
+            *batch_shape, self.NUM_SAMPLES, self.NUM_FEATURES
+        ).requires_grad_()
+        initial_parameters = {
+            name: parameter.detach().clone()
+            for name, parameter in model.named_parameters()
+            if parameter.requires_grad
+        }
+
+        initial_loss = -model.log_prob(target_values).mean()
+
+        for _ in range(3):
+            optimizer.zero_grad()
+            target_values.grad = None
+            loss = -model.log_prob(target_values).mean()
+            loss.backward()
+
+            assert target_values.grad is not None
+            assert target_values.grad.isfinite().all()
+            assert target_values.grad.abs().sum() > 0
+
+            for name, parameter in model.named_parameters():
+                if not parameter.requires_grad:
+                    continue
+                assert parameter.grad is not None, name
+                assert parameter.grad.isfinite().all(), name
+                assert parameter.grad.abs().sum() > 0, name
+
+            optimizer.step()
+
+        final_loss = -model.log_prob(target_values).mean()
+
+        for name, parameter in model.named_parameters():
+            if not parameter.requires_grad:
+                continue
+            assert not torch.equal(parameter, initial_parameters[name]), name
+        assert final_loss < initial_loss
 
 
 class TestMHA:
