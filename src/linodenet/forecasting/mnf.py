@@ -19,6 +19,8 @@ __all__ = [
     "UnconstrainedLinearRationalSpline",
     "PositionalEmbedding",
     "SeparableEncoder",
+    "MultiHeadAttention",
+    "ChannelEmbedding",
     # functions
     "inverse_softplus",
 ]
@@ -1448,11 +1450,11 @@ class SeparableEncoder(nn.Module):
         self.num_heads = num_heads
         self.num_channels = num_channels
         self.num_frequencies = num_frequencies
-        self.ctx_embed_dim = (num_frequencies + 1) + num_channels + 1
-        self.qry_embed_dim = (num_frequencies + 1) + num_channels
 
         self.positional_embedding = PositionalEmbedding(num_frequencies)
         self.channel_embedding = ChannelEmbedding(num_channels)
+        self.ctx_embed_dim = (num_frequencies + 1) + num_channels + 1
+        self.qry_embed_dim = (num_frequencies + 1) + num_channels
 
         self.context_self_attention = MultiHeadAttention(
             q_dim=self.ctx_embed_dim,
@@ -1474,11 +1476,13 @@ class SeparableEncoder(nn.Module):
     def forward(
         self,
         *,
-        query_times,  # Float[(..., $Q)], padded with NaN
-        query_channels,  # Long[(..., $Q)], padded with -1
-        context_times,  # Float[(..., $X)], padded with NaN
-        context_channels,  # Long[(..., $X)], padded with -1
-        context_values,  # Float[(..., $X)], padded with NaN
+        query_times: Tensor,  # Float[(..., $Q)], padded with NaN
+        query_channels: Tensor,  # Long[(..., $Q)], padded with -1
+        query_valid: Tensor | None = None,  # Bool[(..., $Q)],
+        context_times: Tensor,  # Float[(..., $X)], padded with NaN
+        context_channels: Tensor,  # Long[(..., $X)], padded with -1
+        context_values: Tensor,  # Float[(..., $X)], padded with NaN
+        context_valid: Tensor | None = None,  # Bool[(..., $X)],
     ) -> tuple[Tensor, Tensor]:  # (..., $X, M), (..., D, $X, M), padded with NaN
         r"""Compute per-query embeddings and mixture weights.
 
@@ -1493,6 +1497,12 @@ class SeparableEncoder(nn.Module):
             𝐡ᵒᵇˢ: Context embeddings with shape ``(..., $X, M)``.
             𝐡: Per-query embeddings with shape ``(..., D, $Q, M)``.
         """
+        ctx_valid = ~context_times.isnan() if context_valid is None else context_valid
+        qry_valid = ~query_times.isnan() if query_valid is None else query_valid
+
+        context_times = context_times.masked_fill(~ctx_valid, 0.0)
+        query_times = query_times.masked_fill(~qry_valid, 0.0)
+
         *batch_shape, qry_size = query_channels.shape
         *_, ctx_size = context_channels.shape
         D = self.num_components
@@ -1521,7 +1531,10 @@ class SeparableEncoder(nn.Module):
         h_obs = h_obs.reshape(*batch_shape, ctx_size, M)  # (..., $X, M)
         h_mix = h_mix.reshape(*batch_shape, qry_size, D, M)  # (..., $Q, D, M)
         h_mix = h_mix.swapaxes(-2, -3)  # (..., D, $Q, M)
-        return h_obs, h_mix
+        return (
+            h_obs.masked_fill(~ctx_valid[..., None], nan),
+            h_mix.masked_fill(~qry_valid[..., None, :, None], nan),
+        )
 
 
 class Moses(nn.Module):

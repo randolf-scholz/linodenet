@@ -239,6 +239,7 @@ class TestMHA:
 class TestSeparableEncoder:
     r"""Tests for the separable Moses encoder."""
 
+    DIM_HEAD: ClassVar[int] = 4
     DIM_HIDDEN: ClassVar[int] = 8
     NUM_COMPONENTS: ClassVar[int] = 3
     NUM_FREQUENCIES: ClassVar[int] = 2
@@ -258,10 +259,9 @@ class TestSeparableEncoder:
 
     def make_model(self) -> SeparableEncoder:
         r"""Instantiate a separable encoder with scalar context values."""
-        dim_input = (self.NUM_FREQUENCIES + 1) + self.NUM_CHANNELS + 1
         return SeparableEncoder(
-            dim_input=dim_input,
             dim_output=self.DIM_HIDDEN,
+            dim_head=self.DIM_HEAD,
             num_heads=2,
             num_components=self.NUM_COMPONENTS,
             num_frequencies=self.NUM_FREQUENCIES,
@@ -358,7 +358,7 @@ class TestSeparableEncoder:
     def test_backward_produces_finite_gradients(
         self, batch_shape: tuple[int, ...]
     ) -> None:
-        r"""Backward pass should propagate finite gradients through valid entries."""
+        r"""Backward pass should propagate finite gradients through NaN-safe paths."""
         torch.manual_seed(0)
         model = self.make_model()
         inputs = self.make_inputs(batch_shape)
@@ -374,8 +374,11 @@ class TestSeparableEncoder:
         valid_context = context_values.isfinite()
         assert context_values.grad[valid_context].isfinite().all()
         for parameter in model.parameters():
-            if parameter.grad is not None:
-                assert parameter.grad.isfinite().all()
+            if not parameter.requires_grad:
+                continue
+            assert parameter.grad is not None
+            assert parameter.grad.isfinite().all()
+            assert not parameter.grad.eq(0.0).all()
 
 
 class TestMixtureWeightsModel:
