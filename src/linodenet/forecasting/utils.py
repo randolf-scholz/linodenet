@@ -149,9 +149,7 @@ def scatter_fill(
     fill_value: bool | float,
 ) -> Tensor:
     r"""Create a filled tensor and write reference values at the given indices."""
-    result = reference.new_full(shape, fill_value)
-    result[indices] = reference
-    return result
+    return reference.new_full(shape, fill_value).index_put(indices, reference)
 
 
 class EventBatch(NamedTuple):
