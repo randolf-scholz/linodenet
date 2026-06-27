@@ -301,7 +301,7 @@ class TripletBatch(NamedTuple):
         ctx_offsets = (
             ctx_counts.flatten().cumsum(dim=0).reshape(batch_shape) - ctx_counts
         )
-        context_indices = (*ctx_batch_idx, ctx_positions - ctx_offsets[*ctx_batch_idx])
+        ctx_indices = (*ctx_batch_idx, ctx_positions - ctx_offsets[*ctx_batch_idx])
         num_context = int(ctx_counts.max().item())
 
         *qry_batch_idx, qry_time, qry_channel = query_mask.nonzero(as_tuple=True)
@@ -310,48 +310,45 @@ class TripletBatch(NamedTuple):
         qry_offsets = (
             qry_counts.flatten().cumsum(dim=0).reshape(batch_shape) - qry_counts
         )
-        query_indices = (*qry_batch_idx, qry_positions - qry_offsets[*qry_batch_idx])
+        qry_indices = (*qry_batch_idx, qry_positions - qry_offsets[*qry_batch_idx])
         num_query = int(qry_counts.max().item())
 
         seq_dim = -1 if batch_first else 0
+
         return TripletBatch(
-            context_times=scatter_fill(
-                (*batch_shape, num_context),
-                context_indices,
-                context_times[*ctx_batch_idx, ctx_time],
-                fill_value=nan,
-            ).movedim(-1, seq_dim),
-            context_channels=scatter_fill(
-                (*batch_shape, num_context),
-                context_indices,
-                ctx_channel,
-                fill_value=-1,
-            ).movedim(-1, seq_dim),
-            context_values=scatter_fill(
-                (*batch_shape, num_context),
-                context_indices,
-                context_values[*ctx_batch_idx, ctx_time, ctx_channel],
-                fill_value=nan,
-            ).movedim(-1, seq_dim),
-            query_times=scatter_fill(
-                (*batch_shape, num_query),
-                query_indices,
-                query_times[*qry_batch_idx, qry_time],
-                fill_value=nan,
-            ).movedim(-1, seq_dim),
-            query_channels=scatter_fill(
-                (*batch_shape, num_query),
-                query_indices,
-                qry_channel,
-                fill_value=-1,
-            ).movedim(-1, seq_dim),
+            context_times=(
+                context_times.new_full((*batch_shape, num_context), nan)
+                .index_put(ctx_indices, context_times[*ctx_batch_idx, ctx_time])
+                .movedim(-1, seq_dim)
+            ),
+            context_channels=(
+                ctx_channel.new_full((*batch_shape, num_context), -1)
+                .index_put(ctx_indices, ctx_channel)
+                .movedim(-1, seq_dim)
+            ),
+            context_values=(
+                context_values.new_full((*batch_shape, num_context), nan)
+                .index_put(
+                    ctx_indices, context_values[*ctx_batch_idx, ctx_time, ctx_channel]
+                )
+                .movedim(-1, seq_dim)
+            ),
+            query_times=(
+                query_times.new_full((*batch_shape, num_query), nan)
+                .index_put(qry_indices, query_times[*qry_batch_idx, qry_time])
+                .movedim(-1, seq_dim)
+            ),
+            query_channels=(
+                qry_channel.new_full((*batch_shape, num_query), -1)
+                .index_put(qry_indices, qry_channel)
+                .movedim(-1, seq_dim)
+            ),
             target_values=(
-                scatter_fill(
-                    (*batch_shape, num_query),
-                    query_indices,
-                    target_values[*qry_batch_idx, qry_time, qry_channel],
-                    fill_value=nan,
-                ).movedim(-1, seq_dim)
+                target_values.new_full((*batch_shape, num_query), nan)
+                .index_put(
+                    qry_indices, target_values[*qry_batch_idx, qry_time, qry_channel]
+                )
+                .movedim(-1, seq_dim)
                 if target_values is not None
                 else None
             ),
