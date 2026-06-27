@@ -22,6 +22,7 @@ def make_forecasting_request(
     output_shape: tuple[int, ...] | None = None,
     input_missingness: bool = False,
     target_missingness: bool = False,
+    batch_first: bool = True,
 ) -> BatchedForecastingRequest:
     r"""Sample random dense forecasting inputs for a forecasting model."""
     rng = torch.Generator().manual_seed(seed)
@@ -71,15 +72,24 @@ def make_forecasting_request(
     ctx_values = ctx_values.masked_fill(~ctx_mask, nan)
     tgt_values = tgt_values.masked_fill(~qry_mask, nan)
 
-    request = BatchedForecastingRequest(
-        context_times=ctx_times.requires_grad_(),
-        context_values=ctx_values.requires_grad_(),
-        context_mask=ctx_mask,
-        query_times=qry_times.requires_grad_(),
-        query_mask=qry_mask,
-        target_values=tgt_values.requires_grad_(),
+    if batch_first:
+        return BatchedForecastingRequest(
+            context_times=ctx_times.requires_grad_(),
+            context_mask=ctx_mask,
+            context_values=ctx_values.requires_grad_(),
+            query_times=qry_times.requires_grad_(),
+            query_mask=qry_mask,
+            target_values=tgt_values.requires_grad_(),
+        )
+
+    return BatchedForecastingRequest(
+        context_times=ctx_times.swapaxes(-1, 0).requires_grad_(),
+        context_mask=ctx_mask.swapaxes(-2, 0),
+        context_values=ctx_values.swapaxes(-2, 0).requires_grad_(),
+        query_times=qry_times.swapaxes(-1, 0).requires_grad_(),
+        query_mask=qry_mask.swapaxes(-2, 0),
+        target_values=tgt_values.swapaxes(-2, 0).requires_grad_(),
     )
-    return request
 
 
 class TestForecastingModel[M: nn.Module](ABC):
