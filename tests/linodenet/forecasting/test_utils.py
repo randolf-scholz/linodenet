@@ -16,6 +16,8 @@ from linodenet.forecasting.utils import (
     TripletBatch,
 )
 
+from .base import make_forecasting_request
+
 
 def _assert_query_mask_equal(
     actual: Tensor,
@@ -422,120 +424,6 @@ def _make_random_batched_triplet(
         query_times=query_times.reshape(*batch_shape, num_query),
         query_channels=query_channels.reshape(*batch_shape, num_query),
         target_values=target_values.reshape(*batch_shape, num_query),
-        static_covariates=static_covariates.reshape(*batch_shape, 2),
-    )
-
-
-def _make_random_batched_dense(
-    batch_shape: tuple[int, ...],
-    /,
-    *,
-    seed: int = 3141,
-    num_context_steps: int = 4,
-    num_query_steps: int = 3,
-    context_dim: int = 3,
-    query_dim: int = 4,
-) -> BatchedForecastingRequest:
-    num_samples = 1
-    for size in batch_shape:
-        num_samples *= size
-
-    generator = torch.Generator().manual_seed(
-        seed + sum((k + 1) * size for k, size in enumerate(batch_shape))
-    )
-    active_context_dim = max(context_dim - 1, 1)
-    active_query_dim = max(query_dim - 1, 1)
-
-    context_times = torch.full((num_samples, num_context_steps), nan)
-    context_values = torch.full((num_samples, num_context_steps, context_dim), nan)
-    context_mask = torch.zeros(
-        (num_samples, num_context_steps, context_dim),
-        dtype=torch.bool,
-    )
-    query_times = torch.full((num_samples, num_query_steps), nan)
-    query_mask = torch.zeros(
-        (num_samples, num_query_steps, query_dim),
-        dtype=torch.bool,
-    )
-    target_values = torch.full((num_samples, num_query_steps, query_dim), nan)
-
-    for sample in range(num_samples):
-        context_steps = (
-            num_context_steps
-            if sample == 0
-            else int(torch.randint(1, num_context_steps + 1, (), generator=generator))
-        )
-        context_times[sample, :context_steps] = torch.arange(
-            1,
-            context_steps + 1,
-            dtype=context_times.dtype,
-        )
-        for step in range(context_steps):
-            if sample == 0:
-                mask = torch.zeros(context_dim, dtype=torch.bool)
-                mask[:active_context_dim] = True
-            else:
-                mask = torch.zeros(context_dim, dtype=torch.bool)
-                mask[:active_context_dim] = (
-                    torch.rand(active_context_dim, generator=generator) < 0.7
-                )
-                if not mask.any():
-                    mask[
-                        int(torch.randint(active_context_dim, (), generator=generator))
-                    ] = True
-
-            for channel in mask.nonzero(as_tuple=True)[0]:
-                context_mask[sample, step, channel] = True
-                context_values[sample, step, channel] = float(
-                    sample * 100 + step * 10 + channel
-                )
-
-        query_steps = (
-            num_query_steps
-            if sample == 0
-            else int(torch.randint(1, num_query_steps + 1, (), generator=generator))
-        )
-        query_times[sample, :query_steps] = torch.arange(
-            10,
-            10 + query_steps,
-            dtype=query_times.dtype,
-        )
-        for step in range(query_steps):
-            if sample == 0:
-                mask = torch.zeros(query_dim, dtype=torch.bool)
-                mask[:active_query_dim] = True
-            else:
-                mask = torch.zeros(query_dim, dtype=torch.bool)
-                mask[:active_query_dim] = (
-                    torch.rand(active_query_dim, generator=generator) < 0.7
-                )
-                if not mask.any():
-                    mask[
-                        int(torch.randint(active_query_dim, (), generator=generator))
-                    ] = True
-
-            query_mask[sample, step, mask] = True
-            for channel in mask.nonzero(as_tuple=True)[0]:
-                target_values[sample, step, channel] = float(
-                    1000 + sample * 100 + step * 10 + channel
-                )
-
-    static_covariates = torch.randn((num_samples, 2), generator=generator)
-    return BatchedForecastingRequest(
-        context_times=context_times.reshape(*batch_shape, num_context_steps),
-        context_values=context_values.reshape(
-            *batch_shape,
-            num_context_steps,
-            context_dim,
-        ),
-        context_mask=context_mask.reshape(
-            *batch_shape,
-            num_context_steps,
-            context_dim,
-        ),
-        query_times=query_times.reshape(*batch_shape, num_query_steps),
-        query_mask=query_mask.reshape(*batch_shape, num_query_steps, query_dim),
-        target_values=target_values.reshape(*batch_shape, num_query_steps, query_dim),
         static_covariates=static_covariates.reshape(*batch_shape, 2),
     )
 
@@ -988,7 +876,16 @@ class TestDense:
         self,
         batch_shape: tuple[int, ...],
     ) -> None:
-        original = _make_random_batched_dense(batch_shape, query_dim=3)
+        original = make_forecasting_request(
+            seed=3141,
+            batch_shape=batch_shape,
+            min_steps=4,
+            max_steps=4,
+            context_shape=(3,),
+            output_shape=(3,),
+            input_missingness=True,
+            target_missingness=True,
+        )
 
         actual = original.to_triplet().to_dense(
             context_dim=original.context_values.shape[-1],
@@ -1046,10 +943,15 @@ class TestDense:
         self,
         batch_shape: tuple[int, ...],
     ) -> None:
-        original = _make_random_batched_dense(
-            batch_shape,
-            context_dim=3,
-            query_dim=4,
+        original = make_forecasting_request(
+            seed=3141,
+            batch_shape=batch_shape,
+            min_steps=4,
+            max_steps=4,
+            context_shape=(3,),
+            output_shape=(4,),
+            input_missingness=True,
+            target_missingness=True,
         )
 
         combined = original.to_combined()
@@ -1946,7 +1848,16 @@ class TestEventBatch:
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
     def test_query_indices_random(self, batch_shape: tuple[int, ...]) -> None:
-        req = _make_random_batched_dense(batch_shape, context_dim=3, query_dim=4)
+        req = make_forecasting_request(
+            seed=3141,
+            batch_shape=batch_shape,
+            min_steps=1,
+            max_steps=4,
+            context_shape=(3,),
+            output_shape=(4,),
+            input_missingness=True,
+            target_missingness=True,
+        )
         assert req.target_values is not None
         event = EventBatch.from_request(
             context_times=req.context_times,
@@ -1967,7 +1878,16 @@ class TestEventBatch:
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
     def test_query_indices_batch_last(self, batch_shape: tuple[int, ...]) -> None:
-        req = _make_random_batched_dense(batch_shape, context_dim=3, query_dim=4)
+        req = make_forecasting_request(
+            seed=3141,
+            batch_shape=batch_shape,
+            min_steps=1,
+            max_steps=4,
+            context_shape=(3,),
+            output_shape=(4,),
+            input_missingness=True,
+            target_missingness=True,
+        )
         assert req.target_values is not None
 
         # Rearrange to batch_first=False layout: seq dim moves from position -1/-2 to 0.
@@ -2025,7 +1945,16 @@ class TestTripletBatch:
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
     def test_from_request_random(self, batch_shape: tuple[int, ...]) -> None:
-        req = _make_random_batched_dense(batch_shape, context_dim=3, query_dim=4)
+        req = make_forecasting_request(
+            seed=3141,
+            batch_shape=batch_shape,
+            min_steps=1,
+            max_steps=4,
+            context_shape=(3,),
+            output_shape=(4,),
+            input_missingness=True,
+            target_missingness=True,
+        )
 
         actual = TripletBatch.from_request(
             context_times=req.context_times,
@@ -2042,7 +1971,16 @@ class TestTripletBatch:
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
     def test_from_request_batch_last(self, batch_shape: tuple[int, ...]) -> None:
-        req = _make_random_batched_dense(batch_shape, context_dim=3, query_dim=4)
+        req = make_forecasting_request(
+            seed=3141,
+            batch_shape=batch_shape,
+            min_steps=1,
+            max_steps=4,
+            context_shape=(3,),
+            output_shape=(4,),
+            input_missingness=True,
+            target_missingness=True,
+        )
 
         ctx_times = req.context_times.movedim(-1, 0)
         ctx_values = req.context_values.movedim(-2, 0)
