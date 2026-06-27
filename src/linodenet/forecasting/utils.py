@@ -11,7 +11,6 @@ __all__ = [
     "TripletBatch",
     # functions
     "is_prefix_mask",
-    "scatter_fill",
     "unique_count",
 ]
 
@@ -138,18 +137,6 @@ def _consecutive_group_indices(
     is_new &= mask
     inverse = is_new.cumsum(dim=-1) - 1
     return inverse.masked_fill(~mask, -1), is_new.sum(dim=-1)
-
-
-def scatter_fill(
-    shape: Sequence[int],
-    indices: tuple[Tensor, ...],
-    reference: Tensor,
-    /,
-    *,
-    fill_value: bool | float,
-) -> Tensor:
-    r"""Create a filled tensor and write reference values at the given indices."""
-    return reference.new_full(shape, fill_value).index_put(indices, reference)
 
 
 class EventBatch(NamedTuple):
