@@ -701,39 +701,34 @@ class BatchedForecastingRequest:
         num_query = int(counts.max().item())
 
         return BatchedTripletArgs(
-            context_times=scatter_fill(
-                (*batch_shape, num_context),
-                context_indices,
-                T[*ctx_batch_idx, ctx_time],
-                fill_value=nan,
+            context_times=(
+                T.new_full((*batch_shape, num_context), nan).index_put(
+                    context_indices, T[*ctx_batch_idx, ctx_time]
+                )
             ),
-            context_channels=scatter_fill(
-                (*batch_shape, num_context), context_indices, c_channel, fill_value=-1
+            context_channels=(
+                c_channel.new_full((*batch_shape, num_context), -1).index_put(
+                    context_indices, c_channel
+                )
             ),
-            context_values=scatter_fill(
-                (*batch_shape, num_context),
-                context_indices,
-                X[*ctx_batch_idx, ctx_time, c_channel],
-                fill_value=nan,
+            context_values=(
+                X.new_full((*batch_shape, num_context), nan).index_put(
+                    context_indices, X[*ctx_batch_idx, ctx_time, c_channel]
+                )
             ),
-            query_times=scatter_fill(
-                (*batch_shape, num_query),
-                query_indices,
-                Q[*q_batch_idx, q_time],
-                fill_value=nan,
+            query_times=(
+                Q.new_full((*batch_shape, num_query), nan).index_put(
+                    query_indices, Q[*q_batch_idx, q_time]
+                )
             ),
-            query_channels=scatter_fill(
-                (*batch_shape, num_query),
-                query_indices,
-                q_channel,
-                fill_value=-1,
+            query_channels=(
+                q_channel.new_full((*batch_shape, num_query), -1).index_put(
+                    query_indices, q_channel
+                )
             ),
             target_values=(
-                scatter_fill(
-                    (*batch_shape, num_query),
-                    query_indices,
-                    Y[*q_batch_idx, q_time, q_channel],
-                    fill_value=nan,
+                Y.new_full((*batch_shape, num_query), nan).index_put(
+                    query_indices, Y[*q_batch_idx, q_time, q_channel]
                 )
                 if Y is not None
                 else None
@@ -862,8 +857,10 @@ class TripletArg:
         context_dim: int | None = None,
         query_dim: int | None = None,
     ) -> ForecastingRequest:
+        X = self.context_values
         C = self.context_channels
         M = self.query_channels
+        Y = self.target_values
 
         context_dim = (
             context_dim if context_dim is not None else int(C.max().item()) + 1
@@ -878,40 +875,38 @@ class TripletArg:
         context_times, context_inverse = torch.unique_consecutive(
             self.context_times, return_inverse=True
         )
+        ctx_size = len(context_times)
 
         query_times, query_inverse = torch.unique_consecutive(
             self.query_times, return_inverse=True
         )
+        qry_size = len(query_times)
 
         return ForecastingRequest(
             context_times=context_times,
-            context_values=scatter_fill(
-                (context_times.shape[0], context_dim),
-                (context_inverse, self.context_channels),
-                self.context_values,
-                fill_value=nan,
+            context_values=(
+                X.new_full((ctx_size, context_dim), nan).index_put(
+                    (context_inverse, self.context_channels), X
+                )
             ),
-            context_mask=scatter_fill(
-                (context_times.shape[0], context_dim),
-                (context_inverse, self.context_channels),
-                torch.ones_like(self.context_channels, dtype=torch.bool),
-                fill_value=False,
+            context_mask=(
+                C.new_zeros((ctx_size, context_dim), dtype=torch.bool).index_put(
+                    (context_inverse, self.context_channels),
+                    C.new_ones((), dtype=torch.bool),
+                )
             ),
             query_times=query_times,
-            query_mask=scatter_fill(
-                (query_times.shape[0], query_dim),
-                (query_inverse, self.query_channels),
-                torch.ones_like(self.query_channels, dtype=torch.bool),
-                fill_value=False,
+            query_mask=(
+                M.new_zeros((qry_size, query_dim), dtype=torch.bool).index_put(
+                    (query_inverse, self.query_channels),
+                    M.new_ones((), dtype=torch.bool),
+                )
             ),
             target_values=(
-                scatter_fill(
-                    (query_times.shape[0], query_dim),
-                    (query_inverse, self.query_channels),
-                    self.target_values,
-                    fill_value=nan,
+                Y.new_full((qry_size, query_dim), nan).index_put(
+                    (query_inverse, self.query_channels), Y
                 )
-                if self.target_values is not None
+                if Y is not None
                 else None
             ),
             static_covariates=self.static_covariates,
@@ -1142,43 +1137,41 @@ class BatchedTripletArgs:
         qry_channels = M_flat[qry_valid]
 
         return BatchedForecastingRequest(
-            context_times=scatter_fill(
-                (num_batches, ctx_size),
-                ctx_indices,
-                T_flat[ctx_valid],
-                fill_value=nan,
-            ).reshape(*batch_shape, ctx_size),
-            context_values=scatter_fill(
-                (num_batches, ctx_size, ctx_dim),
-                (*ctx_indices, ctx_channels),
-                X_flat[ctx_valid],
-                fill_value=nan,
-            ).reshape(*batch_shape, ctx_size, ctx_dim),
-            context_mask=scatter_fill(
-                (num_batches, ctx_size, ctx_dim),
-                (*ctx_indices, ctx_channels),
-                torch.ones_like(ctx_channels, dtype=torch.bool),
-                fill_value=False,
-            ).reshape(*batch_shape, ctx_size, ctx_dim),
-            query_times=scatter_fill(
-                (num_batches, qry_size),
-                qry_indices,
-                Q_flat[qry_valid],
-                fill_value=nan,
-            ).reshape(*batch_shape, qry_size),
-            query_mask=scatter_fill(
-                (num_batches, qry_size, qry_dim),
-                (*qry_indices, qry_channels),
-                torch.ones_like(qry_channels, dtype=torch.bool),
-                fill_value=False,
-            ).reshape(*batch_shape, qry_size, qry_dim),
-            target_values=(
-                scatter_fill(
-                    (num_batches, qry_size, qry_dim),
+            context_times=(
+                T_flat.new_full((num_batches, ctx_size), nan)
+                .index_put(ctx_indices, T_flat[ctx_valid])
+                .reshape(*batch_shape, ctx_size)
+            ),
+            context_values=(
+                X_flat.new_full((num_batches, ctx_size, ctx_dim), nan)
+                .index_put((*ctx_indices, ctx_channels), X_flat[ctx_valid])
+                .reshape(*batch_shape, ctx_size, ctx_dim)
+            ),
+            context_mask=(
+                C_flat.new_zeros((num_batches, ctx_size, ctx_dim), dtype=torch.bool)
+                .index_put(
+                    (*ctx_indices, ctx_channels),
+                    ctx_channels.new_ones((), dtype=torch.bool),
+                )
+                .reshape(*batch_shape, ctx_size, ctx_dim)
+            ),
+            query_times=(
+                Q_flat.new_full((num_batches, qry_size), nan)
+                .index_put(qry_indices, Q_flat[qry_valid])
+                .reshape(*batch_shape, qry_size)
+            ),
+            query_mask=(
+                M_flat.new_zeros((num_batches, qry_size, qry_dim), dtype=torch.bool)
+                .index_put(
                     (*qry_indices, qry_channels),
-                    Y_flat[qry_valid],
-                    fill_value=nan,
-                ).reshape(*batch_shape, qry_size, qry_dim)
+                    qry_channels.new_ones((), dtype=torch.bool),
+                )
+                .reshape(*batch_shape, qry_size, qry_dim)
+            ),
+            target_values=(
+                Y_flat.new_full((num_batches, qry_size, qry_dim), nan)
+                .index_put((*qry_indices, qry_channels), Y_flat[qry_valid])
+                .reshape(*batch_shape, qry_size, qry_dim)
                 if Y_flat is not None
                 else None
             ),
