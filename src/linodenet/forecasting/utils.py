@@ -285,6 +285,7 @@ class TripletBatch(NamedTuple):
         static_covariates: Tensor | None = None,  # Float[(..., M)], padded NaN, sparse
         batch_first: bool = True,
     ) -> TripletBatch:
+
         if not batch_first:
             context_times = context_times.movedim(0, -1)
             context_mask = context_mask.movedim(0, -2)
@@ -314,65 +315,49 @@ class TripletBatch(NamedTuple):
         query_indices = (*qry_batch_idx, qry_positions - qry_offsets[*qry_batch_idx])
         num_query = int(qry_counts.max().item())
 
-        packed = TripletBatch(
+        seq_dim = -1 if batch_first else 0
+        return TripletBatch(
             context_times=scatter_fill(
                 (*batch_shape, num_context),
                 context_indices,
                 context_times[*ctx_batch_idx, ctx_time],
                 fill_value=nan,
-            ),
+            ).movedim(-1, seq_dim),
             context_channels=scatter_fill(
                 (*batch_shape, num_context),
                 context_indices,
                 ctx_channel,
                 fill_value=-1,
-            ),
+            ).movedim(-1, seq_dim),
             context_values=scatter_fill(
                 (*batch_shape, num_context),
                 context_indices,
                 context_values[*ctx_batch_idx, ctx_time, ctx_channel],
                 fill_value=nan,
-            ),
+            ).movedim(-1, seq_dim),
             query_times=scatter_fill(
                 (*batch_shape, num_query),
                 query_indices,
                 query_times[*qry_batch_idx, qry_time],
                 fill_value=nan,
-            ),
+            ).movedim(-1, seq_dim),
             query_channels=scatter_fill(
                 (*batch_shape, num_query),
                 query_indices,
                 qry_channel,
                 fill_value=-1,
-            ),
+            ).movedim(-1, seq_dim),
             target_values=(
                 scatter_fill(
                     (*batch_shape, num_query),
                     query_indices,
                     target_values[*qry_batch_idx, qry_time, qry_channel],
                     fill_value=nan,
-                )
+                ).movedim(-1, seq_dim)
                 if target_values is not None
                 else None
             ),
             static_covariates=static_covariates,
-        )
-
-        if batch_first:
-            return packed
-
-        return TripletBatch(
-            context_times=packed.context_times.movedim(-1, 0),
-            context_channels=packed.context_channels.movedim(-1, 0),
-            context_values=packed.context_values.movedim(-1, 0),
-            query_times=packed.query_times.movedim(-1, 0),
-            query_channels=packed.query_channels.movedim(-1, 0),
-            target_values=(
-                packed.target_values.movedim(-1, 0)
-                if packed.target_values is not None
-                else None
-            ),
-            static_covariates=packed.static_covariates,
         )
 
 
