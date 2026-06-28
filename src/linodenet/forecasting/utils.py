@@ -142,25 +142,19 @@ class EventBatch(NamedTuple):
     Other than ForecastingRequest, this class does not perform any validation.
     """
 
-    timestamps: Tensor  # Float[(..., $T)], padded NaN, non-decreasing
+    timestamps: Tensor  # Float[..., $T], padded NaN, non-decreasing
 
-    context_values: Tensor  # Float[(..., $T, D)], padded NaN, sparse
-    context_mask: Tensor  # Bool[(..., $T, D)], padded False
+    context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
+    context_mask: Tensor  # Bool[..., $T, D], padded False
 
-    query_mask: Tensor  # Bool[(..., $T, F)], padded False
+    query_mask: Tensor  # Bool[..., $T, F], padded False
     query_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., K, F)`` from ``target_values``.
+    r"""Advanced index tuple recovering ``(..., K, F)`` from ``target_values``."""
 
-    Usage::
-
-        result = event_batch.target_values[event_batch.query_indices]
-        # result.shape == (*batch_shape, K, F)
-    """
-
-    target_values: Tensor | None = None  # Float[(..., $T, F)], padded NaN, sparse
+    target_values: Tensor | None = None  # Float[..., $T, F], padded NaN, sparse
     r"""Only available during training, otherwise None."""
 
-    static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
+    static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
 
     @staticmethod
     def from_request(
@@ -286,28 +280,27 @@ class TripletBatch(NamedTuple):
     Other than BatchedTripletArgs, this class does not perform any validation.
     """
 
-    context_times: Tensor  # Float[(..., $O)] or Float[($O, ...)], padded NaN
-    context_channels: Tensor  # Long[(..., $O)] or Long[($O, ...)], padded -1
-    context_values: Tensor  # Float[(..., $O)] or Float[($O, ...)], padded NaN
+    context_times: Tensor  # Float[..., $O] or Float[$O, ...], padded NaN
+    context_channels: Tensor  # Long[..., $O] or Long[$O, ...], padded -1
+    context_values: Tensor  # Float[..., $O] or Float[$O, ...], padded NaN
 
-    query_times: Tensor  # Float[(..., $Q)] or Float[($Q, ...)], padded NaN
-    query_channels: Tensor  # Long[(..., $Q)] or Long[($Q, ...)], padded -1
-    target_values: Tensor | None = None  # Float[(..., $Q)] or Float[($Q, ...)]
+    query_times: Tensor  # Float[..., $Q] or Float[$Q, ...], padded NaN
+    query_channels: Tensor  # Long[..., $Q] or Long[$Q, ...], padded -1
+    target_values: Tensor | None = None  # Float[..., $Q] or Float[$Q, ...]
     r"""Only available during training, otherwise None."""
 
-    static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
+    static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
 
     @staticmethod
     def from_request(
         *,
-        query_times: Tensor,  # Float[(..., $K)] or Float[($K, ...)], padded NaN
-        query_mask: Tensor,  # Bool[(..., $K, F)] or Bool[($K, ..., F)]
-        context_times: Tensor,  # Float[(..., $N)] or Float[($N, ...)], padded NaN
-        context_mask: Tensor,  # Bool[(..., $N, D)] or Bool[($N, ..., D)]
-        context_values: Tensor,  # Float[(..., $N, D)] or Float[(N, ..., D)]
-        target_values: Tensor
-        | None = None,  # Float[(..., $K, F)] or Float[($K, ..., F)]
-        static_covariates: Tensor | None = None,  # Float[(..., M)], padded NaN, sparse
+        query_times: Tensor,  # Float[..., $K] or Float[$K, ...], padded NaN
+        query_mask: Tensor,  # Bool[..., $K, F] or Bool[$K, ..., F]
+        context_times: Tensor,  # Float[..., $N] or Float[$N, ...], padded NaN
+        context_mask: Tensor,  # Bool[..., $N, D] or Bool[$N, ..., D]
+        context_values: Tensor,  # Float[..., $N, D] or Float[N, ..., D]
+        target_values: Tensor | None = None,  # Float[..., $K, F] or Float[$K, ..., F]
+        static_covariates: Tensor | None = None,  # Float[..., M], padded NaN, sparse
         batch_first: bool = True,
     ) -> TripletBatch:
 
@@ -940,16 +933,16 @@ class TripletTimeData:
         - if query values are given, they are finite
     """
 
-    context_times: Tensor  # Float[(..., O)], padded NaN, non-decreasing
-    context_channels: Tensor  # Long[(..., O)], padded -1
-    context_values: Tensor  # Float[(..., O)], padded NaN
+    context_times: Tensor  # Float[..., $O], padded NaN, non-decreasing
+    context_channels: Tensor  # Long[..., $O], padded -1
+    context_values: Tensor  # Float[..., $O], padded NaN
 
-    query_times: Tensor  # Float[(..., Q)], padded NaN, non-decreasing
-    query_channels: Tensor  # Long[(..., Q)], padded -1
-    target_values: Tensor | None = None  # Float[(..., Q)], padded NaN
+    query_times: Tensor  # Float[..., $Q], padded NaN, non-decreasing
+    query_channels: Tensor  # Long[..., $Q], padded -1
+    target_values: Tensor | None = None  # Float[..., $Q], padded NaN
     r"""Only available during training, otherwise None."""
 
-    static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
+    static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
 
     def __post_init__(self) -> None:
         T = self.context_times
