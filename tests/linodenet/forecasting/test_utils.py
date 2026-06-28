@@ -9,10 +9,7 @@ from linodenet.forecasting.utils import (
     BatchedCombinedArgs,
     BatchedForecastingRequest,
     BatchedTripletArgs,
-    CombinedArg,
     EventBatch,
-    ForecastingRequest,
-    TripletArg,
     TripletBatch,
 )
 
@@ -31,7 +28,7 @@ def _assert_query_mask_equal(
 
 
 def _assert_dense_equal(
-    actual: ForecastingRequest, expected: ForecastingRequest, /
+    actual: BatchedForecastingRequest, expected: BatchedForecastingRequest, /
 ) -> None:
     assert_close(
         actual.context_times, expected.context_times, atol=0.0, rtol=0.0, equal_nan=True
@@ -126,7 +123,9 @@ def _assert_batched_dense_equal(
         )
 
 
-def _assert_triplet_equal(actual: TripletArg, expected: TripletArg, /) -> None:
+def _assert_triplet_equal(
+    actual: BatchedTripletArgs, expected: BatchedTripletArgs, /
+) -> None:
     assert_close(
         actual.context_times,
         expected.context_times,
@@ -176,7 +175,9 @@ def _assert_triplet_equal(actual: TripletArg, expected: TripletArg, /) -> None:
         )
 
 
-def _assert_combined_equal(actual: CombinedArg, expected: CombinedArg, /) -> None:
+def _assert_combined_equal(
+    actual: BatchedCombinedArgs, expected: BatchedCombinedArgs, /
+) -> None:
     assert_close(actual.times, expected.times, atol=0.0, rtol=0.0, equal_nan=True)
     assert_close(
         actual.context_values,
@@ -308,8 +309,8 @@ def _combined_arg(
     query_mask: Tensor,
     target_values_available: bool = True,
     static_covariates: Tensor | None = None,
-) -> CombinedArg:
-    return CombinedArg(
+) -> BatchedCombinedArgs:
+    return BatchedCombinedArgs(
         times=times,
         context_values=values.masked_fill(~context_mask, nan),
         context_mask=context_mask,
@@ -430,7 +431,7 @@ def _make_random_batched_triplet(
 
 class TestDense:
     def test_query_mask_clears_masked_values(self) -> None:
-        arg = ForecastingRequest(
+        arg = BatchedForecastingRequest(
             context_times=torch.tensor([1.0]),
             context_values=torch.tensor([[10.0, 11.0]]),
             context_mask=torch.tensor([[True, True]]),
@@ -455,7 +456,7 @@ class TestDense:
         )
 
     def test_context_mask_clears_masked_values(self) -> None:
-        arg = ForecastingRequest(
+        arg = BatchedForecastingRequest(
             context_times=torch.tensor([1.0]),
             context_values=torch.tensor([[10.0, 11.0]]),
             context_mask=torch.tensor([[True, False]]),
@@ -466,7 +467,7 @@ class TestDense:
         assert_close(arg.context_values, torch.tensor([[10.0, nan]]), equal_nan=True)
 
     def test_to_triplet_unbatched(self) -> None:
-        original = ForecastingRequest(
+        original = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 2.0]),
             context_values=torch.tensor([
                 [10.0, nan, 11.0],
@@ -483,7 +484,7 @@ class TestDense:
         )  # fmt: skip
 
         actual = original.to_triplet()
-        expected = TripletArg(
+        expected = BatchedTripletArgs(
             context_times=torch.tensor([1.0, 1.0, 2.0, 2.0]),
             context_channels=torch.tensor([0, 2, 1, 2]),
             context_values=torch.tensor([10.0, 11.0, 20.0, 21.0]),
@@ -496,7 +497,7 @@ class TestDense:
         _assert_triplet_equal(actual, expected)
 
     def test_to_triplet_roundtrip_unbatched(self) -> None:
-        original = ForecastingRequest(
+        original = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 2.0, 3.0]),
             context_values=torch.tensor([
                     [10.0, nan],
@@ -526,7 +527,7 @@ class TestDense:
         _assert_triplet_equal(triplet_result, triplet)
 
     def test_to_combined_unbatched(self) -> None:
-        original = ForecastingRequest(
+        original = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([
                 [10.0,  nan],
@@ -575,7 +576,7 @@ class TestDense:
         _assert_combined_equal(actual, expected)
 
     def test_to_combined_roundtrip_unbatched(self) -> None:
-        original = ForecastingRequest(
+        original = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([
                 [10.0,  nan],
@@ -602,7 +603,7 @@ class TestDense:
         _assert_dense_equal(actual, original)
 
     def test_to_combined_roundtrip_unbatched_distinct_dims(self) -> None:
-        original = ForecastingRequest(
+        original = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([
                 [10.0,  nan],
@@ -633,7 +634,7 @@ class TestDense:
 
     def test_batched_roundtrip(self) -> None:
         args = [
-            ForecastingRequest(
+            BatchedForecastingRequest(
                 context_times=torch.tensor([1.0, 2.0]),
                 context_values=torch.tensor([[1.0, nan], [2.0, 3.0]]),
                 context_mask=torch.tensor([[True, False], [True, True]]),
@@ -642,7 +643,7 @@ class TestDense:
                 target_values=torch.tensor([[9.0, nan]]),
                 static_covariates=torch.tensor([1.0, 2.0]),
             ),
-            ForecastingRequest(
+            BatchedForecastingRequest(
                 context_times=torch.tensor([3.0]),
                 context_values=torch.tensor([[4.0, 5.0]]),
                 context_mask=torch.tensor([[True, True]]),
@@ -1151,7 +1152,7 @@ class TestCombined:
         )  # fmt: skip
 
         actual = original.to_dense()
-        expected = ForecastingRequest(
+        expected = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([
                 [10.0,  nan],
@@ -1201,7 +1202,7 @@ class TestCombined:
         )  # fmt: skip
 
         actual = original.to_dense()
-        expected = ForecastingRequest(
+        expected = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([
                 [10.0,  nan],
@@ -1452,7 +1453,7 @@ class TestCombined:
 class TestTriplet:
     def test_rejects_duplicate_queries(self) -> None:
         with pytest.raises(AssertionError):
-            TripletArg(
+            BatchedTripletArgs(
                 context_times=torch.tensor([1.0]),
                 context_channels=torch.tensor([0]),
                 context_values=torch.tensor([10.0]),
@@ -1470,7 +1471,7 @@ class TestTriplet:
             )
 
     def test_to_dense_unbatched(self) -> None:
-        original = TripletArg(
+        original = BatchedTripletArgs(
             context_times=torch.tensor([1.0, 1.0, 2.0, 2.0]),
             context_channels=torch.tensor([0, 2, 1, 2]),
             context_values=torch.tensor([10.0, 11.0, 20.0, 21.0]),
@@ -1481,7 +1482,7 @@ class TestTriplet:
         )
 
         actual = original.to_dense()
-        expected = ForecastingRequest(
+        expected = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 2.0]),
             context_values=torch.tensor([
                 [10.0, nan, 11.0],
@@ -1500,7 +1501,7 @@ class TestTriplet:
         _assert_dense_equal(actual, expected)
 
     def test_to_dense_unbatched_with_dims(self) -> None:
-        original = TripletArg(
+        original = BatchedTripletArgs(
             context_times=torch.tensor([1.0, 2.0]),
             context_channels=torch.tensor([0, 1]),
             context_values=torch.tensor([10.0, 20.0]),
@@ -1510,7 +1511,7 @@ class TestTriplet:
         )
 
         actual = original.to_dense(context_dim=3, query_dim=4)
-        expected = ForecastingRequest(
+        expected = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 2.0]),
             context_values=torch.tensor([
                 [10.0,  nan, nan],
@@ -1528,7 +1529,7 @@ class TestTriplet:
         _assert_dense_equal(actual, expected)
 
     def test_to_combined_roundtrip_unbatched(self) -> None:
-        original = TripletArg(
+        original = BatchedTripletArgs(
             context_times=torch.tensor([1.0, 1.0, 3.0, 3.0]),
             context_channels=torch.tensor([0, 2, 1, 2]),
             context_values=torch.tensor([10.0, 12.0, 30.0, 32.0]),
@@ -1544,7 +1545,7 @@ class TestTriplet:
 
     def test_batched_roundtrip(self) -> None:
         args = [
-            TripletArg(
+            BatchedTripletArgs(
                 context_times=torch.tensor([1.0, 1.0, 2.0]),
                 context_channels=torch.tensor([0, 2, 1]),
                 context_values=torch.tensor([10.0, 11.0, 20.0]),
@@ -1553,7 +1554,7 @@ class TestTriplet:
                 target_values=torch.tensor([30.0, 40.0]),
                 static_covariates=torch.tensor([1.0, 2.0]),
             ),
-            TripletArg(
+            BatchedTripletArgs(
                 context_times=torch.tensor([5.0]),
                 context_channels=torch.tensor([1]),
                 context_values=torch.tensor([50.0]),
@@ -1606,14 +1607,14 @@ class TestTriplet:
 
     def test_batched_roundtrip_without_values(self) -> None:
         args = [
-            TripletArg(
+            BatchedTripletArgs(
                 context_times=torch.tensor([1.0]),
                 context_channels=torch.tensor([0]),
                 context_values=torch.tensor([10.0]),
                 query_times=torch.tensor([3.0, 4.0]),
                 query_channels=torch.tensor([0, 1]),
             ),
-            TripletArg(
+            BatchedTripletArgs(
                 context_times=torch.tensor([5.0, 5.0]),
                 context_channels=torch.tensor([0, 1]),
                 context_values=torch.tensor([50.0, 51.0]),
@@ -1820,7 +1821,7 @@ class TestTriplet:
 
 class TestEventBatch:
     def test_query_indices_unbatched(self) -> None:
-        req = ForecastingRequest(
+        req = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([[10.0, nan], [nan, 30.0]]),
             context_mask=torch.tensor([[True, False], [False, True]]),
@@ -1920,7 +1921,7 @@ class TestEventBatch:
 
 class TestTripletBatch:
     def test_from_request_unbatched(self) -> None:
-        req = ForecastingRequest(
+        req = BatchedForecastingRequest(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([[10.0, nan], [nan, 30.0]]),
             context_mask=torch.tensor([[True, False], [False, True]]),

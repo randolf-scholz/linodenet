@@ -4,9 +4,6 @@ __all__ = [
     "BatchedCombinedArgs",
     "BatchedForecastingRequest",
     "BatchedTripletArgs",
-    "TripletArg",
-    "ForecastingRequest",
-    "CombinedArg",
     "EventBatch",
     "TripletBatch",
     # functions
@@ -424,143 +421,6 @@ class TripletBatch(NamedTuple):
 
 
 @dataclass(frozen=True)
-class ForecastingRequest:
-    r"""Default representation of forecasting arguments.
-
-    Assumptions:
-        - context time stamps are finite and non-decreasing
-        - context values are finite exactly at entries selected by the context mask
-        - query time stamps are finite and strictly increasing
-        - if query values are given, they are finite exactly at entries selected by the query mask
-        - there is at least one context value observed per time stamp
-        - there is at least one target value observed per time stamp
-        - there is at least one target mask selected per time stamp
-    """
-
-    context_times: Tensor  # Float[(N)], finite, non-decreasing
-    context_values: Tensor  # Float[(N, D)], sparse
-    context_mask: Tensor  # Bool[(N, D)]
-
-    query_times: Tensor  # Float[(K)], finite, strictly increasing
-    query_mask: Tensor  # Bool[(K, F)]
-    target_values: Tensor | None = None  # Float[(K, F)], sparse
-    r"""Only available during training, otherwise None."""
-
-    static_covariates: Tensor | None = None  # Float[(M)], sparse
-
-    @classmethod
-    def from_triplet(cls, arg: TripletArg, /) -> ForecastingRequest:
-        return arg.to_dense()
-
-    @classmethod
-    def from_combined(cls, arg: CombinedArg, /) -> ForecastingRequest:
-        return arg.to_dense()
-
-    @classmethod
-    def from_batched(
-        cls, arg: BatchedForecastingRequest, /
-    ) -> list[ForecastingRequest]:
-        return arg.unbatch()
-
-    def __post_init__(self) -> None:
-        T = self.context_times
-        C = self.context_mask
-        Q = self.query_times
-        M = self.query_mask
-        X = self.context_values.masked_fill(~C, nan)
-        object.__setattr__(self, "context_values", X)
-
-        *_, context_size, context_dim = X.shape
-        assert C.dtype == torch.bool
-        assert T.shape == (context_size,)
-        assert T.isfinite().all()
-        assert (T.diff(dim=-1) >= 0.0).all()  # non-decreasing
-        assert X.shape == (context_size, context_dim)
-        assert C.shape == (context_size, context_dim)
-        assert torch.equal(X.isfinite(), C)
-        assert C.any(dim=-1).all()  # at least one value per step
-
-        *_, query_size = Q.shape
-        assert Q.shape == (query_size,)
-        assert Q.isfinite().all()
-        assert (Q.diff(dim=-1) > 0.0).all()  # strictly increasing
-
-        *_, query_dim = M.shape
-        assert M.dtype == torch.bool
-        assert M.shape == (query_size, query_dim)
-        assert M.any(dim=-1).all()  # at least one value per step
-
-        if (V := self.target_values) is not None:
-            V = V.masked_fill(~M, nan)
-            object.__setattr__(self, "target_values", V)
-            *_, query_dim = V.shape
-            assert V.shape == (query_size, query_dim)
-            assert V.isfinite().any(dim=-1).all()  # at least one value per step
-            assert V.shape == M.shape
-            assert torch.equal(V.isfinite(), M)
-
-    def to_triplet(self) -> TripletArg:
-        T = self.context_times
-        X = self.context_values
-        C = self.context_mask
-        Q = self.query_times
-        M = self.query_mask
-        Y = self.target_values
-
-        time_indices, context_channels = C.nonzero(as_tuple=True)  # O×2
-        query_indices, query_channels = M.nonzero(as_tuple=True)
-
-        return TripletArg(
-            context_times=T[time_indices],
-            context_channels=context_channels,
-            context_values=X[time_indices, context_channels],
-            query_times=Q[query_indices],
-            query_channels=query_channels,
-            target_values=Y[query_indices, query_channels] if Y is not None else None,
-            static_covariates=self.static_covariates,
-        )
-
-    def to_combined(self) -> CombinedArg:
-        X = self.context_values
-        C = self.context_mask
-        M = self.query_mask
-        Y = self.target_values
-        T = self.context_times
-        Q = self.query_times
-
-        *_, ctx_size, ctx_dim = X.shape
-        *_, q_size, q_dim = M.shape
-
-        times = torch.cat([T, Q], dim=-1)
-        perm = torch.argsort(times, dim=-1, stable=True).unsqueeze(-1)
-
-        return CombinedArg(
-            times=times.take_along_dim(perm.squeeze(-1), dim=-1),
-            context_values=torch.cat(
-                [X, X.new_full((q_size, ctx_dim), nan)],
-                dim=-2,
-            ).take_along_dim(perm, dim=-2),
-            context_mask=torch.cat(
-                [C, C.new_zeros((q_size, ctx_dim))],
-                dim=-2,
-            ).take_along_dim(perm, dim=-2),
-            target_values=(
-                torch.cat(
-                    [Y.new_full((ctx_size, q_dim), nan), Y],
-                    dim=-2,
-                ).take_along_dim(perm, dim=-2)
-                if Y is not None
-                else None
-            ),
-            query_mask=torch.cat(
-                [M.new_zeros((ctx_size, q_dim)), M],
-                dim=-2,
-            ).take_along_dim(perm, dim=-2),
-            static_covariates=self.static_covariates,
-        )
-
-
-@dataclass(frozen=True)
 class BatchedForecastingRequest:
     r"""Batched forecasting arguments.
 
@@ -652,7 +512,7 @@ class BatchedForecastingRequest:
 
     @classmethod
     def from_unbatched(
-        cls, args: Sequence[ForecastingRequest], /
+        cls, args: Sequence[BatchedForecastingRequest], /
     ) -> BatchedForecastingRequest:
         if not args:
             raise ValueError("Expected at least one DenseArg.")
@@ -696,7 +556,7 @@ class BatchedForecastingRequest:
             ),
         )
 
-    def unbatch(self) -> list[ForecastingRequest]:
+    def unbatch(self) -> list[BatchedForecastingRequest]:
         T = self.context_times.unsqueeze(0).flatten(end_dim=-2)
         X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
@@ -708,7 +568,7 @@ class BatchedForecastingRequest:
         num_samples = T.shape[0]
 
         return [
-            ForecastingRequest(
+            BatchedForecastingRequest(
                 context_times=c_time,
                 context_values=c_value,
                 context_mask=c_mask,
@@ -846,144 +706,6 @@ class BatchedForecastingRequest:
 
 
 @dataclass(frozen=True)
-class TripletArg:
-    r"""Triplet representation of forecasting arguments.
-
-    Assumptions:
-        - context time stamps are finite, non-decreasing
-        - context channels are non-negative integers
-        - context values are finite
-        - (context_time, context_channel) pairs are not necessarily unique
-        - query time stamps are finite, non-decreasing
-        - query channels are non-negative integers
-        - (query_time, query_channel) pairs are unique
-        - if query values are given, they are finite
-    """
-
-    context_times: Tensor  # Float[(Oᵢ)], finite, non-decreasing
-    context_channels: Tensor  # Long[(Oᵢ)]
-    context_values: Tensor  # Float[(Oᵢ)], finite
-
-    query_times: Tensor  # Float[(Qᵢ)], finite, non-decreasing
-    query_channels: Tensor  # Long[(Qᵢ)]
-    target_values: Tensor | None = None  # Float[(Qᵢ)], finite
-    r"""Only available during training, otherwise None."""
-
-    static_covariates: Tensor | None = None  # Float[(M)], sparse
-
-    @classmethod
-    def from_dense(cls, arg: ForecastingRequest, /) -> TripletArg:
-        return arg.to_triplet()
-
-    @classmethod
-    def from_combined(cls, arg: CombinedArg, /) -> TripletArg:
-        return arg.to_triplet()
-
-    @classmethod
-    def from_batched(cls, arg: BatchedTripletArgs, /) -> list[TripletArg]:
-        return arg.unbatch()
-
-    def __post_init__(self) -> None:
-        T = self.context_times
-        C = self.context_channels
-        X = self.context_values
-        Q = self.query_times
-        M = self.query_channels
-
-        *_, num_context = T.shape
-        assert C.dtype == torch.long
-        assert T.shape == (num_context,)
-        assert C.shape == (num_context,)
-        assert X.shape == (num_context,)
-        assert T.isfinite().all()
-        assert C.isfinite().all()
-        assert X.isfinite().all()
-        assert C.ge(0).all()  # channels non-negative
-        assert T.diff(dim=-1).ge(0.0).all()  # non-decreasing
-
-        *_, num_query = Q.shape
-        assert Q.shape == (num_query,)
-        assert Q.isfinite().all()
-        assert Q.diff(dim=-1).ge(0.0).all()
-
-        assert M.dtype == torch.long
-        assert M.shape == (num_query,)
-        assert M.isfinite().all()
-        assert M.ge(0).all()
-        query_pairs = torch.stack([Q, M], dim=-1)  # (Q, 2)
-        assert (unique_count(query_pairs.unsqueeze(0)) == num_query).all()
-
-        if (V := self.target_values) is not None:
-            assert V.shape == (num_query,)
-            assert V.isfinite().all()
-
-    def to_dense(
-        self,
-        /,
-        *,
-        context_dim: int | None = None,
-        query_dim: int | None = None,
-    ) -> ForecastingRequest:
-        X = self.context_values
-        C = self.context_channels
-        M = self.query_channels
-        Y = self.target_values
-
-        context_dim = (
-            context_dim if context_dim is not None else int(C.max().item()) + 1
-        )
-        query_dim = query_dim if query_dim is not None else int(M.max().item()) + 1
-
-        if (self.context_channels >= context_dim).any():
-            raise ValueError("Expected context channel indices below context_dim.")
-        if (self.query_channels >= query_dim).any():
-            raise ValueError("Expected query channel indices below query_dim.")
-
-        context_times, context_inverse = torch.unique_consecutive(
-            self.context_times, return_inverse=True
-        )
-        ctx_size = len(context_times)
-
-        query_times, query_inverse = torch.unique_consecutive(
-            self.query_times, return_inverse=True
-        )
-        qry_size = len(query_times)
-
-        return ForecastingRequest(
-            context_times=context_times,
-            context_values=(
-                X.new_full((ctx_size, context_dim), nan).index_put(
-                    (context_inverse, self.context_channels), X
-                )
-            ),
-            context_mask=(
-                C.new_zeros((ctx_size, context_dim), dtype=torch.bool).index_put(
-                    (context_inverse, self.context_channels),
-                    C.new_ones((), dtype=torch.bool),
-                )
-            ),
-            query_times=query_times,
-            query_mask=(
-                M.new_zeros((qry_size, query_dim), dtype=torch.bool).index_put(
-                    (query_inverse, self.query_channels),
-                    M.new_ones((), dtype=torch.bool),
-                )
-            ),
-            target_values=(
-                Y.new_full((qry_size, query_dim), nan).index_put(
-                    (query_inverse, self.query_channels), Y
-                )
-                if Y is not None
-                else None
-            ),
-            static_covariates=self.static_covariates,
-        )
-
-    def to_combined(self) -> CombinedArg:
-        return self.to_dense().to_combined()
-
-
-@dataclass(frozen=True)
 class BatchedTripletArgs:
     r"""Triplet representation of forecasting arguments.
 
@@ -1059,7 +781,7 @@ class BatchedTripletArgs:
         return arg.to_triplet()
 
     @classmethod
-    def from_unbatched(cls, args: Sequence[TripletArg]) -> BatchedTripletArgs:
+    def from_unbatched(cls, args: Sequence[BatchedTripletArgs]) -> BatchedTripletArgs:
         if not args:
             raise ValueError("Expected at least one TripletArg.")
 
@@ -1102,7 +824,7 @@ class BatchedTripletArgs:
             ),
         )
 
-    def unbatch(self) -> list[TripletArg]:
+    def unbatch(self) -> list[BatchedTripletArgs]:
         T = self.context_times.unsqueeze(0).flatten(end_dim=-2)
         C = self.context_channels.unsqueeze(0).flatten(end_dim=-2)
         X = self.context_values.unsqueeze(0).flatten(end_dim=-2)
@@ -1113,7 +835,7 @@ class BatchedTripletArgs:
         query_lengths = Q.isfinite().sum(dim=-1)
 
         return [
-            TripletArg(
+            BatchedTripletArgs(
                 context_times=c_time,
                 context_channels=c_channel,
                 context_values=c_value,
@@ -1250,112 +972,6 @@ class BatchedTripletArgs:
 
 
 @dataclass(frozen=True)
-class CombinedArg:
-    r"""Representation with concatenated context and query tensors.
-
-    Shapes:
-        N: context size
-        K: query size
-        D: context data dimensionality
-        E: query data dimensionality
-
-    Assumptions:
-        - time stamps are finite and non-decreasing
-        - context time stamps are finite and non-decreasing
-        - query time stamps are finite and strictly increasing
-        - context values are finite exactly at entries selected by the context mask
-        - if query values are given, they are finite exactly at entries selected by the query mask
-        - each time stamp has at least one context or query mask entry
-    """
-
-    times: Tensor  # Float[($N + $K)], finite, non-decreasing
-    context_values: Tensor  # Float[($N + $K, D)], sparse
-    context_mask: Tensor  # Bool[($N + $K, D)]
-    query_mask: Tensor  # Bool[($N + $K, E)]
-    target_values: Tensor | None = None  # Float[($N + $K, E)], sparse
-    r"""Only available during training, otherwise None."""
-
-    static_covariates: Tensor | None = None  # Float[(M)], sparse
-
-    def __post_init__(self) -> None:
-        # sanitize context_values
-        object.__setattr__(
-            self,
-            "context_values",
-            self.context_values.masked_fill(~self.context_mask, nan),
-        )
-        # sanitize target_values
-        object.__setattr__(
-            self,
-            "target_values",
-            (
-                self.target_values.masked_fill(~self.query_mask, nan)
-                if self.target_values is not None
-                else None
-            ),
-        )
-
-        T = self.times
-        X = self.context_values
-        C = self.context_mask
-        Y = self.target_values
-        Q = self.query_mask
-
-        *_, num_combined, context_dim = X.shape
-        *_, query_combined, query_dim = Q.shape
-        assert C.dtype == torch.bool
-        assert T.shape == (num_combined,)
-        assert T.isfinite().all()
-        assert T.diff(dim=-1).ge(0.0).all()  # sorted in ascending order
-
-        assert X.shape == (num_combined, context_dim)
-        assert C.shape == (num_combined, context_dim)
-        assert torch.equal(X.isfinite(), C)
-
-        assert Q.dtype == torch.bool
-        assert Q.shape == (query_combined, query_dim)
-        assert query_combined == num_combined
-        assert (C.any(dim=-1) | Q.any(dim=-1)).all()
-        assert T[C.any(dim=-1)].diff(dim=-1).ge(0.0).all()
-        assert T[Q.any(dim=-1)].diff(dim=-1).gt(0.0).all()
-        if Y is not None:
-            assert Y.shape == (num_combined, query_dim)
-            assert torch.equal(Y.isfinite(), Q)
-
-    @classmethod
-    def from_dense(cls, arg: ForecastingRequest, /) -> CombinedArg:
-        return arg.to_combined()
-
-    @classmethod
-    def from_triplet(cls, arg: TripletArg, /) -> CombinedArg:
-        return arg.to_combined()
-
-    @classmethod
-    def from_batched(cls, arg: BatchedCombinedArgs, /) -> list[CombinedArg]:
-        return arg.unbatch()
-
-    def to_dense(self) -> ForecastingRequest:
-        context_filter = self.context_mask.any(dim=-1)
-        query_filter = self.query_mask.any(dim=-1)
-        return ForecastingRequest(
-            context_times=self.times[..., context_filter],
-            context_values=self.context_values[..., context_filter, :],
-            context_mask=self.context_mask[..., context_filter, :],
-            query_times=self.times[..., query_filter],
-            query_mask=self.query_mask[..., query_filter, :],
-            target_values=(
-                self.target_values[..., query_filter, :]
-                if self.target_values is not None
-                else None
-            ),
-            static_covariates=self.static_covariates,
-        )
-
-    def to_triplet(self) -> TripletArg:
-        return self.to_dense().to_triplet()
-
-
-@dataclass(frozen=True)
 class BatchedCombinedArgs:
     r"""Representation with concatenated context and query tensors.
 
@@ -1452,7 +1068,9 @@ class BatchedCombinedArgs:
         return arg.to_combined()
 
     @classmethod
-    def from_unbatched(cls, args: Sequence[CombinedArg], /) -> BatchedCombinedArgs:
+    def from_unbatched(
+        cls, args: Sequence[BatchedCombinedArgs], /
+    ) -> BatchedCombinedArgs:
         if not args:
             raise ValueError("Expected at least one CombinedArg.")
 
@@ -1490,7 +1108,7 @@ class BatchedCombinedArgs:
             ),
         )
 
-    def unbatch(self) -> list[CombinedArg]:
+    def unbatch(self) -> list[BatchedCombinedArgs]:
         T = self.times.unsqueeze(0).flatten(end_dim=-2)
         X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
@@ -1498,7 +1116,7 @@ class BatchedCombinedArgs:
         lengths = T.isfinite().sum(dim=-1)
 
         return [
-            CombinedArg(
+            BatchedCombinedArgs(
                 times=time,
                 context_values=c_value,
                 context_mask=c_mask,
