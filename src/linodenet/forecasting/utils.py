@@ -1000,7 +1000,7 @@ class CombinedArgs:
 
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
 
-    def __post_init__(self) -> None:
+    def _normalize(self) -> None:
         # sanitize context_values
         object.__setattr__(
             self,
@@ -1018,6 +1018,8 @@ class CombinedArgs:
             ),
         )
 
+    def __post_init__(self) -> None:
+        self._normalize()
         T = self.times
         X = self.context_values
         C = self.context_mask
