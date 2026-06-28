@@ -7,7 +7,7 @@ from torch.testing import assert_close
 
 from linodenet.forecasting.utils import (
     EventBatch,
-    MergedTimeData,
+    JointTimeData,
     SplitTimeData,
     TripletBatch,
     TripletTimeData,
@@ -173,7 +173,7 @@ def _assert_triplet_equal(
         )
 
 
-def _assert_combined_equal(actual: MergedTimeData, expected: MergedTimeData, /) -> None:
+def _assert_combined_equal(actual: JointTimeData, expected: JointTimeData, /) -> None:
     assert_close(actual.times, expected.times, atol=0.0, rtol=0.0, equal_nan=True)
     assert_close(
         actual.context_values,
@@ -208,8 +208,8 @@ def _assert_combined_equal(actual: MergedTimeData, expected: MergedTimeData, /) 
 
 
 def _assert_batched_combined_equal(
-    actual: MergedTimeData,
-    expected: MergedTimeData,
+    actual: JointTimeData,
+    expected: JointTimeData,
     /,
 ) -> None:
     assert_close(actual.times, expected.times, atol=0.0, rtol=0.0, equal_nan=True)
@@ -305,8 +305,8 @@ def _combined_arg(
     query_mask: Tensor,
     target_values_available: bool = True,
     static_covariates: Tensor | None = None,
-) -> MergedTimeData:
-    return MergedTimeData(
+) -> JointTimeData:
+    return JointTimeData(
         times=times,
         context_values=values.masked_fill(~context_mask, nan),
         context_mask=context_mask,
@@ -326,8 +326,8 @@ def _batched_combined_args(
     query_mask: Tensor,
     target_values_available: bool = True,
     static_covariates: Tensor | None = None,
-) -> MergedTimeData:
-    return MergedTimeData(
+) -> JointTimeData:
+    return JointTimeData(
         times=times,
         context_values=values.masked_fill(~context_mask, nan),
         context_mask=context_mask,
@@ -479,7 +479,7 @@ class TestDense:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        actual = original.to_triplet()
+        actual = original.to_triplets()
         expected = TripletTimeData(
             context_times=torch.tensor([1.0, 1.0, 2.0, 2.0]),
             context_channels=torch.tensor([0, 2, 1, 2]),
@@ -511,15 +511,15 @@ class TestDense:
             static_covariates=torch.tensor([7.0]),
         )  # fmt: skip
 
-        triplet = original.to_triplet()
-        actual = triplet.to_dense(
+        triplet = original.to_triplets()
+        actual = triplet.to_split_time(
             context_dim=original.context_values.shape[-1],
             query_dim=2,
         )
 
         _assert_dense_equal(actual, original)
 
-        triplet_result = actual.to_triplet()
+        triplet_result = actual.to_triplets()
         _assert_triplet_equal(triplet_result, triplet)
 
     def test_to_combined_unbatched(self) -> None:
@@ -545,7 +545,7 @@ class TestDense:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        actual = original.to_combined()
+        actual = original.to_joint_time()
         expected = _combined_arg(
             times=torch.tensor([1.0, 2.0, 3.0, 4.0]),
             values=torch.tensor([
@@ -594,7 +594,7 @@ class TestDense:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        actual = original.to_combined().to_dense()
+        actual = original.to_joint_time().to_split_time()
 
         _assert_dense_equal(actual, original)
 
@@ -620,11 +620,11 @@ class TestDense:
             ]),
         )  # fmt: skip
 
-        combined = original.to_combined()
+        combined = original.to_joint_time()
         assert combined.context_values.shape == (4, 2)
         assert combined.query_mask.shape == (4, 3)
 
-        actual = combined.to_dense()
+        actual = combined.to_split_time()
 
         _assert_dense_equal(actual, original)
 
@@ -723,7 +723,7 @@ class TestDense:
                 [[ nan, 40.0], [50.0, 60.0]],
             ]),
         )  # fmt: skip
-        actual = original.to_triplet()
+        actual = original.to_triplets()
 
         expected = TripletTimeData(
             context_times=torch.tensor([
@@ -768,7 +768,7 @@ class TestDense:
             .unsqueeze(-1)
             .expand(*query_times.shape, 2),
         )
-        actual = original.to_triplet()
+        actual = original.to_triplets()
 
         expected = TripletTimeData(
             context_times=torch.tensor([[[1.0, nan], [2.0, 2.0]]]),
@@ -824,8 +824,8 @@ class TestDense:
             ]),
         )  # fmt: skip
 
-        triplet = original.to_triplet()
-        actual = triplet.to_dense(context_dim=3, query_dim=3)
+        triplet = original.to_triplets()
+        actual = triplet.to_split_time(context_dim=3, query_dim=3)
         expected = SplitTimeData(
             context_times=torch.tensor([
                 [1.0, 2.0],
@@ -866,7 +866,7 @@ class TestDense:
         )  # fmt: skip
 
         _assert_batched_dense_equal(actual, expected)
-        _assert_batched_triplet_equal(actual.to_triplet(), triplet)
+        _assert_batched_triplet_equal(actual.to_triplets(), triplet)
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3), (1, 2, 3)])
     def test_to_triplet_roundtrip_batched_random(
@@ -884,7 +884,7 @@ class TestDense:
             target_missingness=True,
         )
 
-        actual = original.to_triplet().to_dense(
+        actual = original.to_triplets().to_split_time(
             context_dim=original.context_values.shape[-1],
             query_dim=3,
         )
@@ -931,7 +931,7 @@ class TestDense:
             ]),
         )  # fmt: skip
 
-        actual = original.to_combined().to_dense()
+        actual = original.to_joint_time().to_split_time()
 
         _assert_batched_dense_equal(actual, original)
 
@@ -951,11 +951,11 @@ class TestDense:
             target_missingness=True,
         )
 
-        combined = original.to_combined()
+        combined = original.to_joint_time()
         assert combined.context_values.shape[-1] == 3
         assert combined.query_mask.shape[-1] == 4
 
-        actual = combined.to_dense()
+        actual = combined.to_split_time()
 
         _assert_batched_dense_equal(actual, original)
 
@@ -1073,7 +1073,7 @@ class TestCombined:
             ),
         ]  # fmt: skip
 
-        actual = MergedTimeData.from_unbatched(args)
+        actual = JointTimeData.from_unbatched(args)
         expected = _batched_combined_args(
             times=torch.tensor([
                 [1.0, 2.0, 3.0, 4.0],
@@ -1147,7 +1147,7 @@ class TestCombined:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        actual = original.to_dense()
+        actual = original.to_split_time()
         expected = SplitTimeData(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([
@@ -1197,7 +1197,7 @@ class TestCombined:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        actual = original.to_dense()
+        actual = original.to_split_time()
         expected = SplitTimeData(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([
@@ -1261,7 +1261,7 @@ class TestCombined:
             ]),
         )  # fmt: skip
 
-        actual = original.to_dense()
+        actual = original.to_split_time()
         expected = SplitTimeData(
             context_times=torch.tensor([
                 [1.0, 3.0],
@@ -1321,7 +1321,7 @@ class TestCombined:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        actual = original.to_dense().to_combined()
+        actual = original.to_split_time().to_joint_time()
 
         _assert_combined_equal(actual, original)
 
@@ -1349,7 +1349,7 @@ class TestCombined:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        actual = original.to_triplet().to_combined()
+        actual = original.to_triplets().to_joint_time()
 
         _assert_combined_equal(actual, original)
 
@@ -1395,7 +1395,7 @@ class TestCombined:
             ]),
         )  # fmt: skip
 
-        actual = original.to_dense().to_combined()
+        actual = original.to_split_time().to_joint_time()
 
         _assert_batched_combined_equal(actual, original)
 
@@ -1441,7 +1441,7 @@ class TestCombined:
             ]),
         )  # fmt: skip
 
-        actual = original.to_triplet().to_combined()
+        actual = original.to_triplets().to_joint_time()
 
         _assert_batched_combined_equal(actual, original)
 
@@ -1477,7 +1477,7 @@ class TestTriplet:
             static_covariates=torch.tensor([5.0, 6.0]),
         )
 
-        actual = original.to_dense()
+        actual = original.to_split_time()
         expected = SplitTimeData(
             context_times=torch.tensor([1.0, 2.0]),
             context_values=torch.tensor([
@@ -1506,7 +1506,7 @@ class TestTriplet:
             target_values=torch.tensor([30.0]),
         )
 
-        actual = original.to_dense(context_dim=3, query_dim=4)
+        actual = original.to_split_time(context_dim=3, query_dim=4)
         expected = SplitTimeData(
             context_times=torch.tensor([1.0, 2.0]),
             context_values=torch.tensor([
@@ -1535,7 +1535,7 @@ class TestTriplet:
             static_covariates=torch.tensor([5.0, 6.0]),
         )
 
-        actual = original.to_combined().to_triplet()
+        actual = original.to_joint_time().to_triplets()
 
         _assert_triplet_equal(actual, original)
 
@@ -1683,7 +1683,7 @@ class TestTriplet:
             ]),
         )  # fmt: skip
 
-        actual = original.to_dense(context_dim=2, query_dim=2)
+        actual = original.to_split_time(context_dim=2, query_dim=2)
         expected = SplitTimeData(
             context_times=torch.tensor([
                 [1.0, 2.0, nan],
@@ -1741,7 +1741,7 @@ class TestTriplet:
             ]),
         )  # fmt: skip
 
-        actual = original.to_dense(context_dim=2, query_dim=2)
+        actual = original.to_split_time(context_dim=2, query_dim=2)
         expected = SplitTimeData(
             context_times=torch.tensor([
                 [1.0],
@@ -1799,7 +1799,7 @@ class TestTriplet:
             ]),
         )  # fmt: skip
 
-        actual = original.to_combined().to_triplet()
+        actual = original.to_joint_time().to_triplets()
 
         _assert_batched_triplet_equal(actual, original)
 
@@ -1810,7 +1810,7 @@ class TestTriplet:
     ) -> None:
         original = _make_random_batched_triplet(batch_shape)
 
-        actual = original.to_dense(context_dim=3, query_dim=4).to_triplet()
+        actual = original.to_split_time(context_dim=3, query_dim=4).to_triplets()
 
         _assert_batched_triplet_equal(actual, original)
 
@@ -1936,7 +1936,7 @@ class TestTripletBatch:
             target_values=req.target_values,
             static_covariates=req.static_covariates,
         )
-        expected = req.to_triplet()
+        expected = req.to_triplets()
 
         _assert_triplet_equal(actual, expected)
 
@@ -1962,7 +1962,7 @@ class TestTripletBatch:
             target_values=req.target_values,
             static_covariates=req.static_covariates,
         )
-        expected = req.to_triplet()
+        expected = req.to_triplets()
 
         _assert_batched_triplet_equal(actual, expected)
 
@@ -1998,7 +1998,7 @@ class TestTripletBatch:
             static_covariates=req.static_covariates,
             batch_first=False,
         )
-        expected = req.to_triplet()
+        expected = req.to_triplets()
 
         _assert_batched_triplet_equal(
             TripletTimeData(

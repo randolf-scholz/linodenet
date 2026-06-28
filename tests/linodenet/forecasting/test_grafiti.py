@@ -191,7 +191,7 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
             ]
         ),
     )
-    combined = args.to_combined()
+    combined = args.to_joint_time()
 
     expected = model.forward(
         timestamps=combined.times,

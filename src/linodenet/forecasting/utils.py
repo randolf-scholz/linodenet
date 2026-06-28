@@ -1,7 +1,7 @@
 r"""Utility classes for forecasting."""
 
 __all__ = [
-    "MergedTimeData",
+    "JointTimeData",
     "SplitTimeData",
     "TripletTimeData",
     "EventBatch",
@@ -13,7 +13,7 @@ __all__ = [
 
 
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -444,14 +444,6 @@ class SplitTimeData:
 
     static_covariates: Tensor | None = None  # Float[(..., M)]  padded NaN, sparse
 
-    @classmethod
-    def from_combined(cls, arg: MergedTimeData, /) -> SplitTimeData:
-        return arg.to_dense()
-
-    @classmethod
-    def from_triplet(cls, arg: TripletTimeData, /) -> SplitTimeData:
-        return arg.to_dense()
-
     def __post_init__(self) -> None:
         T = self.context_times
         C = self.context_mask
@@ -504,7 +496,15 @@ class SplitTimeData:
             assert S.shape == (*batch_shape, static_dim)
 
     @classmethod
-    def from_unbatched(cls, args: Sequence[SplitTimeData], /) -> SplitTimeData:
+    def from_joint_time(cls, arg: JointTimeData, /) -> SplitTimeData:
+        return arg.to_split_time()
+
+    @classmethod
+    def from_triplets(cls, arg: TripletTimeData, /) -> SplitTimeData:
+        return arg.to_split_time()
+
+    @classmethod
+    def from_unbatched(cls, args: Collection[SplitTimeData], /) -> SplitTimeData:
         if not args:
             raise ValueError("Expected at least one DenseArg.")
 
@@ -592,7 +592,7 @@ class SplitTimeData:
             )
         ]
 
-    def to_triplet(self) -> TripletTimeData:
+    def to_triplets(self) -> TripletTimeData:
         T = self.context_times
         X = self.context_values
         C = self.context_mask
@@ -654,7 +654,7 @@ class SplitTimeData:
             static_covariates=self.static_covariates,
         )
 
-    def to_combined(self) -> MergedTimeData:
+    def to_joint_time(self) -> JointTimeData:
         T = self.context_times
         X = self.context_values
         C = self.context_mask
@@ -670,7 +670,7 @@ class SplitTimeData:
             times.nan_to_num(nan=torch.inf), dim=-1, stable=True
         ).unsqueeze(-1)
 
-        return MergedTimeData(
+        return JointTimeData(
             times=times.take_along_dim(permutation.squeeze(-1), dim=-1),
             context_values=torch.cat(
                 [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
@@ -697,7 +697,7 @@ class SplitTimeData:
 
 
 @dataclass(frozen=True)
-class MergedTimeData:
+class JointTimeData:
     r"""Representation with concatenated context and query tensors.
 
     Shapes:
@@ -787,15 +787,15 @@ class MergedTimeData:
             assert times[query].diff(dim=-1).gt(0.0).all()
 
     @classmethod
-    def from_dense(cls, arg: SplitTimeData, /) -> MergedTimeData:
-        return arg.to_combined()
+    def from_split_time(cls, arg: SplitTimeData, /) -> JointTimeData:
+        return arg.to_joint_time()
 
     @classmethod
-    def from_triplet(cls, arg: TripletTimeData, /) -> MergedTimeData:
-        return arg.to_combined()
+    def from_triplets(cls, arg: TripletTimeData, /) -> JointTimeData:
+        return arg.to_joint_time()
 
     @classmethod
-    def from_unbatched(cls, args: Sequence[MergedTimeData], /) -> MergedTimeData:
+    def from_unbatched(cls, args: Collection[JointTimeData], /) -> JointTimeData:
         if not args:
             raise ValueError("Expected at least one CombinedArg.")
 
@@ -833,7 +833,7 @@ class MergedTimeData:
             ),
         )
 
-    def unbatch(self) -> list[MergedTimeData]:
+    def unbatch(self) -> list[JointTimeData]:
         T = self.times.unsqueeze(0).flatten(end_dim=-2)
         X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
@@ -841,7 +841,7 @@ class MergedTimeData:
         lengths = T.isfinite().sum(dim=-1)
 
         return [
-            MergedTimeData(
+            JointTimeData(
                 times=time,
                 context_values=c_value,
                 context_mask=c_mask,
@@ -872,7 +872,7 @@ class MergedTimeData:
             )
         ]
 
-    def to_dense(self) -> SplitTimeData:
+    def to_split_time(self) -> SplitTimeData:
         T = self.times
         X = self.context_values
         C = self.context_mask
@@ -910,8 +910,8 @@ class MergedTimeData:
             static_covariates=self.static_covariates,
         )
 
-    def to_triplet(self) -> TripletTimeData:
-        return self.to_dense().to_triplet()
+    def to_triplets(self) -> TripletTimeData:
+        return self.to_split_time().to_triplets()
 
 
 @dataclass(frozen=True)
@@ -982,15 +982,15 @@ class TripletTimeData:
             assert torch.equal(V_valid, M_valid)
 
     @classmethod
-    def from_combined(cls, arg: MergedTimeData, /) -> TripletTimeData:
-        return arg.to_triplet()
+    def from_merged_timedata(cls, arg: JointTimeData, /) -> TripletTimeData:
+        return arg.to_triplets()
 
     @classmethod
-    def from_dense(cls, arg: SplitTimeData, /) -> TripletTimeData:
-        return arg.to_triplet()
+    def from_split_timedata(cls, arg: SplitTimeData, /) -> TripletTimeData:
+        return arg.to_triplets()
 
     @classmethod
-    def from_unbatched(cls, args: Sequence[TripletTimeData]) -> TripletTimeData:
+    def from_unbatched(cls, args: Collection[TripletTimeData], /) -> TripletTimeData:
         if not args:
             raise ValueError("Expected at least one TripletArg.")
 
@@ -1077,12 +1077,8 @@ class TripletTimeData:
             )
         ]
 
-    def to_dense(
-        self,
-        /,
-        *,
-        context_dim: int | None = None,
-        query_dim: int | None = None,
+    def to_split_time(
+        self, *, context_dim: int | None = None, query_dim: int | None = None
     ) -> SplitTimeData:
         T = self.context_times
         C = self.context_channels
@@ -1176,5 +1172,10 @@ class TripletTimeData:
             static_covariates=self.static_covariates,
         )
 
-    def to_combined(self) -> MergedTimeData:
-        return self.to_dense().to_combined()
+    def to_joint_time(
+        self, *, context_dim: int | None = None, query_dim: int | None = None
+    ) -> JointTimeData:
+        return self.to_split_time(
+            context_dim=context_dim,
+            query_dim=query_dim,
+        ).to_joint_time()
