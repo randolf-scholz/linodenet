@@ -168,12 +168,12 @@ class EventBatch(NamedTuple):
     @staticmethod
     def from_request(
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        target_values: Tensor | None = None,  # Float[(..., K, F)]  padded NaN, sparse
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        target_values: Tensor | None = None,  # Float[(..., $K, F)]  padded NaN, sparse
         static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
         batch_first: bool = True,
     ) -> EventBatch:
@@ -240,6 +240,48 @@ class EventBatch(NamedTuple):
             query_indices=query_idx,
         )
 
+    def validate(self) -> None:
+        T = self.timestamps
+        X = self.context_values
+        C = self.context_mask
+        Y = self.target_values
+        Q = self.query_mask
+
+        *batch_shape, num_combined, context_dim = X.shape
+        *query_batch_shape, query_combined, query_dim = Q.shape
+        T_valid = T.isfinite()
+        T_ascending = T.diff(dim=-1).ge(0.0)
+        assert T.shape == (*batch_shape, num_combined)
+        assert is_prefix_mask(T_valid).all()
+        assert is_prefix_mask(T_ascending).all()  # sorted in ascending order
+
+        assert C.dtype == torch.bool
+        assert C.shape == (*batch_shape, num_combined, context_dim)
+        assert torch.equal(X.isfinite(), C)
+        mask_valid = C.any(dim=-1) | Q.any(dim=-1)
+
+        assert X.shape == (*batch_shape, num_combined, context_dim)
+        assert Q.dtype == torch.bool
+        assert Q.shape == (*query_batch_shape, query_combined, query_dim)
+        assert query_batch_shape == batch_shape
+        assert query_combined == num_combined
+        assert is_prefix_mask(mask_valid).all()  # at least one value per step
+
+        if Y is not None:
+            assert Y.shape == (*batch_shape, num_combined, query_dim)
+            assert torch.equal(Y.isfinite(), Q)
+
+        context_filter = C.any(dim=-1)
+        query_filter = Q.any(dim=-1)
+        for times, context, query in zip(
+            T.reshape(-1, num_combined),
+            context_filter.reshape(-1, num_combined),
+            query_filter.reshape(-1, num_combined),
+            strict=True,
+        ):
+            assert times[context].diff(dim=-1).ge(0.0).all()
+            assert times[query].diff(dim=-1).gt(0.0).all()
+
 
 class TripletBatch(NamedTuple):
     r"""Represents a batch of triplets.
@@ -247,13 +289,13 @@ class TripletBatch(NamedTuple):
     Other than BatchedTripletArgs, this class does not perform any validation.
     """
 
-    context_times: Tensor  # Float[(..., O)] or Float[(O, ...)], padded NaN
-    context_channels: Tensor  # Long[(..., O)] or Long[(O, ...)], padded -1
-    context_values: Tensor  # Float[(..., O)] or Float[(O, ...)], padded NaN
+    context_times: Tensor  # Float[(..., $O)] or Float[($O, ...)], padded NaN
+    context_channels: Tensor  # Long[(..., $O)] or Long[($O, ...)], padded -1
+    context_values: Tensor  # Float[(..., $O)] or Float[($O, ...)], padded NaN
 
-    query_times: Tensor  # Float[(..., Q)] or Float[(Q, ...)], padded NaN
-    query_channels: Tensor  # Long[(..., Q)] or Long[(Q, ...)], padded -1
-    target_values: Tensor | None = None  # Float[(..., Q)] or Float[(Q, ...)]
+    query_times: Tensor  # Float[(..., $Q)] or Float[($Q, ...)], padded NaN
+    query_channels: Tensor  # Long[(..., $Q)] or Long[($Q, ...)], padded -1
+    target_values: Tensor | None = None  # Float[(..., $Q)] or Float[($Q, ...)]
     r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
@@ -261,12 +303,13 @@ class TripletBatch(NamedTuple):
     @staticmethod
     def from_request(
         *,
-        query_times: Tensor,  # Float[(..., K)] or Float[(K, ...)], padded NaN
-        query_mask: Tensor,  # Bool[(..., K, F)] or Bool[(K, ..., F)]
-        context_times: Tensor,  # Float[(..., N)] or Float[(N, ...)], padded NaN
-        context_mask: Tensor,  # Bool[(..., N, D)] or Bool[(N, ..., D)]
-        context_values: Tensor,  # Float[(..., N, D)] or Float[(N, ..., D)]
-        target_values: Tensor | None = None,  # Float[(..., K, F)] or Float[(K, ..., F)]
+        query_times: Tensor,  # Float[(..., $K)] or Float[($K, ...)], padded NaN
+        query_mask: Tensor,  # Bool[(..., $K, F)] or Bool[($K, ..., F)]
+        context_times: Tensor,  # Float[(..., $N)] or Float[($N, ...)], padded NaN
+        context_mask: Tensor,  # Bool[(..., $N, D)] or Bool[($N, ..., D)]
+        context_values: Tensor,  # Float[(..., $N, D)] or Float[(N, ..., D)]
+        target_values: Tensor
+        | None = None,  # Float[(..., $K, F)] or Float[($K, ..., F)]
         static_covariates: Tensor | None = None,  # Float[(..., M)], padded NaN, sparse
         batch_first: bool = True,
     ) -> TripletBatch:
@@ -341,6 +384,43 @@ class TripletBatch(NamedTuple):
             ),
             static_covariates=static_covariates,
         )
+
+    def validate(self) -> None:
+        T = self.context_times
+        C = self.context_channels
+        X = self.context_values
+        Q = self.query_times
+        M = self.query_channels
+
+        *batch_shape, num_context = T.shape
+        assert T.shape == (*batch_shape, num_context)
+        assert C.shape == (*batch_shape, num_context)
+        assert X.shape == (*batch_shape, num_context)
+        assert is_prefix_mask(T.isfinite()).all()
+        assert is_prefix_mask(X.isfinite()).all()
+        assert is_prefix_mask(T.diff(dim=-1).ge(0.0)).all()
+        C_valid = C >= 0
+        assert is_prefix_mask(C_valid).all()
+        assert torch.equal(C_valid, T.isfinite())
+        assert torch.equal(C_valid, X.isfinite())
+
+        *_, num_query = self.query_times.shape
+        assert Q.shape == (*batch_shape, num_query)
+        assert is_prefix_mask(Q.isfinite()).all()
+        assert is_prefix_mask(Q.diff(dim=-1).ge(0.0)).all()
+
+        M_valid = M >= 0
+        assert M.shape == (*batch_shape, num_query)
+        assert is_prefix_mask(M_valid).all()
+        assert torch.equal(M_valid, Q.isfinite())
+        query_pairs = torch.stack([Q, M], dim=-1)
+        query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), nan)
+        assert torch.equal(unique_count(query_pairs), M_valid.sum(dim=-1))
+
+        if (V := self.target_values) is not None:
+            V_valid = V.isfinite()
+            assert V.shape == (*batch_shape, num_query)
+            assert torch.equal(V_valid, M_valid)
 
 
 @dataclass(frozen=True)
