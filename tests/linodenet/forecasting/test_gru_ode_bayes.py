@@ -18,7 +18,7 @@ from linodenet.forecasting.gru_ode_bayes import (
     gaussian_kl_logvar,
     update_masked,
 )
-from linodenet.forecasting.utils import ForecastingRequest
+from linodenet.forecasting.utils import SplitTimeData
 
 from .base import TestForecastingModel
 
@@ -84,7 +84,7 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
         return self.make_model(self.STANDARD_CONFIG)
 
     def forecast(
-        self, model: GRU_ODE_Bayes, inputs: ForecastingRequest, /
+        self, model: GRU_ODE_Bayes, inputs: SplitTimeData, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GRU-ODE-Bayes predictions for sequential forecasting inputs."""
         assert inputs.target_values is not None
@@ -273,7 +273,7 @@ class TestGRUODEBayes:
         ])  # fmt: skip
         query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-        combined = ForecastingRequest(
+        combined = SplitTimeData(
             context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,

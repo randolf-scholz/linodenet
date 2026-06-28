@@ -14,7 +14,7 @@ from linodenet.forecasting.continuous_kalman_filter import (
     marginal_gaussian_sample,
     marginal_gaussian_sample_and_log_prob,
 )
-from linodenet.forecasting.utils import ForecastingRequest
+from linodenet.forecasting.utils import SplitTimeData
 
 from .base import TestForecastingModel
 
@@ -191,7 +191,7 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
     def forecast(
         self,
         model: ContinuousKalmanFilter,
-        inputs: ForecastingRequest,
+        inputs: SplitTimeData,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return Kalman filter predictions for sequential forecasting inputs."""
