@@ -18,7 +18,7 @@ from linodenet.forecasting.gru_ode_bayes import (
     gaussian_kl_logvar,
     update_masked,
 )
-from linodenet.forecasting.utils import BatchedForecastingRequest
+from linodenet.forecasting.utils import ForecastingRequest
 
 from .base import TestForecastingModel
 
@@ -84,7 +84,7 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
         return self.make_model(self.STANDARD_CONFIG)
 
     def forecast(
-        self, model: GRU_ODE_Bayes, inputs: BatchedForecastingRequest, /
+        self, model: GRU_ODE_Bayes, inputs: ForecastingRequest, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GRU-ODE-Bayes predictions for sequential forecasting inputs."""
         assert inputs.target_values is not None
@@ -273,7 +273,7 @@ class TestGRUODEBayes:
         ])  # fmt: skip
         query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-        combined = BatchedForecastingRequest(
+        combined = ForecastingRequest(
             context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,

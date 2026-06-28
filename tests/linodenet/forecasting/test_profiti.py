@@ -18,7 +18,7 @@ from linodenet.forecasting.profiti import (
     Shiesh,
     TriangularAttention,
 )
-from linodenet.forecasting.utils import BatchedForecastingRequest
+from linodenet.forecasting.utils import ForecastingRequest
 
 from .base import TestForecastingModel
 
@@ -380,7 +380,7 @@ class TestProfiti(TestForecastingModel[ProFITi]):
     def forecast(
         self,
         model: ProFITi,
-        inputs: BatchedForecastingRequest,
+        inputs: ForecastingRequest,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return ProFITi target log densities for sequential forecasting inputs."""

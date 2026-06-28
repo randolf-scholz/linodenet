@@ -9,7 +9,7 @@ import torch
 from torch import Tensor, nan, nn
 from torch.testing import assert_close
 
-from linodenet.forecasting.utils import BatchedForecastingRequest
+from linodenet.forecasting.utils import ForecastingRequest
 
 
 def make_forecasting_request(
@@ -23,7 +23,7 @@ def make_forecasting_request(
     input_missingness: bool = False,
     target_missingness: bool = False,
     batch_first: bool = True,
-) -> BatchedForecastingRequest:
+) -> ForecastingRequest:
     r"""Sample random dense forecasting inputs for a forecasting model."""
     rng = torch.Generator().manual_seed(seed)
     batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
@@ -73,7 +73,7 @@ def make_forecasting_request(
     tgt_values = tgt_values.masked_fill(~qry_mask, nan)
 
     if batch_first:
-        return BatchedForecastingRequest(
+        return ForecastingRequest(
             context_times=ctx_times.requires_grad_(),
             context_mask=ctx_mask,
             context_values=ctx_values.requires_grad_(),
@@ -82,7 +82,7 @@ def make_forecasting_request(
             target_values=tgt_values.requires_grad_(),
         )
 
-    return BatchedForecastingRequest(
+    return ForecastingRequest(
         context_times=ctx_times.swapaxes(-1, 0).requires_grad_(),
         context_mask=ctx_mask.swapaxes(-2, 0),
         context_values=ctx_values.swapaxes(-2, 0).requires_grad_(),
@@ -107,9 +107,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def forecast(
-        self, model: M, inputs: BatchedForecastingRequest, /
-    ) -> tuple[Tensor, ...]:
+    def forecast(self, model: M, inputs: ForecastingRequest, /) -> tuple[Tensor, ...]:
         r"""Return model predictions for sequential forecasting inputs."""
         raise NotImplementedError
 
@@ -267,7 +265,7 @@ class TestForecastingModel[M: nn.Module](ABC):
 
         context_mask = context_values.isfinite()
         query_mask = target_values.isfinite()
-        data = BatchedForecastingRequest(
+        data = ForecastingRequest(
             context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
@@ -289,7 +287,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         ):
             context_length = int(context_length_tensor.item())
             query_length = int(query_length_tensor.item())
-            single_data = BatchedForecastingRequest(
+            single_data = ForecastingRequest(
                 context_times=context_times[k : k + 1, :context_length],
                 context_values=context_values[k : k + 1, :context_length],
                 context_mask=context_mask[k : k + 1, :context_length],
@@ -349,7 +347,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         batch_dims = data.context_times.shape[:-1]
         query_size = data.query_times.shape[-1]
 
-        padded_data = BatchedForecastingRequest(
+        padded_data = ForecastingRequest(
             context_times=torch.cat(
                 [
                     data.context_times,

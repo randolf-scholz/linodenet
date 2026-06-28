@@ -10,7 +10,7 @@ from torch.nn import functional as F
 from torch.testing import assert_close
 
 from linodenet.forecasting import LastValue
-from linodenet.forecasting.utils import BatchedForecastingRequest
+from linodenet.forecasting.utils import ForecastingRequest
 from tests.testing import PROJECT
 
 from .base import TestForecastingModel
@@ -37,7 +37,7 @@ class TestLastValue(TestForecastingModel[LastValue]):
     def forecast(
         self,
         model: LastValue,
-        inputs: BatchedForecastingRequest,
+        inputs: ForecastingRequest,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return LastValue predictions for sequential forecasting inputs."""

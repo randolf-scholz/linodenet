@@ -15,7 +15,7 @@ from linodenet.forecasting.neural_flow import (
     NeuralFlowConfig,
     ResNetFlow,
 )
-from linodenet.forecasting.utils import BatchedForecastingRequest
+from linodenet.forecasting.utils import ForecastingRequest
 
 from .base import TestForecastingModel
 
@@ -57,7 +57,7 @@ class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
         return NeuralFlow.from_config(model_config)
 
     def forecast(
-        self, model: NeuralFlow, inputs: BatchedForecastingRequest, /
+        self, model: NeuralFlow, inputs: ForecastingRequest, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return NeuralFlow predictions for sequential forecasting inputs."""
         if not isinstance(model, NeuralFlow):
@@ -217,7 +217,7 @@ def test_flow_layers(
     query_times = torch.tensor([[1.0, 1.4], [0.8, nan]])
     query_mask = query_times.isfinite().unsqueeze(-1).expand(2, 2, 3)
 
-    request = BatchedForecastingRequest(
+    request = ForecastingRequest(
         context_times=context_times,
         context_values=context_values,
         context_mask=context_values.isfinite(),

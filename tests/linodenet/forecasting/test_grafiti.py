@@ -10,8 +10,8 @@ from torch.testing import assert_close
 
 from linodenet.forecasting.grafiti import Grafiti, gather_target_embeddings
 from linodenet.forecasting.utils import (
-    BatchedForecastingRequest,
-    BatchedTripletArgs,
+    ForecastingRequest,
+    TripletArgs,
 )
 
 from .base import TestForecastingModel
@@ -57,7 +57,7 @@ class TestGrafiti(TestForecastingModel[Grafiti]):
     def forecast(
         self,
         model: Grafiti,
-        inputs: BatchedForecastingRequest,
+        inputs: ForecastingRequest,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GraFITi predictions for sequential forecasting inputs."""
@@ -153,7 +153,7 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
         num_heads=2,
         output_mode="embeddings",
     )
-    args = BatchedTripletArgs(
+    args = TripletArgs(
         context_times=torch.tensor(
             [
                 [1.0, 3.0, 5.0, 7.0, nan],

@@ -17,7 +17,7 @@ from linodenet.forecasting.cru import (
     build_cru,
     update_masked,
 )
-from linodenet.forecasting.utils import BatchedForecastingRequest
+from linodenet.forecasting.utils import ForecastingRequest
 
 from .base import TestForecastingModel
 
@@ -303,7 +303,7 @@ class TestCRU(TestForecastingModel[CRU]):
         return self.make_model(self.STANDARD_CONFIG)
 
     def forecast(
-        self, model: CRU, inputs: BatchedForecastingRequest, /
+        self, model: CRU, inputs: ForecastingRequest, /
     ) -> tuple[torch.Tensor, ...]:
         r"""Return CRU predictions for sequential forecasting inputs."""
         assert inputs.target_values is not None

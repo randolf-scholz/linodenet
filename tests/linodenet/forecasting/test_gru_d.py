@@ -8,7 +8,7 @@ from torch import nan
 from torch.nn import functional as F
 
 from linodenet.forecasting.gru_d import GRU_D
-from linodenet.forecasting.utils import BatchedForecastingRequest
+from linodenet.forecasting.utils import ForecastingRequest
 
 from .base import TestForecastingModel
 
@@ -56,7 +56,7 @@ class TestGRU_D(TestForecastingModel[GRU_D]):
     def forecast(
         self,
         model: GRU_D,
-        inputs: BatchedForecastingRequest,
+        inputs: ForecastingRequest,
         /,
     ) -> tuple[torch.Tensor, ...]:
         r"""Return GRU-D predictions for sequential forecasting inputs."""
