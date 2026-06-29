@@ -1156,6 +1156,8 @@ class TripletTimeData:
 
     static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
 
+    batch_first: bool = True
+
     validate: InitVar[bool] = True
 
     def __post_init__(self, validate: bool) -> None:
@@ -1163,11 +1165,18 @@ class TripletTimeData:
             self._validate()
 
     def _validate(self):
-        T = self.context_times
-        C = self.context_channels
-        X = self.context_values
-        Q = self.query_times
-        M = self.query_channels
+        seq_dim = -1 if self.batch_first else 0
+
+        T = self.context_times.movedim(seq_dim, -1)
+        C = self.context_channels.movedim(seq_dim, -1)
+        X = self.context_values.movedim(seq_dim, -1)
+        Q = self.query_times.movedim(seq_dim, -1)
+        M = self.query_channels.movedim(seq_dim, -1)
+        Y = (
+            self.target_values.movedim(seq_dim, -1)
+            if self.target_values is not None
+            else None
+        )
 
         *batch_shape, num_context = T.shape
         assert T.shape == (*batch_shape, num_context)
@@ -1181,7 +1190,7 @@ class TripletTimeData:
         assert torch.equal(C_valid, T.isfinite())
         assert torch.equal(C_valid, X.isfinite())
 
-        *_, num_query = self.query_times.shape
+        *_, num_query = Q.shape
         assert Q.shape == (*batch_shape, num_query)
         assert is_prefix_mask(Q.isfinite()).all()
         assert is_prefix_mask(Q.diff(dim=-1).ge(0.0)).all()
@@ -1194,10 +1203,9 @@ class TripletTimeData:
         query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), nan)
         assert torch.equal(unique_count(query_pairs), M_valid.sum(dim=-1))
 
-        if (V := self.target_values) is not None:
-            V_valid = V.isfinite()
-            assert V.shape == (*batch_shape, num_query)
-            assert torch.equal(V_valid, M_valid)
+        if Y is not None:
+            assert Y.shape == (*batch_shape, num_query)
+            assert torch.equal(Y.isfinite(), M_valid)
 
     def __eq__(self, other: object, /) -> bool:
         if not isinstance(other, TripletTimeData):
