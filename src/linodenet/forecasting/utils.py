@@ -757,9 +757,6 @@ class JointTimeData:
 
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
 
-    query_indices: tuple[Tensor, ...] = ()
-    context_indices: tuple[Tensor, ...] = ()
-
     validate: InitVar[bool] = True
 
     def __post_init__(self, validate: bool) -> None:
@@ -798,24 +795,25 @@ class JointTimeData:
                 else None
             ),
         )
-        # set context_indices and query_indices by just taking values in order.
-        if not self.context_indices:
-            *batch_shape, num_combined, _ = self.context_values.shape
-            context_filter = self.context_mask.any(dim=-1)
-            time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
-                *batch_shape, num_combined
-            )
-            time_idx = time_idx.masked_fill(~context_filter, -1)
-            object.__setattr__(self, "context_indices", (time_idx, *batch_shape))
 
-        if not self.query_indices:
-            *batch_shape, num_combined, _ = self.query_mask.shape
-            query_filter = self.query_mask.any(dim=-1)
-            time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
-                *batch_shape, num_combined
-            )
-            time_idx = time_idx.masked_fill(~query_filter, -1)
-            object.__setattr__(self, "query_indices", (time_idx, *batch_shape))
+    def context_indices(self) -> tuple[Tensor, ...]:
+        # set context_indices and query_indices by just taking values in order.
+        *batch_shape, num_combined, _ = self.context_values.shape
+        context_filter = self.context_mask.any(dim=-1)
+        time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
+            *batch_shape, num_combined
+        )
+        time_idx = time_idx.masked_fill(~context_filter, -1)
+        return time_idx, *batch_shape
+
+    def query_indices(self) -> tuple[Tensor, ...]:
+        *batch_shape, num_combined, _ = self.query_mask.shape
+        query_filter = self.query_mask.any(dim=-1)
+        time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
+            *batch_shape, num_combined
+        )
+        time_idx = time_idx.masked_fill(~query_filter, -1)
+        return time_idx, *batch_shape
 
     def _validate(self) -> None:
         T = self.timestamps
