@@ -245,10 +245,7 @@ def _canonical_time_data(
     return _CanonicalTimeData(samples=(first, second), batched=batched)
 
 
-def _make_random_batched_triplet(
-    batch_shape: tuple[int, ...],
-    /,
-) -> TripletTimeData:
+def _make_random_batched_triplet(batch_shape: tuple[int, ...], /) -> TripletTimeData:
     num_samples = 1
     for size in batch_shape:
         num_samples *= size
