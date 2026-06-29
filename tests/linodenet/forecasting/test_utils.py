@@ -1046,6 +1046,76 @@ class TestJointTimeData:
 
         assert actual == original
 
+    @pytest.mark.xfail(
+        reason="JointTimeData query_indices and context_indices are currently broken.",
+        strict=True,
+    )
+    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    def test_query_and_context_indices_match_split_time(
+        self,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        original = make_forecasting_request(
+            seed=3141,
+            batch_shape=batch_shape,
+            min_steps=1,
+            max_steps=4,
+            context_shape=(3,),
+            output_shape=(4,),
+            input_missingness=True,
+            target_missingness=True,
+        )
+        assert original.target_values is not None
+
+        joint = original.to_joint_time()
+        assert joint.target_values is not None
+
+        query_indices = joint.query_indices
+        context_indices = joint.context_indices
+
+        assert_close(
+            original.query_times,
+            joint.timestamps[query_indices],
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+        assert_close(
+            original.query_mask,
+            joint.query_mask[query_indices],
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+        assert_close(
+            original.target_values,
+            joint.target_values[query_indices],
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+        assert_close(
+            original.context_times,
+            joint.timestamps[context_indices],
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+        assert_close(
+            original.context_mask,
+            joint.context_mask[context_indices],
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+        assert_close(
+            original.context_values,
+            joint.context_values[context_indices],
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+
 
 class TestTripletTimeData:
     def test_eq_uses_tensor_value_comparison(self) -> None:
