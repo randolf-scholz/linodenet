@@ -174,7 +174,9 @@ def _assert_triplet_equal(
 
 
 def _assert_combined_equal(actual: JointTimeData, expected: JointTimeData, /) -> None:
-    assert_close(actual.times, expected.times, atol=0.0, rtol=0.0, equal_nan=True)
+    assert_close(
+        actual.timestamps, expected.timestamps, atol=0.0, rtol=0.0, equal_nan=True
+    )
     assert_close(
         actual.context_values,
         expected.context_values,
@@ -212,7 +214,9 @@ def _assert_batched_combined_equal(
     expected: JointTimeData,
     /,
 ) -> None:
-    assert_close(actual.times, expected.times, atol=0.0, rtol=0.0, equal_nan=True)
+    assert_close(
+        actual.timestamps, expected.timestamps, atol=0.0, rtol=0.0, equal_nan=True
+    )
     assert_close(
         actual.context_values,
         expected.context_values,
@@ -307,7 +311,7 @@ def _combined_arg(
     static_covariates: Tensor | None = None,
 ) -> JointTimeData:
     return JointTimeData(
-        times=times,
+        timestamps=times,
         context_values=values.masked_fill(~context_mask, nan),
         context_mask=context_mask,
         query_mask=query_mask,
@@ -328,7 +332,7 @@ def _batched_combined_args(
     static_covariates: Tensor | None = None,
 ) -> JointTimeData:
     return JointTimeData(
-        times=times,
+        timestamps=times,
         context_values=values.masked_fill(~context_mask, nan),
         context_mask=context_mask,
         query_mask=query_mask,

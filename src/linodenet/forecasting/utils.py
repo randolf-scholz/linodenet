@@ -671,7 +671,7 @@ class SplitTimeData:
         ).unsqueeze(-1)
 
         return JointTimeData(
-            times=times.take_along_dim(permutation.squeeze(-1), dim=-1),
+            timestamps=times.take_along_dim(permutation.squeeze(-1), dim=-1),
             context_values=torch.cat(
                 [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
                 dim=-2,
@@ -716,7 +716,7 @@ class JointTimeData:
         - each valid time stamp has at least one context or query mask entry
     """
 
-    times: Tensor  # Float[(..., $N + $K)], padded NaN, non-decreasing
+    timestamps: Tensor  # Float[(..., $N + $K)], padded NaN, non-decreasing
     context_values: Tensor  # Float[(..., $N + $K, D)], padded NaN, sparse
     context_mask: Tensor  # Bool[(..., $N + $K, D)], padded False
     query_mask: Tensor  # Bool[(..., $N + $K, E)], padded False
@@ -745,7 +745,7 @@ class JointTimeData:
 
     def __post_init__(self) -> None:
         self._normalize()
-        T = self.times
+        T = self.timestamps
         X = self.context_values
         C = self.context_mask
         Y = self.target_values
@@ -800,8 +800,8 @@ class JointTimeData:
             raise ValueError("Expected at least one CombinedArg.")
 
         return cls(
-            times=pad_sequence(
-                [arg.times for arg in args],
+            timestamps=pad_sequence(
+                [arg.timestamps for arg in args],
                 batch_first=True,
                 padding_value=nan,
             ),
@@ -834,7 +834,7 @@ class JointTimeData:
         )
 
     def unbatch(self) -> list[JointTimeData]:
-        T = self.times.unsqueeze(0).flatten(end_dim=-2)
+        T = self.timestamps.unsqueeze(0).flatten(end_dim=-2)
         X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
         M = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
@@ -842,7 +842,7 @@ class JointTimeData:
 
         return [
             JointTimeData(
-                times=time,
+                timestamps=time,
                 context_values=c_value,
                 context_mask=c_mask,
                 target_values=q_value,
@@ -873,7 +873,7 @@ class JointTimeData:
         ]
 
     def to_split_time(self) -> SplitTimeData:
-        T = self.times
+        T = self.timestamps
         X = self.context_values
         C = self.context_mask
         Y = self.target_values
