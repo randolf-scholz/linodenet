@@ -14,7 +14,7 @@ __all__ = [
 
 import math
 from collections.abc import Collection, Iterable
-from dataclasses import dataclass
+from dataclasses import InitVar, dataclass
 from typing import NamedTuple
 
 import torch
@@ -720,10 +720,21 @@ class JointTimeData:
     context_values: Tensor  # Float[(..., $N + $K, D)], padded NaN, sparse
     context_mask: Tensor  # Bool[(..., $N + $K, D)], padded False
     query_mask: Tensor  # Bool[(..., $N + $K, E)], padded False
+
     target_values: Tensor | None = None  # Float[(..., $N + $K, E)], padded NaN, sparse
     r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
+
+    query_indices: tuple[Tensor, ...] = ()
+    context_indices: tuple[Tensor, ...] = ()
+
+    validate: InitVar[bool] = True
+
+    def __post_init__(self, validate) -> None:
+        self._normalize()
+        if validate:
+            self._validate()
 
     def _normalize(self) -> None:
         # sanitize context_values
@@ -742,9 +753,19 @@ class JointTimeData:
                 else None
             ),
         )
+        # set query_indices by just taking values in order.
+        if not self.query_indices:
+            *batch_shape, num_combined, _ = self.context_values.shape
+            *_, query_combined, _ = self.query_mask.shape
+            context_filter = self.context_mask.any(dim=-1)
+            query_filter = self.query_mask.any(dim=-1)
+            time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
+                *batch_shape, num_combined
+            )
+            time_idx = time_idx.masked_fill(~query_filter, -1)
+            object.__setattr__(self, "query_indices", (time_idx, *batch_shape))
 
-    def __post_init__(self) -> None:
-        self._normalize()
+    def _validate(self) -> None:
         T = self.timestamps
         X = self.context_values
         C = self.context_mask
@@ -785,6 +806,82 @@ class JointTimeData:
         ):
             assert times[context].diff(dim=-1).ge(0.0).all()
             assert times[query].diff(dim=-1).gt(0.0).all()
+
+    @classmethod
+    def from_request(
+        cls,
+        *,
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        target_values: Tensor | None = None,  # Float[(..., $K, F)]  padded NaN, sparse
+        static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
+        batch_first: bool = True,
+    ) -> JointTimeData:
+        seq_dim = -2 if batch_first else 0
+
+        T = context_times.unsqueeze(-1).movedim(seq_dim, 0)
+        C = context_mask.movedim(seq_dim, 0)
+        X = context_values.movedim(seq_dim, 0)
+        Q = query_times.unsqueeze(-1).movedim(seq_dim, 0)
+        M = query_mask.movedim(seq_dim, 0)
+        Y = target_values.movedim(seq_dim, 0) if target_values is not None else None
+
+        ctx_size, *batch_shape, ctx_dim = X.shape
+        q_size, *_, q_dim = M.shape
+        ctx_pad_shape = (q_size, *batch_shape, ctx_dim)
+        qry_pad_shape = (ctx_size, *batch_shape, q_dim)
+
+        times = torch.cat([T, Q], dim=0)  # (..., $N+$K, 1)
+        permutation = torch.argsort(  # (..., $N+$K, 1)
+            times.nan_to_num(nan=torch.inf),
+            dim=0,
+            stable=True,
+        )
+        inv_perm = torch.argsort(permutation, dim=0, stable=True)  # (..., $N+$K, 1)
+        time_idx = inv_perm[ctx_size:].movedim(0, seq_dim).squeeze(-1)
+
+        batch_idx = tuple(
+            torch.arange(size, device=times.device)
+            .reshape(
+                *(size if j == i else 1 for j in range(len(batch_shape))),
+            )
+            .unsqueeze(-1 if batch_first else 0)
+            for i, size in enumerate(batch_shape)
+        )
+        query_idx = (*batch_idx, time_idx) if batch_first else (time_idx, *batch_idx)
+
+        return JointTimeData(
+            timestamps=(
+                times.take_along_dim(permutation, dim=0).movedim(0, seq_dim).squeeze(-1)
+            ),
+            context_values=(
+                torch.cat([X, X.new_full(ctx_pad_shape, nan)], dim=0)
+                .take_along_dim(permutation, dim=0)
+                .movedim(0, seq_dim)
+            ),
+            context_mask=(
+                torch.cat([C, C.new_zeros(ctx_pad_shape)], dim=0)
+                .take_along_dim(permutation, dim=0)
+                .movedim(0, seq_dim)
+            ),
+            query_mask=(
+                torch.cat([M.new_zeros(qry_pad_shape), M], dim=0)
+                .take_along_dim(permutation, dim=0)
+                .movedim(0, seq_dim)
+            ),
+            target_values=(
+                torch.cat([Y.new_full(qry_pad_shape, nan), Y], dim=0)
+                .take_along_dim(permutation, dim=0)
+                .movedim(0, seq_dim)
+                if Y is not None
+                else None
+            ),
+            static_covariates=static_covariates,
+            query_indices=query_idx,
+        )
 
     @classmethod
     def from_split_time(cls, arg: SplitTimeData, /) -> JointTimeData:
