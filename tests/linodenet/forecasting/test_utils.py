@@ -1046,10 +1046,6 @@ class TestJointTimeData:
 
         assert actual == original
 
-    @pytest.mark.xfail(
-        reason="JointTimeData query_indices and context_indices are currently broken.",
-        strict=True,
-    )
     @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
     def test_query_and_context_indices_match_split_time(
         self,

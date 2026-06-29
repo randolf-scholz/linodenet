@@ -786,53 +786,19 @@ class JointTimeData:
 
     @property
     def context_indices(self) -> tuple[Tensor, ...]:
-        batch_shape = (
-            self.timestamps.shape[:-1]
-            if self.batch_first
-            else self.timestamps.shape[1:]
-        )
-
-        device = self.timestamps.device
+        seq_dim = -1 if self.batch_first else 0
         ctx_valid = self.context_mask.any(dim=-1)
-        ctx_count = ctx_valid.sum(dim=-1)
+        ctx_count = ctx_valid.sum(dim=seq_dim)
         ctx_size = int(ctx_count.max().item())
-        time_idx = torch.arange(ctx_size, device=device) < ctx_count[..., None]
-
-        batch_idx = tuple(
-            torch.arange(size, device=device)
-            .reshape(
-                *(size if j == i else 1 for j in range(len(batch_shape))),
-            )
-            .unsqueeze(-1 if self.batch_first else 0)
-            for i, size in enumerate(batch_shape)
-        )
-
-        return (*batch_idx, time_idx) if self.batch_first else (time_idx, *batch_idx)
+        return self._split_indices(ctx_valid, ctx_count, ctx_size)
 
     @property
     def query_indices(self) -> tuple[Tensor, ...]:
-        batch_shape = (
-            self.timestamps.shape[:-1]
-            if self.batch_first
-            else self.timestamps.shape[1:]
-        )
-
-        device = self.timestamps.device
+        seq_dim = -1 if self.batch_first else 0
         qry_valid = self.query_mask.any(dim=-1)
-        qry_count = qry_valid.sum(dim=-1)
+        qry_count = qry_valid.sum(dim=seq_dim)
         qry_size = int(qry_count.max().item())
-        time_idx = torch.arange(qry_size, device=device) < qry_count[..., None]
-
-        batch_idx = tuple(
-            torch.arange(size, device=device)
-            .reshape(
-                *(size if j == i else 1 for j in range(len(batch_shape))),
-            )
-            .unsqueeze(-1 if self.batch_first else 0)
-            for i, size in enumerate(batch_shape)
-        )
-
-        return (*batch_idx, time_idx) if self.batch_first else (time_idx, *batch_idx)
+        return self._split_indices(qry_valid, qry_count, qry_size)
 
     def __post_init__(self, validate: bool) -> None:
         self._normalize()
@@ -854,6 +820,52 @@ class JointTimeData:
             if self.target_values is not None
             else None,
         )
+
+    def _split_indices(
+        self,
+        valid: Tensor,
+        count: Tensor,
+        size: int,
+        /,
+    ) -> tuple[Tensor, ...]:
+        batch_shape = (
+            self.timestamps.shape[:-1]
+            if self.batch_first
+            else self.timestamps.shape[1:]
+        )
+        device = self.timestamps.device
+        seq_dim = -1 if self.batch_first else 0
+        num_combined = self.timestamps.shape[seq_dim]
+
+        # The joint representation comes from a stable sort of context/query
+        # steps, so stably sorting by `~valid` recovers the split order: all
+        # selected steps move to the front while preserving their relative order.
+        valid_idx = torch.argsort(~valid, dim=seq_dim, stable=True).narrow(
+            seq_dim, 0, size
+        )
+        # Under the non-degenerate contract, the final joint position is padded
+        # whenever a split slot is padded, so it can stand in for every tail NaN.
+        pad_idx = torch.full_like(valid_idx, num_combined - 1)
+
+        keep = torch.arange(size, device=device)
+        keep = (
+            keep < count[..., None]
+            if self.batch_first
+            else keep.reshape(size, *(1 for _ in batch_shape)) < count.unsqueeze(0)
+        )
+        # Build an integer advanced-index tensor with valid joint positions in
+        # front and a single padded joint position filling the split tail.
+        time_idx = torch.where(keep, valid_idx, pad_idx)
+
+        batch_idx = tuple(
+            torch.arange(batch_size, device=device)
+            .reshape(
+                *(batch_size if j == i else 1 for j in range(len(batch_shape))),
+            )
+            .unsqueeze(-1 if self.batch_first else 0)
+            for i, batch_size in enumerate(batch_shape)
+        )
+        return (*batch_idx, time_idx) if self.batch_first else (time_idx, *batch_idx)
 
     def _validate(self) -> None:
         T = self.timestamps
@@ -986,6 +998,7 @@ class JointTimeData:
                 else None
             ),
             static_covariates=static_covariates,
+            batch_first=batch_first,
         )
 
     @classmethod
