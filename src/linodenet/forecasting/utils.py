@@ -531,14 +531,12 @@ class SplitTimeData:
         context_lengths = T.isfinite().sum(dim=-1)
         assert torch.equal(X_valid.sum(dim=-1), context_lengths)
 
+        assert M.shape == (*batch_shape, query_size, query_dim)
         assert torch.equal(M.any(dim=-1), Q_valid)
 
         if Y is not None:
-            *_, query_dim = Y.shape
             assert Y.shape == (*batch_shape, query_size, query_dim)
-            V_valid = Y.isfinite()
-            assert M.shape == Y.shape
-            assert torch.equal(V_valid, M)
+            assert torch.equal(Y.isfinite(), M)
 
         if (S := self.static_covariates) is not None:
             *_, static_dim = S.shape
@@ -848,34 +846,33 @@ class JointTimeData:
 
         *batch_shape, num_combined, context_dim = X.shape
         *query_batch_shape, query_combined, query_dim = M.shape
-        T_valid = T.isfinite()
-        T_ascending = T.diff(dim=-1).ge(0.0)
+        assert query_batch_shape == batch_shape
+        assert query_combined == num_combined
+
         assert T.shape == (*batch_shape, num_combined)
-        assert is_prefix_mask(T_valid).all()
-        assert is_prefix_mask(T_ascending).all()  # sorted in ascending order
+        assert is_prefix_mask(T.isfinite()).all()
+        assert is_prefix_mask(T.diff(dim=-1).ge(0.0)).all()  # sorted in ascending order
 
         assert C.dtype == torch.bool
         assert C.shape == (*batch_shape, num_combined, context_dim)
         assert torch.equal(X.isfinite(), C)
-        mask_valid = C.any(dim=-1) | M.any(dim=-1)
+
+        ctx_steps = C.any(dim=-1)
+        qry_steps = M.any(dim=-1)
 
         assert X.shape == (*batch_shape, num_combined, context_dim)
         assert M.dtype == torch.bool
         assert M.shape == (*query_batch_shape, query_combined, query_dim)
-        assert query_batch_shape == batch_shape
-        assert query_combined == num_combined
-        assert is_prefix_mask(mask_valid).all()  # at least one value per step
+        assert is_prefix_mask(ctx_steps | qry_steps).all()  # at least 1 value per step
 
         if Y is not None:
             assert Y.shape == (*batch_shape, num_combined, query_dim)
             assert torch.equal(Y.isfinite(), M)
 
-        context_filter = C.any(dim=-1)
-        query_filter = M.any(dim=-1)
         for times, context, query in zip(
             T.reshape(-1, num_combined),
-            context_filter.reshape(-1, num_combined),
-            query_filter.reshape(-1, num_combined),
+            ctx_steps.reshape(-1, num_combined),
+            qry_steps.reshape(-1, num_combined),
             strict=True,
         ):
             assert times[context].diff(dim=-1).ge(0.0).all()
