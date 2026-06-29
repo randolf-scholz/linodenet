@@ -35,6 +35,22 @@ def _all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
     return None if has_none else result
 
 
+def _tensor_values_equal(lhs: Tensor, rhs: Tensor, /) -> bool:
+    if lhs.shape != rhs.shape or lhs.device != rhs.device:
+        return False
+    if lhs.is_floating_point() != rhs.is_floating_point():
+        return False
+    if lhs.is_floating_point():
+        return bool(torch.allclose(lhs, rhs, atol=0.0, rtol=0.0, equal_nan=True))
+    return bool(torch.equal(lhs, rhs))
+
+
+def _optional_tensor_values_equal(lhs: Tensor | None, rhs: Tensor | None, /) -> bool:
+    if lhs is None or rhs is None:
+        return lhs is rhs
+    return _tensor_values_equal(lhs, rhs)
+
+
 def is_prefix_mask(x: Tensor, /, *, dim: int = -1) -> Tensor:
     r"""Check that the given boolean tensor is valid up to the tail."""
     # check that a True value cannot follow a False value
@@ -495,6 +511,21 @@ class SplitTimeData:
             *_, static_dim = S.shape
             assert S.shape == (*batch_shape, static_dim)
 
+    def __eq__(self, other: object, /) -> bool:
+        if not isinstance(other, SplitTimeData):
+            return NotImplemented
+        return (
+            _tensor_values_equal(self.context_times, other.context_times)
+            and _tensor_values_equal(self.context_values, other.context_values)
+            and _tensor_values_equal(self.context_mask, other.context_mask)
+            and _tensor_values_equal(self.query_times, other.query_times)
+            and _tensor_values_equal(self.query_mask, other.query_mask)
+            and _optional_tensor_values_equal(self.target_values, other.target_values)
+            and _optional_tensor_values_equal(
+                self.static_covariates, other.static_covariates
+            )
+        )
+
     @classmethod
     def from_joint_time(cls, arg: JointTimeData, /) -> SplitTimeData:
         return arg.to_split_time()
@@ -735,6 +766,20 @@ class JointTimeData:
         self._normalize()
         if validate:
             self._validate()
+
+    def __eq__(self, other: object, /) -> bool:
+        if not isinstance(other, JointTimeData):
+            return NotImplemented
+        return (
+            _tensor_values_equal(self.timestamps, other.timestamps)
+            and _tensor_values_equal(self.context_values, other.context_values)
+            and _tensor_values_equal(self.context_mask, other.context_mask)
+            and _tensor_values_equal(self.query_mask, other.query_mask)
+            and _optional_tensor_values_equal(self.target_values, other.target_values)
+            and _optional_tensor_values_equal(
+                self.static_covariates, other.static_covariates
+            )
+        )
 
     def _normalize(self) -> None:
         # sanitize context_values
@@ -1084,6 +1129,21 @@ class TripletTimeData:
             V_valid = V.isfinite()
             assert V.shape == (*batch_shape, num_query)
             assert torch.equal(V_valid, M_valid)
+
+    def __eq__(self, other: object, /) -> bool:
+        if not isinstance(other, TripletTimeData):
+            return NotImplemented
+        return (
+            _tensor_values_equal(self.context_times, other.context_times)
+            and _tensor_values_equal(self.context_channels, other.context_channels)
+            and _tensor_values_equal(self.context_values, other.context_values)
+            and _tensor_values_equal(self.query_times, other.query_times)
+            and _tensor_values_equal(self.query_channels, other.query_channels)
+            and _optional_tensor_values_equal(self.target_values, other.target_values)
+            and _optional_tensor_values_equal(
+                self.static_covariates, other.static_covariates
+            )
+        )
 
     @classmethod
     def from_merged_timedata(cls, arg: JointTimeData, /) -> TripletTimeData:

@@ -4,7 +4,7 @@ from typing import NamedTuple
 
 import pytest
 import torch
-from torch import Tensor, nan
+from torch import nan
 from torch.testing import assert_close
 
 from linodenet.forecasting.utils import (
@@ -16,291 +16,6 @@ from linodenet.forecasting.utils import (
 )
 
 from .base import make_forecasting_request
-
-
-def _assert_query_mask_equal(
-    actual: Tensor,
-    expected: Tensor,
-    /,
-    *,
-    query_times: Tensor,
-) -> None:
-    assert torch.equal(actual.any(dim=-1), query_times.isfinite())
-    assert torch.equal(actual, expected)
-
-
-def _assert_dense_equal(actual: SplitTimeData, expected: SplitTimeData, /) -> None:
-    assert_close(
-        actual.context_times, expected.context_times, atol=0.0, rtol=0.0, equal_nan=True
-    )
-    assert_close(
-        actual.context_values,
-        expected.context_values,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert torch.equal(actual.context_mask, expected.context_mask)
-    assert_close(
-        actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
-    )
-
-    _assert_query_mask_equal(
-        actual.query_mask,
-        expected.query_mask,
-        query_times=actual.query_times,
-    )
-
-    if actual.target_values is None or expected.target_values is None:
-        assert actual.target_values is expected.target_values
-    else:
-        assert_close(
-            actual.target_values,
-            expected.target_values,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-    if actual.static_covariates is None or expected.static_covariates is None:
-        assert actual.static_covariates is expected.static_covariates
-    else:
-        assert_close(
-            actual.static_covariates,
-            expected.static_covariates,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-
-def _assert_batched_dense_equal(
-    actual: SplitTimeData,
-    expected: SplitTimeData,
-    /,
-) -> None:
-    assert_close(
-        actual.context_times, expected.context_times, atol=0.0, rtol=0.0, equal_nan=True
-    )
-    assert_close(
-        actual.context_values,
-        expected.context_values,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert torch.equal(actual.context_mask, expected.context_mask)
-    assert_close(
-        actual.query_times, expected.query_times, atol=0.0, rtol=0.0, equal_nan=True
-    )
-
-    _assert_query_mask_equal(
-        actual.query_mask,
-        expected.query_mask,
-        query_times=actual.query_times,
-    )
-
-    if actual.target_values is None or expected.target_values is None:
-        assert actual.target_values is expected.target_values
-    else:
-        assert_close(
-            actual.target_values,
-            expected.target_values,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-    if actual.static_covariates is None or expected.static_covariates is None:
-        assert actual.static_covariates is expected.static_covariates
-    else:
-        assert_close(
-            actual.static_covariates,
-            expected.static_covariates,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-
-def _assert_triplet_equal(
-    actual: TripletTimeData, expected: TripletTimeData, /
-) -> None:
-    assert_close(
-        actual.context_times,
-        expected.context_times,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert torch.equal(actual.context_channels, expected.context_channels)
-    assert_close(
-        actual.context_values,
-        expected.context_values,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert_close(
-        actual.query_times,
-        expected.query_times,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert actual.query_channels is not None
-    assert expected.query_channels is not None
-    assert torch.equal(actual.query_channels, expected.query_channels)
-
-    if actual.target_values is None or expected.target_values is None:
-        assert actual.target_values is expected.target_values
-    else:
-        assert_close(
-            actual.target_values,
-            expected.target_values,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-    if actual.static_covariates is None or expected.static_covariates is None:
-        assert actual.static_covariates is expected.static_covariates
-    else:
-        assert_close(
-            actual.static_covariates,
-            expected.static_covariates,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-
-def _assert_combined_equal(actual: JointTimeData, expected: JointTimeData, /) -> None:
-    assert_close(
-        actual.timestamps, expected.timestamps, atol=0.0, rtol=0.0, equal_nan=True
-    )
-    assert_close(
-        actual.context_values,
-        expected.context_values,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert torch.equal(actual.context_mask, expected.context_mask)
-    if actual.target_values is None or expected.target_values is None:
-        assert actual.target_values is expected.target_values
-    else:
-        assert_close(
-            actual.target_values,
-            expected.target_values,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-    assert torch.equal(actual.query_mask, expected.query_mask)
-
-    if actual.static_covariates is None or expected.static_covariates is None:
-        assert actual.static_covariates is expected.static_covariates
-    else:
-        assert_close(
-            actual.static_covariates,
-            expected.static_covariates,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-
-def _assert_batched_combined_equal(
-    actual: JointTimeData,
-    expected: JointTimeData,
-    /,
-) -> None:
-    assert_close(
-        actual.timestamps, expected.timestamps, atol=0.0, rtol=0.0, equal_nan=True
-    )
-    assert_close(
-        actual.context_values,
-        expected.context_values,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert torch.equal(actual.context_mask, expected.context_mask)
-    if actual.target_values is None or expected.target_values is None:
-        assert actual.target_values is expected.target_values
-    else:
-        assert_close(
-            actual.target_values,
-            expected.target_values,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-    assert torch.equal(actual.query_mask, expected.query_mask)
-
-    if actual.static_covariates is None or expected.static_covariates is None:
-        assert actual.static_covariates is expected.static_covariates
-    else:
-        assert_close(
-            actual.static_covariates,
-            expected.static_covariates,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-
-def _assert_batched_triplet_equal(
-    actual: TripletTimeData,
-    expected: TripletTimeData,
-    /,
-) -> None:
-    assert_close(
-        actual.context_times,
-        expected.context_times,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert torch.equal(actual.context_channels, expected.context_channels)
-    assert_close(
-        actual.context_values,
-        expected.context_values,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert_close(
-        actual.query_times,
-        expected.query_times,
-        atol=0.0,
-        rtol=0.0,
-        equal_nan=True,
-    )
-    assert torch.equal(actual.query_channels, expected.query_channels)
-
-    if actual.target_values is None or expected.target_values is None:
-        assert actual.target_values is expected.target_values
-    else:
-        assert_close(
-            actual.target_values,
-            expected.target_values,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-    if actual.static_covariates is None or expected.static_covariates is None:
-        assert actual.static_covariates is expected.static_covariates
-    else:
-        assert_close(
-            actual.static_covariates,
-            expected.static_covariates,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
 
 
 class _CanonicalTimeFormats(NamedTuple):
@@ -616,6 +331,38 @@ def _make_random_batched_triplet(
 
 
 class TestSplitTimeData:
+    def test_eq_uses_tensor_value_comparison(self) -> None:
+        lhs = SplitTimeData(
+            context_times=torch.tensor([1.0, nan]),
+            context_values=torch.tensor([[10.0, nan], [nan, nan]]),
+            context_mask=torch.tensor([[True, False], [False, False]]),
+            query_times=torch.tensor([2.0]),
+            query_mask=torch.tensor([[True, False]]),
+            target_values=torch.tensor([[20.0, nan]]),
+            static_covariates=torch.tensor([3.0, nan]),
+        )
+        rhs = SplitTimeData(
+            context_times=torch.tensor([1.0, nan]),
+            context_values=torch.tensor([[10.0, nan], [nan, nan]]),
+            context_mask=torch.tensor([[True, False], [False, False]]),
+            query_times=torch.tensor([2.0]),
+            query_mask=torch.tensor([[True, False]]),
+            target_values=torch.tensor([[20.0, nan]]),
+            static_covariates=torch.tensor([3.0, nan]),
+        )
+        other = SplitTimeData(
+            context_times=torch.tensor([1.0, nan]),
+            context_values=torch.tensor([[10.0, nan], [nan, nan]]),
+            context_mask=torch.tensor([[True, False], [False, False]]),
+            query_times=torch.tensor([2.0]),
+            query_mask=torch.tensor([[False, True]]),
+            target_values=torch.tensor([[nan, 20.0]]),
+            static_covariates=torch.tensor([3.0, nan]),
+        )
+
+        assert lhs == rhs
+        assert lhs != other
+
     def test_query_mask_clears_masked_values(self) -> None:
         arg = SplitTimeData(
             context_times=torch.tensor([1.0]),
@@ -680,7 +427,7 @@ class TestSplitTimeData:
             static_covariates=torch.tensor([5.0, 6.0]),
         )
 
-        _assert_triplet_equal(actual, expected)
+        assert actual == expected
 
     def test_to_triplet_roundtrip_unbatched(self) -> None:
         original = SplitTimeData(
@@ -707,10 +454,10 @@ class TestSplitTimeData:
             query_dim=2,
         )
 
-        _assert_dense_equal(actual, original)
+        assert actual == original
 
         triplet_result = actual.to_triplets()
-        _assert_triplet_equal(triplet_result, triplet)
+        assert triplet_result == triplet
 
     def test_to_combined_unbatched(self) -> None:
         original = SplitTimeData(
@@ -765,7 +512,7 @@ class TestSplitTimeData:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        _assert_combined_equal(actual, expected)
+        assert actual == expected
 
     def test_to_combined_roundtrip_unbatched(self) -> None:
         original = SplitTimeData(
@@ -792,7 +539,7 @@ class TestSplitTimeData:
 
         actual = original.to_joint_time().to_split_time()
 
-        _assert_dense_equal(actual, original)
+        assert actual == original
 
     def test_to_combined_roundtrip_unbatched_distinct_dims(self) -> None:
         original = SplitTimeData(
@@ -822,7 +569,7 @@ class TestSplitTimeData:
 
         actual = combined.to_split_time()
 
-        _assert_dense_equal(actual, original)
+        assert actual == original
 
     def test_batched_roundtrip(self) -> None:
         args = [
@@ -875,14 +622,14 @@ class TestSplitTimeData:
             static_covariates=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
         )  # fmt: skip
 
-        _assert_batched_dense_equal(actual, expected)
+        assert actual == expected
 
         unbatched = actual.unbatch()
 
         assert isinstance(unbatched, list)
         assert len(unbatched) == len(args)
         for actual, expected in zip(unbatched, args, strict=True):
-            _assert_dense_equal(actual, expected)
+            assert actual == expected
 
     def test_to_triplet_batched_with_mask(self) -> None:
         original = SplitTimeData(
@@ -948,7 +695,17 @@ class TestSplitTimeData:
             ]),
         )  # fmt: skip
 
-        _assert_batched_triplet_equal(actual, expected)
+        actual = TripletTimeData(
+            context_times=actual.context_times,
+            context_channels=actual.context_channels,
+            context_values=actual.context_values,
+            query_times=actual.query_times,
+            query_channels=actual.query_channels,
+            target_values=actual.target_values,
+            static_covariates=actual.static_covariates,
+        )
+
+        assert actual == expected
 
     def test_to_triplet_batched_without_mask(self) -> None:
         context_times = torch.tensor([[[1.0], [2.0]]])
@@ -974,7 +731,17 @@ class TestSplitTimeData:
             query_channels=torch.tensor([[[0, 1, -1, -1], [0, 1, 0, 1]]]),
         )
 
-        _assert_batched_triplet_equal(actual, expected)
+        actual = TripletTimeData(
+            context_times=actual.context_times,
+            context_channels=actual.context_channels,
+            context_values=actual.context_values,
+            query_times=actual.query_times,
+            query_channels=actual.query_channels,
+            target_values=actual.target_values,
+            static_covariates=actual.static_covariates,
+        )
+
+        assert actual == expected
 
     def test_to_triplet_roundtrip_batched_duplicates(self) -> None:
         original = SplitTimeData(
@@ -1061,8 +828,8 @@ class TestSplitTimeData:
             ]),
         )  # fmt: skip
 
-        _assert_batched_dense_equal(actual, expected)
-        _assert_batched_triplet_equal(actual.to_triplets(), triplet)
+        assert actual == expected
+        assert actual.to_triplets() == triplet
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3), (1, 2, 3)])
     def test_to_triplet_roundtrip_batched_random(
@@ -1085,7 +852,7 @@ class TestSplitTimeData:
             query_dim=3,
         )
 
-        _assert_batched_dense_equal(actual, original)
+        assert actual == original
 
     def test_to_combined_roundtrip_batched(self) -> None:
         original = SplitTimeData(
@@ -1129,7 +896,7 @@ class TestSplitTimeData:
 
         actual = original.to_joint_time().to_split_time()
 
-        _assert_batched_dense_equal(actual, original)
+        assert actual == original
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
     def test_to_combined_roundtrip_batched_distinct_dims(
@@ -1153,10 +920,111 @@ class TestSplitTimeData:
 
         actual = combined.to_split_time()
 
-        _assert_batched_dense_equal(actual, original)
+        assert actual == original
 
 
 class TestJointTimeData:
+    def test_eq_uses_tensor_value_comparison(self) -> None:
+        lhs = JointTimeData(
+            timestamps=torch.tensor([1.0, 2.0, nan]),
+            context_values=torch.tensor(
+                [
+                    [10.0, nan],
+                    [nan, nan],
+                    [nan, nan],
+                ]
+            ),
+            context_mask=torch.tensor(
+                [
+                    [True, False],
+                    [False, False],
+                    [False, False],
+                ]
+            ),
+            query_mask=torch.tensor(
+                [
+                    [False, False],
+                    [True, False],
+                    [False, False],
+                ]
+            ),
+            target_values=torch.tensor(
+                [
+                    [nan, nan],
+                    [20.0, nan],
+                    [nan, nan],
+                ]
+            ),
+            static_covariates=torch.tensor([3.0, nan]),
+        )
+        rhs = JointTimeData(
+            timestamps=torch.tensor([1.0, 2.0, nan]),
+            context_values=torch.tensor(
+                [
+                    [10.0, nan],
+                    [nan, nan],
+                    [nan, nan],
+                ]
+            ),
+            context_mask=torch.tensor(
+                [
+                    [True, False],
+                    [False, False],
+                    [False, False],
+                ]
+            ),
+            query_mask=torch.tensor(
+                [
+                    [False, False],
+                    [True, False],
+                    [False, False],
+                ]
+            ),
+            target_values=torch.tensor(
+                [
+                    [nan, nan],
+                    [20.0, nan],
+                    [nan, nan],
+                ]
+            ),
+            static_covariates=torch.tensor([3.0, nan]),
+        )
+        other = JointTimeData(
+            timestamps=torch.tensor([1.0, 2.0, nan]),
+            context_values=torch.tensor(
+                [
+                    [10.0, nan],
+                    [nan, nan],
+                    [nan, nan],
+                ]
+            ),
+            context_mask=torch.tensor(
+                [
+                    [True, False],
+                    [False, False],
+                    [False, False],
+                ]
+            ),
+            query_mask=torch.tensor(
+                [
+                    [False, False],
+                    [False, True],
+                    [False, False],
+                ]
+            ),
+            target_values=torch.tensor(
+                [
+                    [nan, nan],
+                    [nan, 20.0],
+                    [nan, nan],
+                ]
+            ),
+            static_covariates=torch.tensor([3.0, nan]),
+        )
+
+        assert lhs == rhs
+        assert lhs != other
+
     def test_rejects_non_increasing_query_times(self) -> None:
         with pytest.raises(AssertionError):
             JointTimeData(
@@ -1250,13 +1118,13 @@ class TestJointTimeData:
         actual = JointTimeData.from_unbatched(args)
         expected = canonical.batched.joint
 
-        _assert_batched_combined_equal(actual, expected)
+        assert actual == expected
 
         unbatched = actual.unbatch()
         assert isinstance(unbatched, list)
         assert len(unbatched) == len(args)
         for actual, expected in zip(unbatched, args, strict=True):
-            _assert_combined_equal(actual, expected)
+            assert actual == expected
 
     def test_to_dense_unbatched(self) -> None:
         canonical = _canonical_time_data()
@@ -1265,7 +1133,7 @@ class TestJointTimeData:
         actual = original.to_split_time()
         expected = canonical.samples[0].split
 
-        _assert_dense_equal(actual, expected)
+        assert actual == expected
 
     def test_to_dense_unbatched_without_target_values(self) -> None:
         canonical = _canonical_time_data(target_values_available=False)
@@ -1274,7 +1142,7 @@ class TestJointTimeData:
         actual = original.to_split_time()
         expected = canonical.samples[0].split
 
-        _assert_dense_equal(actual, expected)
+        assert actual == expected
 
     def test_to_dense_batched_without_target_values(self) -> None:
         canonical = _canonical_time_data(target_values_available=False)
@@ -1283,38 +1151,70 @@ class TestJointTimeData:
         actual = original.to_split_time()
         expected = canonical.batched.split
 
-        _assert_batched_dense_equal(actual, expected)
+        assert actual == expected
 
     def test_to_dense_roundtrip_unbatched(self) -> None:
         original = _canonical_time_data().samples[0].joint
 
         actual = original.to_split_time().to_joint_time()
 
-        _assert_combined_equal(actual, original)
+        assert actual == original
 
     def test_to_triplet_roundtrip_unbatched(self) -> None:
         original = _canonical_time_data().samples[0].joint
 
         actual = original.to_triplets().to_joint_time()
 
-        _assert_combined_equal(actual, original)
+        assert actual == original
 
     def test_to_dense_roundtrip_batched(self) -> None:
         original = _canonical_time_data().batched.joint
 
         actual = original.to_split_time().to_joint_time()
 
-        _assert_batched_combined_equal(actual, original)
+        assert actual == original
 
     def test_to_triplet_roundtrip_batched(self) -> None:
         original = _canonical_time_data().batched.joint
 
         actual = original.to_triplets().to_joint_time()
 
-        _assert_batched_combined_equal(actual, original)
+        assert actual == original
 
 
 class TestTripletTimeData:
+    def test_eq_uses_tensor_value_comparison(self) -> None:
+        lhs = TripletTimeData(
+            context_times=torch.tensor([1.0, nan]),
+            context_channels=torch.tensor([0, -1]),
+            context_values=torch.tensor([10.0, nan]),
+            query_times=torch.tensor([2.0, nan]),
+            query_channels=torch.tensor([1, -1]),
+            target_values=torch.tensor([20.0, nan]),
+            static_covariates=torch.tensor([3.0, nan]),
+        )
+        rhs = TripletTimeData(
+            context_times=torch.tensor([1.0, nan]),
+            context_channels=torch.tensor([0, -1]),
+            context_values=torch.tensor([10.0, nan]),
+            query_times=torch.tensor([2.0, nan]),
+            query_channels=torch.tensor([1, -1]),
+            target_values=torch.tensor([20.0, nan]),
+            static_covariates=torch.tensor([3.0, nan]),
+        )
+        other = TripletTimeData(
+            context_times=torch.tensor([1.0, nan]),
+            context_channels=torch.tensor([1, -1]),
+            context_values=torch.tensor([10.0, nan]),
+            query_times=torch.tensor([2.0, nan]),
+            query_channels=torch.tensor([1, -1]),
+            target_values=torch.tensor([20.0, nan]),
+            static_covariates=torch.tensor([3.0, nan]),
+        )
+
+        assert lhs == rhs
+        assert lhs != other
+
     def test_rejects_duplicate_queries(self) -> None:
         with pytest.raises(AssertionError):
             TripletTimeData(
@@ -1362,7 +1262,7 @@ class TestTripletTimeData:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        _assert_dense_equal(actual, expected)
+        assert actual == expected
 
     def test_to_dense_unbatched_with_dims(self) -> None:
         original = TripletTimeData(
@@ -1390,7 +1290,7 @@ class TestTripletTimeData:
             target_values=torch.tensor([[nan, 30.0, nan, nan]]),
         )  # fmt: skip
 
-        _assert_dense_equal(actual, expected)
+        assert actual == expected
 
     def test_to_combined_roundtrip_unbatched(self) -> None:
         original = TripletTimeData(
@@ -1405,7 +1305,7 @@ class TestTripletTimeData:
 
         actual = original.to_joint_time().to_triplets()
 
-        _assert_triplet_equal(actual, original)
+        assert actual == original
 
     def test_batched_roundtrip(self) -> None:
         args = [
@@ -1461,13 +1361,13 @@ class TestTripletTimeData:
             ]),
         )  # fmt: skip
 
-        _assert_batched_triplet_equal(actual, expected)
+        assert actual == expected
 
         unbatched = actual.unbatch()
         assert isinstance(unbatched, list)
         assert len(unbatched) == len(args)
         for actual, expected in zip(unbatched, args, strict=True):
-            _assert_triplet_equal(actual, expected)
+            assert actual == expected
 
     def test_batched_roundtrip_without_values(self) -> None:
         args = [
@@ -1511,13 +1411,13 @@ class TestTripletTimeData:
             ]),
         )  # fmt: skip
 
-        _assert_batched_triplet_equal(actual, expected)
+        assert actual == expected
 
         unbatched = actual.unbatch()
         assert isinstance(unbatched, list)
         assert len(unbatched) == len(args)
         for actual, expected in zip(unbatched, args, strict=True):
-            _assert_triplet_equal(actual, expected)
+            assert actual == expected
 
     def test_to_dense_batched(self) -> None:
         original = TripletTimeData(
@@ -1583,7 +1483,7 @@ class TestTripletTimeData:
             ]),
         )  # fmt: skip
 
-        _assert_batched_dense_equal(actual, expected)
+        assert actual == expected
 
     def test_to_dense_batched_without_values(self) -> None:
         original = TripletTimeData(
@@ -1633,7 +1533,7 @@ class TestTripletTimeData:
             ]),
         )  # fmt: skip
 
-        _assert_batched_dense_equal(actual, expected)
+        assert actual == expected
 
     def test_to_combined_roundtrip_batched(self) -> None:
         original = TripletTimeData(
@@ -1669,7 +1569,7 @@ class TestTripletTimeData:
 
         actual = original.to_joint_time().to_triplets()
 
-        _assert_batched_triplet_equal(actual, original)
+        assert actual == original
 
     @pytest.mark.parametrize("batch_shape", [(), (8,), (1, 2, 3)])
     def test_to_dense_roundtrip_batched_random(
@@ -1680,7 +1580,7 @@ class TestTripletTimeData:
 
         actual = original.to_split_time(context_dim=3, query_dim=4).to_triplets()
 
-        _assert_batched_triplet_equal(actual, original)
+        assert actual == original
 
 
 class TestEventBatch:
@@ -1806,7 +1706,17 @@ class TestTripletBatch:
         )
         expected = req.to_triplets()
 
-        _assert_triplet_equal(actual, expected)
+        actual = TripletTimeData(
+            context_times=actual.context_times,
+            context_channels=actual.context_channels,
+            context_values=actual.context_values,
+            query_times=actual.query_times,
+            query_channels=actual.query_channels,
+            target_values=actual.target_values,
+            static_covariates=actual.static_covariates,
+        )
+
+        assert actual == expected
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
     def test_from_request_random(self, batch_shape: tuple[int, ...]) -> None:
@@ -1832,7 +1742,17 @@ class TestTripletBatch:
         )
         expected = req.to_triplets()
 
-        _assert_batched_triplet_equal(actual, expected)
+        actual = TripletTimeData(
+            context_times=actual.context_times,
+            context_channels=actual.context_channels,
+            context_values=actual.context_values,
+            query_times=actual.query_times,
+            query_channels=actual.query_channels,
+            target_values=actual.target_values,
+            static_covariates=actual.static_covariates,
+        )
+
+        assert actual == expected
 
     @pytest.mark.parametrize("batch_shape", [(), (3,), (2, 3)])
     def test_from_request_batch_last(self, batch_shape: tuple[int, ...]) -> None:
@@ -1868,19 +1788,18 @@ class TestTripletBatch:
         )
         expected = req.to_triplets()
 
-        _assert_batched_triplet_equal(
-            TripletTimeData(
-                context_times=actual.context_times.movedim(0, -1),
-                context_channels=actual.context_channels.movedim(0, -1),
-                context_values=actual.context_values.movedim(0, -1),
-                query_times=actual.query_times.movedim(0, -1),
-                query_channels=actual.query_channels.movedim(0, -1),
-                target_values=(
-                    actual.target_values.movedim(0, -1)
-                    if actual.target_values is not None
-                    else None
-                ),
-                static_covariates=actual.static_covariates,
+        actual = TripletTimeData(
+            context_times=actual.context_times.movedim(0, -1),
+            context_channels=actual.context_channels.movedim(0, -1),
+            context_values=actual.context_values.movedim(0, -1),
+            query_times=actual.query_times.movedim(0, -1),
+            query_channels=actual.query_channels.movedim(0, -1),
+            target_values=(
+                actual.target_values.movedim(0, -1)
+                if actual.target_values is not None
+                else None
             ),
-            expected,
+            static_covariates=actual.static_covariates,
         )
+
+        assert actual == expected
