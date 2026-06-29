@@ -1439,24 +1439,16 @@ class TestTripletTimeData:
             output_shape=(4,),
             input_missingness=True,
             target_missingness=True,
-        )
-
-        ctx_times = req.context_times.movedim(-1, 0)
-        ctx_values = req.context_values.movedim(-2, 0)
-        ctx_mask = req.context_mask.movedim(-2, 0)
-        qry_times = req.query_times.movedim(-1, 0)
-        qry_mask = req.query_mask.movedim(-2, 0)
-        tgt_values = (
-            req.target_values.movedim(-2, 0) if req.target_values is not None else None
+            batch_first=False,
         )
 
         actual = TripletTimeData.from_request(
-            context_times=ctx_times,
-            context_values=ctx_values,
-            context_mask=ctx_mask,
-            query_times=qry_times,
-            query_mask=qry_mask,
-            target_values=tgt_values,
+            context_times=req.context_times,
+            context_values=req.context_values,
+            context_mask=req.context_mask,
+            query_times=req.query_times,
+            query_mask=req.query_mask,
+            target_values=req.target_values,
             static_covariates=req.static_covariates,
             batch_first=False,
         )
