@@ -459,6 +459,10 @@ class SplitTimeData:
     r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(..., M)]  padded NaN, sparse
+    r"""Optional time-independent data."""
+
+    batch_first: bool = True
+    r"""Whether the batch axes come before or after the time axes.."""
 
     validate: InitVar[bool] = True
     r"""Whether to validate the data."""
@@ -486,11 +490,18 @@ class SplitTimeData:
         )
 
     def _validate(self) -> None:
-        T = self.context_times
-        C = self.context_mask
-        X = self.context_values
-        Q = self.query_times
-        M = self.query_mask
+        # normalize to batch_first for validation
+        seq_dim = -2 if self.batch_first else 0
+        T = self.context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
+        C = self.context_mask.movedim(seq_dim, -2)
+        X = self.context_values.movedim(seq_dim, -2)
+        Q = self.query_times[..., None].movedim(seq_dim, -2).squeeze(-1)
+        M = self.query_mask.movedim(seq_dim, -2)
+        Y = (
+            self.target_values.movedim(seq_dim, -2)
+            if self.target_values is not None
+            else None
+        )
 
         # check shapes
         *batch_shape, context_size, _ = X.shape
@@ -522,11 +533,11 @@ class SplitTimeData:
 
         assert torch.equal(M.any(dim=-1), Q_valid)
 
-        if (V := self.target_values) is not None:
-            *_, query_dim = V.shape
-            assert V.shape == (*batch_shape, query_size, query_dim)
-            V_valid = V.isfinite()
-            assert M.shape == V.shape
+        if Y is not None:
+            *_, query_dim = Y.shape
+            assert Y.shape == (*batch_shape, query_size, query_dim)
+            V_valid = Y.isfinite()
+            assert M.shape == Y.shape
             assert torch.equal(V_valid, M)
 
         if (S := self.static_covariates) is not None:
@@ -602,8 +613,8 @@ class SplitTimeData:
 
     def unbatch(self) -> list[SplitTimeData]:
         T = self.context_times.unsqueeze(0).flatten(end_dim=-2)
-        X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
+        X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         Q = self.query_times.unsqueeze(0).flatten(end_dim=-2)
         M = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
 
@@ -647,11 +658,11 @@ class SplitTimeData:
 
     def to_triplets(self) -> TripletTimeData:
         T = self.context_times
-        X = self.context_values
         C = self.context_mask
+        X = self.context_values
         Q = self.query_times
-        Y = self.target_values
         M = self.query_mask
+        Y = self.target_values
         batch_shape = X.shape[:-2]
 
         # `nonzero` orders entries by batch, then time, then channel. Subtracting
@@ -709,8 +720,8 @@ class SplitTimeData:
 
     def to_joint_time(self) -> JointTimeData:
         T = self.context_times
-        X = self.context_values
         C = self.context_mask
+        X = self.context_values
         Q = self.query_times
         M = self.query_mask
         Y = self.target_values
@@ -780,9 +791,10 @@ class JointTimeData:
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
 
     batch_first: bool = True
-    r"""Whether the batch dimension is the first dimension."""
+    r"""Whether the batch axes come before or after the time axes.."""
 
     validate: InitVar[bool] = True
+    r"""Optional time-independent data."""
 
     @property
     def context_indices(self) -> tuple[Tensor, ...]:
@@ -820,6 +832,54 @@ class JointTimeData:
             if self.target_values is not None
             else None,
         )
+
+    def _validate(self) -> None:
+        # normalize to batch_first for validation
+        seq_dim = -2 if self.batch_first else 0
+        T = self.timestamps[..., None].movedim(seq_dim, -2).squeeze(-1)
+        C = self.context_mask.movedim(seq_dim, -2)
+        X = self.context_values.movedim(seq_dim, -2)
+        M = self.query_mask.movedim(seq_dim, -2)
+        Y = (
+            self.target_values.movedim(seq_dim, -2)
+            if self.target_values is not None
+            else None
+        )
+
+        *batch_shape, num_combined, context_dim = X.shape
+        *query_batch_shape, query_combined, query_dim = M.shape
+        T_valid = T.isfinite()
+        T_ascending = T.diff(dim=-1).ge(0.0)
+        assert T.shape == (*batch_shape, num_combined)
+        assert is_prefix_mask(T_valid).all()
+        assert is_prefix_mask(T_ascending).all()  # sorted in ascending order
+
+        assert C.dtype == torch.bool
+        assert C.shape == (*batch_shape, num_combined, context_dim)
+        assert torch.equal(X.isfinite(), C)
+        mask_valid = C.any(dim=-1) | M.any(dim=-1)
+
+        assert X.shape == (*batch_shape, num_combined, context_dim)
+        assert M.dtype == torch.bool
+        assert M.shape == (*query_batch_shape, query_combined, query_dim)
+        assert query_batch_shape == batch_shape
+        assert query_combined == num_combined
+        assert is_prefix_mask(mask_valid).all()  # at least one value per step
+
+        if Y is not None:
+            assert Y.shape == (*batch_shape, num_combined, query_dim)
+            assert torch.equal(Y.isfinite(), M)
+
+        context_filter = C.any(dim=-1)
+        query_filter = M.any(dim=-1)
+        for times, context, query in zip(
+            T.reshape(-1, num_combined),
+            context_filter.reshape(-1, num_combined),
+            query_filter.reshape(-1, num_combined),
+            strict=True,
+        ):
+            assert times[context].diff(dim=-1).ge(0.0).all()
+            assert times[query].diff(dim=-1).gt(0.0).all()
 
     def _split_indices(
         self,
@@ -864,48 +924,6 @@ class JointTimeData:
         )
         return (*batch_idx, time_idx) if self.batch_first else (time_idx, *batch_idx)
 
-    def _validate(self) -> None:
-        T = self.timestamps
-        C = self.context_mask
-        X = self.context_values
-        M = self.query_mask
-        Y = self.target_values
-
-        *batch_shape, num_combined, context_dim = X.shape
-        *query_batch_shape, query_combined, query_dim = M.shape
-        T_valid = T.isfinite()
-        T_ascending = T.diff(dim=-1).ge(0.0)
-        assert T.shape == (*batch_shape, num_combined)
-        assert is_prefix_mask(T_valid).all()
-        assert is_prefix_mask(T_ascending).all()  # sorted in ascending order
-
-        assert C.dtype == torch.bool
-        assert C.shape == (*batch_shape, num_combined, context_dim)
-        assert torch.equal(X.isfinite(), C)
-        mask_valid = C.any(dim=-1) | M.any(dim=-1)
-
-        assert X.shape == (*batch_shape, num_combined, context_dim)
-        assert M.dtype == torch.bool
-        assert M.shape == (*query_batch_shape, query_combined, query_dim)
-        assert query_batch_shape == batch_shape
-        assert query_combined == num_combined
-        assert is_prefix_mask(mask_valid).all()  # at least one value per step
-
-        if Y is not None:
-            assert Y.shape == (*batch_shape, num_combined, query_dim)
-            assert torch.equal(Y.isfinite(), M)
-
-        context_filter = C.any(dim=-1)
-        query_filter = M.any(dim=-1)
-        for times, context, query in zip(
-            T.reshape(-1, num_combined),
-            context_filter.reshape(-1, num_combined),
-            query_filter.reshape(-1, num_combined),
-            strict=True,
-        ):
-            assert times[context].diff(dim=-1).ge(0.0).all()
-            assert times[query].diff(dim=-1).gt(0.0).all()
-
     def __eq__(self, other: object, /) -> bool:
         if not isinstance(other, JointTimeData):
             return NotImplemented
@@ -935,8 +953,8 @@ class JointTimeData:
         batch_first: bool = True,
         validate: bool = True,
     ) -> JointTimeData:
+        # normalize to batch_last for construction
         seq_dim = -2 if batch_first else 0
-
         T = context_times.unsqueeze(-1).movedim(seq_dim, 0)
         C = context_mask.movedim(seq_dim, 0)
         X = context_values.movedim(seq_dim, 0)
@@ -1155,8 +1173,10 @@ class TripletTimeData:
     r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
+    r"""Optional time-independent data."""
 
     batch_first: bool = True
+    r"""Whether the batch axes come before or after the time axes.."""
 
     validate: InitVar[bool] = True
 
@@ -1164,9 +1184,9 @@ class TripletTimeData:
         if validate:
             self._validate()
 
-    def _validate(self):
+    def _validate(self) -> None:
+        # normalize to batch_first for validation
         seq_dim = -1 if self.batch_first else 0
-
         T = self.context_times.movedim(seq_dim, -1)
         C = self.context_channels.movedim(seq_dim, -1)
         X = self.context_values.movedim(seq_dim, -1)
@@ -1237,7 +1257,6 @@ class TripletTimeData:
         batch_first: bool = True,
         validate: bool = True,
     ) -> TripletTimeData:
-
         if not batch_first:
             context_times = context_times.movedim(0, -1)
             context_mask = context_mask.movedim(0, -2)
