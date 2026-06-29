@@ -28,7 +28,6 @@ def make_forecasting_request(
     rng = torch.Generator().manual_seed(seed)
     batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
     output_shape = output_shape if output_shape is not None else context_shape
-    seq_shape = (*batch_shape, max_steps)
 
     ctx_lengths = torch.randint(
         min_steps, max_steps + 1, size=batch_shape, generator=rng
@@ -36,16 +35,22 @@ def make_forecasting_request(
     qry_lengths = torch.randint(
         min_steps, max_steps + 1, size=batch_shape, generator=rng
     )
-    ctx_times = torch.sort(torch.rand(seq_shape, generator=rng), dim=-1).values
-    qry_times = torch.sort(torch.rand(seq_shape, generator=rng), dim=-1).values
+    ctx_size = int(ctx_lengths.max())
+    qry_size = int(qry_lengths.max())
+
+    ctx_seq_shape = (*batch_shape, ctx_size)
+    qry_seq_shape = (*batch_shape, qry_size)
+
+    ctx_times = torch.sort(torch.rand(ctx_seq_shape, generator=rng), dim=-1).values
+    qry_times = torch.sort(torch.rand(qry_seq_shape, generator=rng), dim=-1).values
     qry_times = qry_times + ctx_times[..., [-1]]
 
-    ctx_values = torch.randn(*seq_shape, *context_shape, generator=rng)
-    tgt_values = torch.randn(*seq_shape, *output_shape, generator=rng)
+    ctx_values = torch.randn(*ctx_seq_shape, *context_shape, generator=rng)
+    tgt_values = torch.randn(*qry_seq_shape, *output_shape, generator=rng)
 
     # mask by sequence length
-    ctx_valid = torch.arange(max_steps) < ctx_lengths[..., None]
-    qry_valid = torch.arange(max_steps) < qry_lengths[..., None]
+    ctx_valid = torch.arange(ctx_size) < ctx_lengths[..., None]
+    qry_valid = torch.arange(qry_size) < qry_lengths[..., None]
     ctx_times = ctx_times.masked_fill(~ctx_valid, nan)
     qry_times = qry_times.masked_fill(~qry_valid, nan)
     ctx_values = ctx_values.masked_fill(~ctx_valid[..., None], nan)
@@ -54,10 +59,10 @@ def make_forecasting_request(
     # mask by feature missingness
     # sample one value per time stamp that is always observed
     ctx_safe = torch.randint(
-        0, math.prod(context_shape), size=(*seq_shape, 1), generator=rng
+        0, math.prod(context_shape), size=(*ctx_seq_shape, 1), generator=rng
     )
     qry_safe = torch.randint(
-        0, math.prod(output_shape), size=(*seq_shape, 1), generator=rng
+        0, math.prod(output_shape), size=(*qry_seq_shape, 1), generator=rng
     )
     ctx_mask = ctx_valid[..., None] & (
         torch.ones_like(ctx_values, dtype=torch.bool)
