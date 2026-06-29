@@ -460,13 +460,37 @@ class SplitTimeData:
 
     static_covariates: Tensor | None = None  # Float[(..., M)]  padded NaN, sparse
 
-    def __post_init__(self) -> None:
+    validate: InitVar[bool] = True
+    """Whether to validate the data."""
+
+    def __post_init__(self, validate: bool) -> None:
+        self._normalize()
+        if validate:
+            self._validate()
+
+    def _normalize(self) -> None:
+        # sanitize context_values
+        object.__setattr__(
+            self,
+            "context_values",
+            self.context_values.masked_fill(~self.context_mask, nan),
+        )
+
+        # sanitize target_values
+        object.__setattr__(
+            self,
+            "target_values",
+            self.target_values.masked_fill(~self.query_mask, nan)
+            if self.target_values is not None
+            else None,
+        )
+
+    def _validate(self) -> None:
         T = self.context_times
         C = self.context_mask
         Q = self.query_times
         M = self.query_mask
-        X = self.context_values.masked_fill(~C, nan)
-        object.__setattr__(self, "context_values", X.detach().requires_grad_())
+        X = self.context_values
 
         # check shapes
         *batch_shape, context_size, _ = X.shape
@@ -499,8 +523,6 @@ class SplitTimeData:
         assert torch.equal(M.any(dim=-1), Q_valid)
 
         if (V := self.target_values) is not None:
-            V = V.masked_fill(~M, nan)
-            object.__setattr__(self, "target_values", V.detach().requires_grad_())
             *_, query_dim = V.shape
             assert V.shape == (*batch_shape, query_size, query_dim)
             V_valid = V.isfinite()
@@ -759,24 +781,31 @@ class JointTimeData:
 
     validate: InitVar[bool] = True
 
+    @property
+    def context_indices(self) -> tuple[Tensor, ...]:
+        # set context_indices and query_indices by just taking values in order.
+        *batch_shape, num_combined, _ = self.context_values.shape
+        context_filter = self.context_mask.any(dim=-1)
+        time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
+            *batch_shape, num_combined
+        )
+        time_idx = time_idx.masked_fill(~context_filter, -1)
+        return time_idx, *batch_shape
+
+    @property
+    def query_indices(self) -> tuple[Tensor, ...]:
+        *batch_shape, num_combined, _ = self.query_mask.shape
+        query_filter = self.query_mask.any(dim=-1)
+        time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
+            *batch_shape, num_combined
+        )
+        time_idx = time_idx.masked_fill(~query_filter, -1)
+        return time_idx, *batch_shape
+
     def __post_init__(self, validate: bool) -> None:
         self._normalize()
         if validate:
             self._validate()
-
-    def __eq__(self, other: object, /) -> bool:
-        if not isinstance(other, JointTimeData):
-            return NotImplemented
-        return (
-            _tensor_values_equal(self.timestamps, other.timestamps)
-            and _tensor_values_equal(self.context_values, other.context_values)
-            and _tensor_values_equal(self.context_mask, other.context_mask)
-            and _tensor_values_equal(self.query_mask, other.query_mask)
-            and _optional_tensor_values_equal(self.target_values, other.target_values)
-            and _optional_tensor_values_equal(
-                self.static_covariates, other.static_covariates
-            )
-        )
 
     def _normalize(self) -> None:
         # sanitize context_values
@@ -789,31 +818,10 @@ class JointTimeData:
         object.__setattr__(
             self,
             "target_values",
-            (
-                self.target_values.masked_fill(~self.query_mask, nan)
-                if self.target_values is not None
-                else None
-            ),
+            self.target_values.masked_fill(~self.query_mask, nan)
+            if self.target_values is not None
+            else None,
         )
-
-    def context_indices(self) -> tuple[Tensor, ...]:
-        # set context_indices and query_indices by just taking values in order.
-        *batch_shape, num_combined, _ = self.context_values.shape
-        context_filter = self.context_mask.any(dim=-1)
-        time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
-            *batch_shape, num_combined
-        )
-        time_idx = time_idx.masked_fill(~context_filter, -1)
-        return time_idx, *batch_shape
-
-    def query_indices(self) -> tuple[Tensor, ...]:
-        *batch_shape, num_combined, _ = self.query_mask.shape
-        query_filter = self.query_mask.any(dim=-1)
-        time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
-            *batch_shape, num_combined
-        )
-        time_idx = time_idx.masked_fill(~query_filter, -1)
-        return time_idx, *batch_shape
 
     def _validate(self) -> None:
         T = self.timestamps
@@ -856,6 +864,20 @@ class JointTimeData:
         ):
             assert times[context].diff(dim=-1).ge(0.0).all()
             assert times[query].diff(dim=-1).gt(0.0).all()
+
+    def __eq__(self, other: object, /) -> bool:
+        if not isinstance(other, JointTimeData):
+            return NotImplemented
+        return (
+            _tensor_values_equal(self.timestamps, other.timestamps)
+            and _tensor_values_equal(self.context_values, other.context_values)
+            and _tensor_values_equal(self.context_mask, other.context_mask)
+            and _tensor_values_equal(self.query_mask, other.query_mask)
+            and _optional_tensor_values_equal(self.target_values, other.target_values)
+            and _optional_tensor_values_equal(
+                self.static_covariates, other.static_covariates
+            )
+        )
 
     @classmethod
     def from_request(
@@ -1091,7 +1113,13 @@ class TripletTimeData:
 
     static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
 
-    def __post_init__(self) -> None:
+    validate: InitVar[bool] = True
+
+    def __post_init__(self, validate: bool) -> None:
+        if validate:
+            self._validate()
+
+    def _validate(self):
         T = self.context_times
         C = self.context_channels
         X = self.context_values
