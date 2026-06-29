@@ -429,7 +429,7 @@ def _make_random_batched_triplet(
     )
 
 
-class TestDense:
+class TestSplitTimeData:
     def test_query_mask_clears_masked_values(self) -> None:
         arg = SplitTimeData(
             context_times=torch.tensor([1.0]),
@@ -964,7 +964,7 @@ class TestDense:
         _assert_batched_dense_equal(actual, original)
 
 
-class TestCombined:
+class TestJointTimeData:
     def test_rejects_non_increasing_query_times(self) -> None:
         with pytest.raises(AssertionError):
             _combined_arg(
@@ -1450,7 +1450,7 @@ class TestCombined:
         _assert_batched_combined_equal(actual, original)
 
 
-class TestTriplet:
+class TestTripletTimeData:
     def test_rejects_duplicate_queries(self) -> None:
         with pytest.raises(AssertionError):
             TripletTimeData(

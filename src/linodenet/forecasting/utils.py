@@ -731,7 +731,7 @@ class JointTimeData:
 
     validate: InitVar[bool] = True
 
-    def __post_init__(self, validate) -> None:
+    def __post_init__(self, validate: bool) -> None:
         self._normalize()
         if validate:
             self._validate()
@@ -753,11 +753,18 @@ class JointTimeData:
                 else None
             ),
         )
-        # set query_indices by just taking values in order.
-        if not self.query_indices:
+        # set context_indices and query_indices by just taking values in order.
+        if not self.context_indices:
             *batch_shape, num_combined, _ = self.context_values.shape
-            *_, query_combined, _ = self.query_mask.shape
             context_filter = self.context_mask.any(dim=-1)
+            time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
+                *batch_shape, num_combined
+            )
+            time_idx = time_idx.masked_fill(~context_filter, -1)
+            object.__setattr__(self, "context_indices", (time_idx, *batch_shape))
+
+        if not self.query_indices:
+            *batch_shape, num_combined, _ = self.query_mask.shape
             query_filter = self.query_mask.any(dim=-1)
             time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
                 *batch_shape, num_combined
