@@ -461,7 +461,7 @@ class SplitTimeData:
     static_covariates: Tensor | None = None  # Float[(..., M)]  padded NaN, sparse
 
     validate: InitVar[bool] = True
-    """Whether to validate the data."""
+    r"""Whether to validate the data."""
 
     def __post_init__(self, validate: bool) -> None:
         self._normalize()
@@ -779,28 +779,60 @@ class JointTimeData:
 
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
 
+    batch_first: bool = True
+    r"""Whether the batch dimension is the first dimension."""
+
     validate: InitVar[bool] = True
 
     @property
     def context_indices(self) -> tuple[Tensor, ...]:
-        # set context_indices and query_indices by just taking values in order.
-        *batch_shape, num_combined, _ = self.context_values.shape
-        context_filter = self.context_mask.any(dim=-1)
-        time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
-            *batch_shape, num_combined
+        batch_shape = (
+            self.timestamps.shape[:-1]
+            if self.batch_first
+            else self.timestamps.shape[1:]
         )
-        time_idx = time_idx.masked_fill(~context_filter, -1)
-        return time_idx, *batch_shape
+
+        device = self.timestamps.device
+        ctx_valid = self.context_mask.any(dim=-1)
+        ctx_count = ctx_valid.sum(dim=-1)
+        ctx_size = int(ctx_count.max().item())
+        time_idx = torch.arange(ctx_size, device=device) < ctx_count[..., None]
+
+        batch_idx = tuple(
+            torch.arange(size, device=device)
+            .reshape(
+                *(size if j == i else 1 for j in range(len(batch_shape))),
+            )
+            .unsqueeze(-1 if self.batch_first else 0)
+            for i, size in enumerate(batch_shape)
+        )
+
+        return (*batch_idx, time_idx) if self.batch_first else (time_idx, *batch_idx)
 
     @property
     def query_indices(self) -> tuple[Tensor, ...]:
-        *batch_shape, num_combined, _ = self.query_mask.shape
-        query_filter = self.query_mask.any(dim=-1)
-        time_idx = torch.arange(num_combined, device=self.timestamps.device).expand(
-            *batch_shape, num_combined
+        batch_shape = (
+            self.timestamps.shape[:-1]
+            if self.batch_first
+            else self.timestamps.shape[1:]
         )
-        time_idx = time_idx.masked_fill(~query_filter, -1)
-        return time_idx, *batch_shape
+
+        device = self.timestamps.device
+        qry_valid = self.query_mask.any(dim=-1)
+        qry_count = qry_valid.sum(dim=-1)
+        qry_size = int(qry_count.max().item())
+        time_idx = torch.arange(qry_size, device=device) < qry_count[..., None]
+
+        batch_idx = tuple(
+            torch.arange(size, device=device)
+            .reshape(
+                *(size if j == i else 1 for j in range(len(batch_shape))),
+            )
+            .unsqueeze(-1 if self.batch_first else 0)
+            for i, size in enumerate(batch_shape)
+        )
+
+        return (*batch_idx, time_idx) if self.batch_first else (time_idx, *batch_idx)
 
     def __post_init__(self, validate: bool) -> None:
         self._normalize()
