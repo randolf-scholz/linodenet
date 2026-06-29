@@ -883,14 +883,16 @@ class JointTimeData:
     def from_request(
         cls,
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
         context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[(..., $N, D)], padded False
         context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
         target_values: Tensor | None = None,  # Float[(..., $K, F)]  padded NaN, sparse
         static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
+        # extra args
         batch_first: bool = True,
+        validate: bool = True,
     ) -> JointTimeData:
         seq_dim = -2 if batch_first else 0
 
@@ -912,20 +914,20 @@ class JointTimeData:
             dim=0,
             stable=True,
         )
-        inv_perm = torch.argsort(permutation, dim=0, stable=True)  # (..., $N+$K, 1)
-        time_idx = inv_perm[ctx_size:].movedim(0, seq_dim).squeeze(-1)
-
-        batch_idx = tuple(
-            torch.arange(size, device=times.device)
-            .reshape(
-                *(size if j == i else 1 for j in range(len(batch_shape))),
-            )
-            .unsqueeze(-1 if batch_first else 0)
-            for i, size in enumerate(batch_shape)
-        )
-        query_idx = (*batch_idx, time_idx) if batch_first else (time_idx, *batch_idx)
+        # inv_perm = torch.argsort(permutation, dim=0, stable=True)  # (..., $N+$K, 1)
+        # time_idx = inv_perm[ctx_size:].movedim(0, seq_dim).squeeze(-1)
+        # batch_idx = tuple(
+        #     torch.arange(size, device=times.device)
+        #     .reshape(
+        #         *(size if j == i else 1 for j in range(len(batch_shape))),
+        #     )
+        #     .unsqueeze(-1 if batch_first else 0)
+        #     for i, size in enumerate(batch_shape)
+        # )
+        # query_idx = (*batch_idx, time_idx) if batch_first else (time_idx, *batch_idx)
 
         return JointTimeData(
+            validate=validate,
             timestamps=(
                 times.take_along_dim(permutation, dim=0).movedim(0, seq_dim).squeeze(-1)
             ),
@@ -952,7 +954,6 @@ class JointTimeData:
                 else None
             ),
             static_covariates=static_covariates,
-            query_indices=query_idx,
         )
 
     @classmethod
@@ -1169,6 +1170,94 @@ class TripletTimeData:
             and _optional_tensor_values_equal(
                 self.static_covariates, other.static_covariates
             )
+        )
+
+    @classmethod
+    def from_request(
+        cls,
+        *,
+        context_times: Tensor,  # Float[..., $N] or Float[$N, ...], padded NaN
+        context_mask: Tensor,  # Bool[..., $N, D] or Bool[$N, ..., D]
+        context_values: Tensor,  # Float[..., $N, D] or Float[N, ..., D]
+        query_times: Tensor,  # Float[..., $K] or Float[$K, ...], padded NaN
+        query_mask: Tensor,  # Bool[..., $K, F] or Bool[$K, ..., F]
+        target_values: Tensor | None = None,  # Float[..., $K, F] or Float[$K, ..., F]
+        static_covariates: Tensor | None = None,  # Float[..., M], padded NaN, sparse
+        # extra args
+        batch_first: bool = True,
+        validate: bool = True,
+    ) -> TripletTimeData:
+
+        if not batch_first:
+            context_times = context_times.movedim(0, -1)
+            context_mask = context_mask.movedim(0, -2)
+            context_values = context_values.movedim(0, -2)
+            query_times = query_times.movedim(0, -1)
+            query_mask = query_mask.movedim(0, -2)
+            if target_values is not None:
+                target_values = target_values.movedim(0, -2)
+
+        *batch_shape, _, _ = context_values.shape
+
+        *ctx_batch_idx, ctx_time, ctx_channel = context_mask.nonzero(as_tuple=True)
+        ctx_counts = context_mask.sum(dim=(-2, -1))
+        ctx_positions = torch.arange(ctx_time.numel(), device=ctx_time.device)
+        ctx_offsets = (
+            ctx_counts.flatten().cumsum(dim=0).reshape(batch_shape) - ctx_counts
+        )
+        ctx_indices = (*ctx_batch_idx, ctx_positions - ctx_offsets[*ctx_batch_idx])
+        num_context = int(ctx_counts.max().item())
+
+        *qry_batch_idx, qry_time, qry_channel = query_mask.nonzero(as_tuple=True)
+        qry_counts = query_mask.sum(dim=(-2, -1))
+        qry_positions = torch.arange(qry_time.numel(), device=qry_time.device)
+        qry_offsets = (
+            qry_counts.flatten().cumsum(dim=0).reshape(batch_shape) - qry_counts
+        )
+        qry_indices = (*qry_batch_idx, qry_positions - qry_offsets[*qry_batch_idx])
+        num_query = int(qry_counts.max().item())
+
+        seq_dim = -1 if batch_first else 0
+
+        return TripletTimeData(
+            validate=validate,
+            context_times=(
+                context_times.new_full((*batch_shape, num_context), nan)
+                .index_put(ctx_indices, context_times[*ctx_batch_idx, ctx_time])
+                .movedim(-1, seq_dim)
+            ),
+            context_channels=(
+                ctx_channel.new_full((*batch_shape, num_context), -1)
+                .index_put(ctx_indices, ctx_channel)
+                .movedim(-1, seq_dim)
+            ),
+            context_values=(
+                context_values.new_full((*batch_shape, num_context), nan)
+                .index_put(
+                    ctx_indices, context_values[*ctx_batch_idx, ctx_time, ctx_channel]
+                )
+                .movedim(-1, seq_dim)
+            ),
+            query_times=(
+                query_times.new_full((*batch_shape, num_query), nan)
+                .index_put(qry_indices, query_times[*qry_batch_idx, qry_time])
+                .movedim(-1, seq_dim)
+            ),
+            query_channels=(
+                qry_channel.new_full((*batch_shape, num_query), -1)
+                .index_put(qry_indices, qry_channel)
+                .movedim(-1, seq_dim)
+            ),
+            target_values=(
+                target_values.new_full((*batch_shape, num_query), nan)
+                .index_put(
+                    qry_indices, target_values[*qry_batch_idx, qry_time, qry_channel]
+                )
+                .movedim(-1, seq_dim)
+                if target_values is not None
+                else None
+            ),
+            static_covariates=static_covariates,
         )
 
     @classmethod
