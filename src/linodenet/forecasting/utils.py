@@ -249,13 +249,13 @@ class EventBatch(NamedTuple):
 
     def validate(self) -> None:
         T = self.timestamps
-        X = self.context_values
         C = self.context_mask
+        X = self.context_values
+        M = self.query_mask
         Y = self.target_values
-        Q = self.query_mask
 
         *batch_shape, num_combined, context_dim = X.shape
-        *query_batch_shape, query_combined, query_dim = Q.shape
+        *query_batch_shape, query_combined, query_dim = M.shape
         T_valid = T.isfinite()
         T_ascending = T.diff(dim=-1).ge(0.0)
         assert T.shape == (*batch_shape, num_combined)
@@ -265,21 +265,21 @@ class EventBatch(NamedTuple):
         assert C.dtype == torch.bool
         assert C.shape == (*batch_shape, num_combined, context_dim)
         assert torch.equal(X.isfinite(), C)
-        mask_valid = C.any(dim=-1) | Q.any(dim=-1)
+        mask_valid = C.any(dim=-1) | M.any(dim=-1)
 
         assert X.shape == (*batch_shape, num_combined, context_dim)
-        assert Q.dtype == torch.bool
-        assert Q.shape == (*query_batch_shape, query_combined, query_dim)
+        assert M.dtype == torch.bool
+        assert M.shape == (*query_batch_shape, query_combined, query_dim)
         assert query_batch_shape == batch_shape
         assert query_combined == num_combined
         assert is_prefix_mask(mask_valid).all()  # at least one value per step
 
         if Y is not None:
             assert Y.shape == (*batch_shape, num_combined, query_dim)
-            assert torch.equal(Y.isfinite(), Q)
+            assert torch.equal(Y.isfinite(), M)
 
         context_filter = C.any(dim=-1)
-        query_filter = Q.any(dim=-1)
+        query_filter = M.any(dim=-1)
         for times, context, query in zip(
             T.reshape(-1, num_combined),
             context_filter.reshape(-1, num_combined),
@@ -488,9 +488,9 @@ class SplitTimeData:
     def _validate(self) -> None:
         T = self.context_times
         C = self.context_mask
+        X = self.context_values
         Q = self.query_times
         M = self.query_mask
-        X = self.context_values
 
         # check shapes
         *batch_shape, context_size, _ = X.shape
@@ -828,14 +828,13 @@ class JointTimeData:
         size: int,
         /,
     ) -> tuple[Tensor, ...]:
-        batch_shape = (
-            self.timestamps.shape[:-1]
-            if self.batch_first
-            else self.timestamps.shape[1:]
-        )
+        if self.batch_first:
+            *batch_shape, num_combined = self.timestamps.shape
+        else:
+            num_combined, *batch_shape = self.timestamps.shape
+
         device = self.timestamps.device
         seq_dim = -1 if self.batch_first else 0
-        num_combined = self.timestamps.shape[seq_dim]
 
         # The joint representation comes from a stable sort of context/query
         # steps, so stably sorting by `~valid` recovers the split order: all
@@ -849,10 +848,8 @@ class JointTimeData:
 
         keep = torch.arange(size, device=device)
         keep = (
-            keep < count[..., None]
-            if self.batch_first
-            else keep.reshape(size, *(1 for _ in batch_shape)) < count.unsqueeze(0)
-        )
+            keep if self.batch_first else keep.reshape(size, *(1 for _ in batch_shape))
+        ) < count.unsqueeze(seq_dim)
         # Build an integer advanced-index tensor with valid joint positions in
         # front and a single padded joint position filling the split tail.
         time_idx = torch.where(keep, valid_idx, pad_idx)
@@ -862,20 +859,20 @@ class JointTimeData:
             .reshape(
                 *(batch_size if j == i else 1 for j in range(len(batch_shape))),
             )
-            .unsqueeze(-1 if self.batch_first else 0)
+            .unsqueeze(seq_dim)
             for i, batch_size in enumerate(batch_shape)
         )
         return (*batch_idx, time_idx) if self.batch_first else (time_idx, *batch_idx)
 
     def _validate(self) -> None:
         T = self.timestamps
-        X = self.context_values
         C = self.context_mask
+        X = self.context_values
+        M = self.query_mask
         Y = self.target_values
-        Q = self.query_mask
 
         *batch_shape, num_combined, context_dim = X.shape
-        *query_batch_shape, query_combined, query_dim = Q.shape
+        *query_batch_shape, query_combined, query_dim = M.shape
         T_valid = T.isfinite()
         T_ascending = T.diff(dim=-1).ge(0.0)
         assert T.shape == (*batch_shape, num_combined)
@@ -885,21 +882,21 @@ class JointTimeData:
         assert C.dtype == torch.bool
         assert C.shape == (*batch_shape, num_combined, context_dim)
         assert torch.equal(X.isfinite(), C)
-        mask_valid = C.any(dim=-1) | Q.any(dim=-1)
+        mask_valid = C.any(dim=-1) | M.any(dim=-1)
 
         assert X.shape == (*batch_shape, num_combined, context_dim)
-        assert Q.dtype == torch.bool
-        assert Q.shape == (*query_batch_shape, query_combined, query_dim)
+        assert M.dtype == torch.bool
+        assert M.shape == (*query_batch_shape, query_combined, query_dim)
         assert query_batch_shape == batch_shape
         assert query_combined == num_combined
         assert is_prefix_mask(mask_valid).all()  # at least one value per step
 
         if Y is not None:
             assert Y.shape == (*batch_shape, num_combined, query_dim)
-            assert torch.equal(Y.isfinite(), Q)
+            assert torch.equal(Y.isfinite(), M)
 
         context_filter = C.any(dim=-1)
-        query_filter = Q.any(dim=-1)
+        query_filter = M.any(dim=-1)
         for times, context, query in zip(
             T.reshape(-1, num_combined),
             context_filter.reshape(-1, num_combined),
@@ -1050,8 +1047,8 @@ class JointTimeData:
 
     def unbatch(self) -> list[JointTimeData]:
         T = self.timestamps.unsqueeze(0).flatten(end_dim=-2)
-        X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
+        X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
         M = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
         lengths = T.isfinite().sum(dim=-1)
 
@@ -1089,10 +1086,10 @@ class JointTimeData:
 
     def to_split_time(self) -> SplitTimeData:
         T = self.timestamps
-        X = self.context_values
         C = self.context_mask
-        Y = self.target_values
+        X = self.context_values
         M = self.query_mask
+        Y = self.target_values
 
         # Gather the selected steps to the front of each batch item: a stable sort
         # of `~valid` keeps the selected steps (key False) in order ahead of the
