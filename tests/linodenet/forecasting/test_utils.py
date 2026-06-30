@@ -751,6 +751,23 @@ BATCHED_GENERAL_DATA: _TensorViewData = {
 }  # fmt: skip
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(UNBATCHED_SIMPLE_DATA, id="unbatched_simple"),
+        pytest.param(BATCHED_SIMPLE_DATA, id="batched_simple"),
+        pytest.param(UNBATCHED_GENERAL_DATA, id="unbatched_general"),
+        pytest.param(BATCHED_GENERAL_DATA, id="batched_general"),
+        pytest.param(UNBATCHED_SPARSE_DATA, id="unbatched_sparse"),
+        pytest.param(BATCHED_SPARSE_DATA, id="batched_sparse"),
+    ],
+)
+def test_initialization(case) -> None:
+    SplitTimeData(**case["split"])
+    JointTimeData(**case["joint"])
+    TripletTimeData(**case["triplet"])
+
+
 def _iter_batched_times(times: Tensor, /) -> tuple[Tensor, ...]:
     return tuple(times.reshape(-1, times.shape[-1]))
 
