@@ -29,47 +29,54 @@ def make_forecasting_request(
     batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
     output_shape = output_shape if output_shape is not None else context_shape
 
-    ctx_lengths = torch.randint(
+    ctx_lengths = torch.randint(  # (...)
         min_steps, max_steps + 1, size=batch_shape, generator=rng
     )
-    qry_lengths = torch.randint(
+    qry_lengths = torch.randint(  # (...)
         min_steps, max_steps + 1, size=batch_shape, generator=rng
     )
     ctx_size = int(ctx_lengths.max())
     qry_size = int(qry_lengths.max())
 
-    ctx_seq_shape = (*batch_shape, ctx_size)
-    qry_seq_shape = (*batch_shape, qry_size)
+    # sample values
+    ctx_values = torch.randn(*batch_shape, ctx_size, *context_shape, generator=rng)
+    tgt_values = torch.randn(*batch_shape, qry_size, *output_shape, generator=rng)
 
-    ctx_times = torch.sort(torch.rand(ctx_seq_shape, generator=rng), dim=-1).values
-    qry_times = torch.sort(torch.rand(qry_seq_shape, generator=rng), dim=-1).values
-    qry_times = qry_times + ctx_times[..., [-1]]
+    # sample time points
+    ctx_seq_shape = (*batch_shape, ctx_size, 1)  # padded with one
+    qry_seq_shape = (*batch_shape, qry_size, 1)
+    ctx_times = torch.sort(torch.rand(ctx_seq_shape, generator=rng), dim=-2).values
+    qry_times = torch.sort(torch.rand(qry_seq_shape, generator=rng), dim=-2).values
+    qry_times = qry_times + ctx_times[..., [-1], :]  # add last time point
 
-    ctx_values = torch.randn(*ctx_seq_shape, *context_shape, generator=rng)
-    tgt_values = torch.randn(*qry_seq_shape, *output_shape, generator=rng)
+    # create valid mask by broadcasting over sequence length.
+    ctx_valid = torch.arange(ctx_size) < ctx_lengths[..., None]  # (..., $N)
+    qry_valid = torch.arange(qry_size) < qry_lengths[..., None]  # (..., $K)
+    ctx_valid = ctx_valid.unsqueeze(-1)  # (..., $N, 1)
+    qry_valid = qry_valid.unsqueeze(-1)  # (..., $K, 1)
+    assert ctx_valid.shape == (*batch_shape, ctx_size, 1)
+    assert qry_valid.shape == (*batch_shape, qry_size, 1)
 
-    # mask by sequence length
-    ctx_valid = torch.arange(ctx_size) < ctx_lengths[..., None]
-    qry_valid = torch.arange(qry_size) < qry_lengths[..., None]
+    # mask time stamps and values.
     ctx_times = ctx_times.masked_fill(~ctx_valid, nan)
     qry_times = qry_times.masked_fill(~qry_valid, nan)
-    ctx_values = ctx_values.masked_fill(~ctx_valid[..., None], nan)
-    tgt_values = tgt_values.masked_fill(~qry_valid[..., None], nan)
+    ctx_values = ctx_values.masked_fill(~ctx_valid, nan)
+    tgt_values = tgt_values.masked_fill(~qry_valid, nan)
 
     # mask by feature missingness
     # sample one value per time stamp that is always observed
     ctx_safe = torch.randint(
-        0, math.prod(context_shape), size=(*ctx_seq_shape, 1), generator=rng
+        0, math.prod(context_shape), size=ctx_seq_shape, generator=rng
     )
     qry_safe = torch.randint(
-        0, math.prod(output_shape), size=(*qry_seq_shape, 1), generator=rng
+        0, math.prod(output_shape), size=qry_seq_shape, generator=rng
     )
-    ctx_mask = ctx_valid[..., None] & (
+    ctx_mask = ctx_valid & (
         torch.ones_like(ctx_values, dtype=torch.bool)
         if not input_missingness
         else torch.rand_like(ctx_values, generator=rng) > 0.5
     ).scatter(-1, ctx_safe, True)
-    qry_mask = qry_valid[..., None] & (
+    qry_mask = qry_valid & (
         torch.ones_like(tgt_values, dtype=torch.bool)
         if not target_missingness
         else torch.rand_like(tgt_values, generator=rng) > 0.5
@@ -77,23 +84,15 @@ def make_forecasting_request(
     ctx_values = ctx_values.masked_fill(~ctx_mask, nan)
     tgt_values = tgt_values.masked_fill(~qry_mask, nan)
 
-    if batch_first:
-        return SplitTimeData(
-            context_times=ctx_times.requires_grad_(),
-            context_mask=ctx_mask,
-            context_values=ctx_values.requires_grad_(),
-            query_times=qry_times.requires_grad_(),
-            query_mask=qry_mask,
-            target_values=tgt_values.requires_grad_(),
-        )
-
+    # normalize to batch_first, equip floats with grads and return
+    seq_dim = -2 if batch_first else 0
     return SplitTimeData(
-        context_times=ctx_times.swapaxes(-1, 0).requires_grad_(),
-        context_mask=ctx_mask.swapaxes(-2, 0),
-        context_values=ctx_values.swapaxes(-2, 0).requires_grad_(),
-        query_times=qry_times.swapaxes(-1, 0).requires_grad_(),
-        query_mask=qry_mask.swapaxes(-2, 0),
-        target_values=tgt_values.swapaxes(-2, 0).requires_grad_(),
+        context_times=ctx_times.movedim(-2, seq_dim).squeeze(-1).requires_grad_(),
+        context_mask=ctx_mask.movedim(-2, seq_dim),
+        context_values=ctx_values.movedim(-2, seq_dim).requires_grad_(),
+        query_times=qry_times.movedim(-2, seq_dim).squeeze(-1).requires_grad_(),
+        query_mask=qry_mask.movedim(-2, seq_dim),
+        target_values=tgt_values.movedim(-2, seq_dim).requires_grad_(),
     )
 
 
