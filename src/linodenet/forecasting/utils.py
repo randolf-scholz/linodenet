@@ -418,19 +418,29 @@ class SplitTimeData:
         )
 
     @classmethod
-    def from_joint_time(cls, arg: JointTimeData, /) -> SplitTimeData:
-        return arg.to_split_time()
+    def from_joint_time(
+        cls, arg: JointTimeData, /, *, validate: bool = False
+    ) -> SplitTimeData:
+        return arg.to_split_time(validate=validate)
 
     @classmethod
-    def from_triplets(cls, arg: TripletTimeData, /) -> SplitTimeData:
-        return arg.to_split_time()
+    def from_triplets(
+        cls, arg: TripletTimeData, /, *, validate: bool = False
+    ) -> SplitTimeData:
+        return arg.to_split_time(validate=validate)
 
     @classmethod
-    def from_unbatched(cls, args: Collection[SplitTimeData], /) -> SplitTimeData:
+    def from_unbatched(
+        cls, args: Collection[SplitTimeData], /, *, validate: bool = False
+    ) -> SplitTimeData:
         if not args:
             raise ValueError("Expected at least one DenseArg.")
 
+        if not all(arg.batch_first for arg in args):
+            raise NotImplementedError("Only batch_first=True is supported.")
+
         return cls(
+            validate=validate,
             context_times=pad_sequence(
                 [arg.context_times for arg in args],
                 batch_first=True,
@@ -469,7 +479,10 @@ class SplitTimeData:
             ),
         )
 
-    def unbatch(self) -> list[SplitTimeData]:
+    def unbatch(self, *, validate: bool = False) -> list[SplitTimeData]:
+        if not self.batch_first:
+            raise NotImplementedError
+
         T = self.context_times.unsqueeze(0).flatten(end_dim=-2)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
         X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
@@ -482,6 +495,7 @@ class SplitTimeData:
 
         return [
             SplitTimeData(
+                validate=validate,
                 context_times=c_time,
                 context_values=c_value,
                 context_mask=c_mask,
@@ -514,7 +528,7 @@ class SplitTimeData:
             )
         ]
 
-    def to_triplets(self) -> TripletTimeData:
+    def to_triplets(self, *, validate: bool = False) -> TripletTimeData:
         if not self.batch_first:
             raise NotImplementedError
 
@@ -544,6 +558,8 @@ class SplitTimeData:
         num_query = int(counts.max().item())
 
         return TripletTimeData(
+            batch_first=self.batch_first,
+            validate=validate,
             context_times=(
                 T.new_full((*batch_shape, num_context), nan).index_put(
                     context_indices, T[*ctx_batch_idx, ctx_time]
@@ -579,7 +595,7 @@ class SplitTimeData:
             static_covariates=self.static_covariates,
         )
 
-    def to_joint_time(self) -> JointTimeData:
+    def to_joint_time(self, *, validate: bool = False) -> JointTimeData:
         if not self.batch_first:
             raise NotImplementedError
 
@@ -599,6 +615,8 @@ class SplitTimeData:
         ).unsqueeze(-1)
 
         return JointTimeData(
+            batch_first=self.batch_first,
+            validate=validate,
             timestamps=times.take_along_dim(permutation.squeeze(-1), dim=-1),
             context_values=torch.cat(
                 [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
@@ -849,6 +867,7 @@ class JointTimeData:
         # query_idx = (*batch_idx, time_idx) if batch_first else (time_idx, *batch_idx)
 
         return JointTimeData(
+            batch_first=batch_first,
             validate=validate,
             timestamps=(
                 times.take_along_dim(permutation, dim=0).movedim(0, seq_dim).squeeze(-1)
@@ -876,23 +895,32 @@ class JointTimeData:
                 else None
             ),
             static_covariates=static_covariates,
-            batch_first=batch_first,
         )
 
     @classmethod
-    def from_split_time(cls, arg: SplitTimeData, /) -> JointTimeData:
-        return arg.to_joint_time()
+    def from_split_time(
+        cls, arg: SplitTimeData, /, *, validate: bool = False
+    ) -> JointTimeData:
+        return arg.to_joint_time(validate=validate)
 
     @classmethod
-    def from_triplets(cls, arg: TripletTimeData, /) -> JointTimeData:
-        return arg.to_joint_time()
+    def from_triplets(
+        cls, arg: TripletTimeData, /, *, validate: bool = False
+    ) -> JointTimeData:
+        return arg.to_joint_time(validate=validate)
 
     @classmethod
-    def from_unbatched(cls, args: Collection[JointTimeData], /) -> JointTimeData:
+    def from_unbatched(
+        cls, args: Collection[JointTimeData], /, *, validate: bool = False
+    ) -> JointTimeData:
         if not args:
             raise ValueError("Expected at least one CombinedArg.")
 
+        if not all(arg.batch_first for arg in args):
+            raise NotImplementedError("Only batch_first is supported.")
+
         return cls(
+            validate=validate,
             timestamps=pad_sequence(
                 [arg.timestamps for arg in args],
                 batch_first=True,
@@ -926,7 +954,10 @@ class JointTimeData:
             ),
         )
 
-    def unbatch(self) -> list[JointTimeData]:
+    def unbatch(self, *, validate: bool = False) -> list[JointTimeData]:
+        if not self.batch_first:
+            raise NotImplementedError
+
         T = self.timestamps.unsqueeze(0).flatten(end_dim=-2)
         C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
         X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
@@ -935,6 +966,7 @@ class JointTimeData:
 
         return [
             JointTimeData(
+                validate=validate,
                 timestamps=time,
                 context_values=c_value,
                 context_mask=c_mask,
@@ -965,7 +997,7 @@ class JointTimeData:
             )
         ]
 
-    def to_split_time(self) -> SplitTimeData:
+    def to_split_time(self, *, validate: bool = False) -> SplitTimeData:
         if not self.batch_first:
             raise NotImplementedError
 
@@ -993,6 +1025,8 @@ class JointTimeData:
         qry_keep = torch.arange(qry_size, device=T.device) < qry_count[..., None]
 
         return SplitTimeData(
+            batch_first=self.batch_first,
+            validate=validate,
             context_times=T.take_along_dim(ctx_perm, dim=-1).masked_fill(
                 ~ctx_keep, nan
             ),
@@ -1006,8 +1040,8 @@ class JointTimeData:
             static_covariates=self.static_covariates,
         )
 
-    def to_triplets(self) -> TripletTimeData:
-        return self.to_split_time().to_triplets()
+    def to_triplets(self, *, validate: bool = False) -> TripletTimeData:
+        return self.to_split_time(validate=validate).to_triplets(validate=validate)
 
 
 @dataclass(frozen=True)
@@ -1197,19 +1231,29 @@ class TripletTimeData:
         )
 
     @classmethod
-    def from_merged_timedata(cls, arg: JointTimeData, /) -> TripletTimeData:
-        return arg.to_triplets()
+    def from_merged_timedata(
+        cls, arg: JointTimeData, /, *, validate: bool = False
+    ) -> TripletTimeData:
+        return arg.to_triplets(validate=validate)
 
     @classmethod
-    def from_split_timedata(cls, arg: SplitTimeData, /) -> TripletTimeData:
-        return arg.to_triplets()
+    def from_split_timedata(
+        cls, arg: SplitTimeData, /, *, validate: bool = False
+    ) -> TripletTimeData:
+        return arg.to_triplets(validate=validate)
 
     @classmethod
-    def from_unbatched(cls, args: Collection[TripletTimeData], /) -> TripletTimeData:
+    def from_unbatched(
+        cls, args: Collection[TripletTimeData], /, *, validate: bool = False
+    ) -> TripletTimeData:
+        if not all(arg.batch_first for arg in args):
+            raise NotImplementedError("Only batch_first is supported.")
+
         if not args:
             raise ValueError("Expected at least one TripletArg.")
 
         return cls(
+            validate=validate,
             context_times=pad_sequence(
                 [arg.context_times for arg in args],
                 batch_first=True,
@@ -1248,7 +1292,7 @@ class TripletTimeData:
             ),
         )
 
-    def unbatch(self) -> list[TripletTimeData]:
+    def unbatch(self, *, validate: bool = False) -> list[TripletTimeData]:
         if not self.batch_first:
             raise NotImplementedError
 
@@ -1263,6 +1307,7 @@ class TripletTimeData:
 
         return [
             TripletTimeData(
+                validate=validate,
                 context_times=c_time,
                 context_channels=c_channel,
                 context_values=c_value,
@@ -1296,7 +1341,11 @@ class TripletTimeData:
         ]
 
     def to_split_time(
-        self, *, context_dim: int | None = None, query_dim: int | None = None
+        self,
+        *,
+        context_dim: int | None = None,
+        query_dim: int | None = None,
+        validate: bool = False,
     ) -> SplitTimeData:
         if not self.batch_first:
             raise NotImplementedError
@@ -1352,6 +1401,8 @@ class TripletTimeData:
         qry_channels = M_flat[qry_valid]
 
         return SplitTimeData(
+            batch_first=self.batch_first,
+            validate=validate,
             context_times=(
                 T_flat.new_full((num_batches, ctx_size), nan)
                 .index_put(ctx_indices, T_flat[ctx_valid])
@@ -1394,9 +1445,12 @@ class TripletTimeData:
         )
 
     def to_joint_time(
-        self, *, context_dim: int | None = None, query_dim: int | None = None
+        self,
+        *,
+        context_dim: int | None = None,
+        query_dim: int | None = None,
+        validate: bool = False,
     ) -> JointTimeData:
         return self.to_split_time(
-            context_dim=context_dim,
-            query_dim=query_dim,
-        ).to_joint_time()
+            context_dim=context_dim, query_dim=query_dim, validate=validate
+        ).to_joint_time(validate=validate)
