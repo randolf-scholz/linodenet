@@ -13,7 +13,7 @@ __all__ = [
 
 import math
 from collections.abc import Collection, Iterable
-from dataclasses import InitVar, dataclass
+from dataclasses import InitVar, dataclass, field
 from typing import NamedTuple
 
 import torch
@@ -309,21 +309,33 @@ class SplitTimeData:
         - there is at least one target value observed per time stamp
     """
 
-    context_times: Tensor  # Float[(..., N)], padded NaN, non-decreasing
-    context_values: Tensor  # Float[(..., N, D)], padded NaN, sparse
-    context_mask: Tensor  # Bool[(..., N, D)], padded False
+    context_times: Tensor  # Float[(..., $N)], padded NaN, non-decreasing
+    context_values: Tensor  # Float[(..., $N, D)], padded NaN, sparse
+    context_mask: Tensor  # Bool[(..., $N, D)], padded False
 
-    query_times: Tensor  # Float[(..., K)], padded NaN, strictly increasing
-    query_mask: Tensor  # Bool[(..., K, F)]  padded False
-    target_values: Tensor | None = None  # Float[(..., K, F)]  padded NaN, sparse
+    query_times: Tensor  # Float[(..., $K)], padded NaN, strictly increasing
+    query_mask: Tensor  # Bool[(..., $K, F)]  padded False
+    target_values: Tensor | None = None  # Float[(..., $K, F)]  padded NaN, sparse
     r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(..., M)]  padded NaN, sparse
     r"""Optional time-independent data."""
 
+    # metadata
     batch_first: bool = True
-    r"""Whether the batch axes come before or after the time axes.."""
+    r"""Whether the batch axes come before or after the time axes."""
+    batch_shape: tuple[int, ...] = field(init=False)
+    r"""The shape of the batch dimension."""
+    context_size: int = field(init=False)
+    r"""The maximum context size observed in the batch."""
+    query_size: int = field(init=False)
+    r"""The maximum query size observed in the batch."""
+    context_dim: int = field(init=False)
+    r"""The shape of the context dimension."""
+    query_dim: int = field(init=False)
+    r"""The shape of the query dimension."""
 
+    # init options
     validate_args: InitVar[bool] = True
     r"""Whether to validate the data."""
 
@@ -332,23 +344,35 @@ class SplitTimeData:
         if validate_args:
             self.validate()
 
-    @torch.no_grad()
     def _normalize(self) -> None:
-        # sanitize context_values
-        object.__setattr__(
-            self,
-            "context_values",
-            self.context_values.masked_fill_(~self.context_mask, nan),
+        seq_dim = -2 if self.batch_first else 0
+        batch_shape = (
+            self.context_times.shape[:-1]
+            if self.batch_first
+            else self.context_times.shape[1:]
         )
+        context_size = self.context_mask.shape[seq_dim]
+        query_size = self.query_mask.shape[seq_dim]
+        context_dim = self.context_mask.shape[-1]
+        query_dim = self.query_mask.shape[-1]
 
-        # sanitize target_values
-        object.__setattr__(
-            self,
-            "target_values",
-            self.target_values.masked_fill_(~self.query_mask, nan)
-            if self.target_values is not None
-            else None,
-        )
+        # sanitize context and target values
+        with torch.no_grad():
+            context_values = self.context_values.masked_fill_(~self.context_mask, nan)
+            target_values = (
+                self.target_values.masked_fill_(~self.query_mask, nan)
+                if self.target_values is not None
+                else None
+            )
+
+        # set metadata
+        object.__setattr__(self, "batch_shape", batch_shape)
+        object.__setattr__(self, "query_dim", query_dim)
+        object.__setattr__(self, "context_dim", context_dim)
+        object.__setattr__(self, "context_size", context_size)
+        object.__setattr__(self, "query_size", query_size)
+        object.__setattr__(self, "context_values", context_values)
+        object.__setattr__(self, "target_values", target_values)
 
     def validate(self) -> None:
         # normalize to batch_first for validation
@@ -668,12 +692,22 @@ class JointTimeData:
     query_mask: Tensor  # Bool[(..., $N + $K, E)], padded False
     target_values: Tensor | None = None  # Float[(..., $N + $K, E)], padded NaN, sparse
     r"""Only available during training, otherwise None."""
-
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
     r"""Optional time-independent data."""
 
+    # metadata
     batch_first: bool = True
-    r"""Whether the batch axes come before or after the time axes.."""
+    r"""Whether the batch axes come before or after the time axes."""
+    batch_shape: tuple[int, ...] = field(init=False)
+    r"""The shape of the batch dimension."""
+    context_size: int = -1
+    r"""The maximum context size observed in the batch."""
+    query_size: int = -1
+    r"""The maximum query size observed in the batch."""
+    context_dim: int = field(init=False)
+    r"""The shape of the context dimension."""
+    query_dim: int = field(init=False)
+    r"""The shape of the query dimension."""
 
     validate_args: InitVar[bool] = True
     r"""Whether to validate the arguments."""
@@ -683,38 +717,57 @@ class JointTimeData:
         seq_dim = -1 if self.batch_first else 0
         ctx_valid = self.context_mask.any(dim=-1)
         ctx_count = ctx_valid.sum(dim=seq_dim)
-        ctx_size = int(ctx_count.max().item())
-        return self._split_indices(ctx_valid, ctx_count, ctx_size)
+        return self._split_indices(ctx_valid, ctx_count, self.context_size)
 
     @property
     def query_indices(self) -> tuple[Tensor, ...]:
         seq_dim = -1 if self.batch_first else 0
         qry_valid = self.query_mask.any(dim=-1)
         qry_count = qry_valid.sum(dim=seq_dim)
-        qry_size = int(qry_count.max().item())
-        return self._split_indices(qry_valid, qry_count, qry_size)
+        return self._split_indices(qry_valid, qry_count, self.query_size)
 
     def __post_init__(self, validate_args: bool) -> None:
         self._normalize()
         if validate_args:
             self.validate()
 
-    @torch.no_grad()
     def _normalize(self) -> None:
-        # sanitize context_values
-        object.__setattr__(
-            self,
-            "context_values",
-            self.context_values.masked_fill_(~self.context_mask, nan),
+        seq_dim = -1 if self.batch_first else 0
+        batch_shape = (
+            self.timestamps.shape[:-1]
+            if self.batch_first
+            else self.timestamps.shape[1:]
         )
-        # sanitize target_values
-        object.__setattr__(
-            self,
-            "target_values",
-            self.target_values.masked_fill_(~self.query_mask, nan)
-            if self.target_values is not None
-            else None,
+        context_size = (
+            self.context_size
+            if self.context_size >= 0
+            else int(self.context_mask.any(dim=-1).sum(dim=seq_dim).max()) + 1
         )
+        query_size = (
+            self.query_size
+            if self.query_size >= 0
+            else int(self.query_mask.any(dim=-1).sum(dim=seq_dim).max()) + 1
+        )
+        context_dim = self.context_mask.shape[-1]
+        query_dim = self.query_mask.shape[-1]
+
+        # sanitize context and target values
+        with torch.no_grad():
+            context_values = self.context_values.masked_fill_(~self.context_mask, nan)
+            target_values = (
+                self.target_values.masked_fill_(~self.query_mask, nan)
+                if self.target_values is not None
+                else None
+            )
+
+        # set metadata
+        object.__setattr__(self, "batch_shape", batch_shape)
+        object.__setattr__(self, "query_dim", query_dim)
+        object.__setattr__(self, "context_dim", context_dim)
+        object.__setattr__(self, "context_size", context_size)
+        object.__setattr__(self, "query_size", query_size)
+        object.__setattr__(self, "context_values", context_values)
+        object.__setattr__(self, "target_values", target_values)
 
     def validate(self) -> None:
         # normalize to batch_first for validation
@@ -1070,32 +1123,74 @@ class TripletTimeData:
     static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
     r"""Optional time-independent data."""
 
+    # metadata
     batch_first: bool = True
-    r"""Whether the batch axes come before or after the time axes.."""
+    r"""Whether the batch axes come before or after the time axes."""
+    batch_shape: tuple[int, ...] = field(init=False)
+    r"""The shape of the batch dimension."""
+    context_size: int = -1
+    r"""The maximum context size observed in the batch."""
+    query_size: int = -1
+    r"""The maximum query size observed in the batch."""
+    context_dim: int = -1
+    r"""The shape of the context dimension."""
+    query_dim: int = -1
+    r"""The shape of the query dimension."""
 
     validate_args: InitVar[bool] = True
 
     def __post_init__(self, validate_args: bool) -> None:
         self._normalize()
+
         if validate_args:
             self.validate()
 
-    @torch.no_grad()
     def _normalize(self) -> None:
-        # sanitize context_values
-        object.__setattr__(
-            self,
-            "context_values",
-            self.context_values.masked_fill_(self.context_times.isnan(), nan),
+        batch_shape = (
+            self.context_channels.shape[:-1]
+            if self.batch_first
+            else self.context_channels.shape[1:]
         )
-        # sanitize target_values
-        object.__setattr__(
-            self,
-            "target_values",
-            self.target_values.masked_fill_(self.query_times.isnan(), nan)
-            if self.target_values is not None
-            else None,
+        context_size = (
+            self.context_size
+            if self.context_size >= 0
+            else self.context_times.shape[-1 if self.batch_first else 0]
         )
+        query_size = (
+            self.query_size
+            if self.query_size >= 0
+            else self.query_times.shape[-1 if self.batch_first else 0]
+        )
+        context_dim = (
+            self.context_dim
+            if self.context_dim >= 0
+            else int(self.context_channels.max().item()) + 1
+        )
+        query_dim = (
+            self.query_dim
+            if self.query_dim >= 0
+            else int(self.query_channels.max().item()) + 1
+        )
+
+        # sanitize context and target values
+        with torch.no_grad():
+            context_values = self.context_values.masked_fill_(
+                self.context_times.isnan(), nan
+            )
+            target_values = (
+                self.target_values.masked_fill_(self.query_times.isnan(), nan)
+                if self.target_values is not None
+                else None
+            )
+
+        # set metadata
+        object.__setattr__(self, "batch_shape", batch_shape)
+        object.__setattr__(self, "query_dim", query_dim)
+        object.__setattr__(self, "context_dim", context_dim)
+        object.__setattr__(self, "context_size", context_size)
+        object.__setattr__(self, "query_size", query_size)
+        object.__setattr__(self, "context_values", context_values)
+        object.__setattr__(self, "target_values", target_values)
 
     def validate(self) -> None:
         # normalize to batch_first for validation
@@ -1172,10 +1267,10 @@ class TripletTimeData:
     ) -> TripletTimeData:
         # normalize to batch_first for conversion
         seq_dim = -2 if batch_first else 0
-        context_times = context_times[..., None].movedim(seq_dim, -2).squeeze(-2)
+        context_times = context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
         context_mask = context_mask.movedim(seq_dim, -2)
         context_values = context_values.movedim(seq_dim, -2)
-        query_times = query_times[..., None].movedim(seq_dim, -2).squeeze(-2)
+        query_times = query_times[..., None].movedim(seq_dim, -2).squeeze(-1)
         query_mask = query_mask.movedim(seq_dim, -2)
         target_values = (
             target_values.movedim(seq_dim, -2) if target_values is not None else None
