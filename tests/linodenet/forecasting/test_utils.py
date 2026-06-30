@@ -602,6 +602,7 @@ class TestSplitTimeData:
             .expand(*query_times.shape, 2),
         )
         actual = original.to_triplets()
+        actual._validate()
 
         expected = TripletTimeData(
             context_times=torch.tensor([[[1.0, nan], [2.0, 2.0]]]),
@@ -1453,20 +1454,7 @@ class TestTripletTimeData:
             batch_first=False,
         )
         expected = req.to_triplets()
-
-        actual = TripletTimeData(
-            context_times=actual.context_times.movedim(0, -1),
-            context_channels=actual.context_channels.movedim(0, -1),
-            context_values=actual.context_values.movedim(0, -1),
-            query_times=actual.query_times.movedim(0, -1),
-            query_channels=actual.query_channels.movedim(0, -1),
-            target_values=(
-                actual.target_values.movedim(0, -1)
-                if actual.target_values is not None
-                else None
-            ),
-            static_covariates=actual.static_covariates,
-        )
+        expected._validate()
 
         assert actual == expected
 

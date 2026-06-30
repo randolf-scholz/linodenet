@@ -529,66 +529,71 @@ class SplitTimeData:
         ]
 
     def to_triplets(self, *, validate: bool = False) -> TripletTimeData:
-        if not self.batch_first:
-            raise NotImplementedError
+        seq_dim = -2 if self.batch_first else 0
+        T = self.context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
+        C = self.context_mask.movedim(seq_dim, -2)
+        X = self.context_values.movedim(seq_dim, -2)
+        Q = self.query_times[..., None].movedim(seq_dim, -2).squeeze(-1)
+        M = self.query_mask.movedim(seq_dim, -2)
+        Y = (
+            self.target_values.movedim(seq_dim, -2)
+            if self.target_values is not None
+            else None
+        )
 
-        T = self.context_times
-        C = self.context_mask
-        X = self.context_values
-        Q = self.query_times
-        M = self.query_mask
-        Y = self.target_values
-        batch_shape = X.shape[:-2]
+        *batch_shape, _, _ = X.shape
 
         # `nonzero` orders entries by batch, then time, then channel. Subtracting
         # the number of earlier valid entries in the same batch converts the global
         # nonzero order into a 0-based ragged position for that batch item.
-        *ctx_batch_idx, ctx_time, c_channel = C.nonzero(as_tuple=True)
+        *ctx_batch_idx, ctx_size, ctx_dim = C.nonzero(as_tuple=True)
         counts = C.sum(dim=(-2, -1))  # (...)
-        positions = torch.arange(ctx_time.numel(), device=ctx_time.device)
+        positions = torch.arange(ctx_size.numel(), device=ctx_size.device)
         offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts
-        context_indices = (*ctx_batch_idx, positions - offsets[*ctx_batch_idx])
+        ctx_idx = (*ctx_batch_idx, positions - offsets[*ctx_batch_idx])
         num_context = int(counts.max().item())
 
-        *q_batch_idx, q_time, q_channel = M.nonzero(as_tuple=True)
+        *qry_batch_idx, qry_size, qry_dim = M.nonzero(as_tuple=True)
         counts = M.sum(dim=(-2, -1))  # (...)
-        positions = torch.arange(q_time.numel(), device=q_time.device)
+        positions = torch.arange(qry_size.numel(), device=qry_size.device)
         offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts
-        query_indices = (*q_batch_idx, positions - offsets[*q_batch_idx])
+        qry_idx = (*qry_batch_idx, positions - offsets[*qry_batch_idx])
         num_query = int(counts.max().item())
 
+        # move the sequence dim to the target position
+        tgt_dim = -1 if self.batch_first else 0
         return TripletTimeData(
             batch_first=self.batch_first,
             validate=validate,
             context_times=(
-                T.new_full((*batch_shape, num_context), nan).index_put(
-                    context_indices, T[*ctx_batch_idx, ctx_time]
-                )
+                T.new_full((*batch_shape, num_context), nan)
+                .index_put(ctx_idx, T[*ctx_batch_idx, ctx_size])
+                .movedim(-1, tgt_dim)
             ),
             context_channels=(
-                c_channel.new_full((*batch_shape, num_context), -1).index_put(
-                    context_indices, c_channel
-                )
+                ctx_dim.new_full((*batch_shape, num_context), -1)
+                .index_put(ctx_idx, ctx_dim)
+                .movedim(-1, tgt_dim)
             ),
             context_values=(
-                X.new_full((*batch_shape, num_context), nan).index_put(
-                    context_indices, X[*ctx_batch_idx, ctx_time, c_channel]
-                )
+                X.new_full((*batch_shape, num_context), nan)
+                .index_put(ctx_idx, X[*ctx_batch_idx, ctx_size, ctx_dim])
+                .movedim(-1, tgt_dim)
             ),
             query_times=(
-                Q.new_full((*batch_shape, num_query), nan).index_put(
-                    query_indices, Q[*q_batch_idx, q_time]
-                )
+                Q.new_full((*batch_shape, num_query), nan)
+                .index_put(qry_idx, Q[*qry_batch_idx, qry_size])
+                .movedim(-1, tgt_dim)
             ),
             query_channels=(
-                q_channel.new_full((*batch_shape, num_query), -1).index_put(
-                    query_indices, q_channel
-                )
+                qry_dim.new_full((*batch_shape, num_query), -1)
+                .index_put(qry_idx, qry_dim)
+                .movedim(-1, tgt_dim)
             ),
             target_values=(
-                Y.new_full((*batch_shape, num_query), nan).index_put(
-                    query_indices, Y[*q_batch_idx, q_time, q_channel]
-                )
+                Y.new_full((*batch_shape, num_query), nan)
+                .index_put(qry_idx, Y[*qry_batch_idx, qry_size, qry_dim])
+                .movedim(-1, tgt_dim)
                 if Y is not None
                 else None
             ),
