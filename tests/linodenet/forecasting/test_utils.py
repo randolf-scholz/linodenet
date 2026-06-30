@@ -602,7 +602,7 @@ class TestSplitTimeData:
             .expand(*query_times.shape, 2),
         )
         actual = original.to_triplets()
-        actual._validate()
+        actual.validate()
 
         expected = TripletTimeData(
             context_times=torch.tensor([[[1.0, nan], [2.0, 2.0]]]),
@@ -1454,7 +1454,7 @@ class TestTripletTimeData:
             batch_first=False,
         )
         expected = req.to_triplets()
-        expected._validate()
+        expected.validate()
 
         assert actual == expected
 

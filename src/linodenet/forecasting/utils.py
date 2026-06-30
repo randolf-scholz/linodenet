@@ -324,13 +324,13 @@ class SplitTimeData:
     batch_first: bool = True
     r"""Whether the batch axes come before or after the time axes.."""
 
-    validate: InitVar[bool] = True
+    validate_args: InitVar[bool] = True
     r"""Whether to validate the data."""
 
-    def __post_init__(self, validate: bool) -> None:
+    def __post_init__(self, validate_args: bool) -> None:
         self._normalize()
-        if validate:
-            self._validate()
+        if validate_args:
+            self.validate()
 
     def _normalize(self) -> None:
         # sanitize context_values
@@ -349,7 +349,7 @@ class SplitTimeData:
             else None,
         )
 
-    def _validate(self) -> None:
+    def validate(self) -> None:
         # normalize to batch_first for validation
         seq_dim = -2 if self.batch_first else 0
         T = self.context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
@@ -440,7 +440,7 @@ class SplitTimeData:
             raise NotImplementedError("Only batch_first=True is supported.")
 
         return cls(
-            validate=validate,
+            validate_args=validate,
             context_times=pad_sequence(
                 [arg.context_times for arg in args],
                 batch_first=True,
@@ -495,7 +495,7 @@ class SplitTimeData:
 
         return [
             SplitTimeData(
-                validate=validate,
+                validate_args=validate,
                 context_times=c_time,
                 context_values=c_value,
                 context_mask=c_mask,
@@ -564,7 +564,7 @@ class SplitTimeData:
         tgt_dim = -1 if self.batch_first else 0
         return TripletTimeData(
             batch_first=self.batch_first,
-            validate=validate,
+            validate_args=validate,
             context_times=(
                 T.new_full((*batch_shape, num_context), nan)
                 .index_put(ctx_idx, T[*ctx_batch_idx, ctx_size])
@@ -621,7 +621,7 @@ class SplitTimeData:
 
         return JointTimeData(
             batch_first=self.batch_first,
-            validate=validate,
+            validate_args=validate,
             timestamps=times.take_along_dim(permutation.squeeze(-1), dim=-1),
             context_values=torch.cat(
                 [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
@@ -680,7 +680,7 @@ class JointTimeData:
     batch_first: bool = True
     r"""Whether the batch axes come before or after the time axes.."""
 
-    validate: InitVar[bool] = True
+    validate_args: InitVar[bool] = True
     r"""Optional time-independent data."""
 
     @property
@@ -699,10 +699,10 @@ class JointTimeData:
         qry_size = int(qry_count.max().item())
         return self._split_indices(qry_valid, qry_count, qry_size)
 
-    def __post_init__(self, validate: bool) -> None:
+    def __post_init__(self, validate_args: bool) -> None:
         self._normalize()
-        if validate:
-            self._validate()
+        if validate_args:
+            self.validate()
 
     def _normalize(self) -> None:
         # sanitize context_values
@@ -720,7 +720,7 @@ class JointTimeData:
             else None,
         )
 
-    def _validate(self) -> None:
+    def validate(self) -> None:
         # normalize to batch_first for validation
         seq_dim = -2 if self.batch_first else 0
         T = self.timestamps[..., None].movedim(seq_dim, -2).squeeze(-1)
@@ -873,7 +873,7 @@ class JointTimeData:
 
         return JointTimeData(
             batch_first=batch_first,
-            validate=validate,
+            validate_args=validate,
             timestamps=(
                 times.take_along_dim(permutation, dim=0).movedim(0, seq_dim).squeeze(-1)
             ),
@@ -925,7 +925,7 @@ class JointTimeData:
             raise NotImplementedError("Only batch_first is supported.")
 
         return cls(
-            validate=validate,
+            validate_args=validate,
             timestamps=pad_sequence(
                 [arg.timestamps for arg in args],
                 batch_first=True,
@@ -971,7 +971,7 @@ class JointTimeData:
 
         return [
             JointTimeData(
-                validate=validate,
+                validate_args=validate,
                 timestamps=time,
                 context_values=c_value,
                 context_mask=c_mask,
@@ -1031,7 +1031,7 @@ class JointTimeData:
 
         return SplitTimeData(
             batch_first=self.batch_first,
-            validate=validate,
+            validate_args=validate,
             context_times=T.take_along_dim(ctx_perm, dim=-1).masked_fill(
                 ~ctx_keep, nan
             ),
@@ -1083,13 +1083,13 @@ class TripletTimeData:
     batch_first: bool = True
     r"""Whether the batch axes come before or after the time axes.."""
 
-    validate: InitVar[bool] = True
+    validate_args: InitVar[bool] = True
 
-    def __post_init__(self, validate: bool) -> None:
-        if validate:
-            self._validate()
+    def __post_init__(self, validate_args: bool) -> None:
+        if validate_args:
+            self.validate()
 
-    def _validate(self) -> None:
+    def validate(self) -> None:
         # normalize to batch_first for validation
         seq_dim = -1 if self.batch_first else 0
         T = self.context_times.movedim(seq_dim, -1)
@@ -1195,7 +1195,7 @@ class TripletTimeData:
 
         return TripletTimeData(
             batch_first=batch_first,
-            validate=validate,
+            validate_args=validate,
             context_times=(
                 context_times.new_full((*batch_shape, num_context), nan)
                 .index_put(ctx_indices, context_times[*ctx_batch_idx, ctx_time])
@@ -1258,7 +1258,7 @@ class TripletTimeData:
             raise ValueError("Expected at least one TripletArg.")
 
         return cls(
-            validate=validate,
+            validate_args=validate,
             context_times=pad_sequence(
                 [arg.context_times for arg in args],
                 batch_first=True,
@@ -1312,7 +1312,7 @@ class TripletTimeData:
 
         return [
             TripletTimeData(
-                validate=validate,
+                validate_args=validate,
                 context_times=c_time,
                 context_channels=c_channel,
                 context_values=c_value,
@@ -1407,7 +1407,7 @@ class TripletTimeData:
 
         return SplitTimeData(
             batch_first=self.batch_first,
-            validate=validate,
+            validate_args=validate,
             context_times=(
                 T_flat.new_full((num_batches, ctx_size), nan)
                 .index_put(ctx_indices, T_flat[ctx_valid])
