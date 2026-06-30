@@ -1083,8 +1083,8 @@ class JointTimeData:
         return SplitTimeData(
             validate_args=False,  # skip validation since we trust the arguments
             batch_first=self.batch_first,
-            context_times=T.take_along_dim(ctx_perm, dim=-1).masked_fill(
-                ~ctx_keep, nan
+            context_times=(
+                T.take_along_dim(ctx_perm, dim=-1).masked_fill(~ctx_keep, nan)
             ),
             context_mask=C.take_along_dim(ctx_perm[..., None], dim=-2),
             context_values=X.take_along_dim(ctx_perm[..., None], dim=-2),
@@ -1285,22 +1285,22 @@ class TripletTimeData:
         )
 
         *batch_shape, _, _ = context_values.shape
-        *ctx_batch_idx, ctx_time, ctx_channel = context_mask.nonzero(as_tuple=True)
+        *ctx_batch_idx, ctx_time, ctx_dim = context_mask.nonzero(as_tuple=True)
         ctx_counts = context_mask.sum(dim=(-2, -1))
         ctx_positions = torch.arange(ctx_time.numel(), device=ctx_time.device)
         ctx_offsets = (
             ctx_counts.flatten().cumsum(dim=0).reshape(batch_shape) - ctx_counts
         )
-        ctx_indices = (*ctx_batch_idx, ctx_positions - ctx_offsets[*ctx_batch_idx])
+        ctx_idx = (*ctx_batch_idx, ctx_positions - ctx_offsets[*ctx_batch_idx])
         num_context = int(ctx_counts.max().item())
 
-        *qry_batch_idx, qry_time, qry_channel = query_mask.nonzero(as_tuple=True)
+        *qry_batch_idx, qry_time, qry_dim = query_mask.nonzero(as_tuple=True)
         qry_counts = query_mask.sum(dim=(-2, -1))
         qry_positions = torch.arange(qry_time.numel(), device=qry_time.device)
         qry_offsets = (
             qry_counts.flatten().cumsum(dim=0).reshape(batch_shape) - qry_counts
         )
-        qry_indices = (*qry_batch_idx, qry_positions - qry_offsets[*qry_batch_idx])
+        qry_idx = (*qry_batch_idx, qry_positions - qry_offsets[*qry_batch_idx])
         num_query = int(qry_counts.max().item())
 
         seq_dim = -1 if batch_first else 0
@@ -1309,36 +1309,32 @@ class TripletTimeData:
             validate_args=validate,
             context_times=(
                 context_times.new_full((*batch_shape, num_context), nan)
-                .index_put(ctx_indices, context_times[*ctx_batch_idx, ctx_time])
+                .index_put(ctx_idx, context_times[*ctx_batch_idx, ctx_time])
                 .movedim(-1, seq_dim)
             ),
             context_channels=(
-                ctx_channel.new_full((*batch_shape, num_context), -1)
-                .index_put(ctx_indices, ctx_channel)
+                ctx_dim.new_full((*batch_shape, num_context), -1)
+                .index_put(ctx_idx, ctx_dim)
                 .movedim(-1, seq_dim)
             ),
             context_values=(
                 context_values.new_full((*batch_shape, num_context), nan)
-                .index_put(
-                    ctx_indices, context_values[*ctx_batch_idx, ctx_time, ctx_channel]
-                )
+                .index_put(ctx_idx, context_values[*ctx_batch_idx, ctx_time, ctx_dim])
                 .movedim(-1, seq_dim)
             ),
             query_times=(
                 query_times.new_full((*batch_shape, num_query), nan)
-                .index_put(qry_indices, query_times[*qry_batch_idx, qry_time])
+                .index_put(qry_idx, query_times[*qry_batch_idx, qry_time])
                 .movedim(-1, seq_dim)
             ),
             query_channels=(
-                qry_channel.new_full((*batch_shape, num_query), -1)
-                .index_put(qry_indices, qry_channel)
+                qry_dim.new_full((*batch_shape, num_query), -1)
+                .index_put(qry_idx, qry_dim)
                 .movedim(-1, seq_dim)
             ),
             target_values=(
                 target_values.new_full((*batch_shape, num_query), nan)
-                .index_put(
-                    qry_indices, target_values[*qry_batch_idx, qry_time, qry_channel]
-                )
+                .index_put(qry_idx, target_values[*qry_batch_idx, qry_time, qry_dim])
                 .movedim(-1, seq_dim)
                 if target_values is not None
                 else None
@@ -1488,28 +1484,28 @@ class TripletTimeData:
         Y_flat = Y.reshape(-1, num_query) if Y is not None else None
 
         # Map context triplets to dense row indices by grouping consecutive times.
-        ctx_valid = C_flat.ge(0)
-        ctx_inverse, ctx_lengths = _consecutive_group_indices(T_flat, ctx_valid)
+        ctx_steps = C_flat.ge(0)
+        ctx_inverse, ctx_lengths = _consecutive_group_indices(T_flat, ctx_steps)
         ctx_size = int(ctx_lengths.max().item())
         ctx_batch = (
             torch.arange(num_batches, device=T.device)
             .unsqueeze(-1)
-            .expand_as(ctx_valid)
+            .expand_as(ctx_steps)
         )
-        ctx_indices = (ctx_batch[ctx_valid], ctx_inverse[ctx_valid])
-        ctx_channels = C_flat[ctx_valid]
+        ctx_indices = (ctx_batch[ctx_steps], ctx_inverse[ctx_steps])
+        ctx_channels = C_flat[ctx_steps]
 
         # Map query triplets to dense row indices by grouping consecutive times.
-        qry_valid = M_flat.ge(0)
-        qry_inverse, qry_lengths = _consecutive_group_indices(Q_flat, qry_valid)
+        qry_steps = M_flat.ge(0)
+        qry_inverse, qry_lengths = _consecutive_group_indices(Q_flat, qry_steps)
         qry_size = int(qry_lengths.max().item())
         qry_batch = (
             torch.arange(num_batches, device=Q.device)
             .unsqueeze(-1)
-            .expand_as(qry_valid)
+            .expand_as(qry_steps)
         )
-        qry_indices = (qry_batch[qry_valid], qry_inverse[qry_valid])
-        qry_channels = M_flat[qry_valid]
+        qry_indices = (qry_batch[qry_steps], qry_inverse[qry_steps])
+        qry_channels = M_flat[qry_steps]
 
         seq_dim = -2 if self.batch_first else 0
         return SplitTimeData(
@@ -1517,14 +1513,14 @@ class TripletTimeData:
             batch_first=self.batch_first,
             context_times=(
                 T_flat.new_full((num_batches, ctx_size), nan)
-                .index_put(ctx_indices, T_flat[ctx_valid])
+                .index_put(ctx_indices, T_flat[ctx_steps])
                 .reshape(*batch_shape, ctx_size, 1)
                 .movedim(seq_dim, -2)
                 .squeeze(-1)
             ),
             context_values=(
                 X_flat.new_full((num_batches, ctx_size, ctx_dim), nan)
-                .index_put((*ctx_indices, ctx_channels), X_flat[ctx_valid])
+                .index_put((*ctx_indices, ctx_channels), X_flat[ctx_steps])
                 .reshape(*batch_shape, ctx_size, ctx_dim)
                 .movedim(seq_dim, -2)
             ),
@@ -1539,7 +1535,7 @@ class TripletTimeData:
             ),
             query_times=(
                 Q_flat.new_full((num_batches, qry_size), nan)
-                .index_put(qry_indices, Q_flat[qry_valid])
+                .index_put(qry_indices, Q_flat[qry_steps])
                 .reshape(*batch_shape, qry_size, 1)
                 .movedim(seq_dim, -2)
                 .squeeze(-1)
@@ -1555,7 +1551,7 @@ class TripletTimeData:
             ),
             target_values=(
                 Y_flat.new_full((num_batches, qry_size, qry_dim), nan)
-                .index_put((*qry_indices, qry_channels), Y_flat[qry_valid])
+                .index_put((*qry_indices, qry_channels), Y_flat[qry_steps])
                 .reshape(*batch_shape, qry_size, qry_dim)
                 .movedim(seq_dim, -2)
                 if Y_flat is not None
