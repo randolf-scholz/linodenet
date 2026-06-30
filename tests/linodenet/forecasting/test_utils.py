@@ -17,8 +17,6 @@ from linodenet.forecasting.utils import (
 
 from .base import make_forecasting_request
 
-ROUNDTRIP_BATCH_SHAPES = [(), (6,), (1, 2, 3)]
-
 
 class _CanonicalTestData(TypedDict):
     split: SplitTimeData
@@ -74,7 +72,6 @@ UNBATCHED_TEST_DATA: _CanonicalTestData = {
         static_covariates=torch.tensor([5.0, 6.0]),
     ),
 }  # fmt: skip
-
 BATCHED_TEST_DATA: _CanonicalTestData = {
     "split": SplitTimeData(
         context_times=torch.tensor([
@@ -183,10 +180,6 @@ BATCHED_TEST_DATA: _CanonicalTestData = {
     ),
 }  # fmt: skip
 
-type _TensorFields = dict[str, Tensor]
-type _TensorViewData = dict[Literal["split", "joint", "triplet"], _TensorFields]
-
-
 UNBATCHED_SIMPLE_DATA: _TensorViewData = {
     "split": {
         "context_times": torch.tensor([1.0, 3.0]),
@@ -233,6 +226,150 @@ UNBATCHED_SIMPLE_DATA: _TensorViewData = {
         "query_channels": torch.tensor([0, 2, 0, 1, 2]),
         "target_values": torch.tensor([20.0, 22.0, 40.0, 41.0, 42.0]),
         "static_covariates": torch.tensor([5.0, 6.0]),
+    },
+}  # fmt: skip
+UNBATCHED_SPARSE_DATA: _TensorViewData = {
+    "split": {
+        "context_times": torch.tensor([1.0, 1.0, 3.0]),
+        "context_values": torch.tensor([
+            [10.0, nan, nan],
+            [nan, nan, 12.0],
+            [nan, 30.0, nan],
+        ]),
+        "context_mask": torch.tensor([
+            [True, False, False],
+            [False, False, True],
+            [False, True, False],
+        ]),
+        "query_times": torch.tensor([2.0, 4.0, 4.0]),
+        "query_mask": torch.tensor([
+            [True, False, False],
+            [False, True, False],
+            [False, False, True],
+        ]),
+        "target_values": torch.tensor([
+            [20.0, nan, nan],
+            [nan, 41.0, nan],
+            [nan, nan, 42.0],
+        ]),
+        "static_covariates": torch.tensor([7.0, 8.0]),
+    },
+    "joint": {
+        "timestamps": torch.tensor([1.0, 1.0, 2.0, 3.0, 4.0, 4.0]),
+        "context_values": torch.tensor([
+            [10.0, nan, nan],
+            [nan, nan, 12.0],
+            [nan, nan, nan],
+            [nan, 30.0, nan],
+            [nan, nan, nan],
+            [nan, nan, nan],
+        ]),
+        "context_mask": torch.tensor([
+            [True, False, False],
+            [False, False, True],
+            [False, False, False],
+            [False, True, False],
+            [False, False, False],
+            [False, False, False],
+        ]),
+        "query_mask": torch.tensor([
+            [False, False, False],
+            [False, False, False],
+            [True, False, False],
+            [False, False, False],
+            [False, True, False],
+            [False, False, True],
+        ]),
+        "target_values": torch.tensor([
+            [nan, nan, nan],
+            [nan, nan, nan],
+            [20.0, nan, nan],
+            [nan, nan, nan],
+            [nan, 41.0, nan],
+            [nan, nan, 42.0],
+        ]),
+        "static_covariates": torch.tensor([7.0, 8.0]),
+    },
+    "triplet": {
+        "context_times": torch.tensor([1.0, 1.0, 3.0]),
+        "context_channels": torch.tensor([0, 2, 1]),
+        "context_values": torch.tensor([10.0, 12.0, 30.0]),
+        "query_times": torch.tensor([2.0, 4.0, 4.0]),
+        "query_channels": torch.tensor([0, 1, 2]),
+        "target_values": torch.tensor([20.0, 41.0, 42.0]),
+        "static_covariates": torch.tensor([7.0, 8.0]),
+    },
+}  # fmt: skip
+UNBATCHED_GENERAL_DATA: _TensorViewData = {
+    "split": {
+        "context_times": torch.tensor([1.0, 1.0, 2.0]),
+        "context_values": torch.tensor([
+            [10.0, nan, nan],
+            [11.0, 12.0, nan],
+            [nan, 20.0, 21.0],
+        ]),
+        "context_mask": torch.tensor([
+            [True, False, False],
+            [True, True, False],
+            [False, True, True],
+        ]),
+        "query_times": torch.tensor([3.0, 3.0, 4.0]),
+        "query_mask": torch.tensor([
+            [True, False, False],
+            [True, True, False],
+            [False, False, True],
+        ]),
+        "target_values": torch.tensor([
+            [30.0, nan, nan],
+            [31.0, 32.0, nan],
+            [nan, nan, 40.0],
+        ]),
+        "static_covariates": torch.tensor([9.0, 10.0]),
+    },
+    "joint": {
+        "timestamps": torch.tensor([1.0, 1.0, 2.0, 3.0, 3.0, 4.0]),
+        "context_values": torch.tensor([
+            [10.0, nan, nan],
+            [11.0, 12.0, nan],
+            [nan, 20.0, 21.0],
+            [nan, nan, nan],
+            [nan, nan, nan],
+            [nan, nan, nan],
+        ]),
+        "context_mask": torch.tensor([
+            [True, False, False],
+            [True, True, False],
+            [False, True, True],
+            [False, False, False],
+            [False, False, False],
+            [False, False, False],
+        ]),
+        "query_mask": torch.tensor([
+            [False, False, False],
+            [False, False, False],
+            [False, False, False],
+            [True, False, False],
+            [True, True, False],
+            [False, False, True],
+        ]),
+        "target_values": torch.tensor([
+            [nan, nan, nan],
+            [nan, nan, nan],
+            [nan, nan, nan],
+            [30.0, nan, nan],
+            [31.0, 32.0, nan],
+            [nan, nan, 40.0],
+        ]),
+        "static_covariates": torch.tensor([9.0, 10.0]),
+    },
+    "triplet": {
+        "context_times": torch.tensor([1.0, 1.0, 1.0, 2.0, 2.0]),
+        "context_channels": torch.tensor([0, 0, 1, 1, 2]),
+        "context_values": torch.tensor([10.0, 11.0, 12.0, 20.0, 21.0]),
+        "query_times": torch.tensor([3.0, 3.0, 3.0, 4.0]),
+        "query_channels": torch.tensor([0, 0, 1, 2]),
+        "target_values": torch.tensor([30.0, 31.0, 32.0, 40.0]),
+        "static_covariates": torch.tensor([9.0, 10.0]),
     },
 }  # fmt: skip
 
@@ -337,80 +474,6 @@ BATCHED_SIMPLE_DATA: _TensorViewData = {
         ]),
     },
 }  # fmt: skip
-
-UNBATCHED_SPARSE_DATA: _TensorViewData = {
-    "split": {
-        "context_times": torch.tensor([1.0, 1.0, 3.0]),
-        "context_values": torch.tensor([
-            [10.0, nan, nan],
-            [nan, nan, 12.0],
-            [nan, 30.0, nan],
-        ]),
-        "context_mask": torch.tensor([
-            [True, False, False],
-            [False, False, True],
-            [False, True, False],
-        ]),
-        "query_times": torch.tensor([2.0, 4.0, 4.0]),
-        "query_mask": torch.tensor([
-            [True, False, False],
-            [False, True, False],
-            [False, False, True],
-        ]),
-        "target_values": torch.tensor([
-            [20.0, nan, nan],
-            [nan, 41.0, nan],
-            [nan, nan, 42.0],
-        ]),
-        "static_covariates": torch.tensor([7.0, 8.0]),
-    },
-    "joint": {
-        "timestamps": torch.tensor([1.0, 1.0, 2.0, 3.0, 4.0, 4.0]),
-        "context_values": torch.tensor([
-            [10.0, nan, nan],
-            [nan, nan, 12.0],
-            [nan, nan, nan],
-            [nan, 30.0, nan],
-            [nan, nan, nan],
-            [nan, nan, nan],
-        ]),
-        "context_mask": torch.tensor([
-            [True, False, False],
-            [False, False, True],
-            [False, False, False],
-            [False, True, False],
-            [False, False, False],
-            [False, False, False],
-        ]),
-        "query_mask": torch.tensor([
-            [False, False, False],
-            [False, False, False],
-            [True, False, False],
-            [False, False, False],
-            [False, True, False],
-            [False, False, True],
-        ]),
-        "target_values": torch.tensor([
-            [nan, nan, nan],
-            [nan, nan, nan],
-            [20.0, nan, nan],
-            [nan, nan, nan],
-            [nan, 41.0, nan],
-            [nan, nan, 42.0],
-        ]),
-        "static_covariates": torch.tensor([7.0, 8.0]),
-    },
-    "triplet": {
-        "context_times": torch.tensor([1.0, 1.0, 3.0]),
-        "context_channels": torch.tensor([0, 2, 1]),
-        "context_values": torch.tensor([10.0, 12.0, 30.0]),
-        "query_times": torch.tensor([2.0, 4.0, 4.0]),
-        "query_channels": torch.tensor([0, 1, 2]),
-        "target_values": torch.tensor([20.0, 41.0, 42.0]),
-        "static_covariates": torch.tensor([7.0, 8.0]),
-    },
-}  # fmt: skip
-
 BATCHED_SPARSE_DATA: _TensorViewData = {
     "split": {
         "context_times": torch.tensor([
@@ -543,80 +606,6 @@ BATCHED_SPARSE_DATA: _TensorViewData = {
         ]),
     },
 }  # fmt: skip
-
-UNBATCHED_GENERAL_DATA: _TensorViewData = {
-    "split": {
-        "context_times": torch.tensor([1.0, 1.0, 2.0]),
-        "context_values": torch.tensor([
-            [10.0, nan, nan],
-            [11.0, 12.0, nan],
-            [nan, 20.0, 21.0],
-        ]),
-        "context_mask": torch.tensor([
-            [True, False, False],
-            [True, True, False],
-            [False, True, True],
-        ]),
-        "query_times": torch.tensor([3.0, 3.0, 4.0]),
-        "query_mask": torch.tensor([
-            [True, False, False],
-            [True, True, False],
-            [False, False, True],
-        ]),
-        "target_values": torch.tensor([
-            [30.0, nan, nan],
-            [31.0, 32.0, nan],
-            [nan, nan, 40.0],
-        ]),
-        "static_covariates": torch.tensor([9.0, 10.0]),
-    },
-    "joint": {
-        "timestamps": torch.tensor([1.0, 1.0, 2.0, 3.0, 3.0, 4.0]),
-        "context_values": torch.tensor([
-            [10.0, nan, nan],
-            [11.0, 12.0, nan],
-            [nan, 20.0, 21.0],
-            [nan, nan, nan],
-            [nan, nan, nan],
-            [nan, nan, nan],
-        ]),
-        "context_mask": torch.tensor([
-            [True, False, False],
-            [True, True, False],
-            [False, True, True],
-            [False, False, False],
-            [False, False, False],
-            [False, False, False],
-        ]),
-        "query_mask": torch.tensor([
-            [False, False, False],
-            [False, False, False],
-            [False, False, False],
-            [True, False, False],
-            [True, True, False],
-            [False, False, True],
-        ]),
-        "target_values": torch.tensor([
-            [nan, nan, nan],
-            [nan, nan, nan],
-            [nan, nan, nan],
-            [30.0, nan, nan],
-            [31.0, 32.0, nan],
-            [nan, nan, 40.0],
-        ]),
-        "static_covariates": torch.tensor([9.0, 10.0]),
-    },
-    "triplet": {
-        "context_times": torch.tensor([1.0, 1.0, 1.0, 2.0, 2.0]),
-        "context_channels": torch.tensor([0, 0, 1, 1, 2]),
-        "context_values": torch.tensor([10.0, 11.0, 12.0, 20.0, 21.0]),
-        "query_times": torch.tensor([3.0, 3.0, 3.0, 4.0]),
-        "query_channels": torch.tensor([0, 0, 1, 2]),
-        "target_values": torch.tensor([30.0, 31.0, 32.0, 40.0]),
-        "static_covariates": torch.tensor([9.0, 10.0]),
-    },
-}  # fmt: skip
-
 BATCHED_GENERAL_DATA: _TensorViewData = {
     "split": {
         "context_times": torch.tensor([
@@ -750,39 +739,61 @@ BATCHED_GENERAL_DATA: _TensorViewData = {
     },
 }  # fmt: skip
 
+MULTI_BATCHED_SIMPLE_DATA: _TensorViewData = {}
+MULTI_BATCHED_SPARSE_DATA: _TensorViewData = {}
+MULTI_BATCHED_GENERAL_DATA: _TensorViewData = {}
 
-@pytest.mark.parametrize(
-    "case",
-    [
-        pytest.param(UNBATCHED_SIMPLE_DATA, id="unbatched_simple"),
-        pytest.param(BATCHED_SIMPLE_DATA, id="batched_simple"),
-        pytest.param(UNBATCHED_GENERAL_DATA, id="unbatched_general"),
-        pytest.param(BATCHED_GENERAL_DATA, id="batched_general"),
-        pytest.param(UNBATCHED_SPARSE_DATA, id="unbatched_sparse"),
-        pytest.param(BATCHED_SPARSE_DATA, id="batched_sparse"),
-    ],
-)
+type _TensorViewData = dict[DataFormat, dict[str, Tensor]]
+type BatchType = Literal["unbatched", "single", "multi"]
+type DataType = Literal["simple", "sparse", "general"]
+type DataFormat = Literal["split", "joint", "triplet"]
+
+ROUNDTRIP_BATCH_SHAPES = [(), (6,), (1, 2, 3)]
+
+BATCH_SHAPES: dict[BatchType, tuple[int, ...]] = {
+    "unbatched": (),
+    "single": (6,),
+    "multi": (1, 2, 3),
+}
+
+RAW_TEST_DATA: dict[tuple[BatchType, DataType], _TensorViewData] = {
+    ("single", "general"): BATCHED_GENERAL_DATA,
+    ("single", "simple"): BATCHED_SIMPLE_DATA,
+    ("single", "sparse"): BATCHED_SPARSE_DATA,
+    ("unbatched", "general"): UNBATCHED_GENERAL_DATA,
+    ("unbatched", "simple"): UNBATCHED_SIMPLE_DATA,
+    ("unbatched", "sparse"): UNBATCHED_SPARSE_DATA,
+    ("multi", "general"): MULTI_BATCHED_GENERAL_DATA,
+    ("multi", "simple"): MULTI_BATCHED_SIMPLE_DATA,
+    ("multi", "sparse"): MULTI_BATCHED_SPARSE_DATA,
+}
+
+
+def get_test_case(
+    data_type: DataType,
+    data_format: DataFormat,
+    batch_type: BatchType,
+    batch_first: bool,
+) -> dict[str, Tensor]:
+    raw_data = RAW_TEST_DATA[(batch_type, data_type)]
+
+    match data_format:
+        case "split":
+            pass
+        case "joint":
+            pass
+        case "triplet":
+            pass
+        case _:
+            raise ValueError(f"Invalid kind: {data_format}")
+
+
+@pytest.mark.parametrize("case", RAW_TEST_DATA)
 def test_initialization(case) -> None:
-    SplitTimeData(**case["split"])
-    JointTimeData(**case["joint"])
-    TripletTimeData(**case["triplet"])
-
-
-def _iter_batched_times(times: Tensor, /) -> tuple[Tensor, ...]:
-    return tuple(times.reshape(-1, times.shape[-1]))
-
-
-def _iter_batched_masks(mask: Tensor, /) -> tuple[Tensor, ...]:
-    return tuple(mask.reshape(-1, mask.shape[-2], mask.shape[-1]))
-
-
-def _has_duplicate_time_channel_pair(times: Tensor, channels: Tensor, /) -> bool:
-    valid = times.isfinite() & channels.ge(0)
-    if not valid.any():
-        return False
-
-    pairs = torch.stack([times[valid], channels[valid].to(times.dtype)], dim=-1)
-    return len(torch.unique(pairs, dim=0)) < len(pairs)
+    data = RAW_TEST_DATA[case]
+    SplitTimeData(**data["split"])
+    JointTimeData(**data["joint"])
+    TripletTimeData(**data["triplet"])
 
 
 def _make_random_batched_triplet(batch_shape: tuple[int, ...], /) -> TripletTimeData:
@@ -869,6 +880,15 @@ def _make_random_batched_triplet(batch_shape: tuple[int, ...], /) -> TripletTime
 
 
 class TestModuleTestData:
+    @staticmethod
+    def _has_duplicate_time_channel_pair(times: Tensor, channels: Tensor, /) -> bool:
+        valid = times.isfinite() & channels.ge(0)
+        if not valid.any():
+            return False
+
+        pairs = torch.stack([times[valid], channels[valid].to(times.dtype)], dim=-1)
+        return len(torch.unique(pairs, dim=0)) < len(pairs)
+
     @pytest.mark.parametrize(
         "data",
         [UNBATCHED_SIMPLE_DATA, BATCHED_SIMPLE_DATA],
@@ -878,10 +898,12 @@ class TestModuleTestData:
         data: _TensorViewData,
     ) -> None:
         split = data["split"]
-        for times in _iter_batched_times(split["context_times"]):
+
+        for times in split["context_times"].unsqueeze(0).flatten(end_dim=-2):
             valid = times[times.isfinite()]
             assert valid.diff().gt(0.0).all()
-        for times in _iter_batched_times(split["query_times"]):
+
+        for times in split["query_times"].unsqueeze(0).flatten(end_dim=-2):
             valid = times[times.isfinite()]
             assert valid.diff().gt(0.0).all()
 
@@ -894,17 +916,19 @@ class TestModuleTestData:
         data: _TensorViewData,
     ) -> None:
         split = data["split"]
+
         for times, mask in zip(
-            _iter_batched_times(split["context_times"]),
-            _iter_batched_masks(split["context_mask"]),
+            split["context_times"].unsqueeze(0).flatten(end_dim=-2),
+            split["context_mask"].unsqueeze(0).flatten(end_dim=-3),
             strict=True,
         ):
             valid = times.isfinite()
             counts = mask.sum(dim=-1)
             assert torch.equal(counts[valid], torch.ones_like(counts[valid]))
+
         for times, mask in zip(
-            _iter_batched_times(split["query_times"]),
-            _iter_batched_masks(split["query_mask"]),
+            split["query_times"].unsqueeze(0).flatten(end_dim=-2),
+            split["query_mask"].unsqueeze(0).flatten(end_dim=-3),
             strict=True,
         ):
             valid = times.isfinite()
@@ -920,18 +944,20 @@ class TestModuleTestData:
         data: _TensorViewData,
     ) -> None:
         triplet = data["triplet"]
+
         for times, channels in zip(
-            _iter_batched_times(triplet["context_times"]),
-            _iter_batched_times(triplet["context_channels"]),
+            triplet["context_times"].unsqueeze(0).flatten(end_dim=-2),
+            triplet["context_channels"].unsqueeze(0).flatten(end_dim=-2),
             strict=True,
         ):
-            assert _has_duplicate_time_channel_pair(times, channels)
+            assert self._has_duplicate_time_channel_pair(times, channels)
+
         for times, channels in zip(
-            _iter_batched_times(triplet["query_times"]),
-            _iter_batched_times(triplet["query_channels"]),
+            triplet["query_times"].unsqueeze(0).flatten(end_dim=-2),
+            triplet["query_channels"].unsqueeze(0).flatten(end_dim=-2),
             strict=True,
         ):
-            assert _has_duplicate_time_channel_pair(times, channels)
+            assert self._has_duplicate_time_channel_pair(times, channels)
 
 
 class TestSplitTimeData:
