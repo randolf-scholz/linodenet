@@ -332,19 +332,20 @@ class SplitTimeData:
         if validate_args:
             self.validate()
 
+    @torch.no_grad()
     def _normalize(self) -> None:
         # sanitize context_values
         object.__setattr__(
             self,
             "context_values",
-            self.context_values.masked_fill(~self.context_mask, nan),
+            self.context_values.masked_fill_(~self.context_mask, nan),
         )
 
         # sanitize target_values
         object.__setattr__(
             self,
             "target_values",
-            self.target_values.masked_fill(~self.query_mask, nan)
+            self.target_values.masked_fill_(~self.query_mask, nan)
             if self.target_values is not None
             else None,
         )
@@ -670,12 +671,13 @@ class JointTimeData:
     r"""Only available during training, otherwise None."""
 
     static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
+    r"""Optional time-independent data."""
 
     batch_first: bool = True
     r"""Whether the batch axes come before or after the time axes.."""
 
     validate_args: InitVar[bool] = True
-    r"""Optional time-independent data."""
+    r"""Whether to validate the arguments."""
 
     @property
     def context_indices(self) -> tuple[Tensor, ...]:
@@ -698,18 +700,19 @@ class JointTimeData:
         if validate_args:
             self.validate()
 
+    @torch.no_grad()
     def _normalize(self) -> None:
         # sanitize context_values
         object.__setattr__(
             self,
             "context_values",
-            self.context_values.masked_fill(~self.context_mask, nan),
+            self.context_values.masked_fill_(~self.context_mask, nan),
         )
         # sanitize target_values
         object.__setattr__(
             self,
             "target_values",
-            self.target_values.masked_fill(~self.query_mask, nan)
+            self.target_values.masked_fill_(~self.query_mask, nan)
             if self.target_values is not None
             else None,
         )
@@ -831,7 +834,7 @@ class JointTimeData:
         static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
         # extra args
         batch_first: bool = True,
-        validate: bool = True,
+        validate: bool = False,
     ) -> JointTimeData:
         # normalize to batch_last for construction
         seq_dim = -2 if batch_first else 0
@@ -1074,8 +1077,26 @@ class TripletTimeData:
     validate_args: InitVar[bool] = True
 
     def __post_init__(self, validate_args: bool) -> None:
+        self._normalize()
         if validate_args:
             self.validate()
+
+    @torch.no_grad()
+    def _normalize(self) -> None:
+        # sanitize context_values
+        object.__setattr__(
+            self,
+            "context_values",
+            self.context_values.masked_fill_(self.context_times.isnan(), nan),
+        )
+        # sanitize target_values
+        object.__setattr__(
+            self,
+            "target_values",
+            self.target_values.masked_fill_(self.query_times.isnan(), nan)
+            if self.target_values is not None
+            else None,
+        )
 
     def validate(self) -> None:
         # normalize to batch_first for validation

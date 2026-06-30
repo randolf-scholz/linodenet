@@ -511,8 +511,12 @@ class TestForecastingModel[M: nn.Module](ABC):
             output_shape=output_shape,
             input_missingness=input_missingness,
         )
-        context_values = data.context_values
+        assert data.context_times.requires_grad
+        assert data.context_values.requires_grad
         assert data.target_values is not None
+
+        context_values = data.context_values
+
         model = self.make_model(model_config)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
         initial_parameters = {
