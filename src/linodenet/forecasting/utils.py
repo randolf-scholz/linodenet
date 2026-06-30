@@ -663,10 +663,9 @@ class JointTimeData:
     """
 
     timestamps: Tensor  # Float[(..., $N + $K)], padded NaN, non-decreasing
-    context_values: Tensor  # Float[(..., $N + $K, D)], padded NaN, sparse
     context_mask: Tensor  # Bool[(..., $N + $K, D)], padded False
+    context_values: Tensor  # Float[(..., $N + $K, D)], padded NaN, sparse
     query_mask: Tensor  # Bool[(..., $N + $K, E)], padded False
-
     target_values: Tensor | None = None  # Float[(..., $N + $K, E)], padded NaN, sparse
     r"""Only available during training, otherwise None."""
 
