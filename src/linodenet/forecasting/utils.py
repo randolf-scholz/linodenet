@@ -582,8 +582,12 @@ class SplitTimeData:
         # move the sequence dim to the target position
         tgt_dim = -1 if self.batch_first else 0
         return TripletTimeData(
-            validate_args=False,  # skip validation since we trust the arguments
+            # metadata
+            query_dim=self.query_dim,
+            context_dim=self.context_dim,
             batch_first=self.batch_first,
+            validate_args=False,  # skip validation since we trust the arguments
+            # data
             context_times=(
                 T.new_full((*batch_shape, num_context), nan)
                 .index_put(ctx_idx, T[*ctx_batch_idx, ctx_size])
@@ -639,8 +643,12 @@ class SplitTimeData:
         ).unsqueeze(-1)
 
         return JointTimeData(
+            # metadata
+            context_size=self.context_size,
+            query_size=self.query_size,
             validate_args=False,  # skip validation since we trust the arguments
             batch_first=self.batch_first,
+            # data
             timestamps=times.take_along_dim(permutation.squeeze(-1), dim=-1),
             context_values=torch.cat(
                 [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
@@ -1062,13 +1070,13 @@ class JointTimeData:
         # gathered times need their padding tail (`~keep`) reset to NaN.
         ctx_valid = C.any(dim=-1)
         ctx_count = ctx_valid.sum(dim=-1)
-        ctx_size = int(ctx_count.max().item())
+        ctx_size = self.context_size
         ctx_perm = torch.argsort(~ctx_valid, dim=-1, stable=True)[..., :ctx_size]
         ctx_keep = torch.arange(ctx_size, device=T.device) < ctx_count[..., None]
 
         qry_valid = M.any(dim=-1)
         qry_count = qry_valid.sum(dim=-1)
-        qry_size = int(qry_count.max().item())
+        qry_size = self.query_size
         qry_perm = torch.argsort(~qry_valid, dim=-1, stable=True)[..., :qry_size]
         qry_keep = torch.arange(qry_size, device=T.device) < qry_count[..., None]
 
