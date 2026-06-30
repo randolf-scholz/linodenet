@@ -515,6 +515,9 @@ class SplitTimeData:
         ]
 
     def to_triplets(self) -> TripletTimeData:
+        if not self.batch_first:
+            raise NotImplementedError
+
         T = self.context_times
         C = self.context_mask
         X = self.context_values
@@ -577,6 +580,9 @@ class SplitTimeData:
         )
 
     def to_joint_time(self) -> JointTimeData:
+        if not self.batch_first:
+            raise NotImplementedError
+
         T = self.context_times
         C = self.context_mask
         X = self.context_values
@@ -960,6 +966,9 @@ class JointTimeData:
         ]
 
     def to_split_time(self) -> SplitTimeData:
+        if not self.batch_first:
+            raise NotImplementedError
+
         T = self.timestamps
         C = self.context_mask
         X = self.context_values
@@ -1146,6 +1155,7 @@ class TripletTimeData:
         seq_dim = -1 if batch_first else 0
 
         return TripletTimeData(
+            batch_first=batch_first,
             validate=validate,
             context_times=(
                 context_times.new_full((*batch_shape, num_context), nan)
@@ -1239,6 +1249,9 @@ class TripletTimeData:
         )
 
     def unbatch(self) -> list[TripletTimeData]:
+        if not self.batch_first:
+            raise NotImplementedError
+
         T = self.context_times.unsqueeze(0).flatten(end_dim=-2)
         C = self.context_channels.unsqueeze(0).flatten(end_dim=-2)
         X = self.context_values.unsqueeze(0).flatten(end_dim=-2)
@@ -1285,6 +1298,9 @@ class TripletTimeData:
     def to_split_time(
         self, *, context_dim: int | None = None, query_dim: int | None = None
     ) -> SplitTimeData:
+        if not self.batch_first:
+            raise NotImplementedError
+
         T = self.context_times
         C = self.context_channels
         X = self.context_values

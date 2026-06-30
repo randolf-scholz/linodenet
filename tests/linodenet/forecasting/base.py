@@ -93,6 +93,7 @@ def make_forecasting_request(
         query_times=qry_times.movedim(-2, seq_dim).squeeze(-1).requires_grad_(),
         query_mask=qry_mask.movedim(-2, seq_dim),
         target_values=tgt_values.movedim(-2, seq_dim).requires_grad_(),
+        batch_first=batch_first,
     )
 
 
