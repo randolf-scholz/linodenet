@@ -1776,6 +1776,9 @@ class ConditionalGaussian(nn.Module):
     and sample from the distribution efficiently using the Woodbury identity.
     """
 
+    eye: Tensor
+    r"""BUFFER: cached identity matrix."""
+
     def __init__(
         self,
         latent_dim: int,
@@ -1783,6 +1786,8 @@ class ConditionalGaussian(nn.Module):
         num_heads: int | tuple[int, ...] = (),
     ) -> None:
         super().__init__()
+        if covariance_rank <= 0:
+            raise ValueError(f"covariance_rank must be positive, got {covariance_rank}")
         # μ(𝐡) = 𝐡W, Σ(𝐡) = 𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M
         self.head_shape = (num_heads,) if isinstance(num_heads, int) else num_heads
         self.mean_param = nn.Parameter(torch.randn(*self.head_shape, latent_dim))
@@ -1790,8 +1795,10 @@ class ConditionalGaussian(nn.Module):
             torch.randn(*self.head_shape, latent_dim, covariance_rank)
         )
         self.scale = 0.5 / math.sqrt(latent_dim)
+        self.covariance_rank = covariance_rank
+        self.register_buffer("eye", torch.eye(covariance_rank))
 
-    def forward(
+    def embed(
         self,
         context: Tensor,  # (..., *H, $K, D)
         /,
@@ -1801,6 +1808,14 @@ class ConditionalGaussian(nn.Module):
         cov_factor = torch.einsum("...kd, ...df -> ...kf", context, self.cov_param)
         return mean, self.scale * cov_factor
 
+    def forward(
+        self,
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H, $K, F)
+        r"""Alias for :meth:`embed` to preserve module-call semantics."""
+        return self.embed(context)
+
     def log_prob(
         self,
         x: Tensor,  # (..., *H, $K)
@@ -1808,6 +1823,21 @@ class ConditionalGaussian(nn.Module):
         /,
     ) -> Tensor:  # (..., *H)
         r"""Compute the log-likelihood of the input."""
+        mean, cov_factor = self.embed(context)
+        centered = x - mean  # (..., *H, K)
+        event_size = x.shape[-1]
+
+        # Factorize only the small rank×rank Woodbury system, never the K×K covariance.
+        gram = cov_factor.mT @ cov_factor  # (..., *H, F, F)
+        chol = cholesky(self.eye + gram)  # (..., *H, F, F)
+
+        # Woodbury quadratic form: ‖x-μ‖² - ‖L⁻¹Uᵀ(x-μ)‖².
+        projected = cov_factor.mT @ centered.unsqueeze(-1)  # (..., *H, F, 1)
+        whitened = solve_triangular(chol, projected, upper=False)
+        quadratic = centered.square().sum(dim=-1) - whitened.square().sum(dim=(-2, -1))
+
+        logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+        return -0.5 * (quadratic + logdet + event_size * _LOG2PI)
 
     def sample(
         self,
@@ -1816,6 +1846,22 @@ class ConditionalGaussian(nn.Module):
         /,
     ) -> Tensor:  # (..., *H, $K)
         r"""Sample a Gaussian distribution from the conditional distribution."""
+        mean, cov_factor = self.embed(context)
+        white_noise = torch.randn(
+            (*size, *mean.shape),
+            dtype=mean.dtype,
+            device=mean.device,
+        )
+        rank_noise = torch.randn(
+            (*size, *cov_factor.shape[:-2], cov_factor.shape[-1]),
+            dtype=cov_factor.dtype,
+            device=cov_factor.device,
+        )
+        return (
+            mean
+            + white_noise
+            + torch.einsum("...kf, ...f -> ...k", cov_factor, rank_noise)
+        )
 
     def sample_and_log_prob(
         self,
@@ -1824,6 +1870,35 @@ class ConditionalGaussian(nn.Module):
         /,
     ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), # (..., *H)
         r"""Sample a Gaussian distribution from the conditional distribution."""
+        mean, cov_factor = self.embed(context)
+        white_noise = torch.randn(
+            (*size, *mean.shape), dtype=mean.dtype, device=mean.device
+        )
+        rank_noise = torch.randn(
+            (*size, *cov_factor.shape[:-2], cov_factor.shape[-1]),
+            dtype=cov_factor.dtype,
+            device=cov_factor.device,
+        )
+        samples = (
+            mean
+            + white_noise
+            + torch.einsum("...kf, ...f -> ...k", cov_factor, rank_noise)
+        )
+
+        centered = samples - mean
+        event_size = samples.shape[-1]
+        # Factorize only the small rank×rank Woodbury system, never the K×K covariance.
+        gram = cov_factor.mT @ cov_factor  # (..., *H, F, F)
+        chol = cholesky(self.eye + gram)  # (..., *H, F, F)
+
+        # Woodbury quadratic form: ‖x-μ‖² - ‖L⁻¹Uᵀ(x-μ)‖².
+        projected = cov_factor.mT @ centered.unsqueeze(-1)  # (..., *H, F, 1)
+        whitened = solve_triangular(chol, projected, upper=False)
+        quadratic = centered.square().sum(dim=-1) - whitened.square().sum(dim=(-2, -1))
+
+        logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+        log_prob = -0.5 * (quadratic + logdet + event_size * _LOG2PI)
+        return samples, log_prob
 
 
 class Moses(nn.Module):

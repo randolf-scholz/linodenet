@@ -8,6 +8,7 @@ from torch import Tensor
 from torch.testing import assert_close
 
 from linodenet.forecasting.mnf import (
+    ConditionalGaussian,
     ConditionalLRS,
     ConditionalSplineFlow,
     MarginalizableNormalizingFlow,
@@ -327,6 +328,76 @@ class TestMHA:
         for parameter in model.parameters():
             assert parameter.grad is not None
             assert parameter.grad.isfinite().all()
+
+
+class TestConditionalGaussian:
+    r"""Tests for the low-rank conditional Gaussian."""
+
+    LATENT_DIM: ClassVar[int] = 4
+    COVARIANCE_RANK: ClassVar[int] = 2
+    NUM_HEADS: ClassVar[int] = 3
+    NUM_QUERIES: ClassVar[int] = 5
+
+    def make_model(self) -> ConditionalGaussian:
+        r"""Instantiate the conditional Gaussian under test."""
+        return ConditionalGaussian(
+            latent_dim=self.LATENT_DIM,
+            covariance_rank=self.COVARIANCE_RANK,
+            num_heads=self.NUM_HEADS,
+        )
+
+    def test_init_requires_positive_covariance_rank(self) -> None:
+        r"""The low-rank parameterization requires a strictly positive rank."""
+        with pytest.raises(ValueError, match="covariance_rank must be positive"):
+            ConditionalGaussian(
+                latent_dim=self.LATENT_DIM,
+                covariance_rank=0,
+                num_heads=self.NUM_HEADS,
+            )
+
+    def test_log_prob_matches_dense_multivariate_normal(self) -> None:
+        r"""Woodbury log-probabilities should match the dense Gaussian formula."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        context = torch.randn(2, self.NUM_HEADS, self.NUM_QUERIES, self.LATENT_DIM)
+        values = torch.randn(2, self.NUM_HEADS, self.NUM_QUERIES)
+
+        mean, cov_factor = model(context)
+        covariance = cov_factor @ cov_factor.mT + torch.eye(
+            self.NUM_QUERIES, dtype=context.dtype, device=context.device
+        )
+        reference = torch.distributions.MultivariateNormal(
+            loc=mean, covariance_matrix=covariance
+        )
+
+        actual = model.log_prob(values, context)
+        expected = reference.log_prob(values)
+
+        assert actual.shape == (2, self.NUM_HEADS)
+        assert_close(actual, expected, atol=1e-5, rtol=1e-5)
+
+    def test_sample_matches_mean_and_covariance(self) -> None:
+        r"""Samples should reproduce the implied first and second moments."""
+        torch.manual_seed(0)
+        model = ConditionalGaussian(
+            latent_dim=self.LATENT_DIM,
+            covariance_rank=self.COVARIANCE_RANK,
+        )
+        context = torch.randn(self.NUM_QUERIES, self.LATENT_DIM)
+
+        mean, cov_factor = model(context)
+        expected_covariance = cov_factor @ cov_factor.mT + torch.eye(
+            self.NUM_QUERIES, dtype=context.dtype, device=context.device
+        )
+
+        samples = model.sample((8192,), context)
+        sample_mean = samples.mean(dim=0)
+        centered = samples - sample_mean
+        sample_covariance = centered.mT @ centered / samples.shape[0]
+
+        assert samples.shape == (8192, self.NUM_QUERIES)
+        assert_close(sample_mean, mean, atol=0.06, rtol=0.06)
+        assert_close(sample_covariance, expected_covariance, atol=0.10, rtol=0.10)
 
 
 class TestSeparableEncoder:
