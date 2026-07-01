@@ -1600,9 +1600,9 @@ class MixtureWeightsModel(nn.Module):
 
     def forward(
         self,
-        embeddings: Tensor,  # (..., $N, D)
+        embeddings: Tensor,  # (..., $K, D)
         *,
-        valid_mask: Tensor,  # Bool[(..., $N)]
+        valid_mask: Tensor,  # Bool[(..., $K)]
     ) -> Tensor:  # (..., C), one normalized weight vector per batch element
         r"""Compute one mixture-weight vector per batch element.
 
@@ -1953,10 +1953,8 @@ class Moses(nn.Module):
     bounds: Final[tuple[float, float]]
 
     # sub-modules / parameters
-    encoder: Grafiti
-    mixture_weight_model: nn.Linear  # M → C  (mixture logits)
-    mean_proj: nn.Linear  # M → C  (Gaussian mean per component)
-    log_std: Tensor  # (C,), nn.Parameter — shared log-std per component
+    encoder: SeparableEncoder
+    mixture_weight_model: MixtureWeightsModel  # M → C  (mixture logits)
     component_flows: nn.Module  # C × SplineFlow, each n_heads=()
 
     @classmethod
@@ -1993,15 +1991,6 @@ class Moses(nn.Module):
         self.num_bins = num_bins
         self.bounds = bounds
 
-        # Separable Encoder (eq 12)
-        self.encoder = SeparableEncoder(
-            num_attn_heads=num_encoder_heads,
-            num_heads=num_mixture_components,
-            num_frequencies=10,
-            num_channels=input_dim,
-            dim_head=128,
-            dim_output=latent_dim,
-        )
         # self.encoder = Grafiti(
         #     input_dim=input_dim,
         #     latent_dim=latent_dim,
@@ -2010,17 +1999,27 @@ class Moses(nn.Module):
         #     output_mode="embeddings",
         # )
 
+        # Separable Encoder (eq 12)
+        self.encoder = SeparableEncoder(
+            num_heads=num_mixture_components,
+            num_channels=input_dim,
+            num_attn_heads=num_encoder_heads,
+            num_frequencies=10,
+            dim_head=128,
+            dim_output=latent_dim,
+        )
+
         # Separable Gaussian mixture model (eq 13)
         self.base_distribution = ConditionalGaussian(
-            latent_dim=latent_dim,
             num_heads=num_mixture_components,
+            latent_dim=latent_dim,
             covariance_rank=covariance_rank,
         )
 
         # One head per component. (eq 14)
         self.component_flows = ConditionalSplineFlow(
-            dim_context=latent_dim,
             num_heads=num_mixture_components,
+            dim_context=latent_dim,
             num_flow_layers=num_flow_layers,
             num_bins=num_bins,
             x_bounds=bounds,
@@ -2034,6 +2033,32 @@ class Moses(nn.Module):
             dim_hidden=latent_dim,
             num_attn_heads=4,
         )
+
+    def embed(
+        self,
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+    ):
+        triplets = ...
+
+        h_obs, h = self.encoder.forward(
+            query_times=triplets.query_times,
+            query_channels=triplets.query_channels,
+            query_valid=triplets.query_valid,
+            context_times=triplets.context_times,
+            context_channels=triplets.context_channels,
+            context_values=triplets.context_values,
+            context_valid=triplets.context_valid,
+        )
+
+        mixture_weights = self.mixture_weight_model.forward(
+            h_obs, valid_mask=triplets.query_valid
+        )
+
+        return h_obs, h
 
     def log_prob(
         self,
