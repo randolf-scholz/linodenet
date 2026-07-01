@@ -63,9 +63,32 @@ def _reshape_single_batch(
 
 def _init_time_data(data: TensorViewData) -> CanonicalTestData:
     return {
-        "split": SplitTimeData(**data["split"]),
-        "joint": JointTimeData(**data["joint"]),
-        "triplet": TripletTimeData(**data["triplet"]),
+        "split": SplitTimeData(
+            context_times=data["split"]["context_times"],
+            context_values=data["split"]["context_values"],
+            context_mask=data["split"]["context_mask"],
+            query_times=data["split"]["query_times"],
+            query_mask=data["split"]["query_mask"],
+            target_values=data["split"]["target_values"],
+            static_covariates=data["split"]["static_covariates"],
+        ),
+        "joint": JointTimeData(
+            timestamps=data["joint"]["timestamps"],
+            context_mask=data["joint"]["context_mask"],
+            context_values=data["joint"]["context_values"],
+            query_mask=data["joint"]["query_mask"],
+            target_values=data["joint"]["target_values"],
+            static_covariates=data["joint"]["static_covariates"],
+        ),
+        "triplet": TripletTimeData(
+            context_times=data["triplet"]["context_times"],
+            context_channels=data["triplet"]["context_channels"],
+            context_values=data["triplet"]["context_values"],
+            query_times=data["triplet"]["query_times"],
+            query_channels=data["triplet"]["query_channels"],
+            target_values=data["triplet"]["target_values"],
+            static_covariates=data["triplet"]["static_covariates"],
+        ),
     }
 
 
@@ -855,9 +878,32 @@ def get_test_case(
 @pytest.mark.parametrize("case", _RAW_TEST_DATA)
 def test_initialization(case) -> None:
     data: TensorViewData = _RAW_TEST_DATA[case]
-    SplitTimeData(**data["split"])
-    JointTimeData(**data["joint"])
-    TripletTimeData(**data["triplet"])
+    SplitTimeData(
+        context_times=data["split"]["context_times"],
+        context_values=data["split"]["context_values"],
+        context_mask=data["split"]["context_mask"],
+        query_times=data["split"]["query_times"],
+        query_mask=data["split"]["query_mask"],
+        target_values=data["split"]["target_values"],
+        static_covariates=data["split"]["static_covariates"],
+    )
+    JointTimeData(
+        timestamps=data["joint"]["timestamps"],
+        context_mask=data["joint"]["context_mask"],
+        context_values=data["joint"]["context_values"],
+        query_mask=data["joint"]["query_mask"],
+        target_values=data["joint"]["target_values"],
+        static_covariates=data["joint"]["static_covariates"],
+    )
+    TripletTimeData(
+        context_times=data["triplet"]["context_times"],
+        context_channels=data["triplet"]["context_channels"],
+        context_values=data["triplet"]["context_values"],
+        query_times=data["triplet"]["query_times"],
+        query_channels=data["triplet"]["query_channels"],
+        target_values=data["triplet"]["target_values"],
+        static_covariates=data["triplet"]["static_covariates"],
+    )
 
 
 def _make_random_batched_triplet(batch_shape: tuple[int, ...], /) -> TripletTimeData:
