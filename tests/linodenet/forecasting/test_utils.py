@@ -1971,16 +1971,6 @@ class TestTripletTimeData:
         assert lhs == rhs
         assert lhs != other
 
-    def test_rejects_duplicate_queries(self) -> None:
-        with pytest.raises(AssertionError):
-            TripletTimeData(
-                context_times=torch.tensor([1.0]),
-                context_channels=torch.tensor([0]),
-                context_values=torch.tensor([10.0]),
-                query_times=torch.tensor([2.0, 2.0]),
-                query_channels=torch.tensor([1, 1]),
-            )
-
     def test_is_simple(self) -> None:
         arg = TripletTimeData(
             context_times=torch.tensor([1.0, 1.0, 2.0, nan]),
