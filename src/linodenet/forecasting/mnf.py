@@ -1998,8 +1998,8 @@ class Moses(nn.Module):
 
         self.base_distribution = ConditionalGaussian(
             latent_dim=latent_dim,
-            covariance_rank=covariance_rank,
             num_heads=num_components,
+            covariance_rank=covariance_rank,
         )
 
         # One head per component. (eq 14)
@@ -2020,68 +2020,6 @@ class Moses(nn.Module):
             num_attn_heads=4,
         )
 
-    def _encode(
-        self,
-        *,
-        time_points: Tensor,  # (..., $T)
-        context_values: Tensor,  # (..., $T, D)
-        context_mask: Tensor,  # (..., $T, D), bool
-        query_mask: Tensor,  # (..., $T, D), bool
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        r"""Run encoder and compute per-query mixture parameters.
-
-        Returns:
-            H: Per-query embeddings ``(..., K, M)``.
-            log_w: Per-query log mixture weights ``(..., K, C)``.
-            mu: Per-query Gaussian means ``(..., K, C)``.
-            sigma: Shared std per component ``(C,)``.
-        """
-        H = self.encoder(  # (..., K, M)
-            time_points,
-            context_values,
-            context_mask=context_mask,
-            query_mask=query_mask,
-        )
-        log_w = self.mixture_weight_model(H).log_softmax(dim=-1)  # (..., K, C)
-        mu = self.mean_proj(H)  # (..., K, C)
-        sigma = F.softplus(self.log_std) + 1e-6  # (C,)
-        return H, log_w, mu, sigma
-
-    def _predict(
-        self,
-        *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        r"""Run encoder and compute per-query mixture parameters.
-
-        Returns:
-            H: Per-query embeddings ``(..., K, M)``.
-            log_w: Per-query log mixture weights ``(..., K, C)``.
-            mu: Per-query Gaussian means ``(..., K, C)``.
-            sigma: Shared std per component ``(C,)``.
-        """
-        request = EventBatch.from_request(
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_times=query_times,
-            query_mask=query_mask,
-        )
-        H = self.encoder.forward(  # (..., K, M)
-            timestamps=request.timestamps,
-            context_values=request.context_values,
-            context_mask=request.context_mask,
-            query_mask=request.query_mask,
-        )
-        log_w = self.mixture_weight_model(H).log_softmax(dim=-1)  # (..., K, C)
-        mu = self.mean_proj(H)  # (..., K, C)
-        sigma = F.softplus(self.log_std) + 1e-6  # (C,)
-        return H, log_w, mu, sigma
-
     def log_prob(
         self,
         values: Tensor,  # (..., $T, D)
@@ -2098,8 +2036,7 @@ class Moses(nn.Module):
         and sums across query positions (joint under independence).
 
         Args:
-            values: Observed target values; finite at every ``True`` position
-                in ``query_mask``.
+            values: Observed target values; finite at every ``True`` position in ``query_mask``.
             query_times: Sorted time stamps for all query time steps.
             query_mask: Boolean mask selecting query (target) positions.
             context_times: Sorted time stamps for all context time steps.
@@ -2109,45 +2046,7 @@ class Moses(nn.Module):
         Returns:
             Joint log-likelihood with shape ``(...,)``.
         """
-        *batch_shape, _, _ = context_values.shape
-
-        H, log_w, mu, sigma = self._predict(
-            query_times=query_times,
-            query_mask=query_mask,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-        )
-        valid_mask = H.isfinite().all(dim=-1)  # (..., K)
-        max_K = H.shape[-2]
-
-        # Pack query values: (..., T, D) → (..., K), NaN at unused K slots.
-        # query_mask and valid_mask have the same True count per batch element
-        # (GraFITi packs targets in row-major time-sorted order).
-        y_flat = values.new_full((*batch_shape, max_K), nan)
-        y_safe = torch.where(valid_mask, y_flat, 0.0)  # avoid NaN in flow inputs
-        y_safe[valid_mask] = values[query_mask]
-
-        # Per-component flow: encode each scalar independently.
-        z_list: list[Tensor] = []
-        ldj_list: list[Tensor] = []
-        for flow in self.component_flows:
-            z_c, ldj_c = flow.encode_and_logabsdet(y_safe)  # (..., K), (..., K)
-            z_list.append(z_c)
-            ldj_list.append(ldj_c)
-        z = torch.stack(z_list, dim=-1)  # (..., K, C)
-        ldj = torch.stack(ldj_list, dim=-1)  # (..., K, C)
-
-        # Gaussian log-prob per (query, component).
-        log_p_z = (
-            -0.5 * ((z - mu) / sigma).square() - sigma.log() - 0.5 * _LOG2PI
-        )  # (..., K, C)
-
-        # Mixture combination → per-query marginal log-prob.
-        log_p = (log_w + log_p_z + ldj).logsumexp(dim=-1)  # (..., K)
-
-        # Sum over valid query slots; zero-out padding.
-        return torch.where(valid_mask, log_p, 0.0).sum(dim=-1)  # (...,)
+        raise NotImplementedError
 
     def sample(
         self,
@@ -2172,51 +2071,16 @@ class Moses(nn.Module):
         Returns:
             Samples with shape ``(*S, ..., T, D)``, ``NaN`` at non-query positions.
         """
-        *batch_shape, num_steps, num_channels = context_values.shape
-        sample_shape = (size,) if isinstance(size, int) else tuple(size)
+        raise NotImplementedError
 
-        H, log_w, mu, sigma = self._predict(
-            query_times=query_times,
-            query_mask=query_mask,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-        )
-        valid_mask = H.isfinite().all(dim=-1)  # (..., K)
-        max_K = H.shape[-2]
-
-        # Expand mixture parameters to sample shape.
-        log_w_s = log_w.expand(*sample_shape, *log_w.shape)  # (*S, ..., K, C)
-        mu_s = mu.expand(*sample_shape, *mu.shape)  # (*S, ..., K, C)
-
-        # Sample a mixture component per query point.
-        probs_flat = log_w_s.exp().reshape(-1, self.num_components)  # (N, C)
-        c_idx = (
-            torch.multinomial(probs_flat, num_samples=1)
-            .squeeze(-1)
-            .reshape(*sample_shape, *batch_shape, max_K)
-        )  # (*S, ..., K)
-
-        # Draw from the selected Gaussian component.
-        mu_sel = mu_s.gather(-1, c_idx.unsqueeze(-1)).squeeze(-1)  # (*S, ..., K)
-        sigma_sel = sigma[c_idx]  # (*S, ..., K)
-        z = mu_sel + sigma_sel * torch.randn_like(mu_sel)  # (*S, ..., K)
-
-        # Invert all component flows on z, then select the drawn component.
-        y_per_comp = torch.stack(
-            [flow.decode_and_logabsdet(z)[0] for flow in self.component_flows],
-            dim=-1,
-        )  # (*S, ..., K, C)
-        y_flat = y_per_comp.gather(-1, c_idx.unsqueeze(-1)).squeeze(-1)  # (*S, ..., K)
-
-        # Mask padding slots and unpack from (..., K) → (..., T, D).
-        valid_mask_s = valid_mask.expand(*sample_shape, *valid_mask.shape)
-        y_flat = torch.where(valid_mask_s, y_flat, nan)
-
-        samples = y_flat.new_full(
-            (*sample_shape, *batch_shape, num_steps, num_channels), nan
-        )
-        query_mask_s = query_mask.expand(*sample_shape, *query_mask.shape)
-        samples[query_mask_s] = y_flat[valid_mask_s]
-
-        return samples  # (*S, ..., T, D)
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ...)
+        raise NotImplementedError
