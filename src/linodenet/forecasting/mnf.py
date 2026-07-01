@@ -1771,7 +1771,7 @@ class ConditionalGaussian(nn.Module):
     then this is a Normal distribution over ℝᴷ for each component.
 
     the mean μ(𝐡) and covariance Σ(𝐡) are computed as
-    μ(𝐡) = 𝐡W, Σ(𝐡) = γ²𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M.
+    μ(𝐡) = 𝐡W, Σ(𝐡) = σ²𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M.
 
     Since Σ(𝐡) is a low-rank update of an isotropic covariance, we can compute
     the log-likelihood and sample from the distribution efficiently using the
@@ -1786,7 +1786,7 @@ class ConditionalGaussian(nn.Module):
         latent_dim: int,
         covariance_rank: int | None = None,
         num_heads: int | tuple[int, ...] = (),
-        gamma_min: float = 1e-4,
+        cov_scale_min: float = 1e-4,
     ) -> None:
         super().__init__()
         self.head_shape = (num_heads,) if isinstance(num_heads, int) else num_heads
@@ -1795,25 +1795,25 @@ class ConditionalGaussian(nn.Module):
             max(1, latent_dim // 16) if covariance_rank is None else covariance_rank
         )
         self.covariance_rank = covariance_rank
-        self.gamma_min = gamma_min
+        self.cov_scale_min = cov_scale_min
 
         if covariance_rank <= 0:
             raise ValueError(f"covariance_rank must be positive, got {covariance_rank}")
-        if gamma_min < 0:
-            raise ValueError(f"gamma_min must be non-negative, got {gamma_min}")
+        if cov_scale_min < 0:
+            raise ValueError(f"cov_scale_min must be non-negative, got {cov_scale_min}")
 
-        # μ(𝐡) = 𝐡W, Σ(𝐡) = γ²𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M
+        # μ(𝐡) = 𝐡W, Σ(𝐡) = σ²𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M
         self.mean_param = nn.Parameter(torch.randn(*self.head_shape, latent_dim))
         self.cov_param = nn.Parameter(
             torch.randn(*self.head_shape, latent_dim, covariance_rank)
         )
-        self.gamma_param = nn.Parameter(torch.zeros(self.head_shape))
+        self.cov_scale_param = nn.Parameter(torch.zeros(self.head_shape))
         self.scale = 0.5 / math.sqrt(latent_dim)
         self.register_buffer("eye", torch.eye(covariance_rank))
 
-    def gamma(self) -> Tensor:
-        r"""Return the positive isotropic scale γ."""
-        return self.gamma_min + F.celu(self.gamma_param) + 1.0
+    def cov_scale(self) -> Tensor:
+        r"""Return the positive isotropic covariance scale σ."""
+        return self.cov_scale_min + F.celu(self.cov_scale_param) + 1.0
 
     def embed(
         self,
@@ -1834,39 +1834,43 @@ class ConditionalGaussian(nn.Module):
         return self.embed(context)
 
     def _log_prob(
-        self, x: Tensor, mean: Tensor, cov_factor: Tensor, gamma: Tensor
+        self, x: Tensor, mean: Tensor, cov_factor: Tensor, cov_scale: Tensor
     ) -> Tensor:
-        # Write Σ = γ²(I + VVᵀ) with V = U / γ and U = cov_factor. Woodbury
+        # Write Σ = σ²(I + VVᵀ) with V = U / σ and U = cov_factor. Woodbury
         # gives (I + VVᵀ)⁻¹ = I - V(I + VᵀV)⁻¹Vᵀ, so the only factorization is
         # the small rank×rank system I + VᵀV.
         centered = x - mean  # (..., *H, K)
         event_size = x.shape[-1]
-        scaled_factor = cov_factor / gamma[..., None, None]
+        inv_cov_scale = cov_scale.reciprocal()
+        scaled_factor = cov_factor * inv_cov_scale[..., None, None]
 
         gram = scaled_factor.mT @ scaled_factor  # (..., *H, F, F)
         chol = cholesky(self.eye + gram)  # (..., *H, F, F)
 
-        # xᵀΣ⁻¹x = γ⁻²(xᵀx - xᵀV(I + VᵀV)⁻¹Vᵀx) = γ⁻²(‖x‖² - ‖L⁻¹ Vᵀx‖²)
+        # xᵀΣ⁻¹x = σ⁻²(xᵀx - xᵀV(I + VᵀV)⁻¹Vᵀx) = σ⁻²(‖x‖² - ‖L⁻¹ Vᵀx‖²)
         projected = scaled_factor.mT @ centered.unsqueeze(-1)  # (..., *H, F, 1)
         whitened = solve_triangular(chol, projected, upper=False)
-        quadratic = (
+        quadratic = inv_cov_scale.square() * (
             centered.square().sum(dim=-1) - whitened.square().sum(dim=(-2, -1))
-        ).clamp_min(0) / gamma.square()
+        ).clamp_min(0)
 
-        logdet = 2 * event_size * gamma.log() + 2 * chol.diagonal(
-            dim1=-2, dim2=-1
-        ).log().sum(dim=-1)
-        return -0.5 * (quadratic + logdet + event_size * _LOG2PI)
+        # log p(x) = -½(xᵀΣ⁻¹x + log det Σ + K log 2π)
+        # log det Σ = 2K log σ + 2∑ᵢ log Lᵢᵢ for Σ = σ²(I + VVᵀ).
+        return -0.5 * (
+            quadratic
+            + event_size * (_LOG2PI + 2 * cov_scale.log())
+            + 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+        )
 
     def _sample(
         self,
         size: tuple[int, ...],
         mean: Tensor,
         cov_factor: Tensor,
-        gamma: Tensor,
+        cov_scale: Tensor,
     ) -> Tensor:
-        # Write Σ = γ²I + UUᵀ with U = cov_factor. Then [γI, U] is a
-        # rectangular square root because [γI, U][γI, U]ᵀ = γ²I + UUᵀ = Σ.
+        # Write Σ = σ²I + UUᵀ with U = cov_factor. Then [σI, U] is a
+        # rectangular square root because [σI, U][σI, U]ᵀ = σ²I + UUᵀ = Σ.
         white_noise = torch.randn(
             (*size, *mean.shape),
             dtype=mean.dtype,
@@ -1874,7 +1878,7 @@ class ConditionalGaussian(nn.Module):
         )
         # Sampling ε ∼ 𝓝(0, Iₖ) and ξ ∼ 𝓝(0, Iᵣ) independently is equivalent to
         # drawing [ε; ξ] ∼ 𝓝(0, Iₖ₊ᵣ) and applying the usual reparameterization
-        # x = μ + [γI, U][ε; ξ] = μ + γε + Uξ, without forming a dense K×K
+        # x = μ + [σI, U][ε; ξ] = μ + σε + Uξ, without forming a dense K×K
         # factor.
         rank_noise = torch.randn(
             (*size, *cov_factor.shape[:-2], cov_factor.shape[-1]),
@@ -1883,7 +1887,7 @@ class ConditionalGaussian(nn.Module):
         )
         return (
             mean
-            + gamma.unsqueeze(-1) * white_noise
+            + cov_scale.unsqueeze(-1) * white_noise
             + torch.einsum("...kf, ...f -> ...k", cov_factor, rank_noise)
         )
 
@@ -1895,7 +1899,7 @@ class ConditionalGaussian(nn.Module):
     ) -> Tensor:  # (..., *H)
         r"""Compute the log-likelihood of the input."""
         mean, cov_factor = self.embed(context)
-        return self._log_prob(x, mean, cov_factor, self.gamma())
+        return self._log_prob(x, mean, cov_factor, self.cov_scale())
 
     def sample(
         self,
@@ -1905,7 +1909,7 @@ class ConditionalGaussian(nn.Module):
     ) -> Tensor:  # (..., *H, $K)
         r"""Sample a Gaussian distribution from the conditional distribution."""
         mean, cov_factor = self.embed(context)
-        return self._sample(size, mean, cov_factor, self.gamma())
+        return self._sample(size, mean, cov_factor, self.cov_scale())
 
     def sample_and_log_prob(
         self,
@@ -1915,9 +1919,9 @@ class ConditionalGaussian(nn.Module):
     ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), # (..., *H)
         r"""Sample a Gaussian distribution from the conditional distribution."""
         mean, cov_factor = self.embed(context)
-        gamma = self.gamma()
-        samples = self._sample(size, mean, cov_factor, gamma)
-        log_prob = self._log_prob(samples, mean, cov_factor, gamma)
+        cov_scale = self.cov_scale()
+        samples = self._sample(size, mean, cov_factor, cov_scale)
+        log_prob = self._log_prob(samples, mean, cov_factor, cov_scale)
         return samples, log_prob
 
 

@@ -355,14 +355,14 @@ class TestConditionalGaussian:
                 num_heads=self.NUM_HEADS,
             )
 
-    def test_gamma_returns_positive_floor(self) -> None:
+    def test_cov_scale_returns_positive_floor(self) -> None:
         r"""The isotropic scale should stay strictly positive."""
         model = self.make_model()
 
-        gamma = model.gamma()
+        cov_scale = model.cov_scale()
 
-        assert gamma.shape == (self.NUM_HEADS,)
-        assert (gamma > model.gamma_min).all()
+        assert cov_scale.shape == (self.NUM_HEADS,)
+        assert (cov_scale > model.cov_scale_min).all()
 
     def test_log_prob_matches_dense_multivariate_normal(self) -> None:
         r"""Woodbury log-probabilities should match the dense Gaussian formula."""
@@ -372,8 +372,8 @@ class TestConditionalGaussian:
         values = torch.randn(2, self.NUM_HEADS, self.NUM_QUERIES)
 
         mean, cov_factor = model(context)
-        gamma = model.gamma().to(dtype=context.dtype, device=context.device)
-        covariance = cov_factor @ cov_factor.mT + gamma.square()[
+        cov_scale = model.cov_scale().to(dtype=context.dtype, device=context.device)
+        covariance = cov_factor @ cov_factor.mT + cov_scale.square()[
             ..., None, None
         ] * torch.eye(self.NUM_QUERIES, dtype=context.dtype, device=context.device)
         reference = torch.distributions.MultivariateNormal(
@@ -396,9 +396,9 @@ class TestConditionalGaussian:
         context = torch.randn(self.NUM_QUERIES, self.LATENT_DIM)
 
         mean, cov_factor = model(context)
-        gamma = model.gamma().to(dtype=context.dtype, device=context.device)
-        expected_covariance = cov_factor @ cov_factor.mT + gamma.square() * torch.eye(
-            self.NUM_QUERIES, dtype=context.dtype, device=context.device
+        cov_scale = model.cov_scale().to(dtype=context.dtype, device=context.device)
+        expected_covariance = cov_factor @ cov_factor.mT + cov_scale.square() * (
+            torch.eye(self.NUM_QUERIES, dtype=context.dtype, device=context.device)
         )
 
         samples = model.sample((8192,), context)
