@@ -466,7 +466,7 @@ class LearnableLRS(nn.Module):
 
     def __init__(
         self,
-        n_heads: int | tuple[int, ...],
+        num_heads: int | tuple[int, ...],
         *,
         num_bins: int,
         x_bounds: tuple[float, float],
@@ -478,7 +478,9 @@ class LearnableLRS(nn.Module):
         self.num_bins = int(num_bins)
         self.x_bounds = x_bounds
         self.y_bounds = y_bounds
-        self.n_heads = torch.Size((n_heads,) if isinstance(n_heads, int) else n_heads)
+        self.n_heads = torch.Size(
+            (num_heads,) if isinstance(num_heads, int) else num_heads
+        )
         left, right = x_bounds
         bottom, top = y_bounds
         assert left < right
@@ -553,7 +555,7 @@ class LearnableLRS(nn.Module):
 
         new_heads = (*self.n_heads[:-1], num_kept)
         new = LearnableLRS(
-            n_heads=new_heads,
+            num_heads=new_heads,
             num_bins=self.num_bins,
             x_bounds=self.x_bounds,
             y_bounds=self.y_bounds,
@@ -794,7 +796,7 @@ class ConditionalSplineFlow(ModuleSequence[ConditionalLRS]):
         self,
         dim_context: int,
         *,
-        n_heads: int | tuple[int, ...] = (),
+        num_heads: int | tuple[int, ...] = (),
         num_flow_layers: int,
         num_bins: int,
         x_bounds: tuple[float, float],
@@ -805,7 +807,7 @@ class ConditionalSplineFlow(ModuleSequence[ConditionalLRS]):
             ConditionalLRS(
                 dim_context,
                 num_bins=num_bins,
-                num_heads=n_heads,
+                num_heads=num_heads,
                 x_bounds=x_bounds,
                 y_bounds=y_bounds,
                 use_fp64=use_fp64,
@@ -851,7 +853,7 @@ class SplineFlow(ModuleSequence[LearnableLRS]):
 
     def __init__(
         self,
-        n_heads: int | tuple[int, ...] = (),
+        num_heads: int | tuple[int, ...] = (),
         *,
         num_flow_layers: int,
         num_bins: int,
@@ -861,7 +863,7 @@ class SplineFlow(ModuleSequence[LearnableLRS]):
     ) -> None:
         layers = [
             LearnableLRS(
-                n_heads,
+                num_heads,
                 num_bins=num_bins,
                 x_bounds=x_bounds,
                 y_bounds=y_bounds,
@@ -944,24 +946,24 @@ class MultiHeadGaussian(nn.Module):
 
     def __init__(
         self,
-        n_heads: int,
-        n_feats: int,
+        num_feats: int,
         *,
+        num_heads: int,
         means: Optional[Tensor] = None,
         covs: Optional[Tensor] = None,
     ) -> None:
         super().__init__()
 
         # CONSTANTS
-        self.num_heads = int(n_heads)
-        self.num_features = int(n_feats)
+        self.num_heads = int(num_heads)
+        self.num_features = int(num_feats)
         normalization_constant = (
             0.5 * self.num_features * math.log(2 * math.pi)
         )  # -log (2π)^{-k/2}
         self.register_buffer(
             "normalization_constant", torch.tensor(normalization_constant)
         )
-        self.register_buffer("eye", torch.eye(n_feats, dtype=torch.bool))
+        self.register_buffer("eye", torch.eye(num_feats, dtype=torch.bool))
 
         # BUFFERS
         self.register_buffer("covs", torch.empty(0), persistent=False)
@@ -974,17 +976,17 @@ class MultiHeadGaussian(nn.Module):
         self.means = nn.Parameter(
             torch.as_tensor(means)
             if means is not None
-            else self._sample_default_means(n_heads, n_feats)
+            else self._sample_default_means(num_heads, num_feats)
         )
         # initialize the covariances
         self.scale_tril = nn.Parameter(  # not a parameter!
             torch.as_tensor(covs).tril()
             if covs is not None
-            else self._sample_default_covs(n_heads, n_feats).tril()
+            else self._sample_default_covs(num_heads, num_feats).tril()
         )
 
-        assert self.means.shape == (n_heads, n_feats)
-        assert self.scale_tril.shape == (n_heads, n_feats, n_feats)
+        assert self.means.shape == (num_heads, num_feats)
+        assert self.scale_tril.shape == (num_heads, num_feats, num_feats)
 
     @torch.no_grad()
     def marginalize(self, kept: list[int] | Tensor, /) -> MultiHeadGaussian:
@@ -1017,8 +1019,8 @@ class MultiHeadGaussian(nn.Module):
         )
 
         marg_model = MultiHeadGaussian(
-            n_heads=self.num_heads,
-            n_feats=num_kept,
+            num_heads=self.num_heads,
+            num_feats=num_kept,
         ).to(device=device)
         marg_model.means.copy_(marg_means)
         marg_model.scale_tril.copy_(marg_tril)
@@ -1078,8 +1080,8 @@ class MultiHeadGaussian(nn.Module):
         )
 
         cond_model = MultiHeadGaussian(
-            n_heads=self.num_heads,
-            n_feats=self.num_features - len(variables),
+            num_heads=self.num_heads,
+            num_feats=self.num_features - len(variables),
         ).to(device=device)
 
         cond_model.means.copy_(cond_means)
@@ -1229,23 +1231,23 @@ class MarginalizableNormalizingFlow(nn.Module):
 
     def __init__(
         self,
-        n_feats: int,
-        n_heads: int,
+        num_feats: int,
         *,
+        num_heads: int,
         num_flow_layers: int,
         num_bins: int = 16,
         bounds: tuple[float, float] = (-5, +5),
     ) -> None:
         super().__init__()
         # constants
-        self.num_features = n_feats
+        self.num_features = num_feats
         self.num_flow_layers = num_flow_layers
-        self.num_components = n_heads
+        self.num_components = num_heads
         self.num_bins = num_bins
         self.bounds = bounds if isinstance(bounds, tuple) else (bounds, bounds)
 
         # parameters
-        initial_mixture = torch.ones(n_heads) / n_heads  # initialize 𝜔 = 1/M
+        initial_mixture = torch.ones(num_heads) / num_heads  # initialize 𝜔 = 1/M
         self.mixture_params = nn.Parameter(initial_mixture)
 
         # non-permanent buffers
@@ -1262,13 +1264,13 @@ class MarginalizableNormalizingFlow(nn.Module):
 
         # submodules
         self.flow = SplineFlow(
-            (n_heads, n_feats),
+            (num_heads, num_feats),
             num_flow_layers=num_flow_layers,
             num_bins=num_bins,
             x_bounds=self.bounds,
             y_bounds=self.bounds,
         )
-        self.base = MultiHeadGaussian(n_heads=n_heads, n_feats=n_feats)
+        self.base = MultiHeadGaussian(num_heads=num_heads, num_feats=num_feats)
 
     def get_mixture_weights(self) -> Tensor:
         r"""Compute mixture weights from mixture parameters."""
@@ -1356,8 +1358,8 @@ class MarginalizableNormalizingFlow(nn.Module):
             num_kept = len(kept)
 
         new = MarginalizableNormalizingFlow(
-            n_feats=num_kept,
-            n_heads=self.num_components,
+            num_feats=num_kept,
+            num_heads=self.num_components,
             num_flow_layers=self.num_flow_layers,
             num_bins=self.num_bins,
             bounds=self.bounds,
@@ -1404,8 +1406,8 @@ class MarginalizableNormalizingFlow(nn.Module):
         assert latent_values.shape == (self.num_components, marg_ndim)
 
         cond_model = MarginalizableNormalizingFlow(  # p(u | v)
-            n_feats=cond_ndim,
-            n_heads=self.num_components,
+            num_feats=cond_ndim,
+            num_heads=self.num_components,
             num_flow_layers=self.num_flow_layers,
             num_bins=self.num_bins,
             bounds=self.bounds,
@@ -1839,7 +1841,7 @@ class Moses(nn.Module):
 
         # One head per component.
         self.component_flows = SplineFlow(
-            n_heads=num_components,
+            num_heads=num_components,
             num_flow_layers=num_flow_layers,
             num_bins=num_bins,
             x_bounds=bounds,

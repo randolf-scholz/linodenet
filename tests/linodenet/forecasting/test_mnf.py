@@ -49,7 +49,7 @@ class TestConditionalLRS:
         r"""Instantiate a conditional spline flow under test."""
         return ConditionalSplineFlow(
             self.DIM_CONTEXT,
-            n_heads=self.NUM_HEADS,
+            num_heads=self.NUM_HEADS,
             num_flow_layers=num_flow_layers,
             num_bins=self.NUM_BINS,
             x_bounds=(-3.0, 3.0),
@@ -127,8 +127,8 @@ class TestMarginalizableNormalizingFlow:
                 f"model_config must be an MNFConfig, got {type(model_config)}"
             )
         return MarginalizableNormalizingFlow(
-            n_feats=model_config.n_feats,
-            n_heads=model_config.n_heads,
+            num_feats=model_config.n_feats,
+            num_heads=model_config.n_heads,
             num_flow_layers=model_config.num_flow_layers,
             num_bins=model_config.num_bins,
             bounds=model_config.bounds,
