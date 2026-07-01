@@ -1801,15 +1801,28 @@ class ConditionalGaussian(nn.Module):
         cov_factor = torch.einsum("...kd, ...df -> ...kf", context, self.cov_param)
         return mean, self.scale * cov_factor
 
-    def log_prob(self, x: Tensor, context: Tensor, /) -> Tensor:
+    def log_prob(
+        self,
+        x: Tensor,  # (..., *H, $K)
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> Tensor:  # (..., *H)
         r"""Compute the log-likelihood of the input."""
 
-    def sample(self, size: tuple[int, ...], context: Tensor, /) -> Tensor:
+    def sample(
+        self,
+        size: tuple[int, ...],
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> Tensor:  # (..., *H, $K)
         r"""Sample a Gaussian distribution from the conditional distribution."""
 
     def sample_and_log_prob(
-        self, size: tuple[int, ...], context: Tensor, /
-    ) -> tuple[Tensor, Tensor]:
+        self,
+        size: tuple[int, ...],
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), # (..., *H)
         r"""Sample a Gaussian distribution from the conditional distribution."""
 
 
