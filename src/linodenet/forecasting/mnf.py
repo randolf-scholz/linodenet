@@ -1816,14 +1816,7 @@ class ConditionalGaussian(nn.Module):
         r"""Alias for :meth:`embed` to preserve module-call semantics."""
         return self.embed(context)
 
-    def log_prob(
-        self,
-        x: Tensor,  # (..., *H, $K)
-        context: Tensor,  # (..., *H, $K, D)
-        /,
-    ) -> Tensor:  # (..., *H)
-        r"""Compute the log-likelihood of the input."""
-        mean, cov_factor = self.embed(context)
+    def _log_prob(self, x: Tensor, mean: Tensor, cov_factor: Tensor) -> Tensor:
         centered = x - mean  # (..., *H, K)
         event_size = x.shape[-1]
 
@@ -1839,19 +1832,19 @@ class ConditionalGaussian(nn.Module):
         logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
         return -0.5 * (quadratic + logdet + event_size * _LOG2PI)
 
-    def sample(
-        self,
-        size: tuple[int, ...],
-        context: Tensor,  # (..., *H, $K, D)
-        /,
-    ) -> Tensor:  # (..., *H, $K)
-        r"""Sample a Gaussian distribution from the conditional distribution."""
-        mean, cov_factor = self.embed(context)
+    def _sample(
+        self, size: tuple[int, ...], mean: Tensor, cov_factor: Tensor
+    ) -> Tensor:
+        # Write Σ = I + UUᵀ with U = cov_factor. Then [I, U] is a rectangular
+        # square root because [I, U][I, U]ᵀ = I + UUᵀ = Σ.
         white_noise = torch.randn(
             (*size, *mean.shape),
             dtype=mean.dtype,
             device=mean.device,
         )
+        # Sampling ε ∼ 𝓝(0, Iₖ) and ξ ∼ 𝓝(0, Iᵣ) independently is equivalent to
+        # drawing [ε; ξ] ∼ 𝓝(0, Iₖ₊ᵣ) and applying the usual reparameterization
+        # x = μ + [I, U][ε; ξ] = μ + ε + Uξ, without forming a dense K×K factor.
         rank_noise = torch.randn(
             (*size, *cov_factor.shape[:-2], cov_factor.shape[-1]),
             dtype=cov_factor.dtype,
@@ -1863,6 +1856,26 @@ class ConditionalGaussian(nn.Module):
             + torch.einsum("...kf, ...f -> ...k", cov_factor, rank_noise)
         )
 
+    def log_prob(
+        self,
+        x: Tensor,  # (..., *H, $K)
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> Tensor:  # (..., *H)
+        r"""Compute the log-likelihood of the input."""
+        mean, cov_factor = self.embed(context)
+        return self._log_prob(x, mean, cov_factor)
+
+    def sample(
+        self,
+        size: tuple[int, ...],
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> Tensor:  # (..., *H, $K)
+        r"""Sample a Gaussian distribution from the conditional distribution."""
+        mean, cov_factor = self.embed(context)
+        return self._sample(size, mean, cov_factor)
+
     def sample_and_log_prob(
         self,
         size: tuple[int, ...],
@@ -1871,33 +1884,8 @@ class ConditionalGaussian(nn.Module):
     ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), # (..., *H)
         r"""Sample a Gaussian distribution from the conditional distribution."""
         mean, cov_factor = self.embed(context)
-        white_noise = torch.randn(
-            (*size, *mean.shape), dtype=mean.dtype, device=mean.device
-        )
-        rank_noise = torch.randn(
-            (*size, *cov_factor.shape[:-2], cov_factor.shape[-1]),
-            dtype=cov_factor.dtype,
-            device=cov_factor.device,
-        )
-        samples = (
-            mean
-            + white_noise
-            + torch.einsum("...kf, ...f -> ...k", cov_factor, rank_noise)
-        )
-
-        centered = samples - mean
-        event_size = samples.shape[-1]
-        # Factorize only the small rank×rank Woodbury system, never the K×K covariance.
-        gram = cov_factor.mT @ cov_factor  # (..., *H, F, F)
-        chol = cholesky(self.eye + gram)  # (..., *H, F, F)
-
-        # Woodbury quadratic form: ‖x-μ‖² - ‖L⁻¹Uᵀ(x-μ)‖².
-        projected = cov_factor.mT @ centered.unsqueeze(-1)  # (..., *H, F, 1)
-        whitened = solve_triangular(chol, projected, upper=False)
-        quadratic = centered.square().sum(dim=-1) - whitened.square().sum(dim=(-2, -1))
-
-        logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
-        log_prob = -0.5 * (quadratic + logdet + event_size * _LOG2PI)
+        samples = self._sample(size, mean, cov_factor)
+        log_prob = self._log_prob(samples, mean, cov_factor)
         return samples, log_prob
 
 
