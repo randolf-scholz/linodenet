@@ -152,10 +152,7 @@ def _consecutive_group_indices(
 
 
 class EventBatch(NamedTuple):
-    r"""Represents a batch of events.
-
-    Other than ForecastingRequest, this class does not perform any validation.
-    """
+    r"""Lightweight alternative to JointTimeData."""
 
     timestamps: Tensor  # Float[..., $T], padded NaN, non-decreasing
 
@@ -174,7 +171,7 @@ class EventBatch(NamedTuple):
     @staticmethod
     def from_request(
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
         context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[(..., $N, D)], padded False
@@ -303,7 +300,7 @@ class SplitTimeData:
     Assumptions: (up to tail padding)
         - context time stamps are finite and non-decreasing
         - context values are finite exactly at entries selected by the context mask
-        - query time stamps are finite and strictly increasing
+        - query time stamps are finite and non-decreasing
         - if query values are given, they are finite exactly at entries selected by the query mask
         - there is at least one context value observed per time stamp
         - there is at least one target value observed per time stamp
@@ -313,7 +310,7 @@ class SplitTimeData:
     context_values: Tensor  # Float[(..., $N, D)], padded NaN, sparse
     context_mask: Tensor  # Bool[(..., $N, D)], padded False
 
-    query_times: Tensor  # Float[(..., $K)], padded NaN, strictly increasing
+    query_times: Tensor  # Float[(..., $K)], padded NaN, non-decreasing
     query_mask: Tensor  # Bool[(..., $K, F)]  padded False
     target_values: Tensor | None = None  # Float[(..., $K, F)]  padded NaN, sparse
     r"""Only available during training, otherwise None."""
@@ -407,10 +404,10 @@ class SplitTimeData:
         assert is_prefix_mask(Q_valid).all()
         assert is_prefix_mask(T_valid).all()
         assert is_prefix_mask(X_valid).all()
-        Q_increasing = Q.diff(dim=-1).gt(0.0)  # query times are strictly increasing
-        T_increasing = T.diff(dim=-1).ge(0.0)  # context times are non-decreasing
-        assert is_prefix_mask(Q_increasing).all()
-        assert is_prefix_mask(T_increasing).all()
+        Q_increasing = Q.diff(dim=-1).ge(0.0)
+        T_increasing = T.diff(dim=-1).ge(0.0)
+        assert is_prefix_mask(Q_increasing).all()  # query times are non-decreasing
+        assert is_prefix_mask(T_increasing).all()  # context times are non-decreasing
 
         # check padding
         context_lengths = T.isfinite().sum(dim=-1)
@@ -583,6 +580,7 @@ class SplitTimeData:
         tgt_dim = -1 if self.batch_first else 0
         return TripletTimeData(
             # metadata
+            query_size=self.query_size,
             query_dim=self.query_dim,
             context_dim=self.context_dim,
             batch_first=self.batch_first,
@@ -688,7 +686,7 @@ class JointTimeData:
     Assumptions: (up to tail padding)
         - time stamps are finite and non-decreasing
         - context time stamps are finite and non-decreasing
-        - query time stamps are finite and strictly increasing
+        - query time stamps are finite and non-decreasing
         - context values are finite exactly at entries selected by the context mask
         - if query values are given, they are finite exactly at entries selected by the query mask
         - each valid time stamp has at least one context or query mask entry
@@ -749,12 +747,12 @@ class JointTimeData:
         context_size = (
             self.context_size
             if self.context_size >= 0
-            else int(self.context_mask.any(dim=-1).sum(dim=seq_dim).max()) + 1
+            else int(self.context_mask.any(dim=-1).sum(dim=seq_dim).max().item())
         )
         query_size = (
             self.query_size
             if self.query_size >= 0
-            else int(self.query_mask.any(dim=-1).sum(dim=seq_dim).max()) + 1
+            else int(self.query_mask.any(dim=-1).sum(dim=seq_dim).max().item())
         )
         context_dim = self.context_mask.shape[-1]
         query_dim = self.query_mask.shape[-1]
@@ -822,7 +820,7 @@ class JointTimeData:
             strict=True,
         ):
             assert times[context].diff(dim=-1).ge(0.0).all()
-            assert times[query].diff(dim=-1).gt(0.0).all()
+            assert times[query].diff(dim=-1).ge(0.0).all()
 
     def _split_indices(
         self,
@@ -888,7 +886,7 @@ class JointTimeData:
         context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[(..., $N, D)], padded False
         context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
         target_values: Tensor | None = None,  # Float[(..., $K, F)]  padded NaN, sparse
         static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
@@ -929,6 +927,8 @@ class JointTimeData:
         # query_idx = (*batch_idx, time_idx) if batch_first else (time_idx, *batch_idx)
 
         return JointTimeData(
+            context_size=ctx_size,
+            query_size=q_size,
             batch_first=batch_first,
             validate_args=validate,
             timestamps=(
@@ -976,6 +976,8 @@ class JointTimeData:
             raise NotImplementedError("Only batch_first is supported.")
 
         return cls(
+            context_size=max(arg.context_size for arg in args),
+            query_size=max(arg.query_size for arg in args),
             validate_args=False,  # skip validation since we trust the arguments
             timestamps=pad_sequence(
                 [arg.timestamps for arg in args],
@@ -1022,6 +1024,8 @@ class JointTimeData:
 
         return [
             JointTimeData(
+                context_size=self.context_size,
+                query_size=self.query_size,
                 validate_args=False,  # skip validation since we trust the arguments
                 timestamps=time,
                 context_values=c_value,
@@ -1154,6 +1158,11 @@ class TripletTimeData:
             self.validate()
 
     def _normalize(self) -> None:
+        seq_dim = -1 if self.batch_first else 0
+        T = self.context_times.movedim(seq_dim, -1)
+        C = self.context_channels.movedim(seq_dim, -1)
+        Q = self.query_times.movedim(seq_dim, -1)
+        M = self.query_channels.movedim(seq_dim, -1)
         batch_shape = (
             self.context_channels.shape[:-1]
             if self.batch_first
@@ -1162,12 +1171,12 @@ class TripletTimeData:
         context_size = (
             self.context_size
             if self.context_size >= 0
-            else self.context_times.shape[-1 if self.batch_first else 0]
+            else int(_consecutive_group_indices(T, C.ge(0))[1].max().item())
         )
         query_size = (
             self.query_size
             if self.query_size >= 0
-            else self.query_times.shape[-1 if self.batch_first else 0]
+            else int(_consecutive_group_indices(Q, M.ge(0))[1].max().item())
         )
         context_dim = (
             self.context_dim
@@ -1235,9 +1244,9 @@ class TripletTimeData:
         assert M.shape == (*batch_shape, num_query)
         assert is_prefix_mask(M_valid).all()
         assert torch.equal(M_valid, Q.isfinite())
-        query_pairs = torch.stack([Q, M], dim=-1)
-        query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), nan)
-        assert torch.equal(unique_count(query_pairs), M_valid.sum(dim=-1))
+        # query_pairs = torch.stack([Q, M], dim=-1)
+        # query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), nan)
+        # assert torch.equal(unique_count(query_pairs), M_valid.sum(dim=-1))
 
         if Y is not None:
             assert Y.shape == (*batch_shape, num_query)
@@ -1305,6 +1314,9 @@ class TripletTimeData:
 
         seq_dim = -1 if batch_first else 0
         return TripletTimeData(
+            query_size=query_times.shape[seq_dim],
+            context_dim=context_mask.shape[-1],
+            query_dim=query_mask.shape[-1],
             batch_first=batch_first,
             validate_args=validate,
             context_times=(
@@ -1359,6 +1371,10 @@ class TripletTimeData:
             raise ValueError("Expected at least one TripletArg.")
 
         return cls(
+            context_size=max(arg.context_size for arg in args),
+            query_size=max(arg.query_size for arg in args),
+            context_dim=max(arg.context_dim for arg in args),
+            query_dim=max(arg.query_dim for arg in args),
             validate_args=False,  # skip validation since we trust the arguments
             context_times=pad_sequence(
                 [arg.context_times for arg in args],
@@ -1412,6 +1428,10 @@ class TripletTimeData:
 
         return [
             TripletTimeData(
+                context_size=self.context_size,
+                query_size=self.query_size,
+                context_dim=self.context_dim,
+                query_dim=self.query_dim,
                 validate_args=False,  # skip validation since we trust the arguments
                 context_times=c_time,
                 context_channels=c_channel,
@@ -1485,8 +1505,8 @@ class TripletTimeData:
 
         # Map context triplets to dense row indices by grouping consecutive times.
         ctx_steps = C_flat.ge(0)
-        ctx_inverse, ctx_lengths = _consecutive_group_indices(T_flat, ctx_steps)
-        ctx_size = int(ctx_lengths.max().item())
+        ctx_inverse, _ = _consecutive_group_indices(T_flat, ctx_steps)
+        ctx_size = self.context_size
         ctx_batch = (
             torch.arange(num_batches, device=T.device)
             .unsqueeze(-1)
@@ -1497,8 +1517,8 @@ class TripletTimeData:
 
         # Map query triplets to dense row indices by grouping consecutive times.
         qry_steps = M_flat.ge(0)
-        qry_inverse, qry_lengths = _consecutive_group_indices(Q_flat, qry_steps)
-        qry_size = int(qry_lengths.max().item())
+        qry_inverse, _ = _consecutive_group_indices(Q_flat, qry_steps)
+        qry_size = self.query_size
         qry_batch = (
             torch.arange(num_batches, device=Q.device)
             .unsqueeze(-1)
