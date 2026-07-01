@@ -9,6 +9,7 @@ from torch.testing import assert_close
 
 from linodenet.forecasting.mnf import (
     ConditionalLRS,
+    ConditionalSplineFlow,
     MarginalizableNormalizingFlow,
     MixtureWeightsModel,
     MultiHeadAttention,
@@ -44,6 +45,17 @@ class TestConditionalLRS:
             y_bounds=(-2.0, 4.0),
         )
 
+    def make_flow(self, num_flow_layers: int = 2) -> ConditionalSplineFlow:
+        r"""Instantiate a conditional spline flow under test."""
+        return ConditionalSplineFlow(
+            self.DIM_CONTEXT,
+            n_heads=self.NUM_HEADS,
+            num_flow_layers=num_flow_layers,
+            num_bins=self.NUM_BINS,
+            x_bounds=(-3.0, 3.0),
+            y_bounds=(-2.0, 4.0),
+        )
+
     def test_encode_decode_roundtrip_with_logabsdet(self) -> None:
         r"""Encode/decode should invert each other for a conditional spline layer."""
         torch.manual_seed(0)
@@ -67,21 +79,12 @@ class TestConditionalLRS:
     def test_flow_roundtrip_with_logabsdet(self) -> None:
         r"""A chain of conditional spline layers should remain invertible."""
         torch.manual_seed(0)
-        layers = [self.make_layer(), self.make_layer()]
+        flow = self.make_flow(num_flow_layers=2)
         x = torch.randn(3, self.NUM_HEADS, self.NUM_VALUES)
         context = torch.randn(3, self.NUM_HEADS, self.NUM_VALUES, self.DIM_CONTEXT)
 
-        y = x
-        forward_logabsdet = torch.zeros_like(x[..., 0])
-        for layer in layers:
-            y, ldj = layer.encode_and_logabsdet(y, context)
-            forward_logabsdet = forward_logabsdet + ldj
-
-        xhat = y
-        inverse_logabsdet = torch.zeros_like(forward_logabsdet)
-        for layer in reversed(layers):
-            xhat, ldj = layer.decode_and_logabsdet(xhat, context)
-            inverse_logabsdet = inverse_logabsdet + ldj
+        y, forward_logabsdet = flow.encode_and_logabsdet(x, context)
+        xhat, inverse_logabsdet = flow.decode_and_logabsdet(y, context)
 
         assert_close(xhat, x, atol=1e-5, rtol=1e-5)
         assert_close(

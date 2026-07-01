@@ -15,6 +15,7 @@ __all__ = [
     "ModuleSequence",
     "MultiHeadGaussian",
     "SplineCoefficients",
+    "ConditionalSplineFlow",
     "SplineFlow",
     "UnconstrainedLinearRationalSpline",
     "PositionalEmbedding",
@@ -777,6 +778,67 @@ class ConditionalLRS(nn.Module):
         return x + x_center, logabsdet.sum(dim=-1)
 
 
+class ConditionalSplineFlow(ModuleSequence[ConditionalLRS]):
+    r"""Implements a sequence of conditional rational linear spline layers."""
+
+    @classmethod
+    def from_iterable(
+        cls, layers: Iterable[ConditionalLRS], /
+    ) -> ConditionalSplineFlow:
+        r"""Create a ConditionalSplineFlow from an iterable of conditional LRS layers."""
+        new = ConditionalSplineFlow.__new__(ConditionalSplineFlow)
+        super(ConditionalSplineFlow, new).__init__(layers)
+        return new
+
+    def __init__(
+        self,
+        dim_context: int,
+        *,
+        n_heads: int | tuple[int, ...] = (),
+        num_flow_layers: int,
+        num_bins: int,
+        x_bounds: tuple[float, float],
+        y_bounds: tuple[float, float],
+        use_fp64: bool = True,
+    ) -> None:
+        layers = [
+            ConditionalLRS(
+                dim_context,
+                num_bins=num_bins,
+                num_heads=n_heads,
+                x_bounds=x_bounds,
+                y_bounds=y_bounds,
+                use_fp64=use_fp64,
+            )
+            for _ in range(num_flow_layers)
+        ]
+        super().__init__(layers)
+
+    def encode_and_logabsdet(
+        self,
+        x: Tensor,  # (..., *H, $K)
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
+        logabsdet = torch.zeros_like(x[..., 0])
+        for layer in self:
+            x, ldj = layer.encode_and_logabsdet(x, context)
+            logabsdet = logabsdet + ldj
+        return x, logabsdet
+
+    def decode_and_logabsdet(
+        self,
+        y: Tensor,  # (..., *H, $K)
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
+        logabsdet = torch.zeros_like(y[..., 0])
+        for layer in reversed(self):
+            y, ldj = layer.decode_and_logabsdet(y, context)
+            logabsdet = logabsdet + ldj
+        return y, logabsdet
+
+
 class SplineFlow(ModuleSequence[LearnableLRS]):
     r"""Implements a sequence of rational linear spline layers."""
 
@@ -814,23 +876,17 @@ class SplineFlow(ModuleSequence[LearnableLRS]):
         return SplineFlow.from_iterable(layer.marginalize(variables) for layer in self)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        logabsdets: list[Tensor] = []
-
+        logabsdet = torch.zeros_like(x[..., 0]) if x.ndim else torch.zeros_like(x)
         for layer in self:
-            x, logabsdet = layer.encode_and_logabsdet(x)
-            logabsdets.append(logabsdet)
-
-        logabsdet = torch.stack(logabsdets, dim=-1).sum(dim=-1)
+            x, ldj = layer.encode_and_logabsdet(x)
+            logabsdet = logabsdet + ldj
         return x, logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
-        logabsdets: list[Tensor] = []
-
+        logabsdet = torch.zeros_like(y[..., 0]) if y.ndim else torch.zeros_like(y)
         for layer in reversed(self):
-            y, logabsdet = layer.decode_and_logabsdet(y)
-            logabsdets.append(logabsdet)
-
-        logabsdet = torch.stack(logabsdets, dim=-1).sum(dim=-1)
+            y, ldj = layer.decode_and_logabsdet(y)
+            logabsdet = logabsdet + ldj
         return y, logabsdet
 
 
