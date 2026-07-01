@@ -1,12 +1,13 @@
 r"""Tests for forecasting utility containers."""
 
 from dataclasses import replace
-from typing import Literal, TypedDict
+from typing import Literal, cast
 
 import pytest
 import torch
 from torch import Tensor, nan
 from torch.testing import assert_close
+from typing_extensions import TypedDict
 
 from linodenet.forecasting.utils import (
     EventBatch,
@@ -18,42 +19,61 @@ from linodenet.forecasting.utils import (
 from .base import make_forecasting_request
 
 
-class _CanonicalTestData(TypedDict):
+class CanonicalTestData(TypedDict, closed=True):
     split: SplitTimeData
     joint: JointTimeData
     triplet: TripletTimeData
 
 
-def _repeat_batch_elements(data: _TensorViewData, repeats: int, /) -> _TensorViewData:
-    return {
-        data_format: {
-            name: tensor.repeat(repeats, *([1] * (tensor.ndim - 1)))
-            for name, tensor in tensors.items()
-        }
-        for data_format, tensors in data.items()
-    }
+class TensorViewData(TypedDict, closed=True):
+    split: dict[str, Tensor]
+    joint: dict[str, Tensor]
+    triplet: dict[str, Tensor]
+
+
+def _repeat_batch_elements(data: TensorViewData, repeats: int, /) -> TensorViewData:
+    return cast(
+        "TensorViewData",
+        {
+            data_format: {
+                name: tensor.repeat(repeats, *([1] * (tensor.ndim - 1)))
+                for name, tensor in tensors.items()
+            }
+            for data_format, tensors in data.items()
+        },
+    )
 
 
 def _reshape_single_batch(
-    data: _TensorViewData,
+    data: TensorViewData,
     batch_shape: tuple[int, ...],
     /,
-) -> _TensorViewData:
+) -> TensorViewData:
+    return cast(
+        "TensorViewData",
+        {
+            data_format: {
+                name: tensor.reshape(*batch_shape, *tensor.shape[1:])
+                for name, tensor in tensors.items()
+            }
+            for data_format, tensors in data.items()
+        },
+    )
+
+
+def _init_time_data(data: TensorViewData) -> CanonicalTestData:
     return {
-        data_format: {
-            name: tensor.reshape(*batch_shape, *tensor.shape[1:])
-            for name, tensor in tensors.items()
-        }
-        for data_format, tensors in data.items()
+        "split": SplitTimeData(**data["split"]),
+        "joint": JointTimeData(**data["joint"]),
+        "triplet": TripletTimeData(**data["triplet"]),
     }
 
 
-type _TensorViewData = dict[DataFormat, dict[str, Tensor]]
 type BatchType = Literal["unbatched", "single", "multi"]
 type DataType = Literal["simple", "sparse", "general"]
 type DataFormat = Literal["split", "joint", "triplet"]
 
-UNBATCHED_TEST_DATA: _CanonicalTestData = {
+UNBATCHED_TEST_DATA: CanonicalTestData = {
     "split": SplitTimeData(
         context_times=torch.tensor([1.0, 3.0]),
         context_values=torch.tensor([[10.0, nan, 12.0], [nan, 30.0, 32.0]]),
@@ -101,7 +121,7 @@ UNBATCHED_TEST_DATA: _CanonicalTestData = {
         static_covariates=torch.tensor([5.0, 6.0]),
     ),
 }  # fmt: skip
-BATCHED_TEST_DATA: _CanonicalTestData = {
+BATCHED_TEST_DATA: CanonicalTestData = {
     "split": SplitTimeData(
         context_times=torch.tensor([
             [1.0, 3.0],
@@ -209,15 +229,13 @@ BATCHED_TEST_DATA: _CanonicalTestData = {
     ),
 }  # fmt: skip
 
-
-ROUNDTRIP_BATCH_SHAPES = [(), (6,), (1, 2, 3)]
 BATCH_SHAPES: dict[BatchType, tuple[int, ...]] = {
     "unbatched": (),
     "single": (6,),
     "multi": (1, 2, 3),
 }
 
-UNBATCHED_SIMPLE_DATA: _TensorViewData = {
+UNBATCHED_SIMPLE_DATA: TensorViewData = {
     "split": {
         "context_times": torch.tensor([1.0, 3.0]),
         "context_values": torch.tensor([[10.0, nan, 12.0], [nan, 30.0, 32.0]]),
@@ -265,7 +283,7 @@ UNBATCHED_SIMPLE_DATA: _TensorViewData = {
         "static_covariates": torch.tensor([5.0, 6.0]),
     },
 }  # fmt: skip
-UNBATCHED_SPARSE_DATA: _TensorViewData = {
+UNBATCHED_SPARSE_DATA: TensorViewData = {
     "split": {
         "context_times": torch.tensor([1.0, 1.0, 3.0]),
         "context_values": torch.tensor([
@@ -337,7 +355,7 @@ UNBATCHED_SPARSE_DATA: _TensorViewData = {
         "static_covariates": torch.tensor([7.0, 8.0]),
     },
 }  # fmt: skip
-UNBATCHED_GENERAL_DATA: _TensorViewData = {
+UNBATCHED_GENERAL_DATA: TensorViewData = {
     "split": {
         "context_times": torch.tensor([1.0, 1.0, 2.0]),
         "context_values": torch.tensor([
@@ -410,7 +428,7 @@ UNBATCHED_GENERAL_DATA: _TensorViewData = {
     },
 }  # fmt: skip
 
-BATCHED_SIMPLE_DATA: _TensorViewData = {
+BATCHED_SIMPLE_DATA: TensorViewData = {
     "split": {
         "context_times": torch.tensor([
             [1.0, 3.0],
@@ -511,7 +529,7 @@ BATCHED_SIMPLE_DATA: _TensorViewData = {
         ]),
     },
 }  # fmt: skip
-BATCHED_SPARSE_DATA: _TensorViewData = {
+BATCHED_SPARSE_DATA: TensorViewData = {
     "split": {
         "context_times": torch.tensor([
             [1.0, 1.0, 3.0],
@@ -643,7 +661,7 @@ BATCHED_SPARSE_DATA: _TensorViewData = {
         ]),
     },
 }  # fmt: skip
-BATCHED_GENERAL_DATA: _TensorViewData = {
+BATCHED_GENERAL_DATA: TensorViewData = {
     "split": {
         "context_times": torch.tensor([
             [1.0, 1.0, 2.0],
@@ -780,17 +798,17 @@ BATCHED_SIMPLE_DATA = _repeat_batch_elements(BATCHED_SIMPLE_DATA, 3)
 BATCHED_SPARSE_DATA = _repeat_batch_elements(BATCHED_SPARSE_DATA, 3)
 BATCHED_GENERAL_DATA = _repeat_batch_elements(BATCHED_GENERAL_DATA, 3)
 
-MULTI_BATCHED_SIMPLE_DATA: _TensorViewData = _reshape_single_batch(
+MULTI_BATCHED_SIMPLE_DATA: TensorViewData = _reshape_single_batch(
     BATCHED_SIMPLE_DATA, BATCH_SHAPES["multi"]
 )
-MULTI_BATCHED_SPARSE_DATA: _TensorViewData = _reshape_single_batch(
+MULTI_BATCHED_SPARSE_DATA: TensorViewData = _reshape_single_batch(
     BATCHED_SPARSE_DATA, BATCH_SHAPES["multi"]
 )
-MULTI_BATCHED_GENERAL_DATA: _TensorViewData = _reshape_single_batch(
+MULTI_BATCHED_GENERAL_DATA: TensorViewData = _reshape_single_batch(
     BATCHED_GENERAL_DATA, BATCH_SHAPES["multi"]
 )
 
-RAW_TEST_DATA: dict[tuple[BatchType, DataType], _TensorViewData] = {
+_RAW_TEST_DATA: dict[tuple[BatchType, DataType], TensorViewData] = {
     ("single", "general"): BATCHED_GENERAL_DATA,
     ("single", "simple"): BATCHED_SIMPLE_DATA,
     ("single", "sparse"): BATCHED_SPARSE_DATA,
@@ -802,6 +820,10 @@ RAW_TEST_DATA: dict[tuple[BatchType, DataType], _TensorViewData] = {
     ("multi", "sparse"): MULTI_BATCHED_SPARSE_DATA,
 }
 
+TEST_DATA: dict[tuple[BatchType, DataType], CanonicalTestData] = {
+    key: _init_time_data(value) for key, value in _RAW_TEST_DATA.items()
+}
+
 
 def get_test_case(
     data_type: DataType,
@@ -809,22 +831,30 @@ def get_test_case(
     batch_type: BatchType,
     batch_first: bool,
 ) -> dict[str, Tensor]:
-    raw_data = RAW_TEST_DATA[(batch_type, data_type)]
+    raw_data = _RAW_TEST_DATA[(batch_type, data_type)]
 
-    match data_format:
-        case "split":
-            pass
-        case "joint":
-            pass
-        case "triplet":
-            pass
-        case _:
-            raise ValueError(f"Invalid kind: {data_format}")
+    if not batch_first:
+        match data_format:
+            case "split":
+                seq_dim = -2
+                data = raw_data["split"]
+                # data["context_times"] = data["context_times"].movedim(-1, 0)
+                # data["query_mask"] = data["query_mask"].movedim(-2, 0)
+                # data["context_values"] = data["context_values"].movedim(-2, 0)
+                # data["query_times"] = data["query_times"].movedim(-2, 0)
+                # data["target_values"] = data["target_values"].movedim(-2, 0)
+                # data["context_mask"] = data["context_mask"].movedim(-2, 0)
+            case "joint":
+                seq_dim = -2
+            case "triplet":
+                seq_dim = -1
+            case _:
+                raise ValueError(f"Invalid kind: {data_format}")
 
 
-@pytest.mark.parametrize("case", RAW_TEST_DATA)
+@pytest.mark.parametrize("case", _RAW_TEST_DATA)
 def test_initialization(case) -> None:
-    data = RAW_TEST_DATA[case]
+    data: TensorViewData = _RAW_TEST_DATA[case]
     SplitTimeData(**data["split"])
     JointTimeData(**data["joint"])
     TripletTimeData(**data["triplet"])
@@ -929,7 +959,7 @@ class TestModuleTestData:
     )
     def test_simple_data_has_strictly_increasing_split_timestamps(
         self,
-        data: _TensorViewData,
+        data: TensorViewData,
     ) -> None:
         split = data["split"]
 
@@ -947,7 +977,7 @@ class TestModuleTestData:
     )
     def test_sparse_data_has_one_observation_per_split_row(
         self,
-        data: _TensorViewData,
+        data: TensorViewData,
     ) -> None:
         split = data["split"]
 
@@ -975,7 +1005,7 @@ class TestModuleTestData:
     )
     def test_general_data_has_duplicate_time_channel_pairs(
         self,
-        data: _TensorViewData,
+        data: TensorViewData,
     ) -> None:
         triplet = data["triplet"]
 
@@ -1439,7 +1469,7 @@ class TestSplitTimeData:
         assert actual == expected
         assert actual.to_triplets() == triplet
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_triplet_roundtrip(
         self,
         batch_shape: tuple[int, ...],
@@ -1462,7 +1492,7 @@ class TestSplitTimeData:
 
         assert actual == original
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_combined_roundtrip_distinct_dims(
         self,
         batch_shape: tuple[int, ...],
@@ -1671,7 +1701,7 @@ class TestJointTimeData:
 
         assert actual == expected
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_dense_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
         original = make_forecasting_request(
             seed=3141,
@@ -1688,7 +1718,7 @@ class TestJointTimeData:
 
         assert actual == original
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_triplet_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
         original = make_forecasting_request(
             seed=3141,
@@ -1705,7 +1735,7 @@ class TestJointTimeData:
 
         assert actual == original
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_query_and_context_indices_match_split_time(
         self,
         batch_shape: tuple[int, ...],
@@ -2101,7 +2131,7 @@ class TestTripletTimeData:
 
         assert actual == expected
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_dense_roundtrip(
         self,
         batch_shape: tuple[int, ...],
@@ -2112,7 +2142,7 @@ class TestTripletTimeData:
 
         assert actual == original
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_combined_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
         original = _make_random_batched_triplet(batch_shape)
 
@@ -2120,7 +2150,7 @@ class TestTripletTimeData:
 
         assert actual == original
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_from_request_random(self, batch_shape: tuple[int, ...]) -> None:
         req = make_forecasting_request(
             seed=3141,
@@ -2156,7 +2186,7 @@ class TestTripletTimeData:
 
         assert actual == expected
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_from_request_batch_last(self, batch_shape: tuple[int, ...]) -> None:
         req = make_forecasting_request(
             seed=3141,
@@ -2187,7 +2217,7 @@ class TestTripletTimeData:
 
 
 class TestEventBatch:
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_query_indices_random(self, batch_shape: tuple[int, ...]) -> None:
         req = make_forecasting_request(
             seed=3141,
@@ -2217,7 +2247,7 @@ class TestEventBatch:
             equal_nan=True,
         )
 
-    @pytest.mark.parametrize("batch_shape", ROUNDTRIP_BATCH_SHAPES)
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_query_indices_batch_last(self, batch_shape: tuple[int, ...]) -> None:
         req = make_forecasting_request(
             seed=3141,
