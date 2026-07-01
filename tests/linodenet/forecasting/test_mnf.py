@@ -371,8 +371,8 @@ class TestConditionalGaussian:
         context = torch.randn(2, self.NUM_HEADS, self.NUM_QUERIES, self.LATENT_DIM)
         values = torch.randn(2, self.NUM_HEADS, self.NUM_QUERIES)
 
-        mean, cov_factor = model(context)
-        cov_scale = model.cov_scale().to(dtype=context.dtype, device=context.device)
+        mean, cov_factor, cov_scale = model.embed(context)
+        cov_scale = cov_scale.to(dtype=context.dtype, device=context.device)
         covariance = cov_factor @ cov_factor.mT + cov_scale.square()[
             ..., None, None
         ] * torch.eye(self.NUM_QUERIES, dtype=context.dtype, device=context.device)
@@ -395,8 +395,8 @@ class TestConditionalGaussian:
         )
         context = torch.randn(self.NUM_QUERIES, self.LATENT_DIM)
 
-        mean, cov_factor = model(context)
-        cov_scale = model.cov_scale().to(dtype=context.dtype, device=context.device)
+        mean, cov_factor, cov_scale = model.embed(context)
+        cov_scale = cov_scale.to(dtype=context.dtype, device=context.device)
         expected_covariance = cov_factor @ cov_factor.mT + cov_scale.square() * (
             torch.eye(self.NUM_QUERIES, dtype=context.dtype, device=context.device)
         )

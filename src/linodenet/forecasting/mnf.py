@@ -1819,19 +1819,12 @@ class ConditionalGaussian(nn.Module):
         self,
         context: Tensor,  # (..., *H, $K, D)
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H, $K, F)
-        r"""Compute the mean and low-rank factor of the conditional Gaussian."""
+    ) -> tuple[Tensor, Tensor, Tensor]:  # (..., *H, $K), (..., *H, $K, F), (*H,)
+        r"""Compute the mean, low-rank factor, and isotropic scale."""
         mean = torch.einsum("...kd, ...d -> ...k", context, self.mean_param)
         cov_factor = torch.einsum("...kd, ...df -> ...kf", context, self.cov_param)
-        return mean, self.scale * cov_factor
-
-    def forward(
-        self,
-        context: Tensor,  # (..., *H, $K, D)
-        /,
-    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H, $K, F)
-        r"""Alias for :meth:`embed` to preserve module-call semantics."""
-        return self.embed(context)
+        cov_scale = self.cov_scale()
+        return mean, self.scale * cov_factor, cov_scale
 
     def _log_prob(
         self, x: Tensor, mean: Tensor, cov_factor: Tensor, cov_scale: Tensor
@@ -1898,8 +1891,8 @@ class ConditionalGaussian(nn.Module):
         /,
     ) -> Tensor:  # (..., *H)
         r"""Compute the log-likelihood of the input."""
-        mean, cov_factor = self.embed(context)
-        return self._log_prob(x, mean, cov_factor, self.cov_scale())
+        mean, cov_factor, cov_scale = self.embed(context)
+        return self._log_prob(x, mean, cov_factor, cov_scale)
 
     def sample(
         self,
@@ -1908,8 +1901,8 @@ class ConditionalGaussian(nn.Module):
         /,
     ) -> Tensor:  # (..., *H, $K)
         r"""Sample a Gaussian distribution from the conditional distribution."""
-        mean, cov_factor = self.embed(context)
-        return self._sample(size, mean, cov_factor, self.cov_scale())
+        mean, cov_factor, cov_scale = self.embed(context)
+        return self._sample(size, mean, cov_factor, cov_scale)
 
     def sample_and_log_prob(
         self,
@@ -1918,8 +1911,7 @@ class ConditionalGaussian(nn.Module):
         /,
     ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), # (..., *H)
         r"""Sample a Gaussian distribution from the conditional distribution."""
-        mean, cov_factor = self.embed(context)
-        cov_scale = self.cov_scale()
+        mean, cov_factor, cov_scale = self.embed(context)
         samples = self._sample(size, mean, cov_factor, cov_scale)
         log_prob = self._log_prob(samples, mean, cov_factor, cov_scale)
         return samples, log_prob
