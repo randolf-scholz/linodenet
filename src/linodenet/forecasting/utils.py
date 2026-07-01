@@ -112,6 +112,14 @@ def unique_count(x: Tensor, /) -> Tensor:
     ).reshape(batch_shape)
 
 
+def _has_unique_time_channel_pairs(times: Tensor, channels: Tensor, /) -> Tensor:
+    r"""Check whether valid `(time, channel)` pairs are unique per batch item."""
+    valid = times.isfinite()
+    pairs = torch.stack([times, channels.to(times.dtype)], dim=-1)
+    pairs = pairs.masked_fill(~valid.unsqueeze(-1), nan)
+    return unique_count(pairs).eq(valid.sum(dim=-1))
+
+
 def _consecutive_group_indices(
     values: Tensor, mask: Tensor, /
 ) -> tuple[Tensor, Tensor]:
@@ -423,6 +431,23 @@ class SplitTimeData:
         if (S := self.static_covariates) is not None:
             *_, static_dim = S.shape
             assert S.shape == (*batch_shape, static_dim)
+
+    def is_simple(self) -> bool:
+        seq_dim = -2 if self.batch_first else 0
+        T = self.context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
+        Q = self.query_times[..., None].movedim(seq_dim, -2).squeeze(-1)
+        T_increasing = T.diff(dim=-1).gt(0.0)
+        Q_increasing = Q.diff(dim=-1).gt(0.0)
+        T_valid = T.isfinite()
+        Q_valid = Q.isfinite()
+        return bool(
+            (
+                is_prefix_mask(T_increasing)
+                & is_prefix_mask(Q_increasing)
+                & (T_increasing | ~T_valid[..., 1:]).all(dim=-1)
+                & (Q_increasing | ~Q_valid[..., 1:]).all(dim=-1)
+            ).all()
+        )
 
     def __eq__(self, other: object, /) -> bool:
         if not isinstance(other, SplitTimeData):
@@ -821,6 +846,18 @@ class JointTimeData:
         ):
             assert times[context].diff(dim=-1).ge(0.0).all()
             assert times[query].diff(dim=-1).ge(0.0).all()
+
+    def is_simple(self) -> bool:
+        seq_dim = -2 if self.batch_first else 0
+        T = self.timestamps[..., None].movedim(seq_dim, -2).squeeze(-1)
+        T_increasing = T.diff(dim=-1).gt(0.0)
+        T_valid = T.isfinite()
+        return bool(
+            (
+                is_prefix_mask(T_increasing)
+                & (T_increasing | ~T_valid[..., 1:]).all(dim=-1)
+            ).all()
+        )
 
     def _split_indices(
         self,
@@ -1251,6 +1288,19 @@ class TripletTimeData:
         if Y is not None:
             assert Y.shape == (*batch_shape, num_query)
             assert torch.equal(Y.isfinite(), M_valid)
+
+    def is_simple(self) -> bool:
+        seq_dim = -1 if self.batch_first else 0
+        T = self.context_times.movedim(seq_dim, -1)
+        C = self.context_channels.movedim(seq_dim, -1)
+        Q = self.query_times.movedim(seq_dim, -1)
+        M = self.query_channels.movedim(seq_dim, -1)
+        return bool(
+            (
+                _has_unique_time_channel_pairs(T, C)
+                & _has_unique_time_channel_pairs(Q, M)
+            ).all()
+        )
 
     def __eq__(self, other: object, /) -> bool:
         if not isinstance(other, TripletTimeData):

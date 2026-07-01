@@ -1170,6 +1170,31 @@ class TestSplitTimeData:
 
         assert_close(arg.context_values, torch.tensor([[10.0, nan]]), equal_nan=True)
 
+    def test_is_simple(self) -> None:
+        arg = SplitTimeData(
+            context_times=torch.tensor([1.0, 3.0, nan]),
+            context_values=torch.tensor(
+                [
+                    [10.0, nan],
+                    [nan, 30.0],
+                    [nan, nan],
+                ]
+            ),
+            context_mask=torch.tensor(
+                [
+                    [True, False],
+                    [False, True],
+                    [False, False],
+                ]
+            ),
+            query_times=torch.tensor([2.0, 4.0]),
+            query_mask=torch.tensor([[True], [True]]),
+        )
+
+        assert arg.is_simple()
+        assert not replace(arg, context_times=torch.tensor([1.0, 1.0, nan])).is_simple()
+        assert not replace(arg, query_times=torch.tensor([2.0, 2.0])).is_simple()
+
     def test_to_triplet_unbatched(self) -> None:
         original = SplitTimeData(
             context_times=torch.tensor([1.0, 2.0]),
@@ -1740,6 +1765,40 @@ class TestJointTimeData:
                 ]),
             )  # fmt: skip
 
+    def test_is_simple(self) -> None:
+        arg = JointTimeData(
+            timestamps=torch.tensor([1.0, 2.0, 4.0, nan]),
+            context_values=torch.tensor(
+                [
+                    [10.0, nan],
+                    [nan, nan],
+                    [nan, 40.0],
+                    [nan, nan],
+                ]
+            ),
+            context_mask=torch.tensor(
+                [
+                    [True, False],
+                    [False, False],
+                    [False, True],
+                    [False, False],
+                ]
+            ),
+            query_mask=torch.tensor(
+                [
+                    [False, False],
+                    [True, False],
+                    [False, False],
+                    [False, False],
+                ]
+            ),
+        )
+
+        assert arg.is_simple()
+        assert not replace(
+            arg, timestamps=torch.tensor([1.0, 2.0, 2.0, nan])
+        ).is_simple()
+
     def test_batched_roundtrip(self) -> None:
         expected = BATCHED_TEST_DATA["joint"]
         args = expected.unbatch()
@@ -1921,6 +1980,31 @@ class TestTripletTimeData:
                 query_times=torch.tensor([2.0, 2.0]),
                 query_channels=torch.tensor([1, 1]),
             )
+
+    def test_is_simple(self) -> None:
+        arg = TripletTimeData(
+            context_times=torch.tensor([1.0, 1.0, 2.0, nan]),
+            context_channels=torch.tensor([0, 1, 0, -1]),
+            context_values=torch.tensor([10.0, 11.0, 20.0, nan]),
+            query_times=torch.tensor([3.0, 3.0, 4.0]),
+            query_channels=torch.tensor([0, 1, 0]),
+            target_values=torch.tensor([30.0, 31.0, 40.0]),
+        )
+
+        assert arg.is_simple()
+        assert not replace(
+            arg,
+            context_channels=torch.tensor([0, 0, 0, -1]),
+        ).is_simple()
+        assert not TripletTimeData(
+            context_times=torch.tensor([1.0]),
+            context_channels=torch.tensor([0]),
+            context_values=torch.tensor([10.0]),
+            query_times=torch.tensor([2.0, 2.0]),
+            query_channels=torch.tensor([1, 1]),
+            target_values=torch.tensor([20.0, 21.0]),
+            validate_args=False,
+        ).is_simple()
 
     def test_to_dense_unbatched(self) -> None:
         original = TripletTimeData(
