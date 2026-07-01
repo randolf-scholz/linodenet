@@ -437,8 +437,8 @@ class TestSeparableEncoder:
         return SeparableEncoder(
             dim_output=self.DIM_HIDDEN,
             dim_head=self.DIM_HEAD,
-            num_heads=2,
-            num_components=self.NUM_COMPONENTS,
+            num_attn_heads=2,
+            num_heads=self.NUM_COMPONENTS,
             num_frequencies=self.NUM_FREQUENCIES,
             num_channels=self.NUM_CHANNELS,
         )

@@ -1649,19 +1649,18 @@ class SeparableEncoder(nn.Module):
     def __init__(
         self,
         *,
-        dim_output: int,
-        dim_head: int,
-        num_heads: int,
-        num_components: int,
-        num_frequencies: int,
         num_channels: int,
+        dim_output: int,
+        num_heads: int | tuple[int, ...] = (),
+        dim_head: int = 128,
+        num_attn_heads: int = 4,
+        num_frequencies: int = 10,
     ) -> None:
         super().__init__()
         self.dim_output = dim_output
-        self.num_components = num_components
-        self.num_heads = num_heads
         self.num_channels = num_channels
-        self.num_frequencies = num_frequencies
+        self.head_shape = (num_heads,) if isinstance(num_heads, int) else num_heads
+        self.head_count = math.prod(self.head_shape)
 
         self.positional_embedding = PositionalEmbedding(num_frequencies)
         self.channel_embedding = ChannelEmbedding(num_channels)
@@ -1674,15 +1673,15 @@ class SeparableEncoder(nn.Module):
             v_dim=self.ctx_embed_dim,
             dim_head=dim_head,
             dim_output=dim_output,
-            num_heads=num_heads,
+            num_heads=num_attn_heads,
         )
         self.cross_attention = MultiHeadAttention(
             q_dim=self.qry_embed_dim,
             k_dim=dim_output,
             v_dim=dim_output,
             dim_head=dim_head,
-            dim_output=num_components * dim_output,
-            num_heads=num_heads,
+            dim_output=self.head_count * dim_output,
+            num_heads=num_attn_heads,
         )
 
     def forward(
@@ -1695,7 +1694,7 @@ class SeparableEncoder(nn.Module):
         context_channels: Tensor,  # Long[(..., $X)], padded with -1
         context_values: Tensor,  # Float[(..., $X)], padded with NaN
         context_valid: Tensor | None = None,  # Bool[(..., $X)],
-    ) -> tuple[Tensor, Tensor]:  # (..., $X, M), (..., D, $X, M), padded with NaN
+    ) -> tuple[Tensor, Tensor]:  # (..., $X, M), (..., *H, $X, M), padded with NaN
         r"""Compute per-query embeddings and mixture weights.
 
         Args:
@@ -1731,9 +1730,6 @@ class SeparableEncoder(nn.Module):
         context_times = context_times.masked_fill(~ctx_valid, 0.0)
         query_times = query_times.masked_fill(~qry_valid, 0.0)
 
-        D = self.num_components
-        M = self.dim_output
-
         x = torch.cat(  # (..., $X, D)
             [
                 self.positional_embedding(context_times),
@@ -1752,9 +1748,12 @@ class SeparableEncoder(nn.Module):
         )
 
         h_obs = self.context_self_attention(x, x, x)  # (..., $X, M)
-        h_mix = self.cross_attention(q, h_obs, h_obs)  # (..., $Q, D×M)
-        h_mix = h_mix.reshape(*query_times.shape, D, M)  # (..., $Q, D, M)
-        h_mix = h_mix.swapaxes(-2, -3)  # (..., D, $Q, M)
+        h_mix = self.cross_attention(q, h_obs, h_obs)  # (..., $Q, *H×M)
+        h_mix = h_mix.reshape(  # (..., $Q, *H, M)
+            *query_times.shape,
+            *self.head_shape,
+            self.dim_output,
+        ).movedim(query_times.ndim - 1, -2)  # (..., *H, $Q, M)
         return (
             h_obs.masked_fill(~ctx_valid[..., None], nan),
             h_mix.masked_fill(~qry_valid[..., None, :, None], nan),
@@ -1829,8 +1828,13 @@ class ConditionalGaussian(nn.Module):
         return mean, self.scale * cov_factor, cov_scale
 
     def _log_prob(
-        self, x: Tensor, mean: Tensor, cov_factor: Tensor, cov_scale: Tensor
-    ) -> Tensor:
+        self,
+        x: Tensor,  # (..., *H, $K)
+        mean: Tensor,  # (..., *H, $K)
+        cov_factor: Tensor,  # (..., *H, $K, F)
+        cov_scale: Tensor,  # (..., *H,)
+        /,
+    ) -> Tensor:  # (..., *H)
         # Write Σ = σ²(I + VVᵀ) with V = U / σ and U = cov_factor. Woodbury
         # gives (I + VVᵀ)⁻¹ = I - V(I + VᵀV)⁻¹Vᵀ, so the only factorization is
         # the small rank×rank system I + VᵀV.
@@ -1859,11 +1863,12 @@ class ConditionalGaussian(nn.Module):
 
     def _sample(
         self,
-        size: tuple[int, ...],
-        mean: Tensor,
-        cov_factor: Tensor,
-        cov_scale: Tensor,
-    ) -> Tensor:
+        size: tuple[int, ...],  # *S
+        mean: Tensor,  # (..., *H, $K)
+        cov_factor: Tensor,  # (..., *H, $K, F)
+        cov_scale: Tensor,  # (*H,)
+        /,
+    ) -> Tensor:  # (*S, ..., *H, $K)
         # Write Σ = σ²I + UUᵀ with U = cov_factor. Then [σI, U] is a
         # rectangular square root because [σI, U][σI, U]ᵀ = σ²I + UUᵀ = Σ.
         white_noise = torch.randn(
@@ -1898,20 +1903,20 @@ class ConditionalGaussian(nn.Module):
 
     def sample(
         self,
-        size: tuple[int, ...],
+        size: tuple[int, ...],  # (*S)
         context: Tensor,  # (..., *H, $K, D)
         /,
-    ) -> Tensor:  # (..., *H, $K)
+    ) -> Tensor:  # (*S, ..., *H, $K)
         r"""Sample a Gaussian distribution from the conditional distribution."""
         mean, cov_factor, cov_scale = self.embed(context)
         return self._sample(size, mean, cov_factor, cov_scale)
 
     def sample_and_log_prob(
         self,
-        size: tuple[int, ...],
+        size: tuple[int, ...],  # (*S)
         context: Tensor,  # (..., *H, $K, D)
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), # (..., *H)
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., *H, $K), (*S, ..., *H)
         r"""Sample a Gaussian distribution from the conditional distribution."""
         mean, cov_factor, cov_scale = self.embed(context)
         samples = self._sample(size, mean, cov_factor, cov_scale)
@@ -1935,7 +1940,7 @@ class Moses(nn.Module):
     Args:
         input_dim: Number of observed channels ``D``.
         latent_dim: GraFITi / linear-projection embedding size ``M``.
-        num_components: Number of mixture components ``C``.
+        num_mixture_components: Number of mixture components ``C``.
         num_flow_layers: Number of spline layers per component.
         num_bins: Number of rational-spline bins.
         bounds: Symmetric spline input/output domain ``(lo, hi)``.
@@ -1943,7 +1948,7 @@ class Moses(nn.Module):
         num_encoder_heads: Number of GraFITi attention heads.
     """
 
-    num_components: Final[int]
+    num_mixture_components: Final[int]
     num_bins: Final[int]
     bounds: Final[tuple[float, float]]
 
@@ -1974,7 +1979,7 @@ class Moses(nn.Module):
         *,
         input_dim: int,
         latent_dim: int = 128,
-        num_components: int = 4,
+        num_mixture_components: int = 4,
         num_flow_layers: int = 3,
         num_bins: int = 16,
         bounds: tuple[float, float] = (-5.0, 5.0),
@@ -1984,28 +1989,38 @@ class Moses(nn.Module):
         covariance_rank: int | None = None,
     ) -> None:
         super().__init__()
-        self.num_components = num_components
+        self.num_mixture_components = num_mixture_components
         self.num_bins = num_bins
         self.bounds = bounds
 
-        self.encoder = Grafiti(
-            input_dim=input_dim,
-            latent_dim=latent_dim,
-            num_layers=num_encoder_layers,
-            num_heads=num_encoder_heads,
-            output_mode="embeddings",
+        # Separable Encoder (eq 12)
+        self.encoder = SeparableEncoder(
+            num_attn_heads=num_encoder_heads,
+            num_heads=num_mixture_components,
+            num_frequencies=10,
+            num_channels=input_dim,
+            dim_head=128,
+            dim_output=latent_dim,
         )
+        # self.encoder = Grafiti(
+        #     input_dim=input_dim,
+        #     latent_dim=latent_dim,
+        #     num_layers=num_encoder_layers,
+        #     num_heads=num_encoder_heads,
+        #     output_mode="embeddings",
+        # )
 
+        # Separable Gaussian mixture model (eq 13)
         self.base_distribution = ConditionalGaussian(
             latent_dim=latent_dim,
-            num_heads=num_components,
+            num_heads=num_mixture_components,
             covariance_rank=covariance_rank,
         )
 
         # One head per component. (eq 14)
         self.component_flows = ConditionalSplineFlow(
             dim_context=latent_dim,
-            num_heads=num_components,
+            num_heads=num_mixture_components,
             num_flow_layers=num_flow_layers,
             num_bins=num_bins,
             x_bounds=bounds,
@@ -2014,7 +2029,7 @@ class Moses(nn.Module):
 
         # X -> w(X) (eq 15)
         self.mixture_weight_model = MixtureWeightsModel(
-            num_components=num_components,
+            num_components=num_mixture_components,
             dim_input=latent_dim,
             dim_hidden=latent_dim,
             num_attn_heads=4,
