@@ -22,6 +22,8 @@ __all__ = [
     "SeparableEncoder",
     "MultiHeadAttention",
     "ChannelEmbedding",
+    "ConditionalGaussian",
+    "ConditionalLRS",
     # functions
     "inverse_softplus",
 ]
