@@ -1537,8 +1537,8 @@ class MixtureWeightsModel(nn.Module):
     r"""Implements the mixture model used by moses.
 
     Given mixture-query embeddings ``β ∈ ℝᶜˣᴹ`` and a sequence of encoder
-    embeddings ``h ∈ ℝᴺˣᴰ``, this module returns one mixture-weight vector per
-    batch element.
+    embeddings ``h ∈ ℝᴺˣᴰ``, this module returns one mixture log-weight vector
+    per batch element.
 
     The paper writes
 
@@ -1609,8 +1609,8 @@ class MixtureWeightsModel(nn.Module):
         embeddings: Tensor,  # Float[..., $K, M]
         *,
         valid_mask: Tensor,  # Bool[..., $K]
-    ) -> Tensor:  # (..., D), one normalized weight vector per batch element
-        r"""Compute one mixture-weight vector per batch element.
+    ) -> Tensor:  # (..., D), one normalized log-weight vector per batch element
+        r"""Compute one mixture log-weight vector per batch element.
 
         Args:
             embeddings: Sequence embeddings with shape ``(..., N, D)``.
@@ -1618,8 +1618,8 @@ class MixtureWeightsModel(nn.Module):
                 If omitted, it is inferred from finite rows of ``embeddings``.
 
         Returns:
-            Mixture weights with shape ``(..., C)``. Each batch element sums to
-            1 across the mixture-query axis.
+            Mixture log-weights with shape ``(..., C)``. Each batch element
+            log-normalizes across the mixture-query axis.
         """
         *batch_shape, seq_len, dim = embeddings.shape
 
@@ -1648,7 +1648,10 @@ class MixtureWeightsModel(nn.Module):
         embeddings: Tensor,  # Float[..., $K, M]
         valid_mask: Tensor,  # Bool[..., $K]
     ) -> Tensor:  # Float[..., *S]
-        raise NotImplementedError
+        log_weights = self.forward(embeddings, valid_mask=valid_mask)
+        log_prob = torch.distributions.Categorical(logits=log_weights).log_prob(indices)
+        self.log_probs = log_prob
+        return log_prob
 
     def sample(
         self,
@@ -1657,7 +1660,12 @@ class MixtureWeightsModel(nn.Module):
         embeddings: Tensor,  # Float[..., $K, M]
         valid_mask: Tensor,  # Bool[..., $K]
     ) -> Tensor:  # Long[..., *S]
-        raise NotImplementedError
+        sample_shape = (size,) if isinstance(size, int) else size
+        samples = torch.distributions.Categorical(
+            logits=self.forward(embeddings, valid_mask=valid_mask)
+        ).sample(sample_shape)
+        self.samples = samples
+        return samples
 
     def sample_and_log_prob(
         self,
@@ -1666,7 +1674,15 @@ class MixtureWeightsModel(nn.Module):
         embeddings: Tensor,  # Float[..., $K, M]
         valid_mask: Tensor,  # Bool[..., $K]
     ) -> tuple[Tensor, Tensor]:  # Long[..., *S], Float[..., *S]
-        raise NotImplementedError
+        sample_shape = (size,) if isinstance(size, int) else size
+        distribution = torch.distributions.Categorical(
+            logits=self.forward(embeddings, valid_mask=valid_mask)
+        )
+        samples = distribution.sample(sample_shape)
+        log_prob = distribution.log_prob(samples)
+        self.samples = samples
+        self.log_probs = log_prob
+        return samples, log_prob
 
 
 class SeparableEncoder(nn.Module):

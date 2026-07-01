@@ -623,16 +623,19 @@ class TestMixtureWeightsModel:
         valid_mask = torch.rand(*batch_shape, 4) > 0.4
         embeddings = embeddings.masked_fill(~valid_mask.unsqueeze(-1), torch.nan)
 
-        weights = model(embeddings, valid_mask=valid_mask)
+        log_weights = model(embeddings, valid_mask=valid_mask)
 
-        assert weights.shape == (*batch_shape, 3)
-        assert weights.isfinite().all()
-        assert_close(weights.sum(dim=-1), torch.ones_like(weights.sum(dim=-1)))
+        assert log_weights.shape == (*batch_shape, 3)
+        assert log_weights.isfinite().all()
+        assert_close(
+            log_weights.logsumexp(dim=-1),
+            torch.zeros_like(log_weights[..., 0]),
+        )
 
     def test_mixture_weights_model_returns_zero_for_fully_masked_sequences(
         self,
     ) -> None:
-        r"""A fully padded sequence should still yield a finite normalized vector."""
+        r"""A fully padded sequence should still yield a finite normalized log-vector."""
         model = MixtureWeightsModel(
             num_components=2,
             num_attn_heads=2,
@@ -642,8 +645,120 @@ class TestMixtureWeightsModel:
         embeddings = torch.full((1, 3, 4), torch.nan)
         valid_mask = embeddings.isfinite().all(dim=-1)
 
-        weights = model(embeddings, valid_mask=valid_mask)
+        log_weights = model(embeddings, valid_mask=valid_mask)
 
-        assert weights.shape == (1, 2)
-        assert weights.isfinite().all()
-        assert_close(weights.sum(dim=-1), weights.new_ones((1,)))
+        assert log_weights.shape == (1, 2)
+        assert log_weights.isfinite().all()
+        assert_close(log_weights.logsumexp(dim=-1), log_weights.new_zeros((1,)))
+
+    @pytest.mark.parametrize(
+        ("batch_shape", "sample_shape"),
+        [
+            pytest.param((), (), id="batch_shape=(),sample_shape=()"),
+            pytest.param((2,), (5,), id="batch_shape=(2,),sample_shape=(5,)"),
+            pytest.param((2, 3), (4, 2), id="batch_shape=(2,3),sample_shape=(4,2)"),
+        ],
+    )
+    def test_log_prob_matches_forward_gather(
+        self,
+        batch_shape: tuple[int, ...],
+        sample_shape: tuple[int, ...],
+    ) -> None:
+        r"""Index log-probabilities should match the selected forward log-weights."""
+        torch.manual_seed(0)
+        model = MixtureWeightsModel(
+            num_components=4,
+            num_attn_heads=2,
+            dim_input=5,
+            dim_hidden=8,
+        )
+        embeddings = torch.randn(*batch_shape, 4, 5)
+        valid_mask = torch.rand(*batch_shape, 4) > 0.2
+        embeddings = embeddings.masked_fill(~valid_mask.unsqueeze(-1), torch.nan)
+
+        log_weights = model(embeddings, valid_mask=valid_mask)
+        indices = torch.randint(0, 4, (*sample_shape, *batch_shape))
+
+        actual = model.log_prob(indices, embeddings, valid_mask)
+        expected = torch.distributions.Categorical(logits=log_weights).log_prob(indices)
+
+        assert actual.shape == (*sample_shape, *batch_shape)
+        assert_close(actual, expected)
+
+    @pytest.mark.parametrize(
+        ("batch_shape", "size", "expected_sample_shape"),
+        [
+            pytest.param((), (), (), id="batch_shape=(),size=()"),
+            pytest.param((2,), 7, (7,), id="batch_shape=(2,),size=7"),
+            pytest.param(
+                (2, 3),
+                (4, 2),
+                (4, 2),
+                id="batch_shape=(2,3),size=(4,2)",
+            ),
+        ],
+    )
+    def test_sample_returns_expected_shape_and_range(
+        self,
+        batch_shape: tuple[int, ...],
+        size: int | tuple[int, ...],
+        expected_sample_shape: tuple[int, ...],
+    ) -> None:
+        r"""Sampling should prepend sample axes and return valid component indices."""
+        torch.manual_seed(0)
+        model = MixtureWeightsModel(
+            num_components=5,
+            num_attn_heads=2,
+            dim_input=6,
+            dim_hidden=8,
+        )
+        embeddings = torch.randn(*batch_shape, 3, 6)
+        valid_mask = torch.rand(*batch_shape, 3) > 0.3
+        embeddings = embeddings.masked_fill(~valid_mask.unsqueeze(-1), torch.nan)
+
+        actual = model.sample(size, embeddings=embeddings, valid_mask=valid_mask)
+
+        assert actual.shape == (*expected_sample_shape, *batch_shape)
+        assert actual.dtype == torch.long
+        assert ((0 <= actual) & (actual < 5)).all()
+
+    @pytest.mark.parametrize(
+        ("batch_shape", "size", "expected_sample_shape"),
+        [
+            pytest.param((), (), (), id="batch_shape=(),size=()"),
+            pytest.param((2,), 6, (6,), id="batch_shape=(2,),size=6"),
+            pytest.param(
+                (2, 3),
+                (4, 2),
+                (4, 2),
+                id="batch_shape=(2,3),size=(4,2)",
+            ),
+        ],
+    )
+    def test_sample_and_log_prob_is_self_consistent(
+        self,
+        batch_shape: tuple[int, ...],
+        size: int | tuple[int, ...],
+        expected_sample_shape: tuple[int, ...],
+    ) -> None:
+        r"""Joint sampling should return the sampled indices and their log-probabilities."""
+        torch.manual_seed(0)
+        model = MixtureWeightsModel(
+            num_components=4,
+            num_attn_heads=2,
+            dim_input=5,
+            dim_hidden=8,
+        )
+        embeddings = torch.randn(*batch_shape, 5, 5)
+        valid_mask = torch.rand(*batch_shape, 5) > 0.25
+        embeddings = embeddings.masked_fill(~valid_mask.unsqueeze(-1), torch.nan)
+
+        samples, log_prob = model.sample_and_log_prob(
+            size,
+            embeddings=embeddings,
+            valid_mask=valid_mask,
+        )
+
+        assert samples.shape == (*expected_sample_shape, *batch_shape)
+        assert log_prob.shape == (*expected_sample_shape, *batch_shape)
+        assert_close(log_prob, model.log_prob(samples, embeddings, valid_mask))
