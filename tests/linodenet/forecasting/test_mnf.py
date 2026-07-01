@@ -355,6 +355,15 @@ class TestConditionalGaussian:
                 num_heads=self.NUM_HEADS,
             )
 
+    def test_gamma_returns_positive_floor(self) -> None:
+        r"""The isotropic scale should stay strictly positive."""
+        model = self.make_model()
+
+        gamma = model.gamma()
+
+        assert gamma.shape == (self.NUM_HEADS,)
+        assert (gamma > model.gamma_min).all()
+
     def test_log_prob_matches_dense_multivariate_normal(self) -> None:
         r"""Woodbury log-probabilities should match the dense Gaussian formula."""
         torch.manual_seed(0)
@@ -363,9 +372,10 @@ class TestConditionalGaussian:
         values = torch.randn(2, self.NUM_HEADS, self.NUM_QUERIES)
 
         mean, cov_factor = model(context)
-        covariance = cov_factor @ cov_factor.mT + torch.eye(
-            self.NUM_QUERIES, dtype=context.dtype, device=context.device
-        )
+        gamma = model.gamma().to(dtype=context.dtype, device=context.device)
+        covariance = cov_factor @ cov_factor.mT + gamma.square()[
+            ..., None, None
+        ] * torch.eye(self.NUM_QUERIES, dtype=context.dtype, device=context.device)
         reference = torch.distributions.MultivariateNormal(
             loc=mean, covariance_matrix=covariance
         )
@@ -386,7 +396,8 @@ class TestConditionalGaussian:
         context = torch.randn(self.NUM_QUERIES, self.LATENT_DIM)
 
         mean, cov_factor = model(context)
-        expected_covariance = cov_factor @ cov_factor.mT + torch.eye(
+        gamma = model.gamma().to(dtype=context.dtype, device=context.device)
+        expected_covariance = cov_factor @ cov_factor.mT + gamma.square() * torch.eye(
             self.NUM_QUERIES, dtype=context.dtype, device=context.device
         )
 
