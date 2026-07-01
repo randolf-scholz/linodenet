@@ -61,37 +61,6 @@ def _reshape_single_batch(
     )
 
 
-def _init_time_data(data: TensorViewData) -> CanonicalTestData:
-    return {
-        "split": SplitTimeData(
-            context_times=data["split"]["context_times"],
-            context_values=data["split"]["context_values"],
-            context_mask=data["split"]["context_mask"],
-            query_times=data["split"]["query_times"],
-            query_mask=data["split"]["query_mask"],
-            target_values=data["split"]["target_values"],
-            static_covariates=data["split"]["static_covariates"],
-        ),
-        "joint": JointTimeData(
-            timestamps=data["joint"]["timestamps"],
-            context_mask=data["joint"]["context_mask"],
-            context_values=data["joint"]["context_values"],
-            query_mask=data["joint"]["query_mask"],
-            target_values=data["joint"]["target_values"],
-            static_covariates=data["joint"]["static_covariates"],
-        ),
-        "triplet": TripletTimeData(
-            context_times=data["triplet"]["context_times"],
-            context_channels=data["triplet"]["context_channels"],
-            context_values=data["triplet"]["context_values"],
-            query_times=data["triplet"]["query_times"],
-            query_channels=data["triplet"]["query_channels"],
-            target_values=data["triplet"]["target_values"],
-            static_covariates=data["triplet"]["static_covariates"],
-        ),
-    }
-
-
 type BatchType = Literal["unbatched", "single", "multi"]
 type DataType = Literal["simple", "sparse", "general"]
 type DataFormat = Literal["split", "joint", "triplet"]
@@ -831,21 +800,101 @@ MULTI_BATCHED_GENERAL_DATA: TensorViewData = _reshape_single_batch(
     BATCHED_GENERAL_DATA, BATCH_SHAPES["multi"]
 )
 
-_RAW_TEST_DATA: dict[tuple[BatchType, DataType], TensorViewData] = {
-    ("single", "general"): BATCHED_GENERAL_DATA,
-    ("single", "simple"): BATCHED_SIMPLE_DATA,
-    ("single", "sparse"): BATCHED_SPARSE_DATA,
-    ("unbatched", "general"): UNBATCHED_GENERAL_DATA,
-    ("unbatched", "simple"): UNBATCHED_SIMPLE_DATA,
-    ("unbatched", "sparse"): UNBATCHED_SPARSE_DATA,
-    ("multi", "general"): MULTI_BATCHED_GENERAL_DATA,
-    ("multi", "simple"): MULTI_BATCHED_SIMPLE_DATA,
-    ("multi", "sparse"): MULTI_BATCHED_SPARSE_DATA,
+
+def _to_batch_last(data: TensorViewData) -> TensorViewData:
+    return {
+        "split": {
+            key: (
+                tensor
+                if key == "static_covariates"
+                else tensor.movedim(-1, 0)
+                if key in {"timestamps", "context_times", "query_times"}
+                else tensor.movedim(-2, 0)
+            )
+            for key, tensor in data["split"].items()
+        },
+        "joint": {
+            key: (
+                tensor
+                if key == "static_covariates"
+                else tensor.movedim(-1, 0)
+                if key in {"timestamps", "context_times", "query_times"}
+                else tensor.movedim(-2, 0)
+            )
+            for key, tensor in data["split"].items()
+        },
+        "triplet": {
+            key: tensor if key == "static_covariates" else tensor.movedim(-1, 0)
+            for key, tensor in data["triplet"].items()
+        },
+    }
+
+
+_RAW_TEST_DATA: dict[tuple[DataType, BatchType, bool], TensorViewData] = {
+    # batch_first
+    ("general", "multi", True): MULTI_BATCHED_GENERAL_DATA,
+    ("general", "single", True): BATCHED_GENERAL_DATA,
+    ("general", "unbatched", True): UNBATCHED_GENERAL_DATA,
+    ("simple", "multi", True): MULTI_BATCHED_SIMPLE_DATA,
+    ("simple", "single", True): BATCHED_SIMPLE_DATA,
+    ("simple", "unbatched", True): UNBATCHED_SIMPLE_DATA,
+    ("sparse", "multi", True): MULTI_BATCHED_SPARSE_DATA,
+    ("sparse", "single", True): BATCHED_SPARSE_DATA,
+    ("sparse", "unbatched", True): UNBATCHED_SPARSE_DATA,
+    # batch_last
+    ("general", "multi", False): _to_batch_last(MULTI_BATCHED_GENERAL_DATA),
+    ("general", "single", False): _to_batch_last(BATCHED_GENERAL_DATA),
+    ("general", "unbatched", False): _to_batch_last(UNBATCHED_GENERAL_DATA),
+    ("simple", "multi", False): _to_batch_last(MULTI_BATCHED_SIMPLE_DATA),
+    ("simple", "single", False): _to_batch_last(BATCHED_SIMPLE_DATA),
+    ("simple", "unbatched", False): _to_batch_last(UNBATCHED_SIMPLE_DATA),
+    ("sparse", "multi", False): _to_batch_last(MULTI_BATCHED_SPARSE_DATA),
+    ("sparse", "single", False): _to_batch_last(BATCHED_SPARSE_DATA),
+    ("sparse", "unbatched", False): _to_batch_last(UNBATCHED_SPARSE_DATA),
 }
 
-TEST_DATA: dict[tuple[BatchType, DataType], CanonicalTestData] = {
-    key: _init_time_data(value) for key, value in _RAW_TEST_DATA.items()
-}
+
+def _init_time_data(data: TensorViewData) -> CanonicalTestData:
+    return {
+        "split": SplitTimeData(
+            context_times=data["split"]["context_times"],
+            context_values=data["split"]["context_values"],
+            context_mask=data["split"]["context_mask"],
+            query_times=data["split"]["query_times"],
+            query_mask=data["split"]["query_mask"],
+            target_values=data["split"]["target_values"],
+            static_covariates=data["split"]["static_covariates"],
+        ),
+        "joint": JointTimeData(
+            timestamps=data["joint"]["timestamps"],
+            context_mask=data["joint"]["context_mask"],
+            context_values=data["joint"]["context_values"],
+            query_mask=data["joint"]["query_mask"],
+            target_values=data["joint"]["target_values"],
+            static_covariates=data["joint"]["static_covariates"],
+        ),
+        "triplet": TripletTimeData(
+            context_times=data["triplet"]["context_times"],
+            context_channels=data["triplet"]["context_channels"],
+            context_values=data["triplet"]["context_values"],
+            query_times=data["triplet"]["query_times"],
+            query_channels=data["triplet"]["query_channels"],
+            target_values=data["triplet"]["target_values"],
+            static_covariates=data["triplet"]["static_covariates"],
+        ),
+    }
+
+
+for key, value in _RAW_TEST_DATA.items():
+    try:
+        _init_time_data(value)
+    except Exception as e:
+        print(f"Failed to initialize test data for {key}: {e}")
+        raise
+
+# TEST_DATA: dict[tuple[BatchType, DataType], CanonicalTestData] = {
+#     key: _init_time_data(value) for key, value in _RAW_TEST_DATA.items()
+# }
 
 
 def get_test_case(
@@ -854,23 +903,45 @@ def get_test_case(
     batch_type: BatchType,
     batch_first: bool,
 ) -> dict[str, Tensor]:
-    raw_data = _RAW_TEST_DATA[(batch_type, data_type)]
+    raw_data = TEST_DATA[(batch_type, data_type)]
 
     if not batch_first:
         match data_format:
             case "split":
                 seq_dim = -2
                 data = raw_data["split"]
-                # data["context_times"] = data["context_times"].movedim(-1, 0)
-                # data["query_mask"] = data["query_mask"].movedim(-2, 0)
-                # data["context_values"] = data["context_values"].movedim(-2, 0)
-                # data["query_times"] = data["query_times"].movedim(-2, 0)
-                # data["target_values"] = data["target_values"].movedim(-2, 0)
-                # data["context_mask"] = data["context_mask"].movedim(-2, 0)
+                data = SplitTimeData(
+                    context_times=data.context_times.movedim(-1, 0),
+                    query_mask=data.query_mask.movedim(-2, 0),
+                    context_values=data.context_values.movedim(-2, 0),
+                    query_times=data.query_times.movedim(-2, 0),
+                    target_values=data.target_values.movedim(-2, 0),
+                    context_mask=data.context_mask.movedim(-2, 0),
+                    batch_first=False,
+                )
             case "joint":
                 seq_dim = -2
+                data = raw_data["joint"]
+                data = JointTimeData(
+                    timestamps=data.timestamps.movedim(-1, 0),
+                    query_mask=data.query_mask.movedim(-2, 0),
+                    context_values=data.context_values.movedim(-2, 0),
+                    target_values=data.target_values.movedim(-2, 0),
+                    context_mask=data.context_mask.movedim(-2, 0),
+                    batch_first=False,
+                )
             case "triplet":
                 seq_dim = -1
+                data = raw_data["triplet"]
+                data = TripletTimeData(
+                    context_times=data.context_times.movedim(-1, 0),
+                    query_channels=data.query_channels.movedim(-1, 0),
+                    context_values=data.context_values.movedim(-1, 0),
+                    query_times=data.query_times.movedim(-1, 0),
+                    target_values=data.target_values.movedim(-1, 0),
+                    context_channels=data.context_channels.movedim(-1, 0),
+                    batch_first=False,
+                )
             case _:
                 raise ValueError(f"Invalid kind: {data_format}")
 
