@@ -1634,6 +1634,33 @@ class MixtureWeightsModel(nn.Module):
 
         return attended.log_softmax(dim=-1)  # (..., C)
 
+    def log_prob(
+        self,
+        indices: Tensor,  # Long[..., *S]
+        /,
+        embeddings: Tensor,  # Float[..., $K, M]
+        valid_mask: Tensor,  # Bool[..., $K]
+    ) -> Tensor:  # Float[..., *S]
+        raise NotImplementedError
+
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),  # (*S)
+        *,
+        embeddings: Tensor,  # Float[..., $K, M]
+        valid_mask: Tensor,  # Bool[..., $K]
+    ) -> Tensor:  # Long[..., *S]
+        raise NotImplementedError
+
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),  # (*S)
+        *,
+        embeddings: Tensor,  # Float[..., $K, M]
+        valid_mask: Tensor,  # Bool[..., $K]
+    ) -> tuple[Tensor, Tensor]:  # Long[..., *S], Float[..., *S]
+        raise NotImplementedError
+
 
 class SeparableEncoder(nn.Module):
     r"""Implements the encoder used by moses.
@@ -2163,7 +2190,6 @@ class Moses(nn.Module):
             context_mask=context_mask,
             query_times=query_times,
             query_mask=query_mask,
-            target_values=values,
         )
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
