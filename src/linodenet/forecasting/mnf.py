@@ -39,7 +39,7 @@ from torch.linalg import cholesky, solve_triangular
 from torch.nn import functional as F
 
 from .grafiti import Grafiti
-from .utils import EventBatch
+from .utils import EventBatch, TripletTimeData
 
 DEFAULT_MIN_BIN_WIDTH: Final[float] = 1e-3
 DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3
@@ -1594,16 +1594,15 @@ class MixtureWeightsModel(nn.Module):
             v_dim=dim_input,
             dim_head=dim_hidden // num_attn_heads,
             num_heads=num_attn_heads,
-            dim_output=dim_hidden,
+            dim_output=1,
         )
-        self.output_proj = nn.Linear(dim_hidden, 1)
 
     def forward(
         self,
-        embeddings: Tensor,  # (..., $K, D)
+        embeddings: Tensor,  # Float[..., $K, M]
         *,
-        valid_mask: Tensor,  # Bool[(..., $K)]
-    ) -> Tensor:  # (..., C), one normalized weight vector per batch element
+        valid_mask: Tensor,  # Bool[..., $K]
+    ) -> Tensor:  # (..., D), one normalized weight vector per batch element
         r"""Compute one mixture-weight vector per batch element.
 
         Args:
@@ -1626,14 +1625,14 @@ class MixtureWeightsModel(nn.Module):
             self.num_components,
             self.dim_hidden,
         )
-        attended = self.attention(
+        attended = self.attention(  # (..., C)
             queries,
             embeddings,
             embeddings,
             key_mask=valid_mask,
-        )
-        logits = self.output_proj(attended).squeeze(dim=-1)  # (..., C)
-        return logits.softmax(dim=-1)
+        ).squeeze(-1)
+
+        return attended.log_softmax(dim=-1)  # (..., C)
 
 
 class SeparableEncoder(nn.Module):
@@ -1955,7 +1954,8 @@ class Moses(nn.Module):
     # sub-modules / parameters
     encoder: SeparableEncoder
     mixture_weight_model: MixtureWeightsModel  # M → C  (mixture logits)
-    component_flows: nn.Module  # C × SplineFlow, each n_heads=()
+    conditional_flow: ConditionalSplineFlow  # C × SplineFlow, each n_heads=()
+    base_distribution: ConditionalGaussian
 
     @classmethod
     def from_config(
@@ -2017,7 +2017,7 @@ class Moses(nn.Module):
         )
 
         # One head per component. (eq 14)
-        self.component_flows = ConditionalSplineFlow(
+        self.conditional_flow = ConditionalSplineFlow(
             num_heads=num_mixture_components,
             dim_context=latent_dim,
             num_flow_layers=num_flow_layers,
@@ -2039,9 +2039,9 @@ class Moses(nn.Module):
         query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
         context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-    ):
+        context_values: Tensor,  # Float[(..., $N, C)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., $N, C)], padded False
+    ) -> tuple[Tensor, Tensor]:  # (..., D), (..., D, $K, M)
         triplets = ...
 
         h_obs, h = self.encoder.forward(
@@ -2058,17 +2058,17 @@ class Moses(nn.Module):
             h_obs, valid_mask=triplets.query_valid
         )
 
-        return h_obs, h
+        return mixture_weights, h
 
     def log_prob(
         self,
-        values: Tensor,  # (..., $T, D)
+        values: Tensor,  # Float[..., $T, E]
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, C], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, C], padded False
     ) -> Tensor:  # (...,)
         r"""Compute the joint log-likelihood of the target values.
 
@@ -2086,18 +2086,52 @@ class Moses(nn.Module):
         Returns:
             Joint log-likelihood with shape ``(...,)``.
         """
-        raise NotImplementedError
+        triplets = TripletTimeData.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            target_values=values,
+        )
+
+        # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
+        h_obs, h = self.encoder.forward(
+            query_times=triplets.query_times,
+            query_channels=triplets.query_channels,
+            query_valid=triplets.query_valid,
+            context_times=triplets.context_times,
+            context_channels=triplets.context_channels,
+            context_values=triplets.context_values,
+            context_valid=triplets.context_valid,
+        )
+        # compute mixture weights w(𝐡ᵒᵇˢ)
+        log_weights = self.mixture_weight_model.forward(
+            h_obs, valid_mask=triplets.query_valid
+        )
+
+        # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
+        # log pᵢ(x) = log qᵢ(f⁻¹(x)) + log |det J(f⁻¹(x))|
+        z, logabsdet = self.conditional_flow.encode_and_logabsdet(
+            triplets.target_values, h
+        )
+        base_log_prob = self.base_distribution.log_prob(z, h)  # (..., D)
+
+        # log wᵢ + log pᵢ(x)
+        component_log_probs = base_log_prob + logabsdet  # (..., D)
+        # log p(x) = logsumexp(log wᵢ + log pᵢ(x))
+        return torch.logsumexp(log_weights + component_log_probs, dim=-1)  # (...)
 
     def sample(
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-    ) -> Tensor:  # (*S, ..., $K, D)
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, C], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, C], padded False
+    ) -> Tensor:  # (*S, ..., $K, F)
         r"""Sample from the conditional marginal distribution at each query position.
 
         Args:
@@ -2117,10 +2151,38 @@ class Moses(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ...)
-        raise NotImplementedError
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, C], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, C], padded False
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, F), (*S, ...)
+        triplets = TripletTimeData.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            target_values=values,
+        )
+
+        # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
+        h_obs, h = self.encoder.forward(
+            query_times=triplets.query_times,
+            query_channels=triplets.query_channels,
+            query_valid=triplets.query_valid,
+            context_times=triplets.context_times,
+            context_channels=triplets.context_channels,
+            context_values=triplets.context_values,
+            context_valid=triplets.context_valid,
+        )
+        # compute mixture weights w(𝐡ᵒᵇˢ)
+        log_weights = self.mixture_weight_model.forward(
+            h_obs, valid_mask=triplets.query_valid
+        )
+
+        # sample from base distribution
+        z, log_prob = self.base_distribution.sample_and_log_prob(size, h)
+        x, logabsdet = self.conditional_flow.decode_and_logabsdet(z, h)
+
+        # sample indices from the mixture
