@@ -24,6 +24,35 @@ class _CanonicalTestData(TypedDict):
     triplet: TripletTimeData
 
 
+def _repeat_batch_elements(data: _TensorViewData, repeats: int, /) -> _TensorViewData:
+    return {
+        data_format: {
+            name: tensor.repeat(repeats, *([1] * (tensor.ndim - 1)))
+            for name, tensor in tensors.items()
+        }
+        for data_format, tensors in data.items()
+    }
+
+
+def _reshape_single_batch(
+    data: _TensorViewData,
+    batch_shape: tuple[int, ...],
+    /,
+) -> _TensorViewData:
+    return {
+        data_format: {
+            name: tensor.reshape(*batch_shape, *tensor.shape[1:])
+            for name, tensor in tensors.items()
+        }
+        for data_format, tensors in data.items()
+    }
+
+
+type _TensorViewData = dict[DataFormat, dict[str, Tensor]]
+type BatchType = Literal["unbatched", "single", "multi"]
+type DataType = Literal["simple", "sparse", "general"]
+type DataFormat = Literal["split", "joint", "triplet"]
+
 UNBATCHED_TEST_DATA: _CanonicalTestData = {
     "split": SplitTimeData(
         context_times=torch.tensor([1.0, 3.0]),
@@ -179,6 +208,14 @@ BATCHED_TEST_DATA: _CanonicalTestData = {
         ]),
     ),
 }  # fmt: skip
+
+
+ROUNDTRIP_BATCH_SHAPES = [(), (6,), (1, 2, 3)]
+BATCH_SHAPES: dict[BatchType, tuple[int, ...]] = {
+    "unbatched": (),
+    "single": (6,),
+    "multi": (1, 2, 3),
+}
 
 UNBATCHED_SIMPLE_DATA: _TensorViewData = {
     "split": {
@@ -739,22 +776,19 @@ BATCHED_GENERAL_DATA: _TensorViewData = {
     },
 }  # fmt: skip
 
-MULTI_BATCHED_SIMPLE_DATA: _TensorViewData = {}
-MULTI_BATCHED_SPARSE_DATA: _TensorViewData = {}
-MULTI_BATCHED_GENERAL_DATA: _TensorViewData = {}
+BATCHED_SIMPLE_DATA = _repeat_batch_elements(BATCHED_SIMPLE_DATA, 3)
+BATCHED_SPARSE_DATA = _repeat_batch_elements(BATCHED_SPARSE_DATA, 3)
+BATCHED_GENERAL_DATA = _repeat_batch_elements(BATCHED_GENERAL_DATA, 3)
 
-type _TensorViewData = dict[DataFormat, dict[str, Tensor]]
-type BatchType = Literal["unbatched", "single", "multi"]
-type DataType = Literal["simple", "sparse", "general"]
-type DataFormat = Literal["split", "joint", "triplet"]
-
-ROUNDTRIP_BATCH_SHAPES = [(), (6,), (1, 2, 3)]
-
-BATCH_SHAPES: dict[BatchType, tuple[int, ...]] = {
-    "unbatched": (),
-    "single": (6,),
-    "multi": (1, 2, 3),
-}
+MULTI_BATCHED_SIMPLE_DATA: _TensorViewData = _reshape_single_batch(
+    BATCHED_SIMPLE_DATA, BATCH_SHAPES["multi"]
+)
+MULTI_BATCHED_SPARSE_DATA: _TensorViewData = _reshape_single_batch(
+    BATCHED_SPARSE_DATA, BATCH_SHAPES["multi"]
+)
+MULTI_BATCHED_GENERAL_DATA: _TensorViewData = _reshape_single_batch(
+    BATCHED_GENERAL_DATA, BATCH_SHAPES["multi"]
+)
 
 RAW_TEST_DATA: dict[tuple[BatchType, DataType], _TensorViewData] = {
     ("single", "general"): BATCHED_GENERAL_DATA,
