@@ -439,6 +439,15 @@ class SplitTimeData:
             *_, static_dim = S.shape
             assert S.shape == (*batch_shape, static_dim)
 
+    def is_trimmed(self) -> bool:
+        seq_dim = -2 if self.batch_first else 0
+        C = self.context_mask.movedim(seq_dim, -2)
+        M = self.query_mask.movedim(seq_dim, -2)
+        return bool(
+            C.any(dim=-1).reshape(-1, C.shape[-2]).any(dim=0).all()
+            and M.any(dim=-1).reshape(-1, M.shape[-2]).any(dim=0).all()
+        )
+
     def is_simple(self) -> bool:
         seq_dim = -2 if self.batch_first else 0
         T = self.context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
@@ -448,7 +457,8 @@ class SplitTimeData:
         T_valid = T.isfinite()
         Q_valid = Q.isfinite()
         return bool(
-            (
+            self.is_trimmed()
+            and (
                 is_prefix_mask(T_increasing)
                 & is_prefix_mask(Q_increasing)
                 & (T_increasing | ~T_valid[..., 1:]).all(dim=-1)
@@ -854,13 +864,20 @@ class JointTimeData:
             assert times[context].diff(dim=-1).ge(0.0).all()
             assert times[query].diff(dim=-1).ge(0.0).all()
 
+    def is_trimmed(self) -> bool:
+        seq_dim = -2 if self.batch_first else 0
+        C = self.context_mask.movedim(seq_dim, -2)
+        M = self.query_mask.movedim(seq_dim, -2)
+        return bool((C | M).any(dim=-1).reshape(-1, C.shape[-2]).any(dim=0).all())
+
     def is_simple(self) -> bool:
         seq_dim = -2 if self.batch_first else 0
         T = self.timestamps[..., None].movedim(seq_dim, -2).squeeze(-1)
         T_increasing = T.diff(dim=-1).gt(0.0)
         T_valid = T.isfinite()
         return bool(
-            (
+            self.is_trimmed()
+            and (
                 is_prefix_mask(T_increasing)
                 & (T_increasing | ~T_valid[..., 1:]).all(dim=-1)
             ).all()
@@ -1296,6 +1313,15 @@ class TripletTimeData:
             assert Y.shape == (*batch_shape, num_query)
             assert torch.equal(Y.isfinite(), M_valid)
 
+    def is_trimmed(self) -> bool:
+        seq_dim = -1 if self.batch_first else 0
+        C = self.context_channels.movedim(seq_dim, -1)
+        M = self.query_channels.movedim(seq_dim, -1)
+        return bool(
+            C.ge(0).reshape(-1, C.shape[-1]).any(dim=0).all()
+            and M.ge(0).reshape(-1, M.shape[-1]).any(dim=0).all()
+        )
+
     def is_simple(self) -> bool:
         seq_dim = -1 if self.batch_first else 0
         T = self.context_times.movedim(seq_dim, -1)
@@ -1303,7 +1329,8 @@ class TripletTimeData:
         Q = self.query_times.movedim(seq_dim, -1)
         M = self.query_channels.movedim(seq_dim, -1)
         return bool(
-            (
+            self.is_trimmed()
+            and (
                 _has_unique_time_channel_pairs(T, C)
                 & _has_unique_time_channel_pairs(Q, M)
             ).all()
