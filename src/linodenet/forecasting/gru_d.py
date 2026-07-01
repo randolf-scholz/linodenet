@@ -142,8 +142,9 @@ class GRU_D(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
-
-        return predictions[combined.query_indices]
+        result = predictions[combined.query_indices]
+        assert result.shape == query_mask.shape
+        return result
 
     def forward(
         self,
