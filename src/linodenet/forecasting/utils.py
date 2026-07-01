@@ -164,12 +164,14 @@ class EventBatch(NamedTuple):
 
     timestamps: Tensor  # Float[..., $T], padded NaN, non-decreasing
 
-    context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
     context_mask: Tensor  # Bool[..., $T, D], padded False
+    context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
+    context_indices: tuple[Tensor, ...]
+    r"""Advanced index tuple recovering ``(..., K, D)`` from ``context_mask``."""
 
     query_mask: Tensor  # Bool[..., $T, F], padded False
     query_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., K, F)`` from ``target_values``."""
+    r"""Advanced index tuple recovering ``(..., K, F)`` from ``query_mask``."""
 
     target_values: Tensor | None = None  # Float[..., $T, F], padded NaN, sparse
     r"""Only available during training, otherwise None."""
@@ -209,7 +211,8 @@ class EventBatch(NamedTuple):
             stable=True,
         )
         inv_perm = torch.argsort(permutation, dim=0, stable=True)  # (..., $N+$K, 1)
-        time_idx = inv_perm[ctx_size:].movedim(0, seq_dim).squeeze(-1)
+        ctx_idx = inv_perm[:ctx_size].movedim(0, seq_dim).squeeze(-1)
+        qry_idx = inv_perm[ctx_size:].movedim(0, seq_dim).squeeze(-1)
 
         batch_idx = tuple(
             torch.arange(size, device=times.device)
@@ -219,7 +222,6 @@ class EventBatch(NamedTuple):
             .unsqueeze(-1 if batch_first else 0)
             for i, size in enumerate(batch_shape)
         )
-        query_idx = (*batch_idx, time_idx) if batch_first else (time_idx, *batch_idx)
 
         return EventBatch(
             timestamps=(
@@ -248,7 +250,12 @@ class EventBatch(NamedTuple):
                 else None
             ),
             static_covariates=static_covariates,
-            query_indices=query_idx,
+            context_indices=(
+                (*batch_idx, ctx_idx) if batch_first else (ctx_idx, *batch_idx)
+            ),
+            query_indices=(
+                (*batch_idx, qry_idx) if batch_first else (qry_idx, *batch_idx)
+            ),
         )
 
     def validate(self) -> None:
