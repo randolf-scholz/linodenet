@@ -1762,20 +1762,20 @@ class SeparableEncoder(nn.Module):
 class ConditionalGaussian(nn.Module):
     r"""Implements the conditional Gaussian distribution used by moses.
 
+    This implementation has one small tweak compared to the original paper:
+    We add a learnable covariance scale parameter $σ$, that is we parametrize:
+
+    .. math::   μ(𝐡) = 𝐡W    \qquad    Σ(𝐡) = σ²𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M.
+
     Given context embedding 𝐡∈ℝ^{D×K×M}, where
 
         D: number of mixture components
         K: number of query values
         M: dimensionality of each embedding,
 
-    then this is a Normal distribution over ℝᴷ for each component.
-
-    the mean μ(𝐡) and covariance Σ(𝐡) are computed as
-    μ(𝐡) = 𝐡W, Σ(𝐡) = σ²𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M.
-
     Since Σ(𝐡) is a low-rank update of an isotropic covariance, we can compute
     the log-likelihood and sample from the distribution efficiently using the
-    Woodbury identity.
+    Woodbury identity in O(MK²) time instead of O(K³) time.
     """
 
     eye: Tensor
