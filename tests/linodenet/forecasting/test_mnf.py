@@ -8,6 +8,7 @@ from torch import Tensor
 from torch.testing import assert_close
 
 from linodenet.forecasting.mnf import (
+    ConditionalLRS,
     MarginalizableNormalizingFlow,
     MixtureWeightsModel,
     MultiHeadAttention,
@@ -23,6 +24,72 @@ class MNFConfig(NamedTuple):
     num_flow_layers: int
     num_bins: int = 8
     bounds: tuple[float, float] = (-5.0, 5.0)
+
+
+class TestConditionalLRS:
+    r"""Tests for the conditional rational linear spline transform."""
+
+    DIM_CONTEXT: ClassVar[int] = 4
+    NUM_BINS: ClassVar[int] = 8
+    NUM_HEADS: ClassVar[int] = 2
+    NUM_VALUES: ClassVar[int] = 5
+
+    def make_layer(self) -> ConditionalLRS:
+        r"""Instantiate the conditional spline layer under test."""
+        return ConditionalLRS(
+            self.DIM_CONTEXT,
+            num_bins=self.NUM_BINS,
+            num_heads=self.NUM_HEADS,
+            x_bounds=(-3.0, 3.0),
+            y_bounds=(-2.0, 4.0),
+        )
+
+    def test_encode_decode_roundtrip_with_logabsdet(self) -> None:
+        r"""Encode/decode should invert each other for a conditional spline layer."""
+        torch.manual_seed(0)
+        layer = self.make_layer()
+        x = torch.randn(3, self.NUM_HEADS, self.NUM_VALUES)
+        context = torch.randn(3, self.NUM_HEADS, self.NUM_VALUES, self.DIM_CONTEXT)
+
+        y, forward_logabsdet = layer.encode_and_logabsdet(x, context)
+        xhat, inverse_logabsdet = layer.decode_and_logabsdet(y, context)
+
+        assert y.shape == x.shape
+        assert forward_logabsdet.shape == x.shape[:-1]
+        assert_close(xhat, x, atol=1e-5, rtol=1e-5)
+        assert_close(
+            forward_logabsdet + inverse_logabsdet,
+            torch.zeros_like(forward_logabsdet),
+            atol=1e-5,
+            rtol=1e-5,
+        )
+
+    def test_flow_roundtrip_with_logabsdet(self) -> None:
+        r"""A chain of conditional spline layers should remain invertible."""
+        torch.manual_seed(0)
+        layers = [self.make_layer(), self.make_layer()]
+        x = torch.randn(3, self.NUM_HEADS, self.NUM_VALUES)
+        context = torch.randn(3, self.NUM_HEADS, self.NUM_VALUES, self.DIM_CONTEXT)
+
+        y = x
+        forward_logabsdet = torch.zeros_like(x[..., 0])
+        for layer in layers:
+            y, ldj = layer.encode_and_logabsdet(y, context)
+            forward_logabsdet = forward_logabsdet + ldj
+
+        xhat = y
+        inverse_logabsdet = torch.zeros_like(forward_logabsdet)
+        for layer in reversed(layers):
+            xhat, ldj = layer.decode_and_logabsdet(xhat, context)
+            inverse_logabsdet = inverse_logabsdet + ldj
+
+        assert_close(xhat, x, atol=1e-5, rtol=1e-5)
+        assert_close(
+            forward_logabsdet + inverse_logabsdet,
+            torch.zeros_like(forward_logabsdet),
+            atol=1e-5,
+            rtol=1e-5,
+        )
 
 
 class TestMarginalizableNormalizingFlow:

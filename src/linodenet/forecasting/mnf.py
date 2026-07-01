@@ -184,6 +184,7 @@ class SplineCoefficients(NamedTuple):
         return SplineCoefficients(λ, wa, wb, wc, ya, yb, yc, xa, xb, xc)
 
 
+# (...), (..., K+1) -> (...), (...)
 def _lrs_encode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bounded LRS forward map and log|det J| at inputs."""
     num_bins = knots.x.shape[-1] - 1
@@ -215,6 +216,7 @@ def _lrs_encode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
     return numerator / denominator, logabsdet
 
 
+# (...), (..., K+1) -> (...), (...)
 def _lrs_decode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bounded LRS inverse map and log|det J| at inputs."""
     num_bins = knots.y.shape[-1] - 1
@@ -576,10 +578,10 @@ class LearnableLRS(nn.Module):
         r"""Forward pass of the flow.
 
         Args:
-            x (..., *H, D): input tensor
+            x (..., *H, $K): input tensor
 
         Returns:
-            y (..., *H, D): transformed tensor
+            y (..., *H, $K): transformed tensor
             ldj (..., *H): log determinant of the Jacobian
         """
         batch_shape = x.shape[: -len(self.n_heads)] if self.n_heads else x.shape
@@ -598,10 +600,10 @@ class LearnableLRS(nn.Module):
         r"""Inverse pass of the flow.
 
         Args:
-            y (..., *H, D): input tensor
+            y (..., *H, $K): input tensor
 
         Returns:
-            x (..., *H, D): transformed tensor
+            x (..., *H, $K): transformed tensor
             ldj (..., *H): log determinant of the Jacobian
         """
         batch_shape = y.shape[: -len(self.n_heads)] if self.n_heads else y.shape
@@ -616,6 +618,163 @@ class LearnableLRS(nn.Module):
         )
         x = x + self.x_center
         return x, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
+
+
+class ConditionalLRS(nn.Module):
+    width_model: nn.Module
+    height_model: nn.Module
+    lambda_model: nn.Module
+    derivative_model: nn.Module
+    spline: UnconstrainedLinearRationalSpline
+
+    # buffers
+    widths: Tensor
+    heights: Tensor
+    lambdas: Tensor
+    derivatives: Tensor
+    x_center: Tensor
+    y_center: Tensor
+
+    def __init__(
+        self,
+        dim_context: int,
+        *,
+        num_bins: int,
+        num_heads: int | tuple[int, ...] = (),
+        x_bounds: tuple[float, float],
+        y_bounds: tuple[float, float],
+        use_fp64: bool = True,
+    ) -> None:
+        super().__init__()
+        self.head_shape = torch.Size(
+            (num_heads,) if isinstance(num_heads, int) else num_heads
+        )
+        self.num_bins = int(num_bins)
+        self.x_bounds = x_bounds
+        self.y_bounds = y_bounds
+        self.spline = UnconstrainedLinearRationalSpline(use_fp64=use_fp64)
+        self.dim_context = dim_context
+        left, right = x_bounds
+        bottom, top = y_bounds
+        assert left < right
+        assert bottom < top
+        slope = (top - bottom) / (right - left)
+        assert slope > 0.0
+        width_init = (right - left) / self.num_bins
+        height_init = (top - bottom) / self.num_bins
+        min_bin_width = float(DEFAULT_MIN_BIN_WIDTH)
+        min_bin_height = float(DEFAULT_MIN_BIN_HEIGHT)
+        assert width_init > min_bin_width
+        assert height_init > min_bin_height
+
+        self.width_model = nn.Linear(dim_context, num_bins)
+        self.height_model = nn.Linear(dim_context, num_bins)
+        self.lambda_model = nn.Linear(dim_context, num_bins)
+        self.derivative_model = nn.Linear(dim_context, num_bins + 1)
+        self.x_center = nn.Parameter(torch.full(self.head_shape, 0.5 * (left + right)))
+        self.y_center = nn.Parameter(torch.full(self.head_shape, 0.5 * (bottom + top)))
+
+        width_bias = inverse_softplus(
+            torch.tensor(width_init - min_bin_width, dtype=self.width_model.bias.dtype)
+        ).item()
+        height_bias = inverse_softplus(
+            torch.tensor(
+                height_init - min_bin_height, dtype=self.height_model.bias.dtype
+            )
+        ).item()
+        derivative_bias = inverse_softplus(
+            torch.tensor(slope, dtype=self.derivative_model.bias.dtype)
+        ).item()
+
+        with torch.no_grad():
+            for module in (
+                self.width_model,
+                self.height_model,
+                self.lambda_model,
+                self.derivative_model,
+            ):
+                nn.init.zeros_(module.weight)
+                nn.init.zeros_(module.bias)
+            self.width_model.bias.fill_(width_bias)
+            self.height_model.bias.fill_(height_bias)
+            self.derivative_model.bias.fill_(derivative_bias)
+
+        self.register_buffer("widths", None, persistent=False)
+        self.register_buffer("heights", None, persistent=False)
+        self.register_buffer("lambdas", None, persistent=False)
+        self.register_buffer("derivatives", None, persistent=False)
+
+    def forward(self, context: Tensor, /) -> tuple[Tensor, Tensor, Tensor, Tensor]:
+        r"""Condition the spline parameters on the given context tensor."""
+        if context.shape[-1] != self.dim_context:
+            raise ValueError(
+                f"context dim must be {self.dim_context}, got {context.shape[-1]}"
+            )
+
+        widths = self.spline.MIN_BIN_WIDTH + F.softplus(self.width_model(context))
+        heights = self.spline.MIN_BIN_HEIGHT + F.softplus(self.height_model(context))
+        lambdas = torch.sigmoid(self.lambda_model(context))
+        derivatives = F.softplus(self.derivative_model(context))
+        self.widths = widths.detach()
+        self.heights = heights.detach()
+        self.lambdas = lambdas.detach()
+        self.derivatives = derivatives.detach()
+        return widths, heights, lambdas, derivatives
+
+    def encode_and_logabsdet(
+        self,
+        x: Tensor,  # (..., *H, $K)
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
+        r"""Forward pass of the flow."""
+        # Shape legend:
+        # ...: batch_shape
+        # *H: head_shape
+        # $K: number of values (dynamic)
+        # D: context dim (static)
+        if context.shape[:-1] != x.shape:
+            raise ValueError(
+                f"context batch/head/value shape {context.shape[:-1]} must match x "
+                f"shape {x.shape}"
+            )
+        widths, heights, lambdas, derivatives = self(context)
+        x_center = self.x_center.expand(*x.shape[:-1]).unsqueeze(-1)
+        y_center = self.y_center.expand(*x.shape[:-1]).unsqueeze(-1)
+
+        y, logabsdet = self.spline.encode_and_logabsdet(
+            x - x_center,
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
+        )
+        return y + y_center, logabsdet.sum(dim=-1)
+
+    def decode_and_logabsdet(
+        self,
+        y: Tensor,  # (..., *H, $K)
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
+        r"""Inverse pass of the flow."""
+        if context.shape[:-1] != y.shape:
+            raise ValueError(
+                f"context batch/head/value shape {context.shape[:-1]} must match y "
+                f"shape {y.shape}"
+            )
+        widths, heights, lambdas, derivatives = self(context)
+        x_center = self.x_center.expand(*y.shape[:-1]).unsqueeze(-1)
+        y_center = self.y_center.expand(*y.shape[:-1]).unsqueeze(-1)
+
+        x, logabsdet = self.spline.decode_and_logabsdet(
+            y - y_center,
+            widths=widths,
+            heights=heights,
+            lambdas=lambdas,
+            derivatives=derivatives,
+        )
+        return x + x_center, logabsdet.sum(dim=-1)
 
 
 class SplineFlow(ModuleSequence[LearnableLRS]):
@@ -1622,7 +1781,7 @@ class Moses(nn.Module):
         self.mean_proj = nn.Linear(latent_dim, num_components)
         self.log_std = nn.Parameter(torch.zeros(num_components))
 
-        # One scalar SplineFlow per component (n_heads=() → elementwise 1-D flow).
+        # One head per component.
         self.component_flows = SplineFlow(
             n_heads=num_components,
             num_flow_layers=num_flow_layers,
@@ -1661,7 +1820,7 @@ class Moses(nn.Module):
     def _predict(
         self,
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
         context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[(..., $N, D)], padded False
@@ -1697,7 +1856,7 @@ class Moses(nn.Module):
         self,
         values: Tensor,  # (..., $T, D)
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
         context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
         context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
@@ -1764,7 +1923,7 @@ class Moses(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
         context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
         context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
