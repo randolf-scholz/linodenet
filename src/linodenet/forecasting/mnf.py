@@ -1558,25 +1558,26 @@ class MixtureWeightsModel(nn.Module):
 
     def __init__(
         self,
-        num_components: int,
-        num_heads: int,
+        *,
         dim_input: int,
         dim_hidden: int,
+        num_components: int,
+        num_attn_heads: int,
     ) -> None:
         super().__init__()
         if num_components <= 0:
             raise ValueError(f"{num_components=} must be positive.")
-        if num_heads <= 0:
-            raise ValueError(f"{num_heads=} must be positive.")
+        if num_attn_heads <= 0:
+            raise ValueError(f"{num_attn_heads=} must be positive.")
         if dim_input <= 0:
             raise ValueError(f"{dim_input=} must be positive.")
         if dim_hidden <= 0:
             raise ValueError(f"{dim_hidden=} must be positive.")
-        if dim_hidden % num_heads != 0:
-            raise ValueError(f"{dim_hidden=} must be divisible by {num_heads=}.")
+        if dim_hidden % num_attn_heads != 0:
+            raise ValueError(f"{dim_hidden=} must be divisible by {num_attn_heads=}.")
 
         self.num_components = num_components
-        self.num_heads = num_heads
+        self.num_heads = num_attn_heads
         self.dim_input = dim_input
         self.dim_hidden = dim_hidden
 
@@ -1589,8 +1590,8 @@ class MixtureWeightsModel(nn.Module):
             q_dim=dim_hidden,
             k_dim=dim_input,
             v_dim=dim_input,
-            dim_head=dim_hidden // num_heads,
-            num_heads=num_heads,
+            dim_head=dim_hidden // num_attn_heads,
+            num_heads=num_attn_heads,
             dim_output=dim_hidden,
         )
         self.output_proj = nn.Linear(dim_hidden, 1)
@@ -1758,6 +1759,60 @@ class SeparableEncoder(nn.Module):
         )
 
 
+class ConditionalGaussian(nn.Module):
+    r"""Implements the conditional Gaussian distribution used by moses.
+
+    Given context embedding 𝐡∈ℝ^{D×K×M}, where
+
+        D: number of mixture components
+        K: number of query values
+        M: dimensionality of each embedding,
+
+    then this is a Normal distribution over ℝᴷ for each component.
+
+    the mean μ(𝐡) and covariance Σ(𝐡) are computed as μ(𝐡) = 𝐡W, Σ(𝐡) = 𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M.
+
+    Since Σ(𝐡) is a low-rank update of the identity, we can compute the log-likelihood
+    and sample from the distribution efficiently using the Woodbury identity.
+    """
+
+    def __init__(
+        self,
+        latent_dim: int,
+        covariance_rank: int,
+        num_heads: int | tuple[int, ...] = (),
+    ) -> None:
+        super().__init__()
+        # μ(𝐡) = 𝐡W, Σ(𝐡) = 𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M
+        self.head_shape = (num_heads,) if isinstance(num_heads, int) else num_heads
+        self.mean_param = nn.Parameter(torch.randn(*self.head_shape, latent_dim))
+        self.cov_param = nn.Parameter(
+            torch.randn(*self.head_shape, latent_dim, covariance_rank)
+        )
+        self.scale = 0.5 / math.sqrt(latent_dim)
+
+    def forward(
+        self,
+        context: Tensor,  # (..., *H, $K, D)
+        /,
+    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H, $K, F)
+        r"""Compute the mean and low-rank factor of the conditional Gaussian."""
+        mean = torch.einsum("...kd, ...d -> ...k", context, self.mean_param)
+        cov_factor = torch.einsum("...kd, ...df -> ...kf", context, self.cov_param)
+        return mean, self.scale * cov_factor
+
+    def log_prob(self, x: Tensor, context: Tensor, /) -> Tensor:
+        r"""Compute the log-likelihood of the input."""
+
+    def sample(self, size: tuple[int, ...], context: Tensor, /) -> Tensor:
+        r"""Sample a Gaussian distribution from the conditional distribution."""
+
+    def sample_and_log_prob(
+        self, size: tuple[int, ...], context: Tensor, /
+    ) -> tuple[Tensor, Tensor]:
+        r"""Sample a Gaussian distribution from the conditional distribution."""
+
+
 class Moses(nn.Module):
     r"""Context-conditioned mixture normalizing flow for irregular time-series forecasting.
 
@@ -1820,8 +1875,11 @@ class Moses(nn.Module):
         num_encoder_layers: int = 3,
         num_encoder_heads: int = 4,
         mixture_weight_model: nn.Module,
+        covariance_rank: int = 0,
     ) -> None:
         super().__init__()
+        if covariance_rank <= 0:
+            covariance_rank = max(1, latent_dim // 16)
 
         self.num_components = num_components
         self.num_bins = num_bins
@@ -1834,18 +1892,23 @@ class Moses(nn.Module):
             num_heads=num_encoder_heads,
             output_mode="embeddings",
         )
-        # X -> w(X)
-        self.mixture_weight_model = nn.Linear(latent_dim, num_components)
-        self.mean_proj = nn.Linear(latent_dim, num_components)
-        self.log_std = nn.Parameter(torch.zeros(num_components))
 
-        # One head per component.
-        self.component_flows = SplineFlow(
+        # One head per component. (eq 14)
+        self.component_flows = ConditionalSplineFlow(
+            dim_context=latent_dim,
             num_heads=num_components,
             num_flow_layers=num_flow_layers,
             num_bins=num_bins,
             x_bounds=bounds,
             y_bounds=bounds,
+        )
+
+        # X -> w(X) (eq 15)
+        self.mixture_weight_model = MixtureWeightsModel(
+            num_components=num_components,
+            dim_input=latent_dim,
+            dim_hidden=latent_dim,
+            num_attn_heads=4,
         )
 
     def _encode(

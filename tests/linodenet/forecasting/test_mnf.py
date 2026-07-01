@@ -533,7 +533,7 @@ class TestMixtureWeightsModel:
         torch.manual_seed(0)
         model = MixtureWeightsModel(
             num_components=3,
-            num_heads=2,
+            num_attn_heads=2,
             dim_input=5,
             dim_hidden=8,
         )
@@ -553,7 +553,7 @@ class TestMixtureWeightsModel:
         r"""A fully padded sequence should still yield a finite normalized vector."""
         model = MixtureWeightsModel(
             num_components=2,
-            num_heads=2,
+            num_attn_heads=2,
             dim_input=4,
             dim_hidden=6,
         )
