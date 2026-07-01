@@ -1558,6 +1558,10 @@ class MixtureWeightsModel(nn.Module):
     attention: MultiHeadAttention
     output_proj: nn.Linear
 
+    # buffers
+    samples: Tensor
+    log_probs: Tensor
+
     def __init__(
         self,
         *,
@@ -1596,6 +1600,9 @@ class MixtureWeightsModel(nn.Module):
             num_heads=num_attn_heads,
             dim_output=1,
         )
+
+        self.register_buffer("samples", None, persistent=False)
+        self.register_buffer("log_probs", None, persistent=False)
 
     def forward(
         self,
