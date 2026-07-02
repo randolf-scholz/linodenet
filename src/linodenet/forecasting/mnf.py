@@ -636,6 +636,8 @@ class LearnableLRS(nn.Module):
 
 
 class ConditionalLRS(nn.Module):
+    r"""Conditional Linear Rational Spline."""
+
     width_model: nn.Module
     height_model: nn.Module
     lambda_model: nn.Module
