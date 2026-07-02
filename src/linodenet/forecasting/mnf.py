@@ -2153,7 +2153,7 @@ class Moses(nn.Module):
         assert y is not None
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
-        h_obs, h = self.encoder.forward(  # (*S, ..., $N, M), (*S, ..., D, $K, M)
+        h_obs, h = self.encoder.forward(  # (..., $N, M), (..., D, $K, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
             # query_valid=triplets.query_valid,
@@ -2163,7 +2163,7 @@ class Moses(nn.Module):
             # context_valid=triplets.context_valid,
         )
         # compute mixture weights w(𝐡ᵒᵇˢ)
-        log_weights = self.conditional_mixture.forward(  # (*S, ..., D)
+        log_weights = self.conditional_mixture.forward(  # (..., D)
             h_obs, valid_mask=triplets.context_channels.ge(0)
         )
 
@@ -2217,7 +2217,7 @@ class Moses(nn.Module):
         )
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
-        h_obs, h = self.encoder.forward(  # (*S, ..., $N, M), (*S, ..., *H, $K, M)
+        h_obs, h = self.encoder.forward(  # (..., $N, M), (..., *H, $K, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
             # query_valid=triplets.query_valid,
@@ -2241,8 +2241,8 @@ class Moses(nn.Module):
         # sample indices from the mixture (*S, ...)
         indices = self.conditional_mixture.sample_from_weights(size, log_weights)
 
-        # select the values (*S, ..., $K)
-        samples = y.take_along_dim(indices[..., None], dim=-1)
+        # select one component along the head axis D: (*S, ..., D, $K) -> (*S, ..., $K)
+        samples = y.take_along_dim(indices[..., None, None], dim=-2).squeeze(-2)
 
         # store buffers
         self.samples = samples
@@ -2271,7 +2271,7 @@ class Moses(nn.Module):
         )
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
-        h_obs, h = self.encoder.forward(  # (*S, ..., $N, M), (*S, ..., *H, $K, M)
+        h_obs, h = self.encoder.forward(  # (..., $N, M), (..., *H, $K, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
             # query_valid=triplets.query_valid,
@@ -2295,10 +2295,10 @@ class Moses(nn.Module):
         # sample indices from the mixture (*S, ...)
         indices = self.conditional_mixture.sample_from_weights(size, log_weights)
 
-        # select the values (*S, ..., $K)
-        samples = y.take_along_dim(indices[..., None], dim=-1)
+        # select one component along the head axis D: (*S, ..., D, $K) -> (*S, ..., $K)
+        samples = y.take_along_dim(indices[..., None, None], dim=-2).squeeze(-2)
 
-        # flow backwards again to get the log_probs.
+        # Broadcast the selected samples back across D to evaluate the full mixture log-prob.
         # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
         # log pᵢ(x) = log qᵢ(f⁻¹(x)) + log |det J(f⁻¹(x))|
         z_selected, logabsdet = self.conditional_flow.encode_and_logabsdet(samples, h)
