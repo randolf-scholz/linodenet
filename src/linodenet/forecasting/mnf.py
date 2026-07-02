@@ -1643,29 +1643,34 @@ class MixtureWeightsModel(nn.Module):
 
     def _gather_log_weights(
         self,
-        indices: Tensor,
-        log_weights: Tensor,
+        indices: Tensor,  # Long[*S, ...]
+        log_weights: Tensor,  # Float[..., D]
         /,
-    ) -> Tensor:
+    ) -> Tensor:  # Float[*S, ...]
         r"""Select component log-weights for batched sample indices."""
-        sample_shape = indices.shape[: indices.ndim - log_weights.ndim + 1]
-        expanded = log_weights.reshape(
-            *([1] * len(sample_shape)),
-            *log_weights.shape,
-        ).expand(*indices.shape, self.num_components)
-        return expanded.gather(dim=-1, index=indices.unsqueeze(-1)).squeeze(-1)
+        sample_ndim = indices.ndim - (log_weights.ndim - 1)
+        return torch.take_along_dim(
+            log_weights[(None,) * sample_ndim],
+            indices[..., None],
+            dim=-1,
+        ).squeeze(-1)
 
     def _sample_multinomial(
-        self, log_weights: Tensor, /, sample_shape: tuple[int, ...]
-    ) -> Tensor:
+        self,
+        size: int | tuple[int, ...],  # (*S)
+        log_weights: Tensor,  # Float[..., D]
+        /,
+    ) -> Tensor:  # Long[*S, ...]
         r"""Sample component indices with leading sample axes."""
-        flat_probs = log_weights.exp().reshape(-1, self.num_components)
-        flat_samples = torch.multinomial(
-            flat_probs,
-            num_samples=math.prod(sample_shape),
+        sample_shape = (size,) if isinstance(size, int) else size
+        batch_shape = log_weights.shape[:-1]
+        probs = log_weights.exp()  # (B, D)
+        flat_samples = torch.multinomial(  # (B, S)
+            probs.reshape(-1, self.num_components),  # (B, D)
+            num_samples=math.prod(sample_shape),  # (S)
             replacement=True,
         )
-        return flat_samples.mT.reshape((*sample_shape, *log_weights.shape[:-1]))
+        return flat_samples.mT.reshape((*sample_shape, *batch_shape))  # (*S, ...)
 
     def log_prob(
         self,
@@ -1686,9 +1691,8 @@ class MixtureWeightsModel(nn.Module):
         embeddings: Tensor,  # Float[..., $K, M]
         valid_mask: Tensor,  # Bool[..., $K]
     ) -> Tensor:  # Long[*S, ...]
-        sample_shape = (size,) if isinstance(size, int) else size
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
-        samples = self._sample_multinomial(log_weights, sample_shape)
+        samples = self._sample_multinomial(size, log_weights)
         self.samples = samples
         return samples
 
@@ -1699,9 +1703,8 @@ class MixtureWeightsModel(nn.Module):
         embeddings: Tensor,  # Float[..., $K, M]
         valid_mask: Tensor,  # Bool[..., $K]
     ) -> tuple[Tensor, Tensor]:  # Long[*S, ...], Float[*S, ...]
-        sample_shape = (size,) if isinstance(size, int) else size
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
-        samples = self._sample_multinomial(log_weights, sample_shape)
+        samples = self._sample_multinomial(size, log_weights)
         log_prob = self._gather_log_weights(samples, log_weights)
         self.samples = samples
         self.log_probs = log_prob
