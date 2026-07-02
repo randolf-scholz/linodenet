@@ -202,7 +202,7 @@ def _lrs_encode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bounded LRS forward map and log|det J| at inputs."""
     num_bins = knots.x.shape[-1] - 1
     bin_idx = torch.searchsorted(
-        knots.x[..., 1:-1], inputs[..., None], side="right"
+        knots.x[..., 1:-1].contiguous(), inputs[..., None], side="right"
     ).clip(0, num_bins - 1)
 
     lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = SplineCoefficients.from_selected_knots(
@@ -234,7 +234,7 @@ def _lrs_decode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bounded LRS inverse map and log|det J| at inputs."""
     num_bins = knots.y.shape[-1] - 1
     bin_idx = torch.searchsorted(
-        knots.y[..., 1:-1], inputs[..., None], side="right"
+        knots.y[..., 1:-1].contiguous(), inputs[..., None], side="right"
     ).clip(0, num_bins - 1)
 
     lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = SplineCoefficients.from_selected_knots(
