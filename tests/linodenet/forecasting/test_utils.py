@@ -2085,6 +2085,23 @@ class TestTripletTimeData:
             target_values=torch.tensor([[30.0], [40.0]]),
         ).is_simple()
 
+    @pytest.mark.parametrize(
+        "case",
+        [key for key in TEST_DATA if key[0] == "simple"],
+    )
+    def test_query_indices_recover_simple_split_target_layout(
+        self,
+        case: tuple[DataType, BatchType, bool],
+    ) -> None:
+        split = TEST_DATA[case]["split"]
+        triplet = split.to_triplets()
+        y = triplet.target_values
+        assert y is not None
+
+        actual = y[triplet.query_indices].masked_fill(~split.query_mask, nan)
+
+        assert_close(actual, split.target_values, atol=0.0, rtol=0.0, equal_nan=True)
+
     def test_is_trimmed(self) -> None:
         assert TripletTimeData(
             context_times=torch.tensor([[1.0, 2.0], [3.0, nan]]),

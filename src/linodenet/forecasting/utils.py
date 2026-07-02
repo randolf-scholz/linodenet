@@ -1212,6 +1212,26 @@ class TripletTimeData:
 
     validate_args: InitVar[bool] = True
 
+    @property
+    def context_indices(self) -> tuple[Tensor, ...]:
+        r"""Advanced indices recovering the simple split context layout."""
+        return self._simple_indices(
+            self.context_times,
+            self.context_channels,
+            size=self.context_size,
+            dim=self.context_dim,
+        )
+
+    @property
+    def query_indices(self) -> tuple[Tensor, ...]:
+        r"""Advanced indices recovering the simple split query layout."""
+        return self._simple_indices(
+            self.query_times,
+            self.query_channels,
+            size=self.query_size,
+            dim=self.query_dim,
+        )
+
     def __post_init__(self, validate_args: bool) -> None:
         self._normalize()
 
@@ -1335,6 +1355,49 @@ class TripletTimeData:
                 & _has_unique_time_channel_pairs(Q, M)
             ).all()
         )
+
+    def _simple_indices(
+        self,
+        times: Tensor,
+        channels: Tensor,
+        /,
+        *,
+        size: int,
+        dim: int,
+    ) -> tuple[Tensor, ...]:
+        if not self.is_simple():
+            raise ValueError("Simple split indices are only available for simple data.")
+
+        seq_dim = -1 if self.batch_first else 0
+        T = times.movedim(seq_dim, -1)
+        C = channels.movedim(seq_dim, -1)
+        valid = C.ge(0)
+        inverse, _ = _consecutive_group_indices(T, valid)
+        *batch_shape, _ = T.shape
+
+        index = torch.zeros(
+            (*batch_shape, size, dim), dtype=torch.long, device=T.device
+        )
+        *batch_idx, flat_idx = valid.nonzero(as_tuple=True)
+        index[*batch_idx, inverse[valid], C[valid]] = flat_idx
+
+        total_dims = len(batch_shape) + 2
+        if self.batch_first:
+            batch_indices = tuple(
+                torch.arange(batch_size, device=T.device).reshape(
+                    *(batch_size if j == i else 1 for j in range(total_dims))
+                )
+                for i, batch_size in enumerate(batch_shape)
+            )
+            return (*batch_indices, index)
+
+        batch_indices = tuple(
+            torch.arange(batch_size, device=T.device).reshape(
+                *(batch_size if j == i + 1 else 1 for j in range(total_dims))
+            )
+            for i, batch_size in enumerate(batch_shape)
+        )
+        return (index.movedim(-2, 0), *batch_indices)
 
     def __eq__(self, other: object, /) -> bool:
         if not isinstance(other, TripletTimeData):

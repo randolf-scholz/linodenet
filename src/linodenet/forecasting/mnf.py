@@ -1946,7 +1946,7 @@ class ConditionalGaussian(nn.Module):
         # Write Σ = σ²I + UUᵀ with U = cov_factor. Then [σI, U] is a
         # rectangular square root because [σI, U][σI, U]ᵀ = σ²I + UUᵀ = Σ.
         sample_shape = (size,) if isinstance(size, int) else size
-        *batch_and_head_shape, seq_dim, feat_dim = cov_factor.shape
+        *batch_and_head_shape, _, feat_dim = cov_factor.shape
 
         # Sampling ε ∼ 𝓝(0, Iₖ) and ξ ∼ 𝓝(0, Iᵣ) independently is equivalent to
         # drawing [ε; ξ] ∼ 𝓝(0, Iₖ₊ᵣ) and applying the usual reparameterization
@@ -2036,9 +2036,9 @@ class Moses(nn.Module):
     base_distribution: ConditionalGaussian
 
     # buffers
-    samples: Tensor
-    log_probs: Tensor
-    indices: Tensor
+    samples: Tensor | None
+    log_probs: Tensor | None
+    indices: Tensor | None
 
     @classmethod
     def from_config(
@@ -2157,6 +2157,7 @@ class Moses(nn.Module):
             target_values=values,
         )
         y = triplets.target_values
+        assert y is not None
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
         h_obs, h = self.encoder.forward(  # (*S, ..., $N, M), (*S, ..., D, $K, M)
@@ -2181,7 +2182,14 @@ class Moses(nn.Module):
         # log wᵢ + log pᵢ(x)
         component_log_probs = base_log_prob + logabsdet  # (*S, ..., D)
         # log p(x) = logsumexp(log wᵢ + log pᵢ(x))
-        return torch.logsumexp(log_weights + component_log_probs, dim=-1)  # (*S, ...)
+        log_probs = torch.logsumexp(
+            log_weights + component_log_probs, dim=-1
+        )  # (*S, ...)
+
+        self.samples = None
+        self.indices = None
+        self.log_probs = log_probs
+        return log_probs
 
     def sample(
         self,
@@ -2243,7 +2251,12 @@ class Moses(nn.Module):
         samples = y.take_along_dim(indices[..., None], dim=-1)
 
         # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
-        return samples[triplets.query_indices]
+        samples = samples[triplets.query_indices].masked_fill(~query_mask, nan)
+
+        self.samples = samples
+        self.log_probs = None
+        self.indices = indices
+        return samples
 
     def sample_and_log_prob(
         self,
@@ -2302,10 +2315,11 @@ class Moses(nn.Module):
         # log p(x) = logsumexp(log wᵢ + log pᵢ(x))  (*S, ...)
         log_probs = torch.logsumexp(log_weights + component_log_probs, dim=-1)
 
+        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
+        samples = samples[triplets.query_indices].masked_fill(~query_mask, nan)
+
         # store buffers
         self.indices = indices  # (*S, ...)
         self.samples = samples  # (*S, ..., $Q)
         self.log_probs = log_probs  # (*S, ...)
-
-        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
-        return samples[triplets.query_indices], log_probs
+        return samples, log_probs
