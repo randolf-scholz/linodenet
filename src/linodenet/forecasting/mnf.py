@@ -2162,15 +2162,15 @@ class Moses(nn.Module):
         h_obs, h = self.encoder.forward(  # (*S, ..., $N, M), (*S, ..., D, $K, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
-            query_valid=triplets.query_valid,
+            # query_valid=triplets.query_valid,
             context_times=triplets.context_times,
             context_channels=triplets.context_channels,
             context_values=triplets.context_values,
-            context_valid=triplets.context_valid,
+            # context_valid=triplets.context_valid,
         )
         # compute mixture weights w(𝐡ᵒᵇˢ)
         log_weights = self.conditional_mixture.forward(  # (*S, ..., D)
-            h_obs, valid_mask=triplets.context_valid
+            h_obs, valid_mask=triplets.context_channels.ge(0)
         )
 
         # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
@@ -2218,11 +2218,11 @@ class Moses(nn.Module):
         h_obs, h = self.encoder.forward(  # (*S, ..., $X, M), (*S, ..., *H, $Q, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
-            query_valid=triplets.query_valid,
+            # query_valid=triplets.query_valid,
             context_times=triplets.context_times,
             context_channels=triplets.context_channels,
             context_values=triplets.context_values,
-            context_valid=triplets.context_valid,
+            # context_valid=triplets.context_valid,
         )
 
         # sample from base distribution (*S, ..., D, $Q), (*S, ..., D)
@@ -2233,7 +2233,7 @@ class Moses(nn.Module):
 
         # compute mixture weights w(𝐡ᵒᵇˢ)  (..., D)
         log_weights = self.conditional_mixture.forward(
-            h_obs, valid_mask=triplets.context_valid
+            h_obs, valid_mask=triplets.context_channels.ge(0)
         )
 
         # sample indices from the mixture (*S, ...)
@@ -2267,11 +2267,16 @@ class Moses(nn.Module):
         h_obs, h = self.encoder.forward(  # (*S, ..., $X, M), (*S, ..., *H, $Q, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
-            query_valid=triplets.query_valid,
+            # query_valid=triplets.query_valid,
             context_times=triplets.context_times,
             context_channels=triplets.context_channels,
             context_values=triplets.context_values,
-            context_valid=triplets.context_valid,
+            # context_valid=triplets.context_valid,
+        )
+
+        # compute mixture weights w(𝐡ᵒᵇˢ)  (..., D)
+        log_weights = self.conditional_mixture.forward(
+            h_obs, valid_mask=triplets.context_channels.ge(0)
         )
 
         # sample from base distribution (*S, ..., D, $Q), (*S, ..., D)
@@ -2279,11 +2284,6 @@ class Moses(nn.Module):
 
         # decode through the flow (*S, ..., D, $Q), (*S, ..., D)
         y, _ = self.conditional_flow.decode_and_logabsdet(z, h)
-
-        # compute mixture weights w(𝐡ᵒᵇˢ)  (..., D)
-        log_weights = self.conditional_mixture.forward(
-            h_obs, valid_mask=triplets.context_valid
-        )
 
         # sample indices from the mixture (*S, ...)
         indices = self.conditional_mixture.sample_from_weights(size, log_weights)
