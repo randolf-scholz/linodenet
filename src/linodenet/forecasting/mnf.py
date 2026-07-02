@@ -2180,12 +2180,11 @@ class Moses(nn.Module):
         base_log_prob = self.base_distribution.log_prob(z, h)  # (*S, ..., D)
 
         # log wᵢ + log pᵢ(x)
-        component_log_probs = base_log_prob + logabsdet  # (*S, ..., D)
+        value_log_probs = base_log_prob + logabsdet  # (*S, ..., D)
         # log p(x) = logsumexp(log wᵢ + log pᵢ(x))
-        log_probs = torch.logsumexp(
-            log_weights + component_log_probs, dim=-1
-        )  # (*S, ...)
+        log_probs = torch.logsumexp(log_weights + value_log_probs, dim=-1)  # (*S, ...)
 
+        # store samples
         self.samples = None
         self.indices = None
         self.log_probs = log_probs
@@ -2250,13 +2249,13 @@ class Moses(nn.Module):
         # select the values (*S, ..., $Q)
         samples = y.take_along_dim(indices[..., None], dim=-1)
 
-        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
-        samples = samples[triplets.query_indices].masked_fill(~query_mask, nan)
-
+        # store buffers
         self.samples = samples
         self.log_probs = None
         self.indices = indices
-        return samples
+
+        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
+        return samples[triplets.query_indices].masked_fill(~query_mask, nan)
 
     def sample_and_log_prob(
         self,
@@ -2315,11 +2314,12 @@ class Moses(nn.Module):
         # log p(x) = logsumexp(log wᵢ + log pᵢ(x))  (*S, ...)
         log_probs = torch.logsumexp(log_weights + component_log_probs, dim=-1)
 
-        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
-        samples = samples[triplets.query_indices].masked_fill(~query_mask, nan)
-
         # store buffers
         self.indices = indices  # (*S, ...)
         self.samples = samples  # (*S, ..., $Q)
         self.log_probs = log_probs  # (*S, ...)
+
+        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
+        samples = samples[triplets.query_indices].masked_fill(~query_mask, nan)
+
         return samples, log_probs
