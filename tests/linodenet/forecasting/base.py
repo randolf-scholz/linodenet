@@ -451,7 +451,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         context_values = data.context_values
         assert data.target_values is not None
         model = self.make_model(model_config)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         initial_parameters = {
             name: parameter.detach().clone()
             for name, parameter in model.named_parameters()
