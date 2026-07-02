@@ -1606,9 +1606,9 @@ class MixtureWeightsModel(nn.Module):
 
     def forward(
         self,
-        embeddings: Tensor,  # Float[..., $K, M]
+        embeddings: Tensor,  # Float[..., $N, M]
         *,
-        valid_mask: Tensor,  # Bool[..., $K]
+        valid_mask: Tensor,  # Bool[..., $N]
     ) -> Tensor:  # (..., D), one normalized log-weight vector per batch element
         r"""Compute one mixture log-weight vector per batch element.
 
@@ -1632,14 +1632,14 @@ class MixtureWeightsModel(nn.Module):
             self.num_components,
             self.dim_hidden,
         )
-        attended = self.attention(  # (..., C)
+        attended = self.attention(  # (..., D)
             queries,
             embeddings,
             embeddings,
             key_mask=valid_mask,
         ).squeeze(-1)
 
-        return attended.log_softmax(dim=-1)  # (..., C)
+        return attended.log_softmax(dim=-1)  # (..., D)
 
     def _gather_log_weights(
         self,
@@ -1655,7 +1655,7 @@ class MixtureWeightsModel(nn.Module):
             dim=-1,
         ).squeeze(-1)
 
-    def _sample_multinomial(
+    def sample_from_weights(
         self,
         size: int | tuple[int, ...],  # (*S)
         log_weights: Tensor,  # Float[..., D]
@@ -1692,7 +1692,7 @@ class MixtureWeightsModel(nn.Module):
         valid_mask: Tensor,  # Bool[..., $K]
     ) -> Tensor:  # Long[*S, ...]
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
-        samples = self._sample_multinomial(size, log_weights)
+        samples = self.sample_from_weights(size, log_weights)
         self.samples = samples
         return samples
 
@@ -1704,7 +1704,7 @@ class MixtureWeightsModel(nn.Module):
         valid_mask: Tensor,  # Bool[..., $K]
     ) -> tuple[Tensor, Tensor]:  # Long[*S, ...], Float[*S, ...]
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
-        samples = self._sample_multinomial(size, log_weights)
+        samples = self.sample_from_weights(size, log_weights)
         log_prob = self._gather_log_weights(samples, log_weights)
         self.samples = samples
         self.log_probs = log_prob
@@ -1769,7 +1769,7 @@ class SeparableEncoder(nn.Module):
         context_channels: Tensor,  # Long[(..., $X)], padded with -1
         context_values: Tensor,  # Float[(..., $X)], padded with NaN
         context_valid: Tensor | None = None,  # Bool[(..., $X)],
-    ) -> tuple[Tensor, Tensor]:  # (..., $X, M), (..., *H, $X, M), padded with NaN
+    ) -> tuple[Tensor, Tensor]:  # (..., $X, M), (..., *H, $Q, M), padded with NaN
         r"""Compute per-query embeddings and mixture weights.
 
         Args:
@@ -2029,9 +2029,14 @@ class Moses(nn.Module):
 
     # sub-modules / parameters
     encoder: SeparableEncoder
-    mixture_weight_model: MixtureWeightsModel  # M → C  (mixture logits)
+    conditional_mixture: MixtureWeightsModel  # M → C  (mixture logits)
     conditional_flow: ConditionalSplineFlow  # C × SplineFlow, each n_heads=()
     base_distribution: ConditionalGaussian
+
+    # buffers
+    samples: Tensor
+    log_probs: Tensor
+    indices: Tensor
 
     @classmethod
     def from_config(
@@ -2103,12 +2108,17 @@ class Moses(nn.Module):
         )
 
         # X -> w(X) (eq 15)
-        self.mixture_weight_model = MixtureWeightsModel(
+        self.conditional_mixture = MixtureWeightsModel(
             num_components=num_mixture_components,
             dim_input=latent_dim,
             dim_hidden=latent_dim,
             num_attn_heads=4,
         )
+
+        # register buffers
+        self.register_buffer("samples", None, persistent=False)
+        self.register_buffer("log_probs", None, persistent=False)
+        self.register_buffer("indices", None, persistent=False)
 
     def embed(
         self,
@@ -2130,7 +2140,7 @@ class Moses(nn.Module):
             context_valid=triplets.context_valid,
         )
 
-        mixture_weights = self.mixture_weight_model.forward(
+        mixture_weights = self.conditional_mixture.forward(
             h_obs, valid_mask=triplets.query_valid
         )
 
@@ -2170,9 +2180,10 @@ class Moses(nn.Module):
             query_mask=query_mask,
             target_values=values,
         )
+        y = triplets.target_values
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
-        h_obs, h = self.encoder.forward(
+        h_obs, h = self.encoder.forward(  # (*S, ..., $N, M), (*S, ..., D, $K, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
             query_valid=triplets.query_valid,
@@ -2182,21 +2193,19 @@ class Moses(nn.Module):
             context_valid=triplets.context_valid,
         )
         # compute mixture weights w(𝐡ᵒᵇˢ)
-        log_weights = self.mixture_weight_model.forward(
-            h_obs, valid_mask=triplets.query_valid
+        log_weights = self.conditional_mixture.forward(  # (*S, ..., D)
+            h_obs, valid_mask=triplets.context_valid
         )
 
         # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
         # log pᵢ(x) = log qᵢ(f⁻¹(x)) + log |det J(f⁻¹(x))|
-        z, logabsdet = self.conditional_flow.encode_and_logabsdet(
-            triplets.target_values, h
-        )
-        base_log_prob = self.base_distribution.log_prob(z, h)  # (..., D)
+        z, logabsdet = self.conditional_flow.encode_and_logabsdet(y, h)
+        base_log_prob = self.base_distribution.log_prob(z, h)  # (*S, ..., D)
 
         # log wᵢ + log pᵢ(x)
-        component_log_probs = base_log_prob + logabsdet  # (..., D)
+        component_log_probs = base_log_prob + logabsdet  # (*S, ..., D)
         # log p(x) = logsumexp(log wᵢ + log pᵢ(x))
-        return torch.logsumexp(log_weights + component_log_probs, dim=-1)  # (...)
+        return torch.logsumexp(log_weights + component_log_probs, dim=-1)  # (*S, ...)
 
     def sample(
         self,
@@ -2221,7 +2230,6 @@ class Moses(nn.Module):
         Returns:
             Samples with shape ``(*S, ..., T, D)``, ``NaN`` at non-query positions.
         """
-        raise NotImplementedError
 
     def sample_and_log_prob(
         self,
@@ -2251,13 +2259,39 @@ class Moses(nn.Module):
             context_values=triplets.context_values,
             context_valid=triplets.context_valid,
         )
-        # compute mixture weights w(𝐡ᵒᵇˢ)
-        log_weights = self.mixture_weight_model.forward(
-            h_obs, valid_mask=triplets.query_valid
+
+        # sample from base distribution (*S, ..., D, $Q), (*S, ..., D)
+        z, _ = self.base_distribution.sample_and_log_prob(size, h)
+
+        # decode through the flow (*S, ..., D, $Q), (*S, ..., D)
+        y, _ = self.conditional_flow.decode_and_logabsdet(z, h)
+
+        # compute mixture weights w(𝐡ᵒᵇˢ)  (..., D)
+        log_weights = self.conditional_mixture.forward(
+            h_obs, valid_mask=triplets.context_valid
         )
 
-        # sample from base distribution
-        z, log_prob = self.base_distribution.sample_and_log_prob(size, h)
-        x, logabsdet = self.conditional_flow.decode_and_logabsdet(z, h)
+        # sample indices from the mixture (*S, ...)
+        indices = self.conditional_mixture.sample_from_weights(size, log_weights)
 
-        # sample indices from the mixture
+        # select the values (*S, ..., $Q)
+        samples = y.take_along_dim(indices[..., None], dim=-1)
+
+        # flow backwards again to get the log_probs.
+        # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
+        # log pᵢ(x) = log qᵢ(f⁻¹(x)) + log |det J(f⁻¹(x))|
+        z_selected, logabsdet = self.conditional_flow.encode_and_logabsdet(samples, h)
+        base_log_prob = self.base_distribution.log_prob(z_selected, h)  # (*S, ..., D)
+
+        # log wᵢ + log pᵢ(x)
+        component_log_probs = base_log_prob + logabsdet  # (*S, ..., D)
+        # log p(x) = logsumexp(log wᵢ + log pᵢ(x))  (*S, ...)
+        log_probs = torch.logsumexp(log_weights + component_log_probs, dim=-1)
+
+        # store buffers
+        self.indices = indices  # (*S, ...)
+        self.samples = samples  # (*S, ..., $Q)
+        self.log_probs = log_probs  # (*S, ...)
+
+        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
+        return samples[triplets.query_indices], log_probs
