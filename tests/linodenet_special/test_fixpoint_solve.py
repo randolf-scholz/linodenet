@@ -35,7 +35,7 @@ class LinearModule(nn.Module):
         return F.linear(x, self.weight, self.bias)
 
 
-class TestCase(NamedTuple):
+class Case(NamedTuple):
     fn: Callable[Concatenate[Tensor, ...], Tensor]
     x: Tensor
     args: tuple[Tensor, ...]
@@ -55,7 +55,7 @@ class TestFixpoint(TestSuite):
         "compiled_autograd": False,
     }
 
-    def run_check(self, mode: Mode, solver, case: TestCase, /) -> None:
+    def run_check(self, mode: Mode, solver, case: Case, /) -> None:
         match mode:
             case Mode.EAGER:
 
@@ -88,7 +88,7 @@ class TestFixpoint(TestSuite):
 
         self.assert_test_case_grads(case)
 
-    def assert_test_case_grads(self, case: TestCase, /) -> None:
+    def assert_test_case_grads(self, case: Case, /) -> None:
         if case.args:
             assert case.args[0].grad is not None
             assert case.args[1].grad is not None
@@ -106,13 +106,13 @@ class TestFixpoint(TestSuite):
         *,
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> TestCase:
+    ) -> Case:
         y = torch.randn(batch_size, input_size, device=device, dtype=dtype)
         weight = torch.randn(input_size, input_size, device=device, dtype=dtype)
         weight = 0.95 * weight / torch.linalg.matrix_norm(weight, ord=2)
         weight = nn.Parameter(weight)
         bias = nn.Parameter(torch.randn(input_size, device=device, dtype=dtype))
-        return TestCase(F.linear, y, (weight, bias))
+        return Case(F.linear, y, (weight, bias))
 
     def make_linear_module(
         self,
@@ -122,7 +122,7 @@ class TestFixpoint(TestSuite):
         *,
         device: str | torch.device | None = None,
         dtype: torch.dtype | None = None,
-    ) -> TestCase:
+    ) -> Case:
         case = self.make_linear_functional(
             batch_size,
             input_size,
@@ -131,7 +131,7 @@ class TestFixpoint(TestSuite):
         )
         weight, bias = case.args
         module = LinearModule(weight.detach().clone(), bias.detach().clone())
-        return TestCase(module, case.x, ())
+        return Case(module, case.x, ())
 
 
 class TestFixpointSolveFunctional(TestFixpoint):
