@@ -14,9 +14,12 @@ from linodenet.forecasting.mnf import (
     ConditionalSplineFlow,
     MarginalizableNormalizingFlow,
     MixtureWeightsModel,
+    Moses,
     MultiHeadAttention,
     SeparableEncoder,
 )
+
+from .base import make_forecasting_request
 
 
 def _manual_mixture_samples(
@@ -212,6 +215,95 @@ class TestMarginalizableNormalizingFlow:
                 continue
             assert not torch.equal(parameter, initial_parameters[name]), name
         assert final_loss < initial_loss
+
+
+class TestMoses:
+    r"""Smoke tests for the Moses forecasting model."""
+
+    SEED: ClassVar[int] = 0
+    INPUT_DIM: ClassVar[int] = 2
+    MIN_STEPS: ClassVar[int] = 2
+    MAX_STEPS: ClassVar[int] = 4
+
+    def make_model(self) -> Moses:
+        r"""Instantiate a small Moses model for smoke tests."""
+        return Moses(
+            input_dim=self.INPUT_DIM,
+            latent_dim=8,
+            num_mixture_components=2,
+            num_flow_layers=1,
+            num_bins=4,
+            bounds=(-3.0, 3.0),
+            num_encoder_heads=2,
+        )
+
+    def make_inputs(self) -> dict[str, Tensor]:
+        r"""Create a minimal irregular forecasting request."""
+        data = make_forecasting_request(
+            seed=self.SEED,
+            batch_shape=(),
+            min_steps=self.MIN_STEPS,
+            max_steps=self.MAX_STEPS,
+            context_shape=(self.INPUT_DIM,),
+            output_shape=(self.INPUT_DIM,),
+            input_missingness=True,
+            target_missingness=True,
+        )
+        assert data.target_values is not None
+
+        return {
+            "query_times": data.query_times.detach(),
+            "query_mask": data.query_mask,
+            "context_times": data.context_times.detach(),
+            "context_values": data.context_values.detach(),
+            "context_mask": data.context_mask,
+            "values": data.target_values.detach(),
+        }
+
+    def test_initialization_succeeds(self) -> None:
+        r"""A small Moses model should instantiate successfully."""
+        model = self.make_model()
+
+        assert isinstance(model, Moses)
+
+    def test_sample_succeeds(self) -> None:
+        r"""Sampling should succeed on a simple request."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        inputs = self.make_inputs()
+        inputs.pop("values")
+
+        samples = model.sample(**inputs)
+
+        assert samples.shape == inputs["query_mask"].shape
+        assert torch.equal(samples.isfinite(), inputs["query_mask"])
+
+    def test_log_prob_succeeds(self) -> None:
+        r"""Density evaluation should succeed on a simple request."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        inputs = self.make_inputs()
+        values = inputs.pop("values")
+
+        log_prob = model.log_prob(values, **inputs)
+
+        assert log_prob.shape == ()
+        assert log_prob.isfinite()
+
+    def test_sample_and_log_prob_consistent(self) -> None:
+        r"""`sample_and_log_prob` should agree with `log_prob` on returned samples."""
+        torch.manual_seed(0)
+        model = self.make_model()
+        inputs = self.make_inputs()
+        inputs.pop("values")
+
+        samples, log_prob_direct = model.sample_and_log_prob(**inputs)
+        log_prob_via_sample = model.log_prob(samples, **inputs)
+
+        assert samples.shape == inputs["query_mask"].shape
+        assert log_prob_direct.shape == ()
+        assert torch.equal(samples.isfinite(), inputs["query_mask"])
+        assert_close(log_prob_direct, log_prob_via_sample)
 
 
 class TestMHA:

@@ -1,4 +1,15 @@
 r"""Separable flows."""
+# Shape conventions
+# *S: sample shape
+# ...: batch shape
+# *H: head shape
+# D: number of components of moses (=*H)
+# $Q / $K: query size (dense / flattened)
+# $X / $N: context size (dense / flattened)
+# E: context feature dim
+# F: query feature dim
+# M: latent dim
+# R: low rank covariance dim
 
 __all__ = [
     # constants
@@ -728,7 +739,7 @@ class ConditionalLRS(nn.Module):
     def encode_and_logabsdet(
         self,
         x: Tensor,  # (..., *H, $K)
-        context: Tensor,  # (..., *H, $K, D)
+        context: Tensor,  # (..., *H, $K, M)
         /,
     ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
         r"""Forward pass of the flow."""
@@ -736,15 +747,11 @@ class ConditionalLRS(nn.Module):
         # ...: batch_shape
         # *H: head_shape
         # $K: number of values (dynamic)
-        # D: context dim (static)
-        if context.shape[:-1] != x.shape:
-            raise ValueError(
-                f"context batch/head/value shape {context.shape[:-1]} must match x "
-                f"shape {x.shape}"
-            )
+        # M: context dim (static)
         widths, heights, lambdas, derivatives = self(context)
-        x_center = self.x_center.expand(*x.shape[:-1]).unsqueeze(-1)
-        y_center = self.y_center.expand(*x.shape[:-1]).unsqueeze(-1)
+        batch_ndim = x.ndim - len(self.head_shape) - 1
+        x_center = self.x_center[(None,) * batch_ndim + (..., None)]  # (..., *H, 1)
+        y_center = self.y_center[(None,) * batch_ndim + (..., None)]  # (..., *H, 1)
 
         y, logabsdet = self.spline.encode_and_logabsdet(
             x - x_center,
@@ -758,18 +765,14 @@ class ConditionalLRS(nn.Module):
     def decode_and_logabsdet(
         self,
         y: Tensor,  # (..., *H, $K)
-        context: Tensor,  # (..., *H, $K, D)
+        context: Tensor,  # (..., *H, $K, M)
         /,
     ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
         r"""Inverse pass of the flow."""
-        if context.shape[:-1] != y.shape:
-            raise ValueError(
-                f"context batch/head/value shape {context.shape[:-1]} must match y "
-                f"shape {y.shape}"
-            )
         widths, heights, lambdas, derivatives = self(context)
-        x_center = self.x_center.expand(*y.shape[:-1]).unsqueeze(-1)
-        y_center = self.y_center.expand(*y.shape[:-1]).unsqueeze(-1)
+        batch_ndim = y.ndim - len(self.head_shape) - 1
+        x_center = self.x_center[(None,) * batch_ndim + (..., None)]  # (..., *H, 1)
+        y_center = self.y_center[(None,) * batch_ndim + (..., None)]  # (..., *H, 1)
 
         x, logabsdet = self.spline.decode_and_logabsdet(
             y - y_center,
@@ -1612,12 +1615,12 @@ class MixtureWeightsModel(nn.Module):
         r"""Compute one mixture log-weight vector per batch element.
 
         Args:
-            embeddings: Sequence embeddings with shape ``(..., N, D)``.
+            embeddings: Sequence embeddings with shape ``(..., $N, M)``.
             valid_mask: Optional boolean mask selecting valid sequence entries.
                 If omitted, it is inferred from finite rows of ``embeddings``.
 
         Returns:
-            Mixture log-weights with shape ``(..., C)``. Each batch element
+            Mixture log-weights with shape ``(..., D)``. Each batch element
             log-normalizes across the mixture-query axis.
         """
         *batch_shape, seq_len, dim = embeddings.shape
@@ -1675,8 +1678,8 @@ class MixtureWeightsModel(nn.Module):
         self,
         indices: Tensor,  # Long[*S, ...]
         /,
-        embeddings: Tensor,  # Float[..., $K, M]
-        valid_mask: Tensor,  # Bool[..., $K]
+        embeddings: Tensor,  # Float[..., $N, M]
+        valid_mask: Tensor,  # Bool[..., $N]
     ) -> Tensor:  # Float[*S, ...]
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
         log_prob = self._gather_log_weights(indices, log_weights)
@@ -1687,8 +1690,8 @@ class MixtureWeightsModel(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # (*S)
         *,
-        embeddings: Tensor,  # Float[..., $K, M]
-        valid_mask: Tensor,  # Bool[..., $K]
+        embeddings: Tensor,  # Float[..., $N, M]
+        valid_mask: Tensor,  # Bool[..., $N]
     ) -> Tensor:  # Long[*S, ...]
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
         samples = self.sample_from_weights(size, log_weights)
@@ -1699,8 +1702,8 @@ class MixtureWeightsModel(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # (*S)
         *,
-        embeddings: Tensor,  # Float[..., $K, M]
-        valid_mask: Tensor,  # Bool[..., $K]
+        embeddings: Tensor,  # Float[..., $N, M]
+        valid_mask: Tensor,  # Bool[..., $N]
     ) -> tuple[Tensor, Tensor]:  # Long[*S, ...], Float[*S, ...]
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
         samples = self.sample_from_weights(size, log_weights)
@@ -1804,7 +1807,7 @@ class SeparableEncoder(nn.Module):
         context_times = context_times.masked_fill(~ctx_valid, 0.0)
         query_times = query_times.masked_fill(~qry_valid, 0.0)
 
-        x = torch.cat(  # (..., $X, D)
+        x = torch.cat(  # (..., $X, M₁)
             [
                 self.positional_embedding(context_times),
                 self.channel_embedding(context_channels),
@@ -1813,7 +1816,7 @@ class SeparableEncoder(nn.Module):
             dim=-1,
         )
 
-        q = torch.cat(  # (..., $Q, F)
+        q = torch.cat(  # (..., $Q, M₂)
             [
                 self.positional_embedding(query_times),
                 self.channel_embedding(query_channels),
@@ -1842,15 +1845,15 @@ class ConditionalGaussian(nn.Module):
 
     .. math::   μ(𝐡) = 𝐡W    \qquad    Σ(𝐡) = σ²𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M.
 
-    Given context embedding 𝐡∈ℝ^{D×K×M}, where
+    Given context embedding $𝐡∈ℝ^{D×K×M}$, where
 
         D: number of mixture components
         K: number of query values
         M: dimensionality of each embedding,
 
-    Since Σ(𝐡) is a low-rank update of an isotropic covariance, we can compute
+    Since $Σ(𝐡)$ is a low-rank update of an isotropic covariance, we can compute
     the log-likelihood and sample from the distribution efficiently using the
-    Woodbury identity in O(MK²) time instead of O(K³) time.
+    Woodbury identity in $O(MK²)$ time instead of $O(K³)$ time.
     """
 
     eye: Tensor
@@ -1892,9 +1895,9 @@ class ConditionalGaussian(nn.Module):
 
     def embed(
         self,
-        context: Tensor,  # (..., *H, $K, D)
+        context: Tensor,  # (..., *H, $K, M)
         /,
-    ) -> tuple[Tensor, Tensor, Tensor]:  # (..., *H, $K), (..., *H, $K, F), (*H,)
+    ) -> tuple[Tensor, Tensor, Tensor]:  # (..., *H, $K), (..., *H, $K, R), (*H,)
         r"""Compute the mean, low-rank factor, and isotropic scale."""
         mean = torch.einsum("...kd, ...d -> ...k", context, self.mean_param)
         cov_factor = torch.einsum("...kd, ...df -> ...kf", context, self.cov_param)
@@ -1905,7 +1908,7 @@ class ConditionalGaussian(nn.Module):
         self,
         x: Tensor,  # (..., *H, $K)
         mean: Tensor,  # (..., *H, $K)
-        cov_factor: Tensor,  # (..., *H, $K, F)
+        cov_factor: Tensor,  # (..., *H, $K, R)
         cov_scale: Tensor,  # (..., *H,)
         /,
     ) -> Tensor:  # (..., *H)
@@ -1917,11 +1920,11 @@ class ConditionalGaussian(nn.Module):
         inv_cov_scale = cov_scale.reciprocal()
         scaled_factor = cov_factor * inv_cov_scale[..., None, None]
 
-        gram = scaled_factor.mT @ scaled_factor  # (..., *H, F, F)
-        chol = cholesky(self.eye + gram)  # (..., *H, F, F)
+        gram = scaled_factor.mT @ scaled_factor  # (..., *H, R, R)
+        chol = cholesky(self.eye + gram)  # (..., *H, R, R)
 
         # xᵀΣ⁻¹x = σ⁻²(xᵀx - xᵀV(I + VᵀV)⁻¹Vᵀx) = σ⁻²(‖x‖² - ‖L⁻¹ Vᵀx‖²)
-        projected = scaled_factor.mT @ centered.unsqueeze(-1)  # (..., *H, F, 1)
+        projected = scaled_factor.mT @ centered.unsqueeze(-1)  # (..., *H, R, 1)
         whitened = solve_triangular(chol, projected, upper=False)
         quadratic = inv_cov_scale.square() * (
             centered.square().sum(dim=-1) - whitened.square().sum(dim=(-2, -1))
@@ -1939,7 +1942,7 @@ class ConditionalGaussian(nn.Module):
         self,
         size: int | tuple[int, ...],  # *S
         mean: Tensor,  # (..., *H, $K)
-        cov_factor: Tensor,  # (..., *H, $K, F)
+        cov_factor: Tensor,  # (..., *H, $K, R)
         cov_scale: Tensor,  # (*H,)
         /,
     ) -> Tensor:  # (*S, ..., *H, $K)
@@ -1957,7 +1960,7 @@ class ConditionalGaussian(nn.Module):
             dtype=mean.dtype,
             device=mean.device,
         )
-        rank_noise = torch.randn(  # (*S, ..., *H, F)
+        rank_noise = torch.randn(  # (*S, ..., *H, R)
             (*sample_shape, *batch_and_head_shape, feat_dim),
             dtype=cov_factor.dtype,
             device=cov_factor.device,
@@ -1971,7 +1974,7 @@ class ConditionalGaussian(nn.Module):
     def log_prob(
         self,
         x: Tensor,  # (*S, ..., *H, $K)
-        context: Tensor,  # (..., *H, $K, D)
+        context: Tensor,  # (..., *H, $K, M)
         /,
     ) -> Tensor:  # (*S, ..., *H)
         r"""Compute the log-likelihood of the input."""
@@ -1981,7 +1984,7 @@ class ConditionalGaussian(nn.Module):
     def sample(
         self,
         size: int | tuple[int, ...],  # (*S)
-        context: Tensor,  # (..., *H, $K, D)
+        context: Tensor,  # (..., *H, $K, M)
         /,
     ) -> Tensor:  # (*S, ..., *H, $K)
         r"""Sample a Gaussian distribution from the conditional distribution."""
@@ -1991,7 +1994,7 @@ class ConditionalGaussian(nn.Module):
     def sample_and_log_prob(
         self,
         size: int | tuple[int, ...],  # (*S)
-        context: Tensor,  # (..., *H, $K, D)
+        context: Tensor,  # (..., *H, $K, M)
         /,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., *H, $K), (*S, ..., *H)
         r"""Sample a Gaussian distribution from the conditional distribution."""
@@ -2004,9 +2007,9 @@ class ConditionalGaussian(nn.Module):
 class Moses(nn.Module):
     r"""Context-conditioned mixture normalizing flow for irregular time-series forecasting.
 
-    Combines a GraFITi encoder with a per-query mixture of spline flows.  The
+    Combines a separable encoder with a per-query mixture of spline flows.  The
     encoder maps context observations and query positions to per-query
-    embeddings ``H (..., K, M)``, which are projected to per-query mixture
+    embeddings ``H (..., $K, M)``, which are projected to per-query mixture
     logits and Gaussian means.  One learned spline flow per mixture component
     maps Gaussian latents to the data space.
 
@@ -2015,14 +2018,14 @@ class Moses(nn.Module):
     preserved (though not yet exposed on this class).
 
     Args:
-        input_dim: Number of observed channels ``D``.
+        input_dim: Number of observed channels ``E``.
         latent_dim: GraFITi / linear-projection embedding size ``M``.
-        num_mixture_components: Number of mixture components ``C``.
+        num_mixture_components: Number of mixture components ``D``.
         num_flow_layers: Number of spline layers per component.
         num_bins: Number of rational-spline bins.
         bounds: Symmetric spline input/output domain ``(lo, hi)``.
-        num_encoder_layers: Number of GraFITi attention layers.
-        num_encoder_heads: Number of GraFITi attention heads.
+        num_encoder_heads: Number of separable-encoder attention heads.
+        covariance_rank: Low-rank covariance factor rank for the conditional Gaussian.
     """
 
     num_mixture_components: Final[int]
@@ -2031,8 +2034,8 @@ class Moses(nn.Module):
 
     # sub-modules / parameters
     encoder: SeparableEncoder
-    conditional_mixture: MixtureWeightsModel  # M → C  (mixture logits)
-    conditional_flow: ConditionalSplineFlow  # C × SplineFlow, each n_heads=()
+    conditional_mixture: MixtureWeightsModel
+    conditional_flow: ConditionalSplineFlow
     base_distribution: ConditionalGaussian
 
     # buffers
@@ -2046,12 +2049,12 @@ class Moses(nn.Module):
         *,
         input_dim: int,
         latent_dim: int = 128,
-        num_components: int = 4,
+        num_mixture_components: int = 4,
         num_flow_layers: int = 3,
         num_bins: int = 16,
         bounds: tuple[float, float] = (-5.0, 5.0),
-        num_encoder_layers: int = 3,
         num_encoder_heads: int = 4,
+        covariance_rank: int | None = None,
     ) -> Moses:
         raise NotImplementedError
 
@@ -2064,23 +2067,13 @@ class Moses(nn.Module):
         num_flow_layers: int = 3,
         num_bins: int = 16,
         bounds: tuple[float, float] = (-5.0, 5.0),
-        num_encoder_layers: int = 3,
         num_encoder_heads: int = 4,
-        mixture_weight_model: nn.Module,
         covariance_rank: int | None = None,
     ) -> None:
         super().__init__()
         self.num_mixture_components = num_mixture_components
         self.num_bins = num_bins
         self.bounds = bounds
-
-        # self.encoder = Grafiti(
-        #     input_dim=input_dim,
-        #     latent_dim=latent_dim,
-        #     num_layers=num_encoder_layers,
-        #     num_heads=num_encoder_heads,
-        #     output_mode="embeddings",
-        # )
 
         # Separable Encoder (eq 12)
         self.encoder = SeparableEncoder(
@@ -2124,13 +2117,13 @@ class Moses(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # Float[*S, ..., $T, E]
+        values: Tensor,  # Float[*S, ..., $Q, F]
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[..., $K, F]  padded False
-        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., $N, C], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., $N, C], padded False
+        query_times: Tensor,  # Float[..., $Q], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $Q, F]  padded False
+        context_times: Tensor,  # Float[..., $X], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $X, E], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $X, E], padded False
     ) -> Tensor:  # (*S, ...)
         r"""Compute the joint log-likelihood of the target values.
 
@@ -2156,7 +2149,7 @@ class Moses(nn.Module):
             query_mask=query_mask,
             target_values=values,
         )
-        y = triplets.target_values
+        y = triplets.target_values  # (*S, ..., $K)
         assert y is not None
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
@@ -2173,6 +2166,8 @@ class Moses(nn.Module):
         log_weights = self.conditional_mixture.forward(  # (*S, ..., D)
             h_obs, valid_mask=triplets.context_channels.ge(0)
         )
+
+        y = y.unsqueeze(-2)  # (*S, ..., 1, $K)
 
         # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
         # log pᵢ(x) = log qᵢ(f⁻¹(x)) + log |det J(f⁻¹(x))|
@@ -2194,12 +2189,12 @@ class Moses(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[..., $K, F]  padded False
-        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., $N, C], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., $N, C], padded False
-    ) -> Tensor:  # (*S, ..., $K, F)
+        query_times: Tensor,  # Float[..., $Q], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $Q, F]  padded False
+        context_times: Tensor,  # Float[..., $X], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $X, E], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $X, E], padded False
+    ) -> Tensor:  # (*S, ..., $Q, F)
         r"""Sample from the conditional marginal distribution at each query position.
 
         Args:
@@ -2211,7 +2206,7 @@ class Moses(nn.Module):
             context_mask: Boolean mask selecting observed context positions.
 
         Returns:
-            Samples with shape ``(*S, ..., T, D)``, ``NaN`` at non-query positions.
+            Samples with shape ``(*S, ..., $Q, F)``, ``NaN`` at non-query positions.
         """
         triplets = TripletTimeData.from_request(
             context_times=context_times,
@@ -2222,7 +2217,7 @@ class Moses(nn.Module):
         )
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
-        h_obs, h = self.encoder.forward(  # (*S, ..., $X, M), (*S, ..., *H, $Q, M)
+        h_obs, h = self.encoder.forward(  # (*S, ..., $N, M), (*S, ..., *H, $K, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
             # query_valid=triplets.query_valid,
@@ -2232,10 +2227,10 @@ class Moses(nn.Module):
             # context_valid=triplets.context_valid,
         )
 
-        # sample from base distribution (*S, ..., D, $Q), (*S, ..., D)
+        # sample from base distribution (*S, ..., D, $K), (*S, ..., D)
         z, _ = self.base_distribution.sample_and_log_prob(size, h)
 
-        # decode through the flow (*S, ..., D, $Q), (*S, ..., D)
+        # decode through the flow (*S, ..., D, $K), (*S, ..., D)
         y, _ = self.conditional_flow.decode_and_logabsdet(z, h)
 
         # compute mixture weights w(𝐡ᵒᵇˢ)  (..., D)
@@ -2246,7 +2241,7 @@ class Moses(nn.Module):
         # sample indices from the mixture (*S, ...)
         indices = self.conditional_mixture.sample_from_weights(size, log_weights)
 
-        # select the values (*S, ..., $Q)
+        # select the values (*S, ..., $K)
         samples = y.take_along_dim(indices[..., None], dim=-1)
 
         # store buffers
@@ -2254,19 +2249,19 @@ class Moses(nn.Module):
         self.log_probs = None
         self.indices = indices
 
-        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
+        # reshape the samples from (*S, ..., $K) to (*S, ..., $Q, F)
         return samples[triplets.query_indices].masked_fill(~query_mask, nan)
 
     def sample_and_log_prob(
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[..., $K, F]  padded False
-        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., $N, C], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., $N, C], padded False
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, F), (*S, ...)
+        query_times: Tensor,  # Float[..., $Q], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $Q, F]  padded False
+        context_times: Tensor,  # Float[..., $X], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $X, E], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $X, E], padded False
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $Q, F), (*S, ...)
         triplets = TripletTimeData.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -2276,7 +2271,7 @@ class Moses(nn.Module):
         )
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
-        h_obs, h = self.encoder.forward(  # (*S, ..., $X, M), (*S, ..., *H, $Q, M)
+        h_obs, h = self.encoder.forward(  # (*S, ..., $N, M), (*S, ..., *H, $K, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
             # query_valid=triplets.query_valid,
@@ -2291,16 +2286,16 @@ class Moses(nn.Module):
             h_obs, valid_mask=triplets.context_channels.ge(0)
         )
 
-        # sample from base distribution (*S, ..., D, $Q), (*S, ..., D)
+        # sample from base distribution (*S, ..., D, $K), (*S, ..., D)
         z, _ = self.base_distribution.sample_and_log_prob(size, h)
 
-        # decode through the flow (*S, ..., D, $Q), (*S, ..., D)
+        # decode through the flow (*S, ..., D, $K), (*S, ..., D)
         y, _ = self.conditional_flow.decode_and_logabsdet(z, h)
 
         # sample indices from the mixture (*S, ...)
         indices = self.conditional_mixture.sample_from_weights(size, log_weights)
 
-        # select the values (*S, ..., $Q)
+        # select the values (*S, ..., $K)
         samples = y.take_along_dim(indices[..., None], dim=-1)
 
         # flow backwards again to get the log_probs.
@@ -2316,10 +2311,10 @@ class Moses(nn.Module):
 
         # store buffers
         self.indices = indices  # (*S, ...)
-        self.samples = samples  # (*S, ..., $Q)
+        self.samples = samples  # (*S, ..., $K)
         self.log_probs = log_probs  # (*S, ...)
 
-        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
+        # reshape the samples from (*S, ..., $K) to (*S, ..., $Q, F)
         samples = samples[triplets.query_indices].masked_fill(~query_mask, nan)
 
         return samples, log_probs
