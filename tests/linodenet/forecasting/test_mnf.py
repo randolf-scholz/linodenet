@@ -1,5 +1,6 @@
 r"""Tests for Marginalizable Normalizing Flow components."""
 
+import math
 from typing import ClassVar, NamedTuple
 
 import pytest
@@ -16,6 +17,21 @@ from linodenet.forecasting.mnf import (
     MultiHeadAttention,
     SeparableEncoder,
 )
+
+
+def _manual_mixture_samples(
+    log_weights: Tensor, sample_shape: tuple[int, ...]
+) -> Tensor:
+    r"""Sample mixture indices with the same shape convention as `Categorical.sample`."""
+    num_components = log_weights.shape[-1]
+    flat_probs = log_weights.exp().reshape(-1, num_components)
+    num_samples = math.prod(sample_shape) if sample_shape else 1
+    flat_samples = torch.multinomial(
+        flat_probs,
+        num_samples=num_samples,
+        replacement=True,
+    )
+    return flat_samples.mT.reshape((*sample_shape, *log_weights.shape[:-1]))
 
 
 class MNFConfig(NamedTuple):
@@ -680,7 +696,11 @@ class TestMixtureWeightsModel:
         indices = torch.randint(0, 4, (*sample_shape, *batch_shape))
 
         actual = model.log_prob(indices, embeddings, valid_mask)
-        expected = torch.distributions.Categorical(logits=log_weights).log_prob(indices)
+        expected = log_weights.reshape(
+            *([1] * len(sample_shape)),
+            *log_weights.shape,
+        ).expand(*indices.shape, 4)
+        expected = expected.gather(dim=-1, index=indices.unsqueeze(-1)).squeeze(-1)
 
         assert actual.shape == (*sample_shape, *batch_shape)
         assert_close(actual, expected)
@@ -715,12 +735,17 @@ class TestMixtureWeightsModel:
         embeddings = torch.randn(*batch_shape, 3, 6)
         valid_mask = torch.rand(*batch_shape, 3) > 0.3
         embeddings = embeddings.masked_fill(~valid_mask.unsqueeze(-1), torch.nan)
+        log_weights = model(embeddings, valid_mask=valid_mask)
 
+        torch.manual_seed(1234)
         actual = model.sample(size, embeddings=embeddings, valid_mask=valid_mask)
+        torch.manual_seed(1234)
+        expected = _manual_mixture_samples(log_weights, expected_sample_shape)
 
         assert actual.shape == (*expected_sample_shape, *batch_shape)
         assert actual.dtype == torch.long
         assert ((0 <= actual) & (actual < 5)).all()
+        assert_close(actual, expected)
 
     @pytest.mark.parametrize(
         ("batch_shape", "size", "expected_sample_shape"),
@@ -752,13 +777,18 @@ class TestMixtureWeightsModel:
         embeddings = torch.randn(*batch_shape, 5, 5)
         valid_mask = torch.rand(*batch_shape, 5) > 0.25
         embeddings = embeddings.masked_fill(~valid_mask.unsqueeze(-1), torch.nan)
+        log_weights = model(embeddings, valid_mask=valid_mask)
 
+        torch.manual_seed(4321)
         samples, log_prob = model.sample_and_log_prob(
             size,
             embeddings=embeddings,
             valid_mask=valid_mask,
         )
+        torch.manual_seed(4321)
+        expected_samples = _manual_mixture_samples(log_weights, expected_sample_shape)
 
         assert samples.shape == (*expected_sample_shape, *batch_shape)
         assert log_prob.shape == (*expected_sample_shape, *batch_shape)
+        assert_close(samples, expected_samples)
         assert_close(log_prob, model.log_prob(samples, embeddings, valid_mask))

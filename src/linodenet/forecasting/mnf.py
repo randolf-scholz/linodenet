@@ -1286,7 +1286,7 @@ class MarginalizableNormalizingFlow(nn.Module):
         self.mixture_logits = logits
         return logits
 
-    def log_prob(self, inputs: Tensor) -> Tensor:
+    def log_prob(self, inputs: Tensor, /) -> Tensor:
         r"""Compute the log-likelihood of the input."""
         # (..., D) -> ...
 
@@ -1641,15 +1641,41 @@ class MixtureWeightsModel(nn.Module):
 
         return attended.log_softmax(dim=-1)  # (..., C)
 
+    def _gather_log_weights(
+        self,
+        indices: Tensor,
+        log_weights: Tensor,
+        /,
+    ) -> Tensor:
+        r"""Select component log-weights for batched sample indices."""
+        sample_shape = indices.shape[: indices.ndim - log_weights.ndim + 1]
+        expanded = log_weights.reshape(
+            *([1] * len(sample_shape)),
+            *log_weights.shape,
+        ).expand(*indices.shape, self.num_components)
+        return expanded.gather(dim=-1, index=indices.unsqueeze(-1)).squeeze(-1)
+
+    def _sample_multinomial(
+        self, log_weights: Tensor, /, sample_shape: tuple[int, ...]
+    ) -> Tensor:
+        r"""Sample component indices with leading sample axes."""
+        flat_probs = log_weights.exp().reshape(-1, self.num_components)
+        flat_samples = torch.multinomial(
+            flat_probs,
+            num_samples=math.prod(sample_shape),
+            replacement=True,
+        )
+        return flat_samples.mT.reshape((*sample_shape, *log_weights.shape[:-1]))
+
     def log_prob(
         self,
-        indices: Tensor,  # Long[..., *S]
+        indices: Tensor,  # Long[*S, ...]
         /,
         embeddings: Tensor,  # Float[..., $K, M]
         valid_mask: Tensor,  # Bool[..., $K]
-    ) -> Tensor:  # Float[..., *S]
+    ) -> Tensor:  # Float[*S, ...]
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
-        log_prob = torch.distributions.Categorical(logits=log_weights).log_prob(indices)
+        log_prob = self._gather_log_weights(indices, log_weights)
         self.log_probs = log_prob
         return log_prob
 
@@ -1659,11 +1685,10 @@ class MixtureWeightsModel(nn.Module):
         *,
         embeddings: Tensor,  # Float[..., $K, M]
         valid_mask: Tensor,  # Bool[..., $K]
-    ) -> Tensor:  # Long[..., *S]
+    ) -> Tensor:  # Long[*S, ...]
         sample_shape = (size,) if isinstance(size, int) else size
-        samples = torch.distributions.Categorical(
-            logits=self.forward(embeddings, valid_mask=valid_mask)
-        ).sample(sample_shape)
+        log_weights = self.forward(embeddings, valid_mask=valid_mask)
+        samples = self._sample_multinomial(log_weights, sample_shape)
         self.samples = samples
         return samples
 
@@ -1673,13 +1698,11 @@ class MixtureWeightsModel(nn.Module):
         *,
         embeddings: Tensor,  # Float[..., $K, M]
         valid_mask: Tensor,  # Bool[..., $K]
-    ) -> tuple[Tensor, Tensor]:  # Long[..., *S], Float[..., *S]
+    ) -> tuple[Tensor, Tensor]:  # Long[*S, ...], Float[*S, ...]
         sample_shape = (size,) if isinstance(size, int) else size
-        distribution = torch.distributions.Categorical(
-            logits=self.forward(embeddings, valid_mask=valid_mask)
-        )
-        samples = distribution.sample(sample_shape)
-        log_prob = distribution.log_prob(samples)
+        log_weights = self.forward(embeddings, valid_mask=valid_mask)
+        samples = self._sample_multinomial(log_weights, sample_shape)
+        log_prob = self._gather_log_weights(samples, log_weights)
         self.samples = samples
         self.log_probs = log_prob
         return samples, log_prob
@@ -1942,10 +1965,10 @@ class ConditionalGaussian(nn.Module):
 
     def log_prob(
         self,
-        x: Tensor,  # (..., *H, $K)
+        x: Tensor,  # (*S, ..., *H, $K)
         context: Tensor,  # (..., *H, $K, D)
         /,
-    ) -> Tensor:  # (..., *H)
+    ) -> Tensor:  # (*S, ..., *H)
         r"""Compute the log-likelihood of the input."""
         mean, cov_factor, cov_scale = self.embed(context)
         return self._log_prob(x, mean, cov_factor, cov_scale)
@@ -2112,14 +2135,14 @@ class Moses(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # Float[..., $T, E]
+        values: Tensor,  # Float[*S, ..., $T, E]
         *,
         query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, C], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $N, C], padded False
-    ) -> Tensor:  # (...,)
+    ) -> Tensor:  # (*S, ...)
         r"""Compute the joint log-likelihood of the target values.
 
         Evaluates the marginal mixture-flow log-prob at each query position
