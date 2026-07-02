@@ -38,8 +38,7 @@ from torch import Tensor, nan, nn
 from torch.linalg import cholesky, solve_triangular
 from torch.nn import functional as F
 
-from .grafiti import Grafiti
-from .utils import EventBatch, TripletTimeData
+from .utils import TripletTimeData
 
 DEFAULT_MIN_BIN_WIDTH: Final[float] = 1e-3
 DEFAULT_MIN_BIN_HEIGHT: Final[float] = 1e-3
@@ -1938,7 +1937,7 @@ class ConditionalGaussian(nn.Module):
 
     def _sample(
         self,
-        size: tuple[int, ...],  # *S
+        size: int | tuple[int, ...],  # *S
         mean: Tensor,  # (..., *H, $K)
         cov_factor: Tensor,  # (..., *H, $K, F)
         cov_scale: Tensor,  # (*H,)
@@ -1946,23 +1945,26 @@ class ConditionalGaussian(nn.Module):
     ) -> Tensor:  # (*S, ..., *H, $K)
         # Write Σ = σ²I + UUᵀ with U = cov_factor. Then [σI, U] is a
         # rectangular square root because [σI, U][σI, U]ᵀ = σ²I + UUᵀ = Σ.
-        white_noise = torch.randn(
-            (*size, *mean.shape),
-            dtype=mean.dtype,
-            device=mean.device,
-        )
+        sample_shape = (size,) if isinstance(size, int) else size
+        *batch_and_head_shape, seq_dim, feat_dim = cov_factor.shape
+
         # Sampling ε ∼ 𝓝(0, Iₖ) and ξ ∼ 𝓝(0, Iᵣ) independently is equivalent to
         # drawing [ε; ξ] ∼ 𝓝(0, Iₖ₊ᵣ) and applying the usual reparameterization
         # x = μ + [σI, U][ε; ξ] = μ + σε + Uξ, without forming a dense K×K
         # factor.
-        rank_noise = torch.randn(
-            (*size, *cov_factor.shape[:-2], cov_factor.shape[-1]),
+        white_noise = torch.randn(  # (*S, ..., *H, $K)
+            (*sample_shape, *mean.shape),
+            dtype=mean.dtype,
+            device=mean.device,
+        )
+        rank_noise = torch.randn(  # (*S, ..., *H, F)
+            (*sample_shape, *batch_and_head_shape, feat_dim),
             dtype=cov_factor.dtype,
             device=cov_factor.device,
         )
-        return (
+        return (  # (*S, ..., *H, $K)
             mean
-            + cov_scale.unsqueeze(-1) * white_noise
+            + cov_scale[..., None] * white_noise
             + torch.einsum("...kf, ...f -> ...k", cov_factor, rank_noise)
         )
 
@@ -1978,7 +1980,7 @@ class ConditionalGaussian(nn.Module):
 
     def sample(
         self,
-        size: tuple[int, ...],  # (*S)
+        size: int | tuple[int, ...],  # (*S)
         context: Tensor,  # (..., *H, $K, D)
         /,
     ) -> Tensor:  # (*S, ..., *H, $K)
@@ -1988,7 +1990,7 @@ class ConditionalGaussian(nn.Module):
 
     def sample_and_log_prob(
         self,
-        size: tuple[int, ...],  # (*S)
+        size: int | tuple[int, ...],  # (*S)
         context: Tensor,  # (..., *H, $K, D)
         /,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., *H, $K), (*S, ..., *H)
@@ -2120,32 +2122,6 @@ class Moses(nn.Module):
         self.register_buffer("log_probs", None, persistent=False)
         self.register_buffer("indices", None, persistent=False)
 
-    def embed(
-        self,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., $N, C)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., $N, C)], padded False
-    ) -> tuple[Tensor, Tensor]:  # (..., D), (..., D, $K, M)
-        triplets = ...
-
-        h_obs, h = self.encoder.forward(
-            query_times=triplets.query_times,
-            query_channels=triplets.query_channels,
-            query_valid=triplets.query_valid,
-            context_times=triplets.context_times,
-            context_channels=triplets.context_channels,
-            context_values=triplets.context_values,
-            context_valid=triplets.context_valid,
-        )
-
-        mixture_weights = self.conditional_mixture.forward(
-            h_obs, valid_mask=triplets.query_valid
-        )
-
-        return mixture_weights, h
-
     def log_prob(
         self,
         values: Tensor,  # Float[*S, ..., $T, E]
@@ -2230,6 +2206,44 @@ class Moses(nn.Module):
         Returns:
             Samples with shape ``(*S, ..., T, D)``, ``NaN`` at non-query positions.
         """
+        triplets = TripletTimeData.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+
+        # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
+        h_obs, h = self.encoder.forward(  # (*S, ..., $X, M), (*S, ..., *H, $Q, M)
+            query_times=triplets.query_times,
+            query_channels=triplets.query_channels,
+            query_valid=triplets.query_valid,
+            context_times=triplets.context_times,
+            context_channels=triplets.context_channels,
+            context_values=triplets.context_values,
+            context_valid=triplets.context_valid,
+        )
+
+        # sample from base distribution (*S, ..., D, $Q), (*S, ..., D)
+        z, _ = self.base_distribution.sample_and_log_prob(size, h)
+
+        # decode through the flow (*S, ..., D, $Q), (*S, ..., D)
+        y, _ = self.conditional_flow.decode_and_logabsdet(z, h)
+
+        # compute mixture weights w(𝐡ᵒᵇˢ)  (..., D)
+        log_weights = self.conditional_mixture.forward(
+            h_obs, valid_mask=triplets.context_valid
+        )
+
+        # sample indices from the mixture (*S, ...)
+        indices = self.conditional_mixture.sample_from_weights(size, log_weights)
+
+        # select the values (*S, ..., $Q)
+        samples = y.take_along_dim(indices[..., None], dim=-1)
+
+        # reshape the samples from (*S, ..., $Q) to (*S, ..., $K, F)
+        return samples[triplets.query_indices]
 
     def sample_and_log_prob(
         self,
@@ -2250,7 +2264,7 @@ class Moses(nn.Module):
         )
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
-        h_obs, h = self.encoder.forward(
+        h_obs, h = self.encoder.forward(  # (*S, ..., $X, M), (*S, ..., *H, $Q, M)
             query_times=triplets.query_times,
             query_channels=triplets.query_channels,
             query_valid=triplets.query_valid,
