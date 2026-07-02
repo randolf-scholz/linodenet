@@ -1491,7 +1491,9 @@ class MultiHeadAttention(nn.Module):
         self.num_heads = num_heads
 
         self.q_proj = nn.Linear(q_dim, self.dim_hidden, bias=bias)
-        self.k_proj = nn.Linear(k_dim, self.dim_hidden, bias=bias)
+        # A key bias adds the same constant to every logit for a fixed query, so
+        # softmax cancels it and the parameter cannot affect the attention map.
+        self.k_proj = nn.Linear(k_dim, self.dim_hidden, bias=False)
         self.v_proj = nn.Linear(v_dim, self.dim_hidden, bias=bias)
         self.out_proj = nn.Linear(self.dim_hidden, dim_output, bias=bias)
 

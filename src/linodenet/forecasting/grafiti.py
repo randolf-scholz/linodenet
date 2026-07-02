@@ -36,7 +36,9 @@ class MAB(nn.Module):
         self.dim_hidden = dim_hidden
         self.num_heads = num_heads
         self.fc_q = nn.Linear(dim_Q, dim_hidden)
-        self.fc_k = nn.Linear(dim_K, dim_hidden)
+        # A key bias adds the same constant to every logit for a fixed query, so
+        # softmax cancels it and the parameter cannot affect the attention map.
+        self.fc_k = nn.Linear(dim_K, dim_hidden, bias=False)
         self.fc_v = nn.Linear(dim_V, dim_hidden)
         self.layer_norm0 = nn.LayerNorm(dim_hidden) if layer_norm else None
         self.layer_norm1 = nn.LayerNorm(dim_hidden) if layer_norm else None
