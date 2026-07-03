@@ -510,6 +510,9 @@ class LearnableLRS(nn.Module):
             return value + math.log(-math.expm1(-value))
 
         # Parameters
+        # Initialize to a globally affine map by using uniform widths/heights,
+        # λ = 0.5 in every bin, and derivatives equal to the interval slope.
+        # When x_bounds == y_bounds, the initial transform is exactly the identity.
         self.widths = nn.Parameter(
             torch.full(
                 (*self.n_heads, num_bins),
@@ -691,19 +694,20 @@ class ConditionalLRS(nn.Module):
         self.x_center = nn.Parameter(torch.full(self.head_shape, 0.5 * (left + right)))
         self.y_center = nn.Parameter(torch.full(self.head_shape, 0.5 * (bottom + top)))
 
-        width_bias = inverse_softplus(
-            torch.tensor(width_init - min_bin_width, dtype=self.width_model.bias.dtype)
-        ).item()
-        height_bias = inverse_softplus(
-            torch.tensor(
-                height_init - min_bin_height, dtype=self.height_model.bias.dtype
-            )
-        ).item()
-        derivative_bias = inverse_softplus(
-            torch.tensor(slope, dtype=self.derivative_model.bias.dtype)
-        ).item()
-
         with torch.no_grad():
+            width_bias = inverse_softplus(
+                torch.tensor(
+                    width_init - min_bin_width, dtype=self.width_model.bias.dtype
+                )
+            ).item()
+            height_bias = inverse_softplus(
+                torch.tensor(
+                    height_init - min_bin_height, dtype=self.height_model.bias.dtype
+                )
+            ).item()
+            derivative_bias = inverse_softplus(
+                torch.tensor(slope, dtype=self.derivative_model.bias.dtype)
+            ).item()
             for module in (
                 self.width_model,
                 self.height_model,

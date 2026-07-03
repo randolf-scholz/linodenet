@@ -105,6 +105,7 @@ class TestForecastingModel[M: nn.Module](ABC):
     MAX_STEPS: ClassVar[int] = 5
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
     OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    GRADIENT_WARMUP_STEPS: ClassVar[int] = 0
 
     @abstractmethod
     def make_model(self, model_config: object, /) -> M:
@@ -461,7 +462,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         predictions = self.forecast(model, data)
         initial_loss = self.loss(model, predictions, data.target_values)
 
-        for _ in range(3):
+        for step in range(3):
             optimizer.zero_grad()
             predictions = self.forecast(model, data)
             loss = self.loss(model, predictions, data.target_values)
@@ -478,7 +479,8 @@ class TestForecastingModel[M: nn.Module](ABC):
                     continue
                 assert parameter.grad is not None, name
                 assert parameter.grad.isfinite().all(), name
-                assert parameter.grad.abs().max() > min_grad, name
+                if step >= self.GRADIENT_WARMUP_STEPS:
+                    assert parameter.grad.abs().max() > min_grad, name
 
             optimizer.step()
 
@@ -529,7 +531,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         predictions = self.forecast(model, data)
         initial_loss = self.loss(model, predictions, data.target_values)
 
-        for _ in range(3):
+        for step in range(3):
             optimizer.zero_grad()
             predictions = self.forecast(model, data)
             loss = self.loss(model, predictions, data.target_values)
@@ -546,7 +548,8 @@ class TestForecastingModel[M: nn.Module](ABC):
                     continue
                 assert parameter.grad is not None, name
                 assert parameter.grad.isfinite().all(), name
-                assert parameter.grad.abs().max() > min_grad, name
+                if step >= self.GRADIENT_WARMUP_STEPS:
+                    assert parameter.grad.abs().max() > min_grad, name
 
             optimizer.step()
 

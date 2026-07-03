@@ -12,14 +12,16 @@ from linodenet.forecasting.mnf import (
     ConditionalGaussian,
     ConditionalLRS,
     ConditionalSplineFlow,
+    LearnableLRS,
     MarginalizableNormalizingFlow,
     MixtureWeightsModel,
     Moses,
     MultiHeadAttention,
     SeparableEncoder,
 )
+from linodenet.forecasting.utils import SplitTimeData
 
-from .base import make_forecasting_request
+from .base import TestForecastingModel, make_forecasting_request
 
 
 def _manual_mixture_samples(
@@ -45,6 +47,18 @@ class MNFConfig(NamedTuple):
     num_flow_layers: int
     num_bins: int = 8
     bounds: tuple[float, float] = (-5.0, 5.0)
+
+
+class MosesTestConfig(NamedTuple):
+    r"""Configuration for the Moses forecasting model tests."""
+
+    input_dim: int
+    latent_dim: int
+    num_mixture_components: int
+    num_flow_layers: int
+    num_bins: int = 4
+    bounds: tuple[float, float] = (-3.0, 3.0)
+    num_encoder_heads: int = 2
 
 
 class TestConditionalLRS:
@@ -112,6 +126,60 @@ class TestConditionalLRS:
             torch.zeros_like(forward_logabsdet),
             atol=1e-5,
             rtol=1e-5,
+        )
+
+
+class TestLearnableLRS:
+    r"""Tests for the unconditional rational linear spline transform."""
+
+    NUM_BINS: ClassVar[int] = 8
+    NUM_VALUES: ClassVar[int] = 5
+
+    @pytest.mark.parametrize(
+        ("x_bounds", "y_bounds"),
+        [
+            ((-3.0, 3.0), (-3.0, 3.0)),
+            ((-3.0, 3.0), (-2.0, 4.0)),
+        ],
+        ids=["identity", "affine"],
+    )
+    def test_initialization_is_globally_affine(
+        self,
+        x_bounds: tuple[float, float],
+        y_bounds: tuple[float, float],
+    ) -> None:
+        r"""The default parameterization should start as a single affine map."""
+        left, right = x_bounds
+        bottom, top = y_bounds
+        slope = (top - bottom) / (right - left)
+        x_center = 0.5 * (left + right)
+        y_center = 0.5 * (bottom + top)
+
+        layer = LearnableLRS(
+            num_heads=(),
+            num_bins=self.NUM_BINS,
+            x_bounds=x_bounds,
+            y_bounds=y_bounds,
+        )
+        x = torch.linspace(left + 0.25, right - 0.25, self.NUM_VALUES).repeat(3, 1)
+
+        y, forward_logabsdet = layer.encode_and_logabsdet(x)
+        xhat, inverse_logabsdet = layer.decode_and_logabsdet(y)
+
+        expected = (x - x_center) * slope + y_center
+        expected_logabsdet = torch.full_like(
+            forward_logabsdet,
+            math.log(slope),
+        )
+
+        assert_close(y, expected, atol=1e-6, rtol=1e-6)
+        assert_close(forward_logabsdet, expected_logabsdet, atol=1e-6, rtol=1e-6)
+        assert_close(xhat, x, atol=1e-6, rtol=1e-6)
+        assert_close(
+            forward_logabsdet + inverse_logabsdet,
+            torch.zeros_like(forward_logabsdet),
+            atol=1e-6,
+            rtol=1e-6,
         )
 
 
@@ -217,25 +285,77 @@ class TestMarginalizableNormalizingFlow:
         assert final_loss < initial_loss
 
 
-class TestMoses:
-    r"""Smoke tests for the Moses forecasting model."""
+class TestMoses(TestForecastingModel[Moses]):
+    r"""Shared forecasting-model and smoke tests for Moses."""
 
     SEED: ClassVar[int] = 0
-    INPUT_DIM: ClassVar[int] = 2
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (2,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    GRADIENT_WARMUP_STEPS: ClassVar[int] = 1
     MIN_STEPS: ClassVar[int] = 2
     MAX_STEPS: ClassVar[int] = 4
+    STANDARD_CONFIG: ClassVar[MosesTestConfig] = MosesTestConfig(
+        input_dim=CONTEXT_SHAPE[0],
+        latent_dim=8,
+        num_mixture_components=2,
+        num_flow_layers=1,
+    )
 
-    def make_model(self) -> Moses:
-        r"""Instantiate a small Moses model for smoke tests."""
+    @pytest.fixture
+    def model_config(self) -> MosesTestConfig:
+        r"""Configuration used to instantiate the Moses model under test."""
+        return self.STANDARD_CONFIG
+
+    def make_model(self, model_config: object, /) -> Moses:
+        r"""Instantiate a small Moses model for shared tests."""
+        if not isinstance(model_config, MosesTestConfig):
+            raise TypeError("model_config must be a MosesTestConfig.")
         return Moses(
-            input_dim=self.INPUT_DIM,
-            latent_dim=8,
-            num_mixture_components=2,
-            num_flow_layers=1,
-            num_bins=4,
-            bounds=(-3.0, 3.0),
-            num_encoder_heads=2,
+            input_dim=model_config.input_dim,
+            latent_dim=model_config.latent_dim,
+            num_mixture_components=model_config.num_mixture_components,
+            num_flow_layers=model_config.num_flow_layers,
+            num_bins=model_config.num_bins,
+            bounds=model_config.bounds,
+            num_encoder_heads=model_config.num_encoder_heads,
         )
+
+    def forecast(
+        self,
+        model: Moses,
+        inputs: SplitTimeData,
+        /,
+    ) -> tuple[Tensor, ...]:
+        r"""Return Moses joint log likelihood broadcast over valid target positions."""
+        assert inputs.target_values is not None
+        query_valid = inputs.query_mask.any(dim=-1)
+        target_values = inputs.target_values
+
+        log_prob = model.log_prob(
+            target_values,
+            query_times=inputs.query_times,
+            query_mask=inputs.query_mask,
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            context_mask=inputs.context_mask,
+        )
+        event_ndim = target_values.ndim - inputs.query_times.ndim
+        log_prob = log_prob.reshape(*log_prob.shape, *((1,) * (event_ndim + 1)))
+        predictions = torch.where(target_values.isfinite(), log_prob, torch.nan)
+
+        assert predictions.shape == target_values.shape
+        assert predictions[query_valid].isfinite().all()
+        return (predictions,)
+
+    def loss(
+        self,
+        model: Moses,
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
+        r"""Return Moses negative log likelihood for target values."""
+        (log_prob,) = predictions
+        return -log_prob[targets.isfinite()].mean()
 
     def make_inputs(self) -> dict[str, Tensor]:
         r"""Create a minimal irregular forecasting request."""
@@ -244,8 +364,8 @@ class TestMoses:
             batch_shape=(),
             min_steps=self.MIN_STEPS,
             max_steps=self.MAX_STEPS,
-            context_shape=(self.INPUT_DIM,),
-            output_shape=(self.INPUT_DIM,),
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
             input_missingness=True,
             target_missingness=True,
         )
@@ -262,14 +382,14 @@ class TestMoses:
 
     def test_initialization_succeeds(self) -> None:
         r"""A small Moses model should instantiate successfully."""
-        model = self.make_model()
+        model = self.make_model(self.STANDARD_CONFIG)
 
         assert isinstance(model, Moses)
 
     def test_sample_succeeds(self) -> None:
         r"""Sampling should succeed on a simple request."""
         torch.manual_seed(0)
-        model = self.make_model()
+        model = self.make_model(self.STANDARD_CONFIG)
         inputs = self.make_inputs()
         inputs.pop("values")
 
@@ -281,7 +401,7 @@ class TestMoses:
     def test_log_prob_succeeds(self) -> None:
         r"""Density evaluation should succeed on a simple request."""
         torch.manual_seed(0)
-        model = self.make_model()
+        model = self.make_model(self.STANDARD_CONFIG)
         inputs = self.make_inputs()
         values = inputs.pop("values")
 
@@ -293,7 +413,7 @@ class TestMoses:
     def test_sample_and_log_prob_consistent(self) -> None:
         r"""`sample_and_log_prob` should agree with `log_prob` on returned samples."""
         torch.manual_seed(0)
-        model = self.make_model()
+        model = self.make_model(self.STANDARD_CONFIG)
         inputs = self.make_inputs()
         inputs.pop("values")
 
