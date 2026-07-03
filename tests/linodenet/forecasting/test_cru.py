@@ -221,6 +221,8 @@ class TestUpdateMasked:
 class TestCRU(TestForecastingModel[CRU]):
     r"""Tests for direct CRU model construction."""
 
+    GRADIENT_WARMUP_STEPS = 1
+
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (5,)
     OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
     STANDARD_CONFIG: ClassVar[CRUConfig] = CRUConfig(
@@ -292,10 +294,6 @@ class TestCRU(TestForecastingModel[CRU]):
             variance_activation=config.variance_activation,
             validate_args=config.validate_args,
         )
-        with torch.no_grad():
-            model.transition_matrix_parameters.copy_(
-                torch.randn_like(model.transition_matrix_parameters)
-            )
         return model
 
     def make_cru(self) -> CRU:
