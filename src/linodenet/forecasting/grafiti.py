@@ -545,7 +545,7 @@ class Grafiti(nn.Module):
         *batch_shape, num_steps, num_channels = context_values.shape
         device = timestamps.device
 
-        dense_edge_mask = context_mask | query_mask  # (..., T, D)
+        dense_edge_mask = context_mask | query_mask  # (..., $T, D)
 
         # nonzero returns one global list of N true entries in row-major batch order.
         # Subtract each batch item's global start offset to get its local slot in E.
@@ -556,7 +556,7 @@ class Grafiti(nn.Module):
         edge_indices = (*batch_idx, positions - offsets[*batch_idx])
         max_edges = int(counts.max().item())  # E
 
-        # collect the results in tensors of shape (..., E)
+        # collect the results in tensors of shape (..., $E)
         edge_t_indices = t_idx.new_zeros(*batch_shape, max_edges)
         edge_c_indices = c_idx.new_zeros(*batch_shape, max_edges)
         edge_values = context_values.new_zeros(*batch_shape, max_edges)
@@ -571,7 +571,7 @@ class Grafiti(nn.Module):
 
         # Masks route each flattened edge to its incident time and channel nodes.
         time_edge_mask, channel_edge_mask = (
-            self._create_masks(  # (..., T, E), (..., D, E)
+            self._create_masks(  # (..., $T, $E), (..., D, $E)
                 num_steps=num_steps,
                 num_channels=num_channels,
                 edge_time_indices=edge_t_indices,
@@ -579,7 +579,7 @@ class Grafiti(nn.Module):
                 edge_mask=edge_mask,
             )
         )
-        h_edge, h_time, h_channel = (  # (..., E, M), (..., T, M), (..., D, M)
+        h_edge, h_time, h_channel = (  # (..., $E, M), (..., $T, M), (..., D, M)
             self._encode_features(
                 t=timestamps,
                 num_channels=num_channels,
@@ -595,22 +595,25 @@ class Grafiti(nn.Module):
             self.edge_nn,
             strict=True,
         ):
-            h_t_at_edge = torch.take_along_dim(  # (..., E, M)
-                h_time, edge_t_indices[..., None], dim=-2
-            )
-            h_c_at_edge = torch.take_along_dim(  # (..., E, M)
-                h_channel, edge_c_indices[..., None], dim=-2
+            # collect matching nodes for a given edge (..., $E, M)
+            h_t_at_edge = h_time.take_along_dim(edge_t_indices[..., None], dim=-2)
+            h_c_at_edge = h_channel.take_along_dim(edge_c_indices[..., None], dim=-2)
+            # Hᵤ = concat([hᵥ, hₑ]) for each edge e={u,v} connected to u. (eq 12)
+            time_context = torch.cat([h_c_at_edge, h_edge], dim=-1)  # (..., $E, 2M)
+            channel_context = torch.cat([h_t_at_edge, h_edge], dim=-1)  # (..., $E, 2M)
+            edge_context = torch.cat(  # (..., $E, 3M)
+                [h_edge, h_t_at_edge, h_c_at_edge], dim=-1
             )
 
-            time_context = torch.cat([h_c_at_edge, h_edge], dim=-1)  # (..., E, 2M)
-            h_time = time_channel_attn(  # (..., T, M)
+            # update time node embeddings (eq 11 and 12)
+            h_time = time_channel_attn(  # (..., $T, M)
                 h_time,
                 time_context,
                 time_context,
                 mask=time_edge_mask,
             )
 
-            channel_context = torch.cat([h_t_at_edge, h_edge], dim=-1)  # (..., E, 2M)
+            # update context node embeddings (eq 11 and 12)
             h_channel = channel_time_attn(  # (..., D, M)
                 h_channel,
                 channel_context,
@@ -618,28 +621,22 @@ class Grafiti(nn.Module):
                 mask=channel_edge_mask,
             )
 
-            edge_context = torch.cat(  # (..., E, 3M)
-                [h_edge, h_t_at_edge, h_c_at_edge],
-                dim=-1,
-            )
-            h_edge = torch.where(  # (..., E, M)
+            # update edge embeddings (eq 13)
+            h_edge = torch.where(  # (..., $E, M)
                 edge_mask[..., None],
                 torch.relu(h_edge + edge_nn(edge_context)),
                 0.0,
             )
 
         if self.output_mode == "embeddings":
-            return gather_target_embeddings(  # (..., K, M)
+            return gather_target_embeddings(  # (..., $K, M)
                 h_edge, target_mask=edge_target_mask
             )
 
-        h_t_at_edge = torch.take_along_dim(  # (..., E, M)
-            h_time, edge_t_indices[..., None], dim=-2
-        )
-        h_c_at_edge = torch.take_along_dim(  # (..., E, M)
-            h_channel, edge_c_indices[..., None], dim=-2
-        )
-        y_at_edge = self.output(  # (..., E)
+        # collect matching nodes for a given edge # (..., $E, M)
+        h_t_at_edge = h_time.take_along_dim(edge_t_indices[..., None], dim=-2)
+        h_c_at_edge = h_channel.take_along_dim(edge_c_indices[..., None], dim=-2)
+        y_at_edge = self.output(  # (..., $E)
             torch.cat([h_edge, h_t_at_edge, h_c_at_edge], dim=-1)
         ).squeeze(dim=-1)
 
