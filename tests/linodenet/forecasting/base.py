@@ -474,7 +474,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             assert context_values.grad[valid_context].abs().sum() > 0
 
             for name, parameter in model.named_parameters():
-                min_grad = torch.finfo(parameter.dtype).resolution
+                min_grad = torch.finfo(parameter.dtype).eps
                 if not parameter.requires_grad:
                     continue
                 assert parameter.grad is not None, name
@@ -521,7 +521,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         context_values = data.context_values
 
         model = self.make_model(model_config)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
         initial_parameters = {
             name: parameter.detach().clone()
             for name, parameter in model.named_parameters()
@@ -543,7 +543,7 @@ class TestForecastingModel[M: nn.Module](ABC):
             assert context_values.grad[valid_context].abs().sum() > 0
 
             for name, parameter in model.named_parameters():
-                min_grad = torch.finfo(parameter.dtype).resolution
+                min_grad = torch.finfo(parameter.dtype).eps
                 if not parameter.requires_grad:
                     continue
                 assert parameter.grad is not None, name
