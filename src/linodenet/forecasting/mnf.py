@@ -1501,9 +1501,10 @@ class ChannelEmbedding(nn.Module):
 
 
 class MultiHeadAttention(nn.Module):
-    r"""Computes multi-head attention.
+    r"""Computes residual multi-head attention.
 
-    .. math:: hᵢ = Attn(QWᵢ𐞥, KWᵢᵏ, VWᵢᵛ), r = concat(h₁, …, h_H)Wᵒ
+    .. math:: hᵢ &= Attn(QWᵢ𐞥, KWᵢᵏ, VWᵢᵛ)    \\
+               y &= Q + concat(h₁, …, h_H)Wᵒ
     """
 
     def __init__(
@@ -1514,14 +1515,13 @@ class MultiHeadAttention(nn.Module):
         *,
         dim_head: int,
         num_heads: int,
-        dim_output: int,
         bias: bool = True,
     ) -> None:
         super().__init__()
 
+        self.q_dim = q_dim
         self.dim_head = dim_head
         self.dim_hidden = dim_head * num_heads
-        self.dim_output = dim_output
         self.num_heads = num_heads
 
         self.q_proj = nn.Linear(q_dim, self.dim_hidden, bias=bias)
@@ -1529,32 +1529,28 @@ class MultiHeadAttention(nn.Module):
         # softmax cancels it and the parameter cannot affect the attention map.
         self.k_proj = nn.Linear(k_dim, self.dim_hidden, bias=False)
         self.v_proj = nn.Linear(v_dim, self.dim_hidden, bias=bias)
-        self.out_proj = nn.Linear(self.dim_hidden, dim_output, bias=bias)
+        self.out_proj = nn.Linear(self.dim_hidden, q_dim, bias=bias)
 
     def forward(
         self,
-        q: Tensor,  # (..., $Q, d_q)
-        k: Tensor,  # (..., $X, d_k)
-        v: Tensor,  # (..., $X, d_v)
+        x_q: Tensor,  # (..., $Q, d_q)
+        x_k: Tensor,  # (..., $X, d_k)
+        x_v: Tensor,  # (..., $X, d_v)
         /,
         *,
         query_mask: Tensor | None = None,  # Bool[(..., $Q)]
         key_mask: Tensor | None = None,  # Bool[(..., $X)]
-    ) -> Tensor:  # (..., $Q, d_out)
-        query_mask = (  # broadcast (..., $Q) -> (..., $Q, d_out)
-            query_mask[..., :, None]
-            if query_mask is not None
-            else ~q.isnan().any(dim=-1).unsqueeze(-1)
-        )
-        key_mask = (  # broadcast (..., $X) -> (..., H, $Q, $X)
-            key_mask[..., None, None, :]
-            if key_mask is not None
-            else ~k.isnan().any(dim=-1).unsqueeze(-2).unsqueeze(-2)
-        )
+    ) -> Tensor:  # (..., $Q, d_q)
+        # sanitize arguments
+        if query_mask is not None:
+            x_q = torch.where(query_mask[..., :, None], x_q, 0.0)
+        if key_mask is not None:
+            x_k = torch.where(key_mask[..., :, None], x_k, 0.0)
+            x_v = torch.where(key_mask[..., :, None], x_v, 0.0)
 
-        q = self.q_proj(q.nan_to_num(0.0))  # (..., $Q, H×d_h)
-        k = self.k_proj(k.nan_to_num(0.0))  # (..., $X, H×d_h)
-        v = self.v_proj(v.nan_to_num(0.0))  # (..., $X, H×d_h)
+        q = self.q_proj(x_q)  # (..., $Q, H×d_h)
+        k = self.k_proj(x_k)  # (..., $X, H×d_h)
+        v = self.v_proj(x_v)  # (..., $X, H×d_h)
 
         q = q.unflatten(-1, (self.num_heads, self.dim_head))  # (..., $Q, H, d_h)
         k = k.unflatten(-1, (self.num_heads, self.dim_head))  # (..., $X, H, d_h)
@@ -1564,13 +1560,20 @@ class MultiHeadAttention(nn.Module):
             q.swapaxes(-2, -3),  # (..., H, $Q, d_h)
             k.swapaxes(-2, -3),  # (..., H, $X, d_h)
             v.swapaxes(-2, -3),  # (..., H, $X, d_h)
-            attn_mask=key_mask,  # (..., H, $Q, $X)
+            attn_mask=(  # (..., 1, 1, $X)
+                key_mask[..., None, None, :] if key_mask is not None else None
+            ),
             dropout_p=0.0,
         )
         # recombine heads
         h = h.swapaxes(-2, -3).flatten(-2)  # (..., $Q, H×d_h)
-        y = self.out_proj(h)  # (..., $Q, d_out)
-        return torch.where(query_mask, y, nan)  # mask out invalid queries
+        y = x_q + self.out_proj(h)  # (..., $Q, d_q)
+
+        # sanitize results
+        if query_mask is not None:
+            y = torch.where(query_mask[..., None], y, nan)  # mask out invalid queries
+
+        return y
 
 
 class MixtureWeightsModel(nn.Module):
@@ -1632,14 +1635,19 @@ class MixtureWeightsModel(nn.Module):
         )
         nn.init.xavier_normal_(self.mixture_queries)
 
+        # All component logits are jointly log-normalized, so additive attention
+        # biases either cancel identically (output bias) or only inject a shared
+        # shift through the value path. Disabling biases avoids structurally
+        # weak or unidentifiable parameters in this gating block.
         self.attention = MultiHeadAttention(
             q_dim=dim_hidden,
             k_dim=dim_input,
             v_dim=dim_input,
             dim_head=dim_hidden // num_attn_heads,
             num_heads=num_attn_heads,
-            dim_output=1,
+            bias=False,
         )
+        self.output_proj = nn.Linear(dim_hidden, 1, bias=False)
 
         self.register_buffer("samples", None, persistent=False)
         self.register_buffer("log_probs", None, persistent=False)
@@ -1672,14 +1680,15 @@ class MixtureWeightsModel(nn.Module):
             self.num_components,
             self.dim_hidden,
         )
-        attended = self.attention(  # (..., D)
+        attended = self.attention(  # (..., D, M)
             queries,
             embeddings,
             embeddings,
             key_mask=valid_mask,
-        ).squeeze(-1)
+        )
+        logits = self.output_proj(attended).squeeze(-1)  # (..., D)
 
-        return attended.log_softmax(dim=-1)  # (..., D)
+        return logits.log_softmax(dim=-1)  # (..., D)
 
     def _gather_log_weights(
         self,
@@ -1757,8 +1766,8 @@ class SeparableEncoder(nn.Module):
     .. math::
         𝐱 = [pos_embed(t), one-hot(c), v]
         𝐪 = [pos_embed(t), one-hot(c)]
-        𝐡ᵒᵇˢ = MHA(𝐱, 𝐱, 𝐱)
-        𝐡 = MHA(𝐪, 𝐡ᵒᵇˢ, 𝐡ᵒᵇˢ)
+        𝐡ᵒᵇˢ = MHA(Wˣ𝐱, Wˣ𝐱, Wˣ𝐱)
+        𝐡 = Wʰ MHA(Wᵠ𝐪, 𝐡ᵒᵇˢ, 𝐡ᵒᵇˢ)
     """
 
     def __init__(
@@ -1782,22 +1791,23 @@ class SeparableEncoder(nn.Module):
         self.ctx_embed_dim = (num_frequencies + 1) + num_channels + 1
         self.qry_embed_dim = (num_frequencies + 1) + num_channels
 
+        self.context_input_proj = nn.Linear(self.ctx_embed_dim, dim_output)
+        self.query_input_proj = nn.Linear(self.qry_embed_dim, dim_output)
         self.context_self_attention = MultiHeadAttention(
-            q_dim=self.ctx_embed_dim,
-            k_dim=self.ctx_embed_dim,
-            v_dim=self.ctx_embed_dim,
-            dim_head=dim_head,
-            dim_output=dim_output,
-            num_heads=num_attn_heads,
-        )
-        self.cross_attention = MultiHeadAttention(
-            q_dim=self.qry_embed_dim,
+            q_dim=dim_output,
             k_dim=dim_output,
             v_dim=dim_output,
             dim_head=dim_head,
-            dim_output=self.head_count * dim_output,
             num_heads=num_attn_heads,
         )
+        self.cross_attention = MultiHeadAttention(
+            q_dim=dim_output,
+            k_dim=dim_output,
+            v_dim=dim_output,
+            dim_head=dim_head,
+            num_heads=num_attn_heads,
+        )
+        self.head_proj = nn.Linear(dim_output, self.head_count * dim_output)
 
     def forward(
         self,
@@ -1862,12 +1872,17 @@ class SeparableEncoder(nn.Module):
             dim=-1,
         )
 
-        h_obs = self.context_self_attention(x, x, x)  # (..., $X, M)
-        h_mix = self.cross_attention(q, h_obs, h_obs)  # (..., $Q, *H×M)
+        h_obs = self.context_input_proj(x.nan_to_num(0.0))
+        h_obs = self.context_self_attention(  # (..., $X, M)
+            h_obs, h_obs, h_obs, query_mask=ctx_valid, key_mask=ctx_valid
+        )
+        h_q = self.query_input_proj(q.nan_to_num(0.0))
+        h_mix = self.cross_attention(  # (..., $Q, M)
+            h_q, h_obs, h_obs, query_mask=qry_valid, key_mask=ctx_valid
+        )
+        h_mix = self.head_proj(h_mix.nan_to_num(0.0))  # (..., $Q, *H×M)
         h_mix = h_mix.reshape(  # (..., $Q, *H, M)
-            *query_times.shape,
-            *self.head_shape,
-            self.dim_output,
+            *query_times.shape, *self.head_shape, self.dim_output
         ).movedim(query_times.ndim - 1, -2)  # (..., *H, $Q, M)
         return (
             h_obs.masked_fill(~ctx_valid[..., None], nan),
