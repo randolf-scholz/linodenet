@@ -171,7 +171,14 @@ def reconstruct_y(
 
 
 class Grafiti(nn.Module):
-    r"""GraFITi forecaster for observed and target time-series entries."""
+    r"""GraFITi forecaster for observed and target time-series entries.
+
+    References:
+        - | GraFITi: Graphs for Forecasting Irregularly Sampled Time Series
+          | Yalavarthi et al.
+          | The Thirty-Eighth AAAI Conference on Artificial Intelligence (AAAI-24)
+          | https://ojs.aaai.org/index.php/AAAI/article/view/29560
+    """
 
     output_mode: Final[Literal["forecast", "embeddings"]]
 
