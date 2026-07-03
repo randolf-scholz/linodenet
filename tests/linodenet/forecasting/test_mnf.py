@@ -433,7 +433,6 @@ class TestMHA:
     K_DIM: ClassVar[int] = 7
     V_DIM: ClassVar[int] = 11
     DIM_HEAD: ClassVar[int] = 4
-    DIM_OUTPUT: ClassVar[int] = 3
     NUM_HEADS: ClassVar[int] = 2
     QUERY_SIZE: ClassVar[int] = 4
     KEY_SIZE: ClassVar[int] = 5
@@ -453,7 +452,6 @@ class TestMHA:
             self.K_DIM,
             self.V_DIM,
             dim_head=self.DIM_HEAD,
-            dim_output=self.DIM_OUTPUT,
             num_heads=self.NUM_HEADS,
         )
 
@@ -467,14 +465,14 @@ class TestMHA:
         return q, k, v
 
     def test_forward_returns_expected_shape(self, batch_shape: tuple[int, ...]) -> None:
-        r"""Forward pass should preserve batch axes and return projected outputs."""
+        r"""Forward pass should preserve batch axes and query width."""
         torch.manual_seed(0)
         model = self.make_model()
         q, k, v = self.make_inputs(batch_shape)
 
         actual = model(q, k, v)
 
-        assert actual.shape == (*batch_shape, self.QUERY_SIZE, self.DIM_OUTPUT)
+        assert actual.shape == (*batch_shape, self.QUERY_SIZE, self.Q_DIM)
         assert actual.isfinite().all()
 
     def test_masked_forward_matches_truncated_inputs(self) -> None:
@@ -512,10 +510,10 @@ class TestMHA:
 
         assert torch.equal(actual_finite, expected_finite)
 
-    def test_nan_padded_queries_nansum_backward_keeps_parameter_gradients_finite(
+    def test_masked_nan_padded_queries_nansum_backward_keeps_parameter_gradients_finite(
         self,
     ) -> None:
-        r"""NaN-padded query rows should not poison attention parameter gradients."""
+        r"""Explicitly masked NaN-padded query rows should keep gradients finite."""
         torch.manual_seed(0)
         model = self.make_model()
         q, k, v = self.make_inputs((2,))
@@ -523,8 +521,9 @@ class TestMHA:
         k = k.requires_grad_()
         v = v.requires_grad_()
         q.data[0, 2:] = torch.nan
+        query_mask = q.isfinite().all(dim=-1)
 
-        actual = model(q, k, v)
+        actual = model(q, k, v, query_mask=query_mask)
         actual.nansum().backward()
 
         for parameter in model.parameters():
