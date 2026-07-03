@@ -740,16 +740,23 @@ class ConditionalLRS(nn.Module):
 
     def encode_and_logabsdet(
         self,
-        x: Tensor,  # (..., *H, $K)
-        context: Tensor,  # (..., *H, $K, M)
+        x: Tensor,  # Float[..., *H, $K]
+        context: Tensor,  # Float[..., *H, $K, M]
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
+        *,
+        valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
+    ) -> tuple[Tensor, Tensor]:  # Float[..., *H, $K], Float[..., *H]
         r"""Forward pass of the flow."""
         # Shape legend:
         # ...: batch_shape
         # *H: head_shape
         # $K: number of values (dynamic)
         # M: context dim (static)
+        if valid_mask is not None:
+            # sanitize arguments
+            x = torch.where(valid_mask, x, 0.0)
+            context = torch.where(valid_mask[..., None], context, 0.0)
+
         widths, heights, lambdas, derivatives = self(context)
         batch_ndim = x.ndim - len(self.head_shape) - 1
         x_center = self.x_center[(None,) * batch_ndim + (..., None)]  # (..., *H, 1)
@@ -762,15 +769,28 @@ class ConditionalLRS(nn.Module):
             lambdas=lambdas,
             derivatives=derivatives,
         )
+
+        if valid_mask is not None:
+            # sanitize results
+            y = torch.where(valid_mask, y, nan)
+            logabsdet = torch.where(valid_mask, logabsdet, 0.0)
+
         return y + y_center, logabsdet.sum(dim=-1)
 
     def decode_and_logabsdet(
         self,
-        y: Tensor,  # (..., *H, $K)
-        context: Tensor,  # (..., *H, $K, M)
+        y: Tensor,  # Float[..., *H, $K]
+        context: Tensor,  # Float[..., *H, $K, M]
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
+        *,
+        valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
+    ) -> tuple[Tensor, Tensor]:  # Float[..., *H, $K], Float[..., *H]
         r"""Inverse pass of the flow."""
+        if valid_mask is not None:
+            # sanitize arguments
+            y = torch.where(valid_mask, y, 0.0)
+            context = torch.where(valid_mask[..., None], context, 0.0)
+
         widths, heights, lambdas, derivatives = self(context)
         batch_ndim = y.ndim - len(self.head_shape) - 1
         x_center = self.x_center[(None,) * batch_ndim + (..., None)]  # (..., *H, 1)
@@ -783,6 +803,12 @@ class ConditionalLRS(nn.Module):
             lambdas=lambdas,
             derivatives=derivatives,
         )
+
+        if valid_mask is not None:
+            # sanitize results
+            x = torch.where(valid_mask, x, nan)
+            logabsdet = torch.where(valid_mask, logabsdet, 0.0)
+
         return x + x_center, logabsdet.sum(dim=-1)
 
 
@@ -827,10 +853,12 @@ class ConditionalSplineFlow(ModuleSequence[ConditionalLRS]):
         x: Tensor,  # (..., *H, $K)
         context: Tensor,  # (..., *H, $K, D)
         /,
+        *,
+        valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
     ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
         logabsdet = torch.zeros_like(x[..., 0])
         for layer in self:
-            x, ldj = layer.encode_and_logabsdet(x, context)
+            x, ldj = layer.encode_and_logabsdet(x, context, valid_mask=valid_mask)
             logabsdet = logabsdet + ldj
         return x, logabsdet
 
@@ -839,10 +867,12 @@ class ConditionalSplineFlow(ModuleSequence[ConditionalLRS]):
         y: Tensor,  # (..., *H, $K)
         context: Tensor,  # (..., *H, $K, D)
         /,
+        *,
+        valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
     ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
         logabsdet = torch.zeros_like(y[..., 0])
         for layer in reversed(self):
-            y, ldj = layer.decode_and_logabsdet(y, context)
+            y, ldj = layer.decode_and_logabsdet(y, context, valid_mask=valid_mask)
             logabsdet = logabsdet + ldj
         return y, logabsdet
 
@@ -1899,10 +1929,14 @@ class ConditionalGaussian(nn.Module):
 
     def embed(
         self,
-        context: Tensor,  # (..., *H, $K, M)
+        context: Tensor,  # Float[..., *H, $K, M]
         /,
+        *,
+        valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
     ) -> tuple[Tensor, Tensor, Tensor]:  # (..., *H, $K), (..., *H, $K, R), (*H,)
         r"""Compute the mean, low-rank factor, and isotropic scale."""
+        if valid_mask is not None:
+            context = torch.where(valid_mask[..., None], context, 0.0)
         mean = torch.einsum("...kd, ...d -> ...k", context, self.mean_param)
         cov_factor = torch.einsum("...kd, ...df -> ...kf", context, self.cov_param)
         cov_scale = self.cov_scale()
@@ -1915,12 +1949,20 @@ class ConditionalGaussian(nn.Module):
         cov_factor: Tensor,  # (..., *H, $K, R)
         cov_scale: Tensor,  # (..., *H,)
         /,
+        *,
+        valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
     ) -> Tensor:  # (..., *H)
+        if valid_mask is not None:
+            cov_factor = torch.where(valid_mask[..., None], cov_factor, 0.0)
+            centered = torch.where(valid_mask, x - mean, 0.0)
+            event_size = valid_mask.sum(dim=-1)
+        else:
+            centered = x - mean
+            event_size = x.shape[-1]
+
         # Write Σ = σ²(I + VVᵀ) with V = U / σ and U = cov_factor. Woodbury
         # gives (I + VVᵀ)⁻¹ = I - V(I + VᵀV)⁻¹Vᵀ, so the only factorization is
         # the small rank×rank system I + VᵀV.
-        centered = x - mean  # (..., *H, K)
-        event_size = x.shape[-1]
         inv_cov_scale = cov_scale.reciprocal()
         scaled_factor = cov_factor * inv_cov_scale[..., None, None]
 
@@ -1980,19 +2022,23 @@ class ConditionalGaussian(nn.Module):
         x: Tensor,  # (*S, ..., *H, $K)
         context: Tensor,  # (..., *H, $K, M)
         /,
+        *,
+        valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
     ) -> Tensor:  # (*S, ..., *H)
         r"""Compute the log-likelihood of the input."""
-        mean, cov_factor, cov_scale = self.embed(context)
-        return self._log_prob(x, mean, cov_factor, cov_scale)
+        mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
+        return self._log_prob(x, mean, cov_factor, cov_scale, valid_mask=valid_mask)
 
     def sample(
         self,
         size: int | tuple[int, ...],  # (*S)
         context: Tensor,  # (..., *H, $K, M)
         /,
+        *,
+        valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
     ) -> Tensor:  # (*S, ..., *H, $K)
         r"""Sample a Gaussian distribution from the conditional distribution."""
-        mean, cov_factor, cov_scale = self.embed(context)
+        mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
         return self._sample(size, mean, cov_factor, cov_scale)
 
     def sample_and_log_prob(
@@ -2000,11 +2046,15 @@ class ConditionalGaussian(nn.Module):
         size: int | tuple[int, ...],  # (*S)
         context: Tensor,  # (..., *H, $K, M)
         /,
+        *,
+        valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., *H, $K), (*S, ..., *H)
         r"""Sample a Gaussian distribution from the conditional distribution."""
-        mean, cov_factor, cov_scale = self.embed(context)
+        mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
         samples = self._sample(size, mean, cov_factor, cov_scale)
-        log_prob = self._log_prob(samples, mean, cov_factor, cov_scale)
+        log_prob = self._log_prob(
+            samples, mean, cov_factor, cov_scale, valid_mask=valid_mask
+        )
         return samples, log_prob
 
 
@@ -2153,8 +2203,13 @@ class Moses(nn.Module):
             query_mask=query_mask,
             target_values=values,
         )
+        return self._log_prob_triplets(triplets)
+
+    def _log_prob_triplets(self, triplets: TripletTimeData, /) -> Tensor:
+        r"""Compute the log-likelihood for a single trimmed triplet batch."""
         y = triplets.target_values  # (*S, ..., $K)
         assert y is not None
+        query_valid = triplets.query_channels.ge(0).unsqueeze(-2)
 
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
         h_obs, h = self.encoder.forward(  # (..., $N, M), (..., D, $K, M)
@@ -2175,8 +2230,12 @@ class Moses(nn.Module):
 
         # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
         # log pᵢ(x) = log qᵢ(f⁻¹(x)) + log |det J(f⁻¹(x))|
-        z, logabsdet = self.conditional_flow.encode_and_logabsdet(y, h)
-        base_log_prob = self.base_distribution.log_prob(z, h)  # (*S, ..., D)
+        z, logabsdet = self.conditional_flow.encode_and_logabsdet(
+            y, h, valid_mask=query_valid
+        )
+        base_log_prob = self.base_distribution.log_prob(
+            z, h, valid_mask=query_valid
+        )  # (*S, ..., D)
 
         # log wᵢ + log pᵢ(x)
         value_log_probs = base_log_prob + logabsdet  # (*S, ..., D)
@@ -2187,7 +2246,7 @@ class Moses(nn.Module):
         self.samples = None
         self.indices = None
         self.log_probs = log_probs
-        return log_probs
+        return log_probs  # (*S, ...,)
 
     def sample(
         self,
@@ -2232,10 +2291,13 @@ class Moses(nn.Module):
         )
 
         # sample from base distribution (*S, ..., D, $K), (*S, ..., D)
-        z, _ = self.base_distribution.sample_and_log_prob(size, h)
+        query_valid = triplets.query_channels.ge(0).unsqueeze(-2)
+        z, _ = self.base_distribution.sample_and_log_prob(
+            size, h, valid_mask=query_valid
+        )
 
         # decode through the flow (*S, ..., D, $K), (*S, ..., D)
-        y, _ = self.conditional_flow.decode_and_logabsdet(z, h)
+        y, _ = self.conditional_flow.decode_and_logabsdet(z, h, valid_mask=query_valid)
 
         # compute mixture weights w(𝐡ᵒᵇˢ)  (..., D)
         log_weights = self.conditional_mixture.forward(
@@ -2291,10 +2353,13 @@ class Moses(nn.Module):
         )
 
         # sample from base distribution (*S, ..., D, $K), (*S, ..., D)
-        z, _ = self.base_distribution.sample_and_log_prob(size, h)
+        query_valid = triplets.query_channels.ge(0).unsqueeze(-2)
+        z, _ = self.base_distribution.sample_and_log_prob(
+            size, h, valid_mask=query_valid
+        )
 
         # decode through the flow (*S, ..., D, $K), (*S, ..., D)
-        y, _ = self.conditional_flow.decode_and_logabsdet(z, h)
+        y, _ = self.conditional_flow.decode_and_logabsdet(z, h, valid_mask=query_valid)
 
         # sample indices from the mixture (*S, ...)
         indices = self.conditional_mixture.sample_from_weights(size, log_weights)
@@ -2305,8 +2370,12 @@ class Moses(nn.Module):
         # Broadcast the selected samples back across D to evaluate the full mixture log-prob.
         # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
         # log pᵢ(x) = log qᵢ(f⁻¹(x)) + log |det J(f⁻¹(x))|
-        z_selected, logabsdet = self.conditional_flow.encode_and_logabsdet(samples, h)
-        base_log_prob = self.base_distribution.log_prob(z_selected, h)  # (*S, ..., D)
+        z_selected, logabsdet = self.conditional_flow.encode_and_logabsdet(
+            samples, h, valid_mask=query_valid
+        )
+        base_log_prob = self.base_distribution.log_prob(
+            z_selected, h, valid_mask=query_valid
+        )  # (*S, ..., D)
 
         # log wᵢ + log pᵢ(x)
         component_log_probs = base_log_prob + logabsdet  # (*S, ..., D)
