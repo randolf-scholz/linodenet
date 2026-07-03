@@ -473,11 +473,12 @@ class TestForecastingModel[M: nn.Module](ABC):
             assert context_values.grad[valid_context].abs().sum() > 0
 
             for name, parameter in model.named_parameters():
+                min_grad = torch.finfo(parameter.dtype).resolution
                 if not parameter.requires_grad:
                     continue
                 assert parameter.grad is not None, name
                 assert parameter.grad.isfinite().all(), name
-                assert parameter.grad.abs().sum() > 0, name
+                assert parameter.grad.abs().max() > min_grad, name
 
             optimizer.step()
 
@@ -540,11 +541,12 @@ class TestForecastingModel[M: nn.Module](ABC):
             assert context_values.grad[valid_context].abs().sum() > 0
 
             for name, parameter in model.named_parameters():
+                min_grad = torch.finfo(parameter.dtype).resolution
                 if not parameter.requires_grad:
                     continue
                 assert parameter.grad is not None, name
                 assert parameter.grad.isfinite().all(), name
-                assert parameter.grad.abs().sum() > 0, name
+                assert parameter.grad.abs().max() > min_grad, name
 
             optimizer.step()
 

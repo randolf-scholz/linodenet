@@ -36,6 +36,7 @@ class MAB(nn.Module):
         dim_hidden: int,
         num_heads: int,
         layer_norm: bool = False,
+        bias: bool = True,
     ) -> None:
         super().__init__()
         if dim_hidden % num_heads != 0:
@@ -44,10 +45,9 @@ class MAB(nn.Module):
         self.num_heads = num_heads
         # A key bias adds the same constant to every logit for a fixed query, so
         # softmax cancels it and the parameter cannot affect the attention map.
-        # For cross-attention Attn(Q, K, K), value bias
-        self.fc_q = nn.Linear(dim_Q, dim_hidden, bias=False)
+        self.fc_q = nn.Linear(dim_Q, dim_hidden, bias=bias)
         self.fc_k = nn.Linear(dim_K, dim_hidden, bias=False)
-        self.fc_v = nn.Linear(dim_V, dim_hidden, bias=False)
+        self.fc_v = nn.Linear(dim_V, dim_hidden, bias=bias)
         self.layer_norm0 = nn.LayerNorm(dim_hidden) if layer_norm else None
         self.layer_norm1 = nn.LayerNorm(dim_hidden) if layer_norm else None
         self.fc_o = nn.Linear(dim_hidden, dim_hidden)
@@ -189,6 +189,7 @@ class Grafiti(nn.Module):
         latent_dim: int = 128,
         num_layers: int = 3,
         num_heads: int = 4,
+        bias: bool = True,
         output_mode: Literal["forecast", "embeddings"] = "forecast",
     ) -> None:
         r"""Initialize the GraFITi forecaster.
@@ -200,6 +201,7 @@ class Grafiti(nn.Module):
             num_heads: Number of attention heads.
             output_mode: Whether :meth:`forward` returns dense forecasts or
                 target-edge embeddings.
+            bias: Whether to use bias in attention layers.
         """
         super().__init__()
         self.latent_dim = latent_dim
@@ -218,6 +220,7 @@ class Grafiti(nn.Module):
                 dim_V=2 * latent_dim,
                 dim_hidden=latent_dim,
                 num_heads=num_heads,
+                bias=bias,
             )
             for _ in range(num_layers)
         ])  # fmt: skip
@@ -229,6 +232,7 @@ class Grafiti(nn.Module):
                 dim_V=2 * latent_dim,
                 dim_hidden=latent_dim,
                 num_heads=num_heads,
+                bias=bias,
             )
             for _ in range(num_layers)
         ])  # fmt: skip
@@ -241,8 +245,14 @@ class Grafiti(nn.Module):
         self.output = nn.Linear(3 * latent_dim, 1)
 
         if self.output_mode == "embeddings":
-            self.output.weight.requires_grad_(False)
-            self.output.bias.requires_grad_(False)
+            frozen_modules = [
+                self.output,
+                self.channel_time_attn[-1],
+                self.time_channel_attn[-1],
+            ]
+            for module in frozen_modules:
+                for parameter in module.parameters():
+                    parameter.requires_grad_(False)
 
     def _create_masks(
         self,

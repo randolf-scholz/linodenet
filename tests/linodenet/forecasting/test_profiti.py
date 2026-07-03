@@ -345,7 +345,7 @@ class TestProFITiBlock:
 class TestProfiti(TestForecastingModel[ProFITi]):
     r"""Shared forecasting-model tests for ProFITi."""
 
-    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (4,)
     OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
     STANDARD_CONFIG: ClassVar[ProFITiTestConfig] = ProFITiTestConfig(
         input_dim=CONTEXT_SHAPE[0],
