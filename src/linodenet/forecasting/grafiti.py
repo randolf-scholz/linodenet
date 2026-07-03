@@ -8,7 +8,7 @@ __all__ = [
 ]
 
 import math
-from typing import Literal
+from typing import Final, Literal
 
 import torch
 import torch.nn.functional as F
@@ -18,7 +18,14 @@ from .utils import EventBatch
 
 
 class MAB(nn.Module):
-    r"""Multi-head attention block with configurable hidden dimension."""
+    r"""Multi-head attention block with configurable hidden dimension.
+
+    References:
+        - | Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks
+          | Lee et al.
+          | International Conference on Machine Learning (ICML) 2019.
+          | http://proceedings.mlr.press/v97/lee19d.html
+    """
 
     def __init__(
         self,
@@ -35,11 +42,12 @@ class MAB(nn.Module):
             raise ValueError(f"{dim_hidden=} must be divisible by {num_heads=}.")
         self.dim_hidden = dim_hidden
         self.num_heads = num_heads
-        self.fc_q = nn.Linear(dim_Q, dim_hidden)
         # A key bias adds the same constant to every logit for a fixed query, so
         # softmax cancels it and the parameter cannot affect the attention map.
+        # For cross-attention Attn(Q, K, K), value bias
+        self.fc_q = nn.Linear(dim_Q, dim_hidden, bias=False)
         self.fc_k = nn.Linear(dim_K, dim_hidden, bias=False)
-        self.fc_v = nn.Linear(dim_V, dim_hidden)
+        self.fc_v = nn.Linear(dim_V, dim_hidden, bias=False)
         self.layer_norm0 = nn.LayerNorm(dim_hidden) if layer_norm else None
         self.layer_norm1 = nn.LayerNorm(dim_hidden) if layer_norm else None
         self.fc_o = nn.Linear(dim_hidden, dim_hidden)
@@ -165,6 +173,8 @@ def reconstruct_y(
 class Grafiti(nn.Module):
     r"""GraFITi forecaster for observed and target time-series entries."""
 
+    output_mode: Final[Literal["forecast", "embeddings"]]
+
     def __init__(
         self,
         *,
@@ -220,7 +230,12 @@ class Grafiti(nn.Module):
             nn.Linear(3 * latent_dim, latent_dim)
             for _ in range(num_layers)
         ])  # fmt: skip
+
         self.output = nn.Linear(3 * latent_dim, 1)
+
+        if self.output_mode == "embeddings":
+            self.output.weight.requires_grad_(False)
+            self.output.bias.requires_grad_(False)
 
     def _create_masks(
         self,
@@ -627,6 +642,7 @@ class Grafiti(nn.Module):
         y_at_edge = self.output(  # (..., E)
             torch.cat([h_edge, h_t_at_edge, h_c_at_edge], dim=-1)
         ).squeeze(dim=-1)
+
         return reconstruct_y(
             y_at_edge,
             edge_mask=edge_target_mask,
