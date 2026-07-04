@@ -374,12 +374,12 @@ class GRU_Bayes(nn.Module):
 
         q = torch.stack([values, mean, logvar, error], dim=-1)  # (..., D, 4)
         # r_d ≔ ϕ(W_d q_d + b_d)
-        r = torch.relu(  # (..., D, P)
+        r = torch.relu(  # (..., D, 4)
             torch.einsum("...dn, dnp -> ...dp", q, self.weight) + self.bias_prep
         )
         # f_pred = flatten(m_d ⊙ r_d) (see Appendix D)
         u = torch.where(feature_mask.unsqueeze(-1), r, 0.0)
-        prepared_features = u.flatten(start_dim=-2)  # (..., D*P)
+        prepared_features = u.flatten(start_dim=-2)  # (..., D*4)
         # compute new state
         new_state = self.gru(prepared_features, state)
 
