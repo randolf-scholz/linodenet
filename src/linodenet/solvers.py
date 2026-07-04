@@ -22,6 +22,8 @@ from typing import Any, Literal
 import torch
 from torch import Tensor
 
+type ODESolverMethod = ODESolver | Literal["euler", "midpoint", "heun"]
+
 
 class ODESolver(StrEnum):
     r"""Explicit one-step ODE solver methods."""
@@ -40,9 +42,6 @@ class ODESolver(StrEnum):
                 return midpoint_step
             case ODESolver.HEUN:
                 return heun_step
-
-
-ODESolverMethod = ODESolver | Literal["euler", "midpoint", "heun"]
 
 
 def euler_step(
