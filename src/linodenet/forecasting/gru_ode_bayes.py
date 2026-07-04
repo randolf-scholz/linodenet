@@ -14,6 +14,7 @@ Bayesian jumps.
 __all__ = [
     "Decoder",
     "GRUODEBayesConfig",
+    "GRUODEBayesTrace",
     "GRU_ODE",
     "GRU_Bayes",
     "GRU_ODE_Bayes",
@@ -27,7 +28,7 @@ __all__ = [
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Final
+from typing import Any, Final, NamedTuple
 
 import torch
 import torchode as to
@@ -401,6 +402,15 @@ class GRUODEBayesConfig:
     batch_first: bool = True
 
 
+class GRUODEBayesTrace(NamedTuple):
+    r"""Filtering trace returned by :meth:`GRU_ODE_Bayes.filter`."""
+
+    prior_means: Tensor
+    prior_logvars: Tensor
+    posterior_means: Tensor
+    posterior_logvars: Tensor
+
+
 class GRU_ODE_Bayes(nn.Module):
     r"""GRU-ODE-Bayes as a state-space model.
 
@@ -429,13 +439,13 @@ class GRU_ODE_Bayes(nn.Module):
     batch_first: Final[bool]
 
     prior_means: Tensor
-    r"""BUFFER: Prior predictive means from the last forward pass."""
+    r"""BUFFER: Prior predictive means from the last :meth:`predict` call."""
     prior_logvars: Tensor
-    r"""BUFFER: Prior predictive log-variances from the last forward pass."""
-    post_means: Tensor
-    r"""BUFFER: Posterior predictive means from the last forward pass."""
-    post_logvars: Tensor
-    r"""BUFFER: Posterior predictive log-variances from the last forward pass."""
+    r"""BUFFER: Prior predictive log-variances from the last :meth:`predict` call."""
+    posterior_means: Tensor
+    r"""BUFFER: Posterior predictive means from the last :meth:`predict` call."""
+    posterior_logvars: Tensor
+    r"""BUFFER: Posterior predictive log-variances from the last :meth:`predict` call."""
 
     @classmethod
     def from_config(
@@ -644,7 +654,7 @@ class GRU_ODE_Bayes(nn.Module):
             query_mask=query_mask,
             batch_first=self.batch_first,
         )
-        post_means, post_logvars = self.forward(
+        trace = self.filter(
             timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
             context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
             context_mask=combined.context_mask,  # Bool[(..., $T, D)], padded False
@@ -653,11 +663,15 @@ class GRU_ODE_Bayes(nn.Module):
             initial_time=initial_time,
         )
 
-        self.pred_means = post_means[combined.query_indices]
-        self.pred_logvars = post_logvars[combined.query_indices]
+        self.prior_means = trace.prior_means
+        self.prior_logvars = trace.prior_logvars
+        self.posterior_means = trace.posterior_means
+        self.posterior_logvars = trace.posterior_logvars
+        self.pred_means = trace.posterior_means[combined.query_indices]
+        self.pred_logvars = trace.posterior_logvars[combined.query_indices]
         return self.pred_means, self.pred_logvars
 
-    def forward(
+    def filter(
         self,
         *,
         timestamps: Tensor,  # (..., $T), float, padded NaN
@@ -666,7 +680,7 @@ class GRU_ODE_Bayes(nn.Module):
         context_mask: Tensor,  # (..., $T, D), bool, padded False
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
+    ) -> GRUODEBayesTrace:
         r"""Filter and forecast over combined context/query time points.
 
         Context and query masks explicitly select valid feature-level entries.
@@ -742,17 +756,17 @@ class GRU_ODE_Bayes(nn.Module):
             post_logvars_list.append(post_logvar)
 
         stack_dim = -2 if self.batch_first else 0
-        self.prior_means = torch.stack(prior_means_list, dim=stack_dim)
-        self.prior_logvars = torch.stack(prior_logvars_list, dim=stack_dim)
-        self.post_means = torch.stack(post_means_list, dim=stack_dim)
-        self.post_logvars = torch.stack(post_logvars_list, dim=stack_dim)
+        prior_means = torch.stack(prior_means_list, dim=stack_dim)
+        prior_logvars = torch.stack(prior_logvars_list, dim=stack_dim)
+        posterior_means = torch.stack(post_means_list, dim=stack_dim)
+        posterior_logvars = torch.stack(post_logvars_list, dim=stack_dim)
 
-        self.prior_means = self.prior_means.masked_fill(~mean_mask, nan)
-        self.prior_logvars = self.prior_logvars.masked_fill(~mean_mask, nan)
-        self.post_means = self.post_means.masked_fill(~mean_mask, nan)
-        self.post_logvars = self.post_logvars.masked_fill(~mean_mask, nan)
-
-        return self.post_means, self.post_logvars
+        return GRUODEBayesTrace(
+            prior_means=prior_means.masked_fill(~mean_mask, nan),
+            prior_logvars=prior_logvars.masked_fill(~mean_mask, nan),
+            posterior_means=posterior_means.masked_fill(~mean_mask, nan),
+            posterior_logvars=posterior_logvars.masked_fill(~mean_mask, nan),
+        )
 
     def log_prob(
         self,

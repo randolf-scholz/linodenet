@@ -239,7 +239,7 @@ class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
 class TestGRUODEBayes:
     r"""Tests for the cleaned GRU-ODE-Bayes implementation."""
 
-    def test_forward_with_padded_partial_observations(self) -> None:
+    def test_filter_with_padded_partial_observations(self) -> None:
         torch.manual_seed(0)
         decoder = Decoder(input_size=3, hidden_size=5, decoder_hidden_size=7)
         flow = ODE_Flow(
@@ -282,6 +282,27 @@ class TestGRUODEBayes:
         ).to_joint_time()
         combined_step_mask = (combined.context_mask | combined.query_mask).any(dim=-1)
 
+        trace = model.filter(
+            timestamps=combined.timestamps,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+            query_mask=combined.query_mask,
+        )
+
+        assert trace.prior_means.shape == combined.context_values.shape
+        assert trace.prior_logvars.shape == combined.context_values.shape
+        assert trace.posterior_means.shape == combined.context_values.shape
+        assert trace.posterior_logvars.shape == combined.context_values.shape
+        assert trace.prior_means[combined_step_mask].isfinite().all()
+        assert trace.posterior_logvars[combined_step_mask].isfinite().all()
+        assert trace.prior_means[~combined_step_mask].isnan().all()
+        assert trace.posterior_logvars[~combined_step_mask].isnan().all()
+
+        assert model.prior_means.numel() == 0
+        assert model.prior_logvars.numel() == 0
+        assert model.posterior_means.numel() == 0
+        assert model.posterior_logvars.numel() == 0
+
         posterior_mean, posterior_logvar = model.predict(
             query_times=query_times,
             query_mask=query_mask,
@@ -297,14 +318,16 @@ class TestGRUODEBayes:
         assert posterior_mean[~query_mask].isnan().all()
         assert posterior_logvar[~query_mask].isnan().all()
 
-        assert model.prior_means.shape == combined.context_values.shape
-        assert model.prior_logvars.shape == combined.context_values.shape
-        assert model.post_means.shape == combined.context_values.shape
-        assert model.post_logvars.shape == combined.context_values.shape
-        assert model.prior_means[combined_step_mask].isfinite().all()
-        assert model.post_logvars[combined_step_mask].isfinite().all()
-        assert model.prior_means[~combined_step_mask].isnan().all()
-        assert model.post_logvars[~combined_step_mask].isnan().all()
+        torch.testing.assert_close(model.prior_means, trace.prior_means, equal_nan=True)
+        torch.testing.assert_close(
+            model.prior_logvars, trace.prior_logvars, equal_nan=True
+        )
+        torch.testing.assert_close(
+            model.posterior_means, trace.posterior_means, equal_nan=True
+        )
+        torch.testing.assert_close(
+            model.posterior_logvars, trace.posterior_logvars, equal_nan=True
+        )
 
     def test_batch_first_false_matches_batch_first_true(self) -> None:
         r"""Check time-major inputs match batch-first inputs."""
@@ -376,8 +399,8 @@ class TestGRUODEBayes:
             equal_nan=True,
         )
         torch.testing.assert_close(
-            time_model.post_logvars.moveaxis(0, -2),
-            batch_model.post_logvars,
+            time_model.posterior_logvars.moveaxis(0, -2),
+            batch_model.posterior_logvars,
             equal_nan=True,
         )
 
