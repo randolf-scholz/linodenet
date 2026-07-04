@@ -518,7 +518,7 @@ class NeuralFlow(GRU_ODE_Bayes):
     """
 
     @classmethod
-    def from_config(
+    def from_config(  # type: ignore[override]
         cls,
         config: NeuralFlowConfig | Mapping[str, Any],
         /,
@@ -584,7 +584,7 @@ class NeuralFlow(GRU_ODE_Bayes):
         )
 
     @classmethod
-    def from_parameters(
+    def from_parameters(  # type: ignore[override]
         cls,
         *,
         input_size: int,
