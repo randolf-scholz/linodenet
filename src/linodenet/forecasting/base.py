@@ -4,6 +4,7 @@ __all__ = [
     "PointForecastingModel",
     "ProbabilisticForecastingModel",
     "PathForecastingModel",
+    "ProbabilisticLSSM",
 ]
 
 from abc import abstractmethod
