@@ -7,6 +7,13 @@ __all__ = [
     "EncoderConfig",
     "build_cru",
     "update_masked",
+    "Decoder",
+    "new_activation",
+    "Exp",
+    "ELU1P",
+    "Encoder",
+    "Square",
+    "Abs",
 ]
 
 import math
