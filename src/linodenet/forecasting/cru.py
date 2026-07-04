@@ -7,6 +7,10 @@ __all__ = [
     "EncoderConfig",
     "Decoder",
     "Encoder",
+    # config dicts
+    "EncoderConfigDict",
+    "CRUConfigDict",
+    "DecoderConfigDict",
     # functions
     "build_cru",
     "update_masked",
@@ -14,9 +18,9 @@ __all__ = [
 ]
 
 import math
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, NotRequired, TypedDict
 
 import torch
 from torch import Tensor, nan, nn
@@ -235,6 +239,49 @@ class CRUConfig:
     initial_variance: float = 10.0
     validate_args: bool = False
     batch_first: bool = True
+
+
+class EncoderConfigDict(TypedDict):
+    r"""Mapping form of ``EncoderConfig``."""
+
+    input_size: int
+    output_size: int
+    hidden_size: int
+    num_hidden_layers: NotRequired[int]
+    activation_function: NotRequired[str]
+    variance_activation: NotRequired[str]
+
+
+class DecoderConfigDict(TypedDict):
+    r"""Mapping form of ``DecoderConfig``."""
+
+    input_size: int
+    output_size: int
+    hidden_size: int
+    num_hidden_mean_model_layers: NotRequired[int]
+    num_hidden_variance_model_layers: NotRequired[int]
+    activation_function: NotRequired[str]
+    variance_activation: NotRequired[str]
+
+
+type EncoderConfigLike = EncoderConfig | EncoderConfigDict
+type DecoderConfigLike = DecoderConfig | DecoderConfigDict
+
+
+class CRUConfigDict(TypedDict):
+    r"""Mapping form of ``CRUConfig``."""
+
+    input_size: int
+    latent_size: int
+    encoder: EncoderConfigLike
+    decoder: DecoderConfigLike
+    output_size: int
+    num_basis: NotRequired[int]
+    bandwidth: NotRequired[int]
+    variance_activation: NotRequired[str]
+    initial_variance: NotRequired[float]
+    validate_args: NotRequired[bool]
+    batch_first: NotRequired[bool]
 
 
 def update_masked[R: tuple[Tensor, ...]](
@@ -886,13 +933,32 @@ class CRU(nn.Module):
         return post_mean, post_cov
 
 
-def build_cru(config: CRUConfig | Mapping[str, object], /) -> CRU:
+def build_cru(config: CRUConfig | CRUConfigDict, /) -> CRU:
     r"""Construct a CRU from a hierarchical configuration object."""
-    if isinstance(config, Mapping):
-        config = dict(config)
-        config["encoder"] = EncoderConfig(**config["encoder"])
-        config["decoder"] = DecoderConfig(**config["decoder"])
-        config = CRUConfig(**config)
+    if not isinstance(config, CRUConfig):
+        encoder = config["encoder"]
+        decoder = config["decoder"]
+        config = CRUConfig(
+            input_size=config["input_size"],
+            latent_size=config["latent_size"],
+            encoder=(
+                encoder
+                if isinstance(encoder, EncoderConfig)
+                else EncoderConfig(**encoder)
+            ),
+            decoder=(
+                decoder
+                if isinstance(decoder, DecoderConfig)
+                else DecoderConfig(**decoder)
+            ),
+            output_size=config["output_size"],
+            num_basis=config.get("num_basis", 15),
+            bandwidth=config.get("bandwidth", 3),
+            variance_activation=config.get("variance_activation", "elup1"),
+            initial_variance=config.get("initial_variance", 10.0),
+            validate_args=config.get("validate_args", False),
+            batch_first=config.get("batch_first", True),
+        )
 
     encoder = Encoder(
         config.encoder.input_size,
