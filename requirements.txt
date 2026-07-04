@@ -3,13 +3,13 @@
 -e .
 cuda-bindings==13.3.1 ; sys_platform == 'linux'
     # via torch
-cuda-pathfinder==1.5.5 ; sys_platform == 'linux'
+cuda-pathfinder==1.5.6 ; sys_platform == 'linux'
     # via cuda-bindings
 cuda-toolkit==13.0.2 ; sys_platform == 'linux'
     # via torch
-filelock==3.29.3
+filelock==3.29.5
     # via torch
-fsspec==2026.4.0
+fsspec==2026.6.0
     # via torch
 jinja2==3.1.6
     # via torch
@@ -19,7 +19,7 @@ mpmath==1.3.0
     # via sympy
 networkx==3.6.1
     # via torch
-numpy==2.4.6
+numpy==2.5.0
     # via
     #   linodenet
     #   scipy
@@ -64,7 +64,7 @@ nvidia-nvshmem-cu13==3.4.5 ; sys_platform == 'linux'
     # via torch
 nvidia-nvtx==13.0.85 ; sys_platform == 'linux'
     # via cuda-toolkit
-scipy==1.17.1
+scipy==1.18.0
     # via linodenet
 setuptools==81.0.0
     # via torch
@@ -72,7 +72,7 @@ sympy==1.14.0
     # via
     #   torch
     #   torchode
-torch==2.12.0
+torch==2.12.1
     # via
     #   linodenet
     #   torchode
@@ -81,11 +81,11 @@ torchode==1.0.1
     # via linodenet
 torchtyping==0.1.5
     # via torchode
-triton==3.7.0 ; sys_platform == 'linux'
+triton==3.7.1 ; sys_platform == 'linux'
     # via torch
 typeguard==2.13.3
     # via torchtyping
-typing-extensions==4.15.0
+typing-extensions==4.16.0
     # via
     #   linodenet
     #   torch
