@@ -393,7 +393,7 @@ class TestMoses(TestForecastingModel[Moses]):
         inputs = self.make_inputs()
         inputs.pop("values")
 
-        samples = model.sample(**inputs)
+        samples = model.sample((), **inputs)
 
         assert samples.shape == inputs["query_mask"].shape
         assert torch.equal(samples.isfinite(), inputs["query_mask"])
@@ -417,7 +417,7 @@ class TestMoses(TestForecastingModel[Moses]):
         inputs = self.make_inputs()
         inputs.pop("values")
 
-        samples, log_prob_direct = model.sample_and_log_prob(**inputs)
+        samples, log_prob_direct = model.sample_and_log_prob((), **inputs)
         log_prob_via_sample = model.log_prob(samples, **inputs)
 
         assert samples.shape == inputs["query_mask"].shape
