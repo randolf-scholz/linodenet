@@ -600,4 +600,4 @@ def initialize[T = Any](spec: T | type[T] | Blueprint[T], /) -> T:
             raise TypeError("Expected a blueprint dictionary.")
         return BLUEPRINT_REGISTRY.initialize(spec)
     # fall through
-    return spec  # pyrefly: ignore[bad-return]
+    return spec
