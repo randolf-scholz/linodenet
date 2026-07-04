@@ -645,11 +645,11 @@ class CRU(nn.Module):
         )
 
         if self.batch_first:
-            timestamps = timestamps.moveaxis(-1, 0)
-            y_means = y_means.moveaxis(-2, 0)
-            y_variances = y_variances.moveaxis(-2, 0)
-            has_context = has_context.moveaxis(-1, 0)
-            valid_steps = valid_steps.moveaxis(-1, 0)
+            timestamps = timestamps.movedim(-1, 0)
+            y_means = y_means.movedim(-2, 0)
+            y_variances = y_variances.movedim(-2, 0)
+            has_context = has_context.movedim(-1, 0)
+            valid_steps = valid_steps.movedim(-1, 0)
 
         # Initialize state (mean: (..., 2d), cov: (..., d, 3)).
         t = timestamps[0] if initial_time is None else initial_time

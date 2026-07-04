@@ -237,8 +237,8 @@ class LinODEnet(nn.Module):
 
         # Move sequence to the front
         DT = torch.diff(T, prepend=t0)  # (..., LEN) → (..., LEN)
-        DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
-        X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
+        DT = DT.movedim(-1, 0)  # (..., LEN) → (LEN, ...)
+        X = torch.movedim(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
         # Initialize buffers
         z_pre_list: list[Tensor] = []
@@ -271,7 +271,7 @@ class LinODEnet(nn.Module):
         self.x_post = torch.stack(x_post_list, dim=-2)
         self.z_pre = torch.stack(z_pre_list, dim=-2)
         self.z_post = torch.stack(z_post_list, dim=-2)
-        self.timedeltas = DT.moveaxis(0, -1)
+        self.timedeltas = DT.movedim(0, -1)
 
         yhat = self.x_post[..., : self.output_size]
         return yhat
@@ -314,8 +314,8 @@ class LinODEnet(nn.Module):
 
         # Move sequence to the front
         DT = torch.diff(time, prepend=t0)  # (..., LEN) → (..., LEN)
-        DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
-        X = torch.moveaxis(values, -2, 0)  # (..., LEN, DIM) → (LEN, ..., DIM)
+        DT = DT.movedim(-1, 0)  # (..., LEN) → (LEN, ...)
+        X = torch.movedim(values, -2, 0)  # (..., LEN, DIM) → (LEN, ..., DIM)
 
         # Initialize buffers
         zhat_pre_list: list[Tensor] = []
@@ -352,7 +352,7 @@ class LinODEnet(nn.Module):
             xhat_post_list.append(x_post)
             zhat_post_list.append(z_post)
 
-        self.timedeltas = DT.moveaxis(0, -1)
+        self.timedeltas = DT.movedim(0, -1)
         self.x_pre = torch.stack(xhat_pre_list, dim=-2)
         self.x_post = torch.stack(xhat_post_list, dim=-2)
         self.z_pre = torch.stack(zhat_pre_list, dim=-2)

@@ -259,8 +259,8 @@ class LatentStateSpaceModel(nn.Module):
         # DT = torch.diff(T, prepend=T[..., 0].unsqueeze(-1))  # (..., LEN) → (..., LEN)
 
         ## Move sequence to the front
-        # DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
-        # X = torch.moveaxis(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
+        # DT = DT.movedim(-1, 0)  # (..., LEN) → (LEN, ...)
+        # X = torch.movedim(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
         # prepend a single zero for the first iteration.
         # T = pad(T, 0.0, 1, prepend=True)
@@ -270,8 +270,8 @@ class LatentStateSpaceModel(nn.Module):
 
         # Move sequence to the front
         DT = torch.diff(T, prepend=t0)  # (..., LEN) → (..., LEN)
-        DT = DT.moveaxis(-1, 0)  # (..., LEN) → (LEN, ...)
-        Y_OBS = torch.moveaxis(Y_OBS, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
+        DT = DT.movedim(-1, 0)  # (..., LEN) → (LEN, ...)
+        Y_OBS = torch.movedim(Y_OBS, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
 
         # Initialize buffers
         Zhat_pre: list[Tensor] = []
@@ -308,7 +308,7 @@ class LatentStateSpaceModel(nn.Module):
         self.xhat_post = torch.stack(Xhat_post, dim=-2)
         self.zhat_pre = torch.stack(Zhat_pre, dim=-2)
         self.zhat_post = torch.stack(Zhat_post, dim=-2)
-        self.timedeltas = DT.moveaxis(0, -1)
+        self.timedeltas = DT.movedim(0, -1)
 
         yhat = self.xhat_pre[..., : self.output_size]
         return yhat

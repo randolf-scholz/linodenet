@@ -733,10 +733,10 @@ class MultiHeadGaussian(DistributionBase):
 
         # compute z = L⁻¹(x-μ)
         y = y - self.means
-        y = y.moveaxis(0, -1)  # (B, H, D) -> (H, D, B)
+        y = y.movedim(0, -1)  # (B, H, D) -> (H, D, B)
         # (H, D, D), (H, D, B) -> (H, D, B)
         u = solve_triangular(L, y, upper=False)
-        u = u.moveaxis(-1, 0)  # (H, D, B) -> (B, H, D)
+        u = u.movedim(-1, 0)  # (H, D, B) -> (B, H, D)
 
         # compute log |det L⁻¹| = - log |det L| = log ∏ᵢ Lᵢᵢ
         ldj = -L.diagonal(dim1=-2, dim2=-1).log().sum(-1)

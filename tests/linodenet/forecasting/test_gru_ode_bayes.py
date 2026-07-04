@@ -381,25 +381,23 @@ class TestGRUODEBayes:
         # batch_first=False model expects time-major inputs and returns (K, *batch, D)
         time_mean, time_logvar = time_model.predict(
             query_times=query_times.mT,
-            query_mask=query_mask.moveaxis(-2, 0),
+            query_mask=query_mask.movedim(-2, 0),
             context_times=context_times.mT,
-            context_values=context_values.moveaxis(-2, 0),
-            context_mask=context_mask.moveaxis(-2, 0),
+            context_values=context_values.movedim(-2, 0),
+            context_mask=context_mask.movedim(-2, 0),
         )
 
+        torch.testing.assert_close(time_mean.movedim(0, -2), batch_mean, equal_nan=True)
         torch.testing.assert_close(
-            time_mean.moveaxis(0, -2), batch_mean, equal_nan=True
+            time_logvar.movedim(0, -2), batch_logvar, equal_nan=True
         )
         torch.testing.assert_close(
-            time_logvar.moveaxis(0, -2), batch_logvar, equal_nan=True
-        )
-        torch.testing.assert_close(
-            time_model.prior_means.moveaxis(0, -2),
+            time_model.prior_means.movedim(0, -2),
             batch_model.prior_means,
             equal_nan=True,
         )
         torch.testing.assert_close(
-            time_model.posterior_logvars.moveaxis(0, -2),
+            time_model.posterior_logvars.movedim(0, -2),
             batch_model.posterior_logvars,
             equal_nan=True,
         )

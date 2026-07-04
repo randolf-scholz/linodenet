@@ -511,11 +511,11 @@ class ContinuousKalmanFilter(nn.Module):
 
         if self.batch_first:
             # Move the time axis to the front.
-            timestamps = timestamps.moveaxis(-1, 0)
-            context_values = context_values.moveaxis(-2, 0)
-            context_mask = context_mask.moveaxis(-2, 0)
-            query_mask = query_mask.moveaxis(-2, 0)
-            valid_steps = valid_steps.moveaxis(-1, 0)
+            timestamps = timestamps.movedim(-1, 0)
+            context_values = context_values.movedim(-2, 0)
+            context_mask = context_mask.movedim(-2, 0)
+            query_mask = query_mask.movedim(-2, 0)
+            valid_steps = valid_steps.movedim(-1, 0)
 
         # check the shapes
         m = self.input_size
