@@ -5,15 +5,12 @@ __all__ = [
     "CRUConfig",
     "DecoderConfig",
     "EncoderConfig",
+    "Decoder",
+    "Encoder",
+    # functions
     "build_cru",
     "update_masked",
-    "Decoder",
     "new_activation",
-    "Exp",
-    "ELU1P",
-    "Encoder",
-    "Square",
-    "Abs",
 ]
 
 import math
@@ -29,22 +26,22 @@ from .utils import EventBatch
 _LOG2PI = math.log(2.0 * math.pi)
 
 
-class ELU1P(nn.Module):
+class _ELUP1(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return torch.where(x < 0.0, x.exp(), x + 1.0)
 
 
-class Exp(nn.Module):
+class _Exp(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return x.exp()
 
 
-class Square(nn.Module):
+class _Square(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return x.square()
 
 
-class Abs(nn.Module):
+class _Abs(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         return x.abs()
 
@@ -53,16 +50,16 @@ def new_activation(name: str) -> nn.Module:
     match name:
         case "relu":
             return nn.ReLU()
-        case "elup1":
-            return ELU1P()
-        case "exp":
-            return Exp()
-        case "square":
-            return Square()
-        case "abs":
-            return Abs()
         case "tanh":
             return nn.Tanh()
+        case "elup1":
+            return _ELUP1()
+        case "exp":
+            return _Exp()
+        case "square":
+            return _Square()
+        case "abs":
+            return _Abs()
         case _:
             raise NotImplementedError
 
