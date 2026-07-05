@@ -27,7 +27,7 @@ classifiers = [
 
 requires-python = ">=3.14,<3.15"
 dependencies = [
-    "numpy>=2.5.0",
+    "numpy>=2.5.1",
     "scipy>=1.18.0",
     "torch>=2.12.1",
     "torchode>=1.0.1",
@@ -55,7 +55,7 @@ debug = [
 devtools = [
     "cmake>=4.3.4",
     "ninja>=1.13.0",
-    "prek>=0.4.6",
+    "prek>=0.4.8",
     "pybadges>=3.0.1",
 ]
 docs = [
@@ -75,7 +75,7 @@ docs = [
     "sphinx-typo3-theme>=4.9.0",
 ]
 linters = [
-    "prek>=0.4.6",
+    "prek>=0.4.8",
     "ruff>=0.15.20",
     "tach>=0.35.0",
 ]
