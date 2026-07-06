@@ -399,16 +399,15 @@ class Grafiti(nn.Module):
         assert torch.equal(context_values.isfinite(), context_mask)
 
         *batch_shape, num_steps, num_channels = context_values.shape
-        device = timestamps.device
 
         dense_edge_mask = context_mask | query_mask  # (..., $T, D)
 
         # nonzero returns one global list of N true entries in row-major batch order.
         # Subtract each batch item's global start offset to get its local slot in E.
-        *batch_idx, t_idx, c_idx = dense_edge_mask.nonzero(as_tuple=True)  # (N)
+        *batch_idx, t_idx, c_idx = dense_edge_mask.nonzero(as_tuple=True)
         counts = dense_edge_mask.sum(dim=(-2, -1))  # (...)
         offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts  # (...)
-        positions = torch.arange(t_idx.numel(), device=device)  # (N)
+        positions = torch.arange(t_idx.numel(), device=timestamps.device)
         edge_indices = (*batch_idx, positions - offsets[*batch_idx])
         max_edges = int(counts.max().item())  # ($E)
 
@@ -446,9 +445,9 @@ class Grafiti(nn.Module):
             )
         )
 
-        for channel_time_attn, time_channel_attn, edge_nn in zip(
-            self.channel_time_attn,
+        for time_channel_attn, channel_time_attn, edge_nn in zip(
             self.time_channel_attn,
+            self.channel_time_attn,
             self.edge_nn,
             strict=True,
         ):
