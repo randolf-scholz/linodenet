@@ -350,6 +350,7 @@ class Grafiti(nn.Module):
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
     ) -> Tensor:  # Float[..., $K, F]
+        assert self.output_mode == "forecast"
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
