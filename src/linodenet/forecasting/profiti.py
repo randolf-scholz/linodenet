@@ -372,8 +372,8 @@ class ProFITi(nn.Module):
             config = ProFITiConfig(**config)
 
         conditioning_module = Grafiti(
-            input_dim=config.input_dim,
-            latent_dim=config.latent_dim,
+            dim_input=config.input_dim,
+            dim_latent=config.latent_dim,
             num_layers=config.num_layers,
             num_heads=config.num_heads,
             output_mode="embeddings",

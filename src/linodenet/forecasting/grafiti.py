@@ -178,8 +178,8 @@ class Grafiti(nn.Module):
     def __init__(
         self,
         *,
-        input_dim: int = 41,
-        latent_dim: int = 128,
+        dim_input: int = 41,
+        dim_latent: int = 128,
         num_layers: int = 3,
         num_heads: int = 4,
         bias: bool = True,
@@ -188,8 +188,8 @@ class Grafiti(nn.Module):
         r"""Initialize the GraFITi forecaster.
 
         Args:
-            input_dim: Number of channels.
-            latent_dim: Latent embedding size.
+            dim_input: Number of channels.
+            dim_latent: Latent embedding size.
             num_layers: Number of GraFITi layers.
             num_heads: Number of attention heads.
             output_mode: Whether :meth:`forward` returns dense forecasts or
@@ -197,21 +197,22 @@ class Grafiti(nn.Module):
             bias: Whether to use bias in attention layers.
         """
         super().__init__()
-        self.latent_dim = latent_dim
+        self.latent_dim = dim_latent
         self.num_heads = num_heads
         self.num_layers = num_layers
+        self.dim_input = dim_input
         self.output_mode = output_mode
 
-        self.time_init = nn.Linear(1, latent_dim)
-        self.edge_init = nn.Linear(2, latent_dim)
-        self.channel_init = nn.Linear(input_dim, latent_dim)
+        self.time_init = nn.Linear(1, dim_latent)
+        self.edge_init = nn.Linear(2, dim_latent)
+        self.channel_init = nn.Linear(dim_input, dim_latent)
 
         self.channel_time_attn = nn.ModuleList([
             MAB(
-                dim_Q=latent_dim,
-                dim_K=2 * latent_dim,
-                dim_V=2 * latent_dim,
-                dim_hidden=latent_dim,
+                dim_Q=dim_latent,
+                dim_K=2 * dim_latent,
+                dim_V=2 * dim_latent,
+                dim_hidden=dim_latent,
                 num_heads=num_heads,
                 bias=bias,
             )
@@ -220,10 +221,10 @@ class Grafiti(nn.Module):
 
         self.time_channel_attn = nn.ModuleList([
             MAB(
-                dim_Q=latent_dim,
-                dim_K=2 * latent_dim,
-                dim_V=2 * latent_dim,
-                dim_hidden=latent_dim,
+                dim_Q=dim_latent,
+                dim_K=2 * dim_latent,
+                dim_V=2 * dim_latent,
+                dim_hidden=dim_latent,
                 num_heads=num_heads,
                 bias=bias,
             )
@@ -231,11 +232,11 @@ class Grafiti(nn.Module):
         ])  # fmt: skip
 
         self.edge_nn = nn.ModuleList([
-            nn.Linear(3 * latent_dim, latent_dim)
+            nn.Linear(3 * dim_latent, dim_latent)
             for _ in range(num_layers)
         ])  # fmt: skip
 
-        self.output = nn.Linear(3 * latent_dim, 1)
+        self.output = nn.Linear(3 * dim_latent, 1)
 
         if self.output_mode == "embeddings":
             frozen_modules = [
@@ -519,10 +520,11 @@ class Grafiti(nn.Module):
         """
         assert context_channels.dtype == torch.long
         assert query_channels.dtype == torch.long
+        assert (context_channels < self.dim_input).all()
+        assert (query_channels < self.dim_input).all()
 
         *batch_shape, num_context = context_times.shape
         *_, num_query = query_times.shape
-        num_channels = self.channel_init.in_features
         device = context_times.device
 
         context_valid = (  # (..., $O)
@@ -531,11 +533,6 @@ class Grafiti(nn.Module):
             & context_values.isfinite()
         )
         query_valid = query_times.isfinite() & query_channels.ge(0)  # (..., $Q)
-
-        if (context_channels[context_valid] >= num_channels).any():
-            raise ValueError("Expected context channel indices below input_dim.")
-        if (query_channels[query_valid] >= num_channels).any():
-            raise ValueError("Expected query channel indices below input_dim.")
 
         num_edges = num_context + num_query
         timestamps = torch.cat([context_times, query_times], dim=-1)  # (..., $E)
@@ -560,7 +557,7 @@ class Grafiti(nn.Module):
         time_edge_mask, channel_edge_mask = (
             self._create_masks(  # (..., $E, $E), (..., D, $E)
                 num_steps=num_edges,
-                num_channels=num_channels,
+                num_channels=self.dim_input,
                 edge_time_indices=edge_t_indices,
                 edge_channel_indices=edge_c_indices,
                 edge_mask=edge_mask,
@@ -569,7 +566,7 @@ class Grafiti(nn.Module):
         h_edge, h_time, h_channel = (  # (..., $E, M), (..., $E, M), (..., D, M)
             self._encode_features(
                 t=timestamps,
-                num_channels=num_channels,
+                num_channels=self.dim_input,
                 edge_values=edge_values,
                 edge_target_mask=edge_target_mask,
                 edge_mask=edge_mask,
