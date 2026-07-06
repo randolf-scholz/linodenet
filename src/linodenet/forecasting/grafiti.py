@@ -458,9 +458,7 @@ class Grafiti(nn.Module):
             # Hᵤ = concat([hᵥ, hₑ]) for each edge e={u,v} connected to u. (eq 12)
             time_context = torch.cat([h_c_at_edge, h_edge], dim=-1)  # (..., $E, 2M)
             channel_context = torch.cat([h_t_at_edge, h_edge], dim=-1)  # (..., $E, 2M)
-            edge_context = torch.cat(  # (..., $E, 3M)
-                [h_edge, h_t_at_edge, h_c_at_edge], dim=-1
-            )
+            edge_context = torch.cat([h_edge, h_t_at_edge, h_c_at_edge], dim=-1)
 
             # update time node embeddings (eq 11 and 12)
             h_time = time_channel_attn(  # (..., $T, M)
@@ -539,13 +537,9 @@ class Grafiti(nn.Module):
         timestamps = torch.cat([context_times, query_times], dim=-1)  # (..., $E)
         edge_mask = torch.cat([context_valid, query_valid], dim=-1)  # (..., $E)
 
-        edge_c_indices = torch.cat(  # (..., $E)
-            [context_channels, query_channels], dim=-1
-        )
-        edge_values = torch.cat(  # (..., $E)
-            [context_values, torch.zeros_like(query_times)], dim=-1
-        )
-        edge_target_mask = torch.cat(  # (..., $E)
+        edge_c_indices = torch.cat([context_channels, query_channels], dim=-1)
+        edge_values = torch.cat([context_values, torch.zeros_like(query_times)], dim=-1)
+        edge_target_mask = torch.cat(
             [torch.zeros_like(context_valid), query_valid], dim=-1
         )
         edge_t_indices = torch.arange(num_edges, device=device).expand(
@@ -557,8 +551,8 @@ class Grafiti(nn.Module):
         edge_values = edge_values.masked_fill(~edge_mask, 0.0)
         edge_target_mask = edge_target_mask & edge_mask
 
-        time_edge_mask, channel_edge_mask = (
-            self._create_masks(  # (..., $E, $E), (..., D, $E)
+        time_edge_mask, channel_edge_mask = (  # (..., $E, $E), (..., D, $E)
+            self._create_masks(
                 num_steps=num_edges,
                 num_channels=self.dim_input,
                 edge_time_indices=edge_t_indices,
@@ -589,9 +583,7 @@ class Grafiti(nn.Module):
             # Hᵤ = concat([hᵥ, hₑ]) for each edge e={u,v} connected to u. (eq 12)
             time_context = torch.cat([h_c_at_edge, h_edge], dim=-1)  # (..., $E, 2M)
             channel_context = torch.cat([h_t_at_edge, h_edge], dim=-1)  # (..., $E, 2M)
-            edge_context = torch.cat(  # (..., $E, 3M)
-                [h_edge, h_t_at_edge, h_c_at_edge], dim=-1
-            )
+            edge_context = torch.cat([h_edge, h_t_at_edge, h_c_at_edge], dim=-1)
 
             # update time node embeddings (eq 11 and 12)
             h_time = time_channel_attn(  # (..., $T, M)
