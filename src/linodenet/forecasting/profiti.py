@@ -33,7 +33,7 @@ class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
     r"""Wrapper for ModuleList to make it a generic Sequence type."""
 
     if TYPE_CHECKING:
-        _modules: Mapping[str, M]  # type: ignore[override]
+        _modules: Mapping[str, M]  # type: ignore[assignment]
 
         # noinspection PyMissingConstructor
         def __init__(self, _: Iterable[M] = (), /) -> None: ...
@@ -329,7 +329,7 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
         return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
 
-class ConditionalFlowSequence(ModuleSequence[ConditionalTransform]):  # type: ignore[type-arg]
+class ConditionalFlowSequence(ModuleSequence[ConditionalTransform]):  # type: ignore[type-var]
     r"""Implements a sequence of flow layers."""
 
     def __init__(self, layers: list[ConditionalTransform], /) -> None:

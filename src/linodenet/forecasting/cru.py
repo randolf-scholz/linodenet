@@ -299,7 +299,7 @@ def update_masked[R: tuple[Tensor, ...]](
 
     ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
 
-    return tuple(  # type: ignore[return-type]
+    return tuple(  # type: ignore[return-value]
         t.reshape(-1, *t.shape[batch_rank:])
         .index_put([mask_flat], y)
         .reshape(*batch_shape, *t.shape[batch_rank:])

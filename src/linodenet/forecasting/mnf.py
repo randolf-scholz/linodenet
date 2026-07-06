@@ -61,7 +61,7 @@ class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
     r"""Wrapper for ModuleList to make it a generic Sequence type."""
 
     if TYPE_CHECKING:
-        _modules: Mapping[str, M]  # type: ignore[override]
+        _modules: Mapping[str, M]  # type: ignore[assignment]
 
         # noinspection PyMissingConstructor
         def __init__(self, _: Iterable[M] = (), /) -> None: ...
