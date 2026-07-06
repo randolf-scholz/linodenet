@@ -221,45 +221,33 @@ def test_grafiti_triplet_matches_combined_embeddings_with_duplicate_times() -> N
         output_mode="embeddings",
     )
     args = TripletTimeData(
-        context_times=torch.tensor(
-            [
-                [1.0, 1.0, 2.0, nan],
-                [0.0, 2.0, 2.0, 3.0],
-            ]
-        ),
-        context_channels=torch.tensor(
-            [
-                [0, 1, 2, -1],
-                [1, 0, 2, 1],
-            ]
-        ),
-        context_values=torch.tensor(
-            [
-                [10.0, 11.0, 20.0, nan],
-                [1.0, 20.0, 22.0, 31.0],
-            ]
-        ),
-        query_times=torch.tensor(
-            [
-                [1.0, 2.0, nan],
-                [1.0, 2.0, 2.0],
-            ]
-        ),
-        query_channels=torch.tensor(
-            [
-                [2, 0, -1],
-                [2, 1, 0],
-            ]
-        ),
-        target_values=torch.tensor(
-            [
-                [100.0, 200.0, nan],
-                [110.0, 220.0, 230.0],
-            ]
-        ),
+        context_times=torch.tensor([
+            [1.0, 1.0, 2.0, nan],
+            [0.0, 2.0, 2.0, 3.0],
+        ]),
+        context_channels=torch.tensor([
+            [0, 1, 2, -1],
+            [1, 0, 2,  1],
+        ]),
+        context_values=torch.tensor([
+            [10.0, 11.0, 20.0,  nan],
+            [ 1.0, 20.0, 22.0, 31.0],
+        ]),
+        query_times=torch.tensor([
+            [1.0, 2.0, nan],
+            [1.0, 2.0, 2.0],
+        ]),
+        query_channels=torch.tensor([
+            [2, 0, -1],
+            [2, 1,  0],
+        ]),
+        target_values=torch.tensor([
+            [100.0, 200.0,   nan],
+            [110.0, 220.0, 230.0],
+        ]),
         context_dim=3,
         query_dim=3,
-    )
+    )  # fmt: skip
     combined = args.to_joint_time(context_dim=3, query_dim=3)
 
     expected = model.forward(
