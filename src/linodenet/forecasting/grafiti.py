@@ -550,43 +550,23 @@ class Grafiti(nn.Module):
         if (query_channels_flat[query_valid] >= num_channels).any():
             raise ValueError("Expected query channel indices below input_dim.")
 
-        edge_times = torch.cat([context_times_flat, query_times_flat], dim=-1)  # (B, E)
-        edge_valid_mask = torch.cat([context_valid, query_valid], dim=-1)  # (B, E)
-        sort_indices = torch.argsort(  # (B, E)
-            edge_times.nan_to_num(nan=torch.inf),
-            dim=-1,
-            stable=True,
-        )
+        num_edges = num_context + num_query
+        time_points = torch.cat(  # (B, E)
+            [context_times_flat, query_times_flat], dim=-1
+        ).reshape(*batch_shape, num_edges)
+        valid_edge_mask = torch.cat(  # (B, E)
+            [context_valid, query_valid], dim=-1
+        ).reshape(*batch_shape, num_edges)
         edge_channel_indices = torch.cat(  # (B, E)
             [context_channels_flat, query_channels_flat], dim=-1
-        )
+        ).reshape(*batch_shape, num_edges)
         edge_values = torch.cat(  # (B, E)
             [context_values_flat, torch.zeros_like(query_times_flat)], dim=-1
-        )
+        ).reshape(*batch_shape, num_edges)
         edge_target_mask = torch.cat(
             [torch.zeros_like(context_valid), query_valid], dim=-1
-        )  # (B, E)
-
-        num_edges = num_context + num_query
+        ).reshape(*batch_shape, num_edges)  # (B, E)
         num_steps = num_edges
-        (
-            time_points,
-            edge_channel_indices,
-            edge_values,
-            edge_target_mask,
-            valid_edge_mask,
-        ) = [
-            torch.take_along_dim(tensor, sort_indices, dim=-1).reshape(
-                *batch_shape, num_edges
-            )
-            for tensor in (
-                edge_times,
-                edge_channel_indices,
-                edge_values,
-                edge_target_mask,
-                edge_valid_mask,
-            )
-        ]  # (..., E)
         edge_time_indices = (
             torch.arange(num_edges, device=device)
             .expand(B, num_edges)
