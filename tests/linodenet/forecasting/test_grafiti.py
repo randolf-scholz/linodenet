@@ -210,6 +210,111 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
     assert_close(actual, expected, equal_nan=True)
 
 
+def test_grafiti_triplet_matches_combined_embeddings_with_duplicate_times() -> None:
+    r"""Check sparse and combined GraFITi agree when timestamps repeat."""
+    torch.manual_seed(0)
+    model = Grafiti(
+        input_dim=3,
+        latent_dim=8,
+        num_layers=2,
+        num_heads=2,
+        output_mode="embeddings",
+    )
+    args = TripletTimeData(
+        context_times=torch.tensor(
+            [
+                [1.0, 1.0, 2.0, nan],
+                [0.0, 2.0, 2.0, 3.0],
+            ]
+        ),
+        context_channels=torch.tensor(
+            [
+                [0, 1, 2, -1],
+                [1, 0, 2, 1],
+            ]
+        ),
+        context_values=torch.tensor(
+            [
+                [10.0, 11.0, 20.0, nan],
+                [1.0, 20.0, 22.0, 31.0],
+            ]
+        ),
+        query_times=torch.tensor(
+            [
+                [1.0, 2.0, nan],
+                [1.0, 2.0, 2.0],
+            ]
+        ),
+        query_channels=torch.tensor(
+            [
+                [2, 0, -1],
+                [2, 1, 0],
+            ]
+        ),
+        target_values=torch.tensor(
+            [
+                [100.0, 200.0, nan],
+                [110.0, 220.0, 230.0],
+            ]
+        ),
+        context_dim=3,
+        query_dim=3,
+    )
+    combined = args.to_joint_time(context_dim=3, query_dim=3)
+
+    expected = model.forward(
+        timestamps=combined.timestamps,
+        context_values=combined.context_values,
+        context_mask=combined.context_mask,
+        query_mask=combined.query_mask,
+    )
+    actual = model.forward_triplet(
+        args.context_times,
+        args.context_channels,
+        args.context_values,
+        args.query_times,
+        args.query_channels,
+    )
+
+    assert_close(actual, expected, equal_nan=True)
+
+
+def test_grafiti_forward_embeddings_allow_duplicate_timestamps() -> None:
+    r"""Check GraFITi embeddings mode handles repeated dense timestamps."""
+    torch.manual_seed(0)
+    model = Grafiti(
+        input_dim=3,
+        latent_dim=8,
+        num_layers=2,
+        num_heads=2,
+        output_mode="embeddings",
+    )
+    timestamps = torch.tensor(
+        [
+            [1.0, 1.0, 2.0, 2.0],
+            [0.0, 2.0, 2.0, 3.0],
+        ]
+    )
+    context_values = torch.tensor([
+        [[10.0, 11.0, nan], [nan, nan, nan], [nan, nan, 20.0], [nan, nan, nan]],
+        [[nan, 1.0, nan], [20.0, nan, 22.0], [nan, nan, nan], [nan, 31.0, nan]],
+    ])  # fmt: skip
+    query_mask = torch.tensor([
+        [[False, False, False], [False, False,  True], [False, False, False], [ True, False, False]],
+        [[False, False, False], [False, False, False], [ True,  True, False], [False, False, False]],
+    ])  # fmt: skip
+
+    actual = model.forward(
+        timestamps=timestamps,
+        context_values=context_values,
+        context_mask=context_values.isfinite(),
+        query_mask=query_mask,
+    )
+
+    assert actual.shape == (2, 2, model.latent_dim)
+    assert actual.isfinite().all()
+
+
 def test_grafiti_batched_forward_allows_missing_context_values() -> None:
     r"""Check batched GraFITi handles sparse dense context values."""
     torch.manual_seed(0)
