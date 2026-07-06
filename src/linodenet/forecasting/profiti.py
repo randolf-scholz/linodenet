@@ -1,21 +1,22 @@
 r"""ProFITi-style forecasting components."""
 
 __all__ = [
-    "ProFITi",
-    "ProFITiConfig",
     "ConditionalFlowSequence",
-    "Shiesh",
-    "TriangularAttention",
-    "ProFITiBlock",
-    "Transform",
     "ConditionalTransform",
+    "ModuleSequence",
+    "ProFITi",
+    "ProFITiBlock",
+    "ProFITiConfig",
+    "Shiesh",
+    "Transform",
+    "TriangularAttention",
 ]
 
 import math
-from collections.abc import Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from itertools import chain
-from typing import Any, Final, Protocol
+from typing import TYPE_CHECKING, Any, Final, Protocol, overload
 
 import torch
 from torch import Tensor, nan, nn
@@ -26,6 +27,28 @@ from .grafiti import Grafiti
 from .utils import EventBatch
 
 _LOG2PI = math.log(2.0 * math.pi)
+
+
+class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
+    r"""Wrapper for ModuleList to make it a generic Sequence type."""
+
+    if TYPE_CHECKING:
+        _modules: Mapping[str, M]  # type: ignore[override]
+
+        # noinspection PyMissingConstructor
+        def __init__(self, _: Iterable[M] = (), /) -> None: ...
+        def __iter__(self) -> Iterator[M]: ...
+
+    @overload
+    def __getitem__(self, index: int, /) -> M: ...  # pyrefly: ignore[bad-override]
+    @overload
+    def __getitem__(self, index: slice, /) -> ModuleSequence[M]: ...
+    def __getitem__(self, index: int | slice, /) -> M | ModuleSequence[M]:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if isinstance(index, slice):
+            modules = list(self._modules.values())
+            selection = modules[index]
+            return ModuleSequence(selection)
+        return self._modules[self._get_abs_string_index(index)]
 
 
 class Transform(Protocol):
@@ -306,11 +329,11 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
         return y, (ldj_sita + ldj_scale + ldj_shiesh)
 
 
-class ConditionalFlowSequence(nn.ModuleList):
+class ConditionalFlowSequence(ModuleSequence[ConditionalTransform]):  # type: ignore[type-arg]
     r"""Implements a sequence of flow layers."""
 
     def __init__(self, layers: list[ConditionalTransform], /) -> None:
-        super().__init__(layers)  # type: ignore[arg-type]
+        super().__init__(layers)
 
     def encode_and_logabsdet(
         self,
@@ -321,7 +344,7 @@ class ConditionalFlowSequence(nn.ModuleList):
         batch_shape = x.shape[:-1]
         logabsdet = torch.zeros(batch_shape, dtype=x.dtype, device=x.device)
         for layer in self:
-            x, ldj = layer.encode_and_logabsdet(x, context)  # type: ignore[arg-type]
+            x, ldj = layer.encode_and_logabsdet(x, context)
             logabsdet = logabsdet + ldj
         return x, logabsdet
 
@@ -334,7 +357,7 @@ class ConditionalFlowSequence(nn.ModuleList):
         batch_shape = y.shape[:-1]
         logabsdet = torch.zeros(batch_shape, dtype=y.dtype, device=y.device)
         for layer in reversed(self):
-            y, ldj = layer.decode_and_logabsdet(y, context)  # type: ignore[arg-type]
+            y, ldj = layer.decode_and_logabsdet(y, context)
             logabsdet = logabsdet + ldj
         return y, logabsdet
 
