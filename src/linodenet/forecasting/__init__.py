@@ -2,8 +2,11 @@ r"""Forecasting Models."""
 
 __all__ = [
     # Constants
-    "FORECASTING_MODELS",
+    "PATH_FORECASTING_MODELS",
+    "POINT_FORECASTING_MODELS",
+    "PROBABILISTIC_FORECASTING_MODELS",
     # ABCs & Protocols
+    "PathForecastingModel",
     "PointForecastingModel",
     "ProbabilisticForecastingModel",
     # Classes
@@ -16,12 +19,16 @@ __all__ = [
     "LastValue",
     "LatentStateSpaceModel",
     "LinODEnet",
-    "MarginalizableNormalizingFlow",
+    "Moses",
+    "NeuralFlow",
     "ProFITi",
-    "Shiesh",
 ]
 
-from .base import PointForecastingModel, ProbabilisticForecastingModel
+from .base import (
+    PathForecastingModel,
+    PointForecastingModel,
+    ProbabilisticForecastingModel,
+)
 from .continuous_kalman_filter import ContinuousKalmanFilter
 from .cru import CRU
 from .discrete_kalman_filter import DiscreteKalmanFilter
@@ -31,8 +38,29 @@ from .gru_ode_bayes import GRU_ODE_Bayes
 from .last_value import LastValue
 from .linodenet import LinODEnet
 from .lssm import LatentStateSpaceModel
-from .mnf import MarginalizableNormalizingFlow
-from .profiti import ProFITi, Shiesh
+from .mnf import Moses
+from .neural_flow import NeuralFlow
+from .profiti import ProFITi
 
-FORECASTING_MODELS: dict[str, type[PointForecastingModel]] = {}
+POINT_FORECASTING_MODELS: dict[str, type[PointForecastingModel]] = {
+    "grafiti": Grafiti,
+    "gru_d": GRU_D,
+    "last_value": LastValue,
+    "linodenet": LinODEnet,
+    "lssm": LatentStateSpaceModel,
+}
 r"""Dictionary containing all available forecasting models."""
+
+PROBABILISTIC_FORECASTING_MODELS: dict[str, type[ProbabilisticForecastingModel]] = {
+    "continuous_kalman_filter": ContinuousKalmanFilter,
+    "cru": CRU,
+    "gru_ode_bayes": GRU_ODE_Bayes,
+    "neural_flow": NeuralFlow,
+}
+r"""Dictionary containing all available probabilistic forecasting models."""
+
+PATH_FORECASTING_MODELS: dict[str, type[PathForecastingModel]] = {
+    "profiti": ProFITi,
+    "moses": Moses,
+}
+r"""Dictionary containing all available path forecasting models."""

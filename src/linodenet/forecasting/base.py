@@ -11,7 +11,6 @@ from abc import abstractmethod
 from typing import Protocol
 
 from torch import Tensor
-from torch.distributions import Distribution
 
 
 class PointForecastingModel(Protocol):
@@ -55,7 +54,9 @@ class ProbabilisticForecastingModel(Protocol):
     A probabilistic forecasting model is a model that predicts the conditional
     distribution of the future time series, given the past observations.
 
-    .. math::   model(t, S) = p̂(yₜ | t, S)
+    .. math::
+        model: \Seq(𝓣)×\Seq(𝓣×𝓧) ⟶ \Seq(𝓟(𝓧)),
+        ((t₁, …, tₙ), S, M) ⟼ (p̂(y_{t₁} | t₁, S, M), …, p̂(y_{tₙ} | tₙ, S, M))
 
     We distinguish between 2 types of probabilistic forecasting models:
 
@@ -65,20 +66,77 @@ class ProbabilisticForecastingModel(Protocol):
       $p(y_{tₖ} | tₖ, S, M)$ for each time step $tₖ ∈ T$.
     """
 
-    @abstractmethod
-    def __call__(self, query: Tensor, context: Tensor, /) -> list[Distribution]:
-        r"""Forward pass of the model.
+    # @abstractmethod
+    # def __call__(
+    #     self,
+    #     query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+    #     query_mask: Tensor,  # Bool[..., $K, F], padded False
+    #     context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+    #     context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+    #     context_mask: Tensor,  # Bool[..., $N, D], padded False
+    # ) -> Distribution:  # p(
+    #     r"""Forward pass of the model.
+    #
+    #     Args:
+    #         query_times: $q = (t₁, t₂, …, tₖ)$ are the time indices we want to predict at
+    #         query_mask: $c = (c₁, c₂, …, cₖ)$ indicate channels to be predicted at query time
+    #         context_times: $τ = (τ₁, τ₂, …, τₙ)$ are the time indices of the observations
+    #         context_values: $x = (x₁, x₂, …, xₙ)$ are the values of the observations
+    #         context_mask: $m = (m₁, m₂, …, mₙ)$ indicate valid observations (at feature level)
+    #
+    #     Returns:
+    #         prediction: Batched Distribution object.
+    #     """
 
-        .. math::
-            model: \Seq(𝓣)×\Seq(𝓣×𝓧) ⟶ \Seq(𝓟(𝓧)),
-            ((t₁, …, tₙ), S, M) ⟼ (p̂(y_{t₁} | t₁, S, M), …, p̂(y_{tₙ} | tₙ, S, M))
+    @abstractmethod
+    def log_prob(
+        self,
+        samples: Tensor,  # Float[*S, ..., $K, F]
+        /,
+        *,
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F], padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+    ) -> Tensor:  # Float[*S, ..., $K]
+        r"""Compute the log-likelihood of the samples.
 
         Args:
-            query: $q = (t₁, t₂, …, tₙ)$ are the time indices we want to predict at
-            context: $S = ((τ₁, x₁), (τ₂, x₂), …, (τₘ, xₘ))$ are the observations and covariates.
+            samples: The samples to compute the log-likelihood of.
+            query_times: $q = (t₁, t₂, …, tₖ)$ are the time indices we want to predict at
+            query_mask: $c = (c₁, c₂, …, cₖ)$ indicate channels to be predicted at query time
+            context_times: $τ = (τ₁, τ₂, …, τₙ)$ are the time indices of the observations
+            context_values: $x = (x₁, x₂, …, xₙ)$ are the values of the observations
+            context_mask: $m = (m₁, m₂, …, mₙ)$ indicate valid observations (at feature level)
 
         Returns:
-            prediction: List of distributions, one per time step in the query.
+            log_probs: the time-marginal log-likelihoods of the samples.
+        """
+
+    @abstractmethod
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F], padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+    ) -> Tensor:  # (*S, ..., $K, F)
+        r"""Sample from the predictive distribution of the model.
+
+        Args:
+            size: The number of samples to draw from the predictive distribution.
+            query_times: $q = (t₁, t₂, …, tₖ)$ are the time indices we want to predict at
+            query_mask: $c = (c₁, c₂, …, cₖ)$ indicate channels to be predicted at query time
+            context_times: $τ = (τ₁, τ₂, …, τₙ)$ are the time indices of the observations
+            context_values: $x = (x₁, x₂, …, xₙ)$ are the values of the observations
+            context_mask: $m = (m₁, m₂, …, mₙ)$ indicate valid observations (at feature level)
+
+        Returns:
+            samples: The sampled values from the predictive distribution.
         """
 
 
@@ -87,22 +145,73 @@ class PathForecastingModel(Protocol):
 
     A path-forecasting model is a model that predicts the joint distribution across
     multiple future time steps.
-    """
 
-    @abstractmethod
-    def __call__(self, query: Tensor, context: Tensor, /) -> Distribution:
-        r"""Forward pass of the model.
-
-        .. math::
+    .. math::
             model: \Seq(𝓣)×\Seq(𝓣×𝓧) ⟶ 𝓟(\Seq(𝓧)),
             ((t₁, …, tₙ), S, M) ⟼ p̂(y_{t₁}, y_{t₂}, …, y_{tₙ} | (t₁, …, tₙ), S, M)
+    """
+
+    # @abstractmethod
+    # def __call__(self, query: Tensor, context: Tensor, /) -> Distribution:
+    #     r"""Forward pass of the model.
+    #
+    #     Args:
+    #       query: $q = (t₁, t₂, …, tₙ)$ are the time indices we want to predict at
+    #       context: $S = ((τ₁, x₁), (τ₂, x₂), …, (τₘ, xₘ))$ are the observations and covariates.
+    #
+    #     Returns:
+    #         prediction: The joint distribution over the future time steps.
+    #     """
+
+    @abstractmethod
+    def log_prob(
+        self,
+        samples: Tensor,  # Float[*S, ..., $K, F]
+        /,
+        *,
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F], padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+    ) -> Tensor:  # Float[*S, ...]
+        r"""Compute the log-likelihood of the samples.
 
         Args:
-          query: $q = (t₁, t₂, …, tₙ)$ are the time indices we want to predict at
-          context: $S = ((τ₁, x₁), (τ₂, x₂), …, (τₘ, xₘ))$ are the observations and covariates.
+            samples: The samples to compute the log-likelihood of.
+            query_times: $q = (t₁, t₂, …, tₖ)$ are the time indices we want to predict at
+            query_mask: $c = (c₁, c₂, …, cₖ)$ indicate channels to be predicted at query time
+            context_times: $τ = (τ₁, τ₂, …, τₙ)$ are the time indices of the observations
+            context_values: $x = (x₁, x₂, …, xₙ)$ are the values of the observations
+            context_mask: $m = (m₁, m₂, …, mₙ)$ indicate valid observations (at feature level)
 
         Returns:
-            prediction: The joint distribution over the future time steps.
+            log_probs: the joint log-likelihoods of the samples across all time steps.
+        """
+
+    @abstractmethod
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F], padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+    ) -> Tensor:  # Float[*S, ..., $K, F]
+        r"""Sample from the predictive distribution of the model.
+
+        Args:
+            size: The number of samples to draw from the predictive distribution.
+            query_times: $q = (t₁, t₂, …, tₖ)$ are the time indices we want to predict at
+            query_mask: $c = (c₁, c₂, …, cₖ)$ indicate channels to be predicted at query time
+            context_times: $τ = (τ₁, τ₂, …, τₙ)$ are the time indices of the observations
+            context_values: $x = (x₁, x₂, …, xₙ)$ are the values of the observations
+            context_mask: $m = (m₁, m₂, …, mₙ)$ indicate valid observations (at feature level)
+
+        Returns:
+            samples: The sampled values from the predictive distribution.
         """
 
 
