@@ -527,28 +527,26 @@ class Grafiti(nn.Module):
         *_, num_query = query_times.shape
         device = context_times.device
 
-        context_valid = (  # (..., $O)
-            context_times.isfinite()
-            & context_channels.ge(0)
-            & context_values.isfinite()
-        )
-        query_valid = query_times.isfinite() & query_channels.ge(0)  # (..., $Q)
+        context_valid = context_channels.ge(0)  # (..., $O)
+        query_valid = query_channels.ge(0)  # (..., $Q)
 
         num_edges = num_context + num_query
         timestamps = torch.cat([context_times, query_times], dim=-1)  # (..., $E)
         edge_mask = torch.cat([context_valid, query_valid], dim=-1)  # (..., $E)
+
         edge_c_indices = torch.cat(  # (..., $E)
             [context_channels, query_channels], dim=-1
         )
         edge_values = torch.cat(  # (..., $E)
             [context_values, torch.zeros_like(query_times)], dim=-1
         )
-        edge_target_mask = torch.cat(
+        edge_target_mask = torch.cat(  # (..., $E)
             [torch.zeros_like(context_valid), query_valid], dim=-1
-        )  # (..., $E)
+        )
         edge_t_indices = torch.arange(num_edges, device=device).expand(
             *batch_shape, num_edges
         )  # (..., $E)
+
         edge_c_indices = edge_c_indices.masked_fill(~edge_mask, 0)
         edge_t_indices = edge_t_indices.masked_fill(~edge_mask, 0)
         edge_values = edge_values.masked_fill(~edge_mask, 0.0)
