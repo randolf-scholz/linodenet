@@ -251,20 +251,19 @@ class Grafiti(nn.Module):
     def _create_masks(
         self,
         *,
-        num_steps: int,  # T
+        num_steps: int,  # $T
         num_channels: int,  # D
-        edge_time_indices: Tensor,  # (..., E)
-        edge_channel_indices: Tensor,  # (..., E)
-        edge_mask: Tensor,  # (..., E)
-    ) -> tuple[Tensor, Tensor]:  # (..., T, E), (..., D, E)
+        edge_time_indices: Tensor,  # (..., $E)
+        edge_channel_indices: Tensor,  # (..., $E)
+        edge_mask: Tensor,  # (..., $E)
+    ) -> tuple[Tensor, Tensor]:  # (..., $T, $E), (..., D, $E)
         r"""Create masks for time and channel attention.
 
         Args:
             num_steps: Number of time steps.
             num_channels: Number of channels.
             edge_time_indices: Time node index for each edge with shape ``(..., edges)``.
-            edge_channel_indices: Channel node index for each edge with shape
-                ``(..., edges)``.
+            edge_channel_indices: Channel node index for each edge with shape ``(..., edges)``.
             edge_mask: Boolean mask for real entries in the padded flattened
                 edge list with shape ``(..., edges)``.
 
@@ -273,24 +272,26 @@ class Grafiti(nn.Module):
             ``(..., time, edges)`` and ``(..., dim, edges)``.
         """
         device = edge_mask.device
-        time_index = torch.arange(num_steps, device=device)  # (T)
+        time_index = torch.arange(num_steps, device=device)  # ($T)
         channel_index = torch.arange(num_channels, device=device)  # (D)
 
-        time_edge_mask = (  # (..., T, E)
-            edge_mask[..., None, :]  # (..., 1, E)
-            # (..., 1, E) == (..., T, 1) -> (..., T, E)
-            & (edge_time_indices[..., None, :] == time_index[..., :, None])
+        time_edge_mask = (  # (..., $T, $E)
+            edge_mask[..., None, :]  # (..., 1, $E)
+            & (  # (..., 1, $E) == (..., $T, 1)  =>  (..., $T, $E)
+                edge_time_indices[..., None, :] == time_index[..., :, None]
+            )
         )
-        channel_edge_mask = (  # (..., D, E)
-            edge_mask[..., None, :]  # (..., 1, E)
-            # (..., 1, E) == (..., D, 1) -> (..., D, E)
-            & (edge_channel_indices[..., None, :] == channel_index[..., :, None])
+        channel_edge_mask = (  # (..., D, $E)
+            edge_mask[..., None, :]  # (..., 1, $E)
+            & (  # (..., 1, $E) == (..., D, 1)  =>  (..., D, $E)
+                edge_channel_indices[..., None, :] == channel_index[..., :, None]
+            )
         )
-        return time_edge_mask, channel_edge_mask  # (..., T, E), (..., D, E)
+        return time_edge_mask, channel_edge_mask  # (..., $T, $E), (..., D, $E)
 
     def _encode_features(
         self,
-        t: Tensor,  # (..., $T)
+        timestamps: Tensor,  # (..., $T)
         *,
         num_channels: int,
         edge_values: Tensor,  # (..., $E)
@@ -300,7 +301,7 @@ class Grafiti(nn.Module):
         r"""Encode edge, time-node, and channel-node features.
 
         Args:
-            t: Time-node features with shape ``(..., time)``.
+            timestamps: Time-node features with shape ``(..., time)``.
             num_channels: Number of channel nodes.
             edge_values: Edge values with shape ``(..., edges)``.
             edge_target_mask: Boolean target-query mask with shape ``(..., edges)``.
@@ -309,13 +310,13 @@ class Grafiti(nn.Module):
         Returns:
             Encoded edge, time, and channel features.
         """
-        *batch_shape, _ = t.shape
+        *batch_shape, _ = timestamps.shape
 
         # encode time
-        t_encoded = torch.sin(self.time_init(t[..., None]))  # (..., T, M)
+        t_encoded = torch.sin(self.time_init(timestamps[..., None]))  # (..., $T, M)
 
         # encode channels
-        channel_indices = torch.arange(num_channels, device=t.device)  # (D)
+        channel_indices = torch.arange(num_channels, device=timestamps.device)  # (D)
         c_onehot = F.one_hot(channel_indices, num_classes=num_channels)
         c_onehot = c_onehot.expand(*batch_shape, num_channels, num_channels)
         c_encoded = torch.relu(self.channel_init(c_onehot.float()))  # (..., D, M)
@@ -325,26 +326,30 @@ class Grafiti(nn.Module):
         # valid edge is a target exactly when it came from target_mask.
         target_indicator = ~edge_mask | edge_target_mask  # (..., E)
         edge_values = torch.where(edge_target_mask, 0.0, edge_values)
-        edge_input = torch.stack(  # (..., E, 2)
+        edge_input = torch.stack(  # (..., $E, 2)
             [edge_values, target_indicator.to(dtype=edge_values.dtype)],
             dim=-1,
         )
-        e_encoded = torch.where(  # (..., E, M)
+        e_encoded = torch.where(  # (..., $E, M)
             edge_mask[..., None],
             torch.relu(self.edge_init(edge_input)),
             0.0,
         )
-        return e_encoded, t_encoded, c_encoded  # (..., E, M), (..., T, M), (..., D, M)
+        return (
+            e_encoded,  # (..., $E, M)
+            t_encoded,  # (..., $T, M)
+            c_encoded,  # (..., D, M)
+        )
 
     def predict(
         self,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
         *,
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-    ) -> Tensor:  # (..., $K, F)
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+    ) -> Tensor:  # Float[..., $K, F]
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -363,10 +368,10 @@ class Grafiti(nn.Module):
     def forward(
         self,
         *,
-        timestamps: Tensor,  # (..., $T), float, padded NaN
-        query_mask: Tensor,  # (..., $T, D), bool, padded False
-        context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
-        context_mask: Tensor,  # (..., $T, D), bool, padded False
+        timestamps: Tensor,  # Float[..., $T], padded NaN
+        query_mask: Tensor,  # Bool[..., $T, D], padded False
+        context_values: Tensor,  # Float[..., $T, D], padded Nan, sparse
+        context_mask: Tensor,  # Bool[..., $T, D], padded False
     ) -> Tensor:  # (..., $T, D) if forecast, (..., $K, M) if embeddings
         r"""Process observed values and target queries with GraFITi.
 
@@ -421,8 +426,8 @@ class Grafiti(nn.Module):
         edge_mask[edge_indices] = True
 
         # Masks route each flattened edge to its incident time and channel nodes.
-        time_edge_mask, channel_edge_mask = (
-            self._create_masks(  # (..., $T, $E), (..., D, $E)
+        time_edge_mask, channel_edge_mask = (  # (..., $T, $E), (..., D, $E)
+            self._create_masks(
                 num_steps=num_steps,
                 num_channels=num_channels,
                 edge_time_indices=edge_t_indices,
@@ -432,7 +437,7 @@ class Grafiti(nn.Module):
         )
         h_edge, h_time, h_channel = (  # (..., $E, M), (..., $T, M), (..., D, M)
             self._encode_features(
-                t=timestamps,
+                timestamps=timestamps,
                 num_channels=num_channels,
                 edge_values=edge_values,
                 edge_target_mask=edge_target_mask,
@@ -500,18 +505,18 @@ class Grafiti(nn.Module):
 
     def forward_triplet(
         self,
-        context_times: Tensor,  # (..., $O)
-        context_channels: Tensor,  # (..., $O)
-        context_values: Tensor,  # (..., $O)
+        context_times: Tensor,  # (..., $X)
+        context_channels: Tensor,  # (..., $X)
+        context_values: Tensor,  # (..., $X)
         query_times: Tensor,  # (..., $Q)
         query_channels: Tensor,  # (..., $Q)
     ) -> Tensor:  # (..., $K, M)
         r"""Encode observed values and target queries from sparse triplets.
 
         Args:
-            context_times: Times for observed values with shape ``(..., $O)``.
-            context_channels: Channel indices for observed values with shape ``(..., $O)``.
-            context_values: Observed values with shape ``(..., $O)``.
+            context_times: Times for observed values with shape ``(..., $X)``.
+            context_channels: Channel indices for observed values with shape ``(..., $X)``.
+            context_values: Observed values with shape ``(..., $X)``.
             query_times: Times for target queries with shape ``(..., $Q)``.
             query_channels: Channel indices for target queries with shape ``(..., $Q)``.
 
@@ -527,7 +532,7 @@ class Grafiti(nn.Module):
         *_, num_query = query_times.shape
         device = context_times.device
 
-        context_valid = context_channels.ge(0)  # (..., $O)
+        context_valid = context_channels.ge(0)  # (..., $X)
         query_valid = query_channels.ge(0)  # (..., $Q)
 
         num_edges = num_context + num_query
@@ -563,7 +568,7 @@ class Grafiti(nn.Module):
         )
         h_edge, h_time, h_channel = (  # (..., $E, M), (..., $E, M), (..., D, M)
             self._encode_features(
-                t=timestamps,
+                timestamps=timestamps,
                 num_channels=self.dim_input,
                 edge_values=edge_values,
                 edge_target_mask=edge_target_mask,
