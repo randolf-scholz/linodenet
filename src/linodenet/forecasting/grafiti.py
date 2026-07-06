@@ -410,7 +410,7 @@ class Grafiti(nn.Module):
         offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts  # (...)
         positions = torch.arange(t_idx.numel(), device=device)  # (N)
         edge_indices = (*batch_idx, positions - offsets[*batch_idx])
-        max_edges = int(counts.max().item())  # E
+        max_edges = int(counts.max().item())  # ($E)
 
         # collect the results in tensors of shape (..., $E)
         edge_t_indices = t_idx.new_zeros(*batch_shape, max_edges)
@@ -496,7 +496,7 @@ class Grafiti(nn.Module):
             torch.cat([h_edge, h_t_at_edge, h_c_at_edge], dim=-1)
         ).squeeze(dim=-1)
 
-        return reconstruct_y(
+        return reconstruct_y(  # (..., $T, D)
             y_at_edge,
             edge_mask=target_edges,
             target_mask=query_mask,
