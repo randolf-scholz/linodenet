@@ -290,13 +290,13 @@ class Grafiti(nn.Module):
 
     def _encode_features(
         self,
-        t: Tensor,  # (..., T)
+        t: Tensor,  # (..., $T)
         *,
         num_channels: int,
-        edge_values: Tensor,  # (..., E)
-        edge_target_mask: Tensor,  # (..., E)
-        edge_mask: Tensor,  # (..., E)
-    ) -> tuple[Tensor, Tensor, Tensor]:  # (..., E, M), (..., T, M), (..., D, M)
+        edge_values: Tensor,  # (..., $E)
+        edge_target_mask: Tensor,  # (..., $E)
+        edge_mask: Tensor,  # (..., $E)
+    ) -> tuple[Tensor, Tensor, Tensor]:  # (..., $E, M), (..., $T, M), (..., D, M)
         r"""Encode edge, time-node, and channel-node features.
 
         Args:
