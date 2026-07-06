@@ -442,11 +442,11 @@ class ContinuousKalmanFilter(nn.Module):
     def predict(
         self,
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, F]  padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
@@ -462,8 +462,8 @@ class ContinuousKalmanFilter(nn.Module):
         post_means, post_logvars = self.forward(
             timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
             context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
-            context_mask=combined.context_mask,  # Bool[(..., $T, D)], padded False
-            query_mask=combined.query_mask,  # Bool[(..., $T, F)], padded False
+            context_mask=combined.context_mask,  # Bool[..., $T, D], padded False
+            query_mask=combined.query_mask,  # Bool[..., $T, F], padded False
             initial_state=initial_state,
             initial_time=initial_time,
         )
@@ -615,11 +615,11 @@ class ContinuousKalmanFilter(nn.Module):
         self,
         values: Tensor,  # (..., $K, D)
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, D)], padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_times: Tensor,  # Float[..., N), padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
     ) -> Tensor:  # (..., $K)
@@ -647,11 +647,11 @@ class ContinuousKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, D)], padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
     ) -> Tensor:  # (*S, ..., $K, D)
@@ -680,11 +680,11 @@ class ContinuousKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, D)], padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
