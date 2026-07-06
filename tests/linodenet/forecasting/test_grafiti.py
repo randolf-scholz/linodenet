@@ -213,9 +213,12 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
 def test_grafiti_triplet_matches_combined_embeddings_with_duplicate_times() -> None:
     r"""Check sparse and combined GraFITi agree when timestamps repeat."""
     torch.manual_seed(0)
+    batch_shape = (2,)
+    latent_dim = 8
+    seq_length = 3
     model = Grafiti(
         dim_input=3,
-        dim_latent=8,
+        dim_latent=latent_dim,
         num_layers=2,
         num_heads=2,
         output_mode="embeddings",
@@ -263,6 +266,8 @@ def test_grafiti_triplet_matches_combined_embeddings_with_duplicate_times() -> N
         args.query_times,
         args.query_channels,
     )
+    assert actual.shape == (*batch_shape, seq_length, latent_dim)
+    assert expected.shape == (*batch_shape, seq_length, latent_dim)
 
     assert_close(actual, expected, equal_nan=True)
 
