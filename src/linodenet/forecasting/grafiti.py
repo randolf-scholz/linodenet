@@ -7,7 +7,6 @@ __all__ = [
     "reconstruct_y",
 ]
 
-import math
 from typing import Final, Literal
 
 import torch
@@ -90,19 +89,13 @@ class MAB(nn.Module):
         K = K.movedim(-2, -3)  # (..., H, Nk, M/H)
         V = V.movedim(-2, -3)  # (..., H, Nk, M/H)
 
-        # Reference GraFITi divides by sqrt(dim_hidden) after splitting heads.
-        # We use the standard scaled-attention factor for the contracted axis.
-        attention_scores = (Q / math.sqrt(head_dim)) @ K.mT  # (..., H, Nq, Nk)
-
-        if mask is not None:
-            # Broadcast mask across heads: (..., Nq, Nk) -> (..., 1, Nq, Nk).
-            attention_scores = attention_scores.masked_fill(
-                ~mask.unsqueeze(dim=-3),
-                -10e9,
-            )
-
-        attention = attention_scores.softmax(dim=-1)  # (..., H, Nq, Nk)
-        Y = Q + attention @ V  # (..., H, Nq, M/H)
+        Y = Q + F.scaled_dot_product_attention(  # (..., H, Nq, M/H)
+            Q,
+            K,
+            V,
+            attn_mask=None if mask is None else mask.unsqueeze(dim=-3),
+            dropout_p=0.0,
+        )
         Y = Y.movedim(-3, -2)  # (..., Nq, H, M/H)
         Y = Y.flatten(start_dim=-2)  # (..., Nq, M)
 
