@@ -2188,42 +2188,6 @@ class Moses(nn.Module):
         self.register_buffer("log_probs", None, persistent=False)
         self.register_buffer("indices", None, persistent=False)
 
-    def log_prob(
-        self,
-        values: Tensor,  # Float[*S, ..., $Q, F]
-        *,
-        query_times: Tensor,  # Float[..., $Q], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[..., $Q, F]  padded False
-        context_times: Tensor,  # Float[..., $X], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., $X, E], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., $X, E], padded False
-    ) -> Tensor:  # (*S, ...)
-        r"""Compute the joint log-likelihood of the target values.
-
-        Evaluates the marginal mixture-flow log-prob at each query position
-        and sums across query positions (joint under independence).
-
-        Args:
-            values: Observed target values; finite at every ``True`` position in ``query_mask``.
-            query_times: Sorted time stamps for all query time steps.
-            query_mask: Boolean mask selecting query (target) positions.
-            context_times: Sorted time stamps for all context time steps.
-            context_values: Context observations; ``NaN`` at unobserved positions.
-            context_mask: Boolean mask selecting observed context positions.
-
-        Returns:
-            Joint log-likelihood with shape ``(...,)``.
-        """
-        triplets = TripletTimeData.from_request(
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_times=query_times,
-            query_mask=query_mask,
-            target_values=values,
-        )
-        return self._log_prob_triplets(triplets)
-
     def _log_prob_triplets(self, triplets: TripletTimeData, /) -> Tensor:
         r"""Compute the log-likelihood for a single trimmed triplet batch."""
         y = triplets.target_values  # (*S, ..., $K)
@@ -2267,37 +2231,10 @@ class Moses(nn.Module):
         self.log_probs = log_probs
         return log_probs  # (*S, ...,)
 
-    def sample(
-        self,
-        size: int | tuple[int, ...] = (),  # *S
-        *,
-        query_times: Tensor,  # Float[..., $Q], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[..., $Q, F]  padded False
-        context_times: Tensor,  # Float[..., $X], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., $X, E], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., $X, E], padded False
-    ) -> Tensor:  # (*S, ..., $Q, F)
-        r"""Sample from the conditional marginal distribution at each query position.
-
-        Args:
-            size: Number of samples (leading sample dimensions ``*S``).
-            query_times: Sorted time stamps for all query time steps.
-            query_mask: Boolean mask selecting query (target) positions.
-            context_times: Sorted time stamps for all context time steps.
-            context_values: Context observations; ``NaN`` at unobserved positions.
-            context_mask: Boolean mask selecting observed context positions.
-
-        Returns:
-            Samples with shape ``(*S, ..., $Q, F)``, ``NaN`` at non-query positions.
-        """
-        triplets = TripletTimeData.from_request(
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            query_times=query_times,
-            query_mask=query_mask,
-        )
-
+    def _sample_triplets(
+        self, size: int | tuple[int, ...], triplets: TripletTimeData, /
+    ) -> Tensor:  # (*S, ..., $K)
+        r"""Sample from the conditional distribution."""
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
         h_obs, h = self.encoder.forward(  # (..., $N, M), (..., *H, $K, M)
             query_times=triplets.query_times,
@@ -2331,8 +2268,79 @@ class Moses(nn.Module):
 
         # store buffers
         self.samples = samples
-        self.log_probs = None
         self.indices = indices
+        self.log_probs = None
+
+        return samples
+
+    def log_prob(
+        self,
+        values: Tensor,  # Float[*S, ..., $Q, F]
+        *,
+        query_times: Tensor,  # Float[..., $Q], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $Q, F]  padded False
+        context_times: Tensor,  # Float[..., $X], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $X, E], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $X, E], padded False
+    ) -> Tensor:  # (*S, ...)
+        r"""Compute the joint log-likelihood of the target values.
+
+        Evaluates the marginal mixture-flow log-prob at each query position
+        and sums across query positions (joint under independence).
+
+        Args:
+            values: Observed target values; finite at every ``True`` position in ``query_mask``.
+            query_times: Sorted time stamps for all query time steps.
+            query_mask: Boolean mask selecting query (target) positions.
+            context_times: Sorted time stamps for all context time steps.
+            context_values: Context observations; ``NaN`` at unobserved positions.
+            context_mask: Boolean mask selecting observed context positions.
+
+        Returns:
+            Joint log-likelihood with shape ``(...,)``.
+        """
+        triplets = TripletTimeData.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            target_values=values,
+        )
+        return self._log_prob_triplets(triplets)
+
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[..., $Q], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $Q, F]  padded False
+        context_times: Tensor,  # Float[..., $X], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $X, E], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $X, E], padded False
+    ) -> Tensor:  # (*S, ..., $Q, F)
+        r"""Sample from the conditional marginal distribution at each query position.
+
+        Args:
+            size: Number of samples (leading sample dimensions ``*S``).
+            query_times: Sorted time stamps for all query time steps.
+            query_mask: Boolean mask selecting query (target) positions.
+            context_times: Sorted time stamps for all context time steps.
+            context_values: Context observations; ``NaN`` at unobserved positions.
+            context_mask: Boolean mask selecting observed context positions.
+
+        Returns:
+            Samples with shape ``(*S, ..., $Q, F)``, ``NaN`` at non-query positions.
+        """
+        triplets = TripletTimeData.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+        )
+
+        samples = self._sample_triplets(size, triplets)  # (*S, ..., $K)
 
         # reshape the samples from (*S, ..., $K) to (*S, ..., $Q, F)
         return samples[triplets.query_indices].masked_fill(~query_mask, nan)
