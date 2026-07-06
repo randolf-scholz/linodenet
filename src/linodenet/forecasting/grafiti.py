@@ -528,49 +528,36 @@ class Grafiti(nn.Module):
 
         *batch_shape, num_context = context_times.shape
         *_, num_query = query_times.shape
-        B = math.prod(batch_shape)
         num_channels = self.channel_init.in_features
         device = context_times.device
 
-        context_times_flat = context_times.reshape(B, num_context)  # (B, O)
-        context_channels_flat = context_channels.reshape(B, num_context)  # (B, O)
-        context_values_flat = context_values.reshape(B, num_context)  # (B, O)
-        query_times_flat = query_times.reshape(B, num_query)  # (B, Q)
-        query_channels_flat = query_channels.reshape(B, num_query)  # (B, Q)
-
-        context_valid = (  # (B, O)
-            context_times_flat.isfinite()
-            & context_channels_flat.ge(0)
-            & context_values_flat.isfinite()
+        context_valid = (  # (..., O)
+            context_times.isfinite()
+            & context_channels.ge(0)
+            & context_values.isfinite()
         )
-        query_valid = query_times_flat.isfinite() & query_channels_flat.ge(0)  # (B, Q)
+        query_valid = query_times.isfinite() & query_channels.ge(0)  # (..., Q)
 
-        if (context_channels_flat[context_valid] >= num_channels).any():
+        if (context_channels[context_valid] >= num_channels).any():
             raise ValueError("Expected context channel indices below input_dim.")
-        if (query_channels_flat[query_valid] >= num_channels).any():
+        if (query_channels[query_valid] >= num_channels).any():
             raise ValueError("Expected query channel indices below input_dim.")
 
         num_edges = num_context + num_query
-        time_points = torch.cat(  # (B, E)
-            [context_times_flat, query_times_flat], dim=-1
-        ).reshape(*batch_shape, num_edges)
-        valid_edge_mask = torch.cat(  # (B, E)
-            [context_valid, query_valid], dim=-1
-        ).reshape(*batch_shape, num_edges)
-        edge_channel_indices = torch.cat(  # (B, E)
-            [context_channels_flat, query_channels_flat], dim=-1
-        ).reshape(*batch_shape, num_edges)
-        edge_values = torch.cat(  # (B, E)
-            [context_values_flat, torch.zeros_like(query_times_flat)], dim=-1
-        ).reshape(*batch_shape, num_edges)
+        time_points = torch.cat([context_times, query_times], dim=-1)  # (..., E)
+        valid_edge_mask = torch.cat([context_valid, query_valid], dim=-1)  # (..., E)
+        edge_channel_indices = torch.cat(  # (..., E)
+            [context_channels, query_channels], dim=-1
+        )
+        edge_values = torch.cat(  # (..., E)
+            [context_values, torch.zeros_like(query_times)], dim=-1
+        )
         edge_target_mask = torch.cat(
             [torch.zeros_like(context_valid), query_valid], dim=-1
-        ).reshape(*batch_shape, num_edges)  # (B, E)
+        )  # (..., E)
         num_steps = num_edges
-        edge_time_indices = (
-            torch.arange(num_edges, device=device)
-            .expand(B, num_edges)
-            .reshape(*batch_shape, num_edges)
+        edge_time_indices = torch.arange(num_edges, device=device).expand(
+            *batch_shape, num_edges
         )  # (..., E)
         edge_channel_indices = edge_channel_indices.masked_fill(~valid_edge_mask, 0)
         edge_time_indices = edge_time_indices.masked_fill(~valid_edge_mask, 0)
