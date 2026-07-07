@@ -89,8 +89,7 @@ class GradientStepUpdater(nn.Module):
     observation back through the decoder and performs the Euclidean one-step
     update
 
-    .. math::
-        θ' = θ - λ⁻¹ ∇_θ[-\log p_θ(y)]
+    .. math:: θ' = θ - λ⁻¹ ∇_θ[-\log p_θ(y)]
 
     where $p_θ(y)$ is induced by the decoder and the latent density.
     """
