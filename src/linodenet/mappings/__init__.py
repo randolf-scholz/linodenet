@@ -89,6 +89,7 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "ResidualContraction"  : transforms.ResidualContraction,
     "ResidualContractionFallback" : transforms.ResidualContractionFallback,
     "SplineTransform"      : transforms.SplineTransform,
+    "SymmetricLowRankTransform" : transforms.SymmetricLowRankTransform,
     "TransformSequence"    : base.TransformSequence,
     "TriangularTransform"  : transforms.TriangularTransform,
     # scalar transforms
