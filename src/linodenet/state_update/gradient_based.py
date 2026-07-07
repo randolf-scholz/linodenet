@@ -32,16 +32,10 @@ __all__ = [
     "GaussianGradientStepUpdater",
 ]
 
-from math import expm1, log
-from typing import Any, Callable
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
-from torch.utils import _pytree
 
-from linodenet.distributions import Distribution
-from linodenet.distributions.gaussian import kl
 from linodenet.mappings import Transform
 
 
@@ -106,10 +100,12 @@ class GradientStepUpdater(nn.Module):
 class GaussianGradientStepUpdater(nn.Module):
     r"""Perform a gradient based update assuming a latent Gaussian distribution.
 
-    .. math:: Jₜ(θ; θ₋, y_obs) = -\log q(y_obs∣θ) + λ\kl(𝓝(μ, Σ), 𝓝(μ₋, Σ₋))
+    .. math:: Jₜ(θ; θ₋, y_obs) = -\log q(y_obs∣θ) + λ⋅\kl(𝓝(μ, Σ), 𝓝(μ₋, Σ₋))
 
-    where $θ = (μ, Σ)$ are the parameters of the latent Gaussian distribution,
-    $θ₋$ are the parameters before the update, and $y_obs$ is the observed value.
+    where $q(y_obs∣θ) = p(ϕ⁻¹(y_obs)∣θ) |𝐃ϕ⁻¹(y_obs)|$ is the predictive distribution
+    obtained by pushing the latent Gaussian through a decoder $ϕ$, and $θ = (μ, Σ)$
+    are the parameters of the latent Gaussian distribution. $θ₋$ denote the parameters
+    before the update, and $y_obs$ is the observed value.
     The first term is the negative log-likelihood of the observation under the current parameters,
     and the second term is a KL divergence regularization that encourages the updated parameters
     to stay close to the previous parameters.
@@ -118,27 +114,18 @@ class GaussianGradientStepUpdater(nn.Module):
     def __init__(
         self,
         decoder: Transform[Tensor, Tensor],
-        loss: nn.Module,
         regularizer: nn.Module,
         regularization_strength: float,
+        parametrization: str = "covariance",
     ) -> None:
         super().__init__()
-        raise NotImplementedError
+        self.decoder = decoder
+        self.regularizer = regularizer
+        self.regularization_strength = regularization_strength
+        self.parametrization = parametrization
 
-    def update_covariance(
+    def forward(
         self, theta: tuple[Tensor, Tensor], y_obs: Tensor
     ) -> tuple[Tensor, Tensor]:
-        r"""Gradient step assuming parameterization $θ=(μ, Σ)$."""
-        raise NotImplementedError
-
-    def update_precision(
-        self, theta: tuple[Tensor, Tensor], y_obs: Tensor
-    ) -> tuple[Tensor, Tensor]:
-        r"""Gradient step assuming parameterization $θ=(μ, Λ)$, with $Σ=Λ⁻¹$."""
-        raise NotImplementedError
-
-    def update_cholesky(
-        self, theta: tuple[Tensor, Tensor], y_obs: Tensor
-    ) -> tuple[Tensor, Tensor]:
-        r"""Gradient step assuming parameterization $θ=(μ, L)$, with $Σ=LLᵀ$."""
+        r"""Return the updated Gaussian parameters $(μ', Σ')$."""
         raise NotImplementedError
