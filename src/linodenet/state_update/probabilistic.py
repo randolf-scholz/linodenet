@@ -26,27 +26,22 @@ __all__ = [
     "EmpiricalStateUpdate",
     "DiracStateUpdate",
     # Classes
-    "GradientStepUpdater",
     "NaturalGaussianUpdater",
-    "GaussianLatentStateUpdate",
     "probabilistic_kalman_update",
     "discrete_probabilistic_kalman_update",
 ]
 
 from abc import abstractmethod
-from collections.abc import Callable
 from math import expm1, log
-from typing import Any, Optional, Protocol, runtime_checkable
+from typing import Optional, Protocol, runtime_checkable
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.distributions import MultivariateNormal
-from torch.utils import _pytree
 
 from linodenet.distributions import Dirac, Distribution, Empirical
 from linodenet.distributions.gaussian import (
-    kl,
     multivariate_gaussian_log_likelihood,
 )
 from linodenet.mappings import Transform
@@ -80,95 +75,6 @@ class EmpiricalStateUpdate[D: Distribution](ProbabilisticStateUpdate[D, Empirica
 
     @abstractmethod
     def __call__(self, y: Tensor | Empirical, x: D, /) -> D: ...
-
-
-class GradientStepUpdater(nn.Module):
-    r"""Single gradient-step updater for latent distribution parameters.
-
-    Given an observation $y$ and latent parameters $θ$, this module pulls the
-    observation back through the decoder and performs the Euclidean one-step
-    update
-
-    .. math:: θ' = θ - λ⁻¹ ∇_θ[-\log p_θ(y)]
-
-    where $p_θ(y)$ is induced by the decoder and the latent density.
-    """
-
-    decoder: Transform[Tensor, Tensor]
-    r"""Decoder used to pull observations back to latent space."""
-    latent_dist: Callable[[Tensor, Any], Tensor]
-    r"""Callable returning the latent log-density $log p(x∣θ)$."""
-    raw_lambda: Tensor
-    r"""Unconstrained parameter whose softplus defines the positive $λ$."""
-
-    def __init__(
-        self,
-        *,
-        decoder: Transform[Tensor, Tensor],
-        latent_dist: Callable[[Tensor, Any], Tensor],
-        lambda_init: float = 1.0,
-    ) -> None:
-        super().__init__()
-        if lambda_init <= 0:
-            raise ValueError(f"Expected lambda_init > 0, got {lambda_init}.")
-        self.decoder = decoder
-        self.latent_dist = latent_dist
-        raw_lambda = log(expm1(lambda_init))
-        self.raw_lambda = nn.Parameter(torch.tensor(raw_lambda))
-
-    @property
-    def lambda_(self) -> Tensor:
-        r"""Return the positive regularization/step-size parameter $λ$."""
-        return F.softplus(self.raw_lambda) + torch.finfo(self.raw_lambda.dtype).eps
-
-    def forward(self, y: Tensor, theta: Any, /) -> Any:
-        r"""Update the latent parameter pytree using a single observation.
-
-        Args:
-            y: Observed value in data space.
-            theta: Pytree of tensor parameters defining the latent distribution.
-
-        Returns:
-            Updated pytree with the same structure as `theta`.
-        """
-        leaves, spec = _pytree.tree_flatten(theta)
-        differentiable_indices = [
-            k
-            for k, leaf in enumerate(leaves)
-            if isinstance(leaf, Tensor)
-            and (leaf.is_floating_point() or leaf.is_complex())
-        ]
-
-        if not differentiable_indices:
-            return theta
-
-        updated_leaves = list(leaves)
-        grad_leaves: list[Tensor] = []
-        for k in differentiable_indices:
-            leaf = leaves[k]
-            assert isinstance(leaf, Tensor)
-            cloned = leaf.detach().clone().requires_grad_(True)
-            updated_leaves[k] = cloned
-            grad_leaves.append(cloned)
-
-        theta_var = _pytree.tree_unflatten(updated_leaves, spec)
-        # Pull back y ↦ x via the decoder so log p_θ(y) = log p(x∣θ) + log│det ∂x/∂y│.
-        x, logabsdet = self.decoder.decode_and_logabsdet(y)
-        log_density = self.latent_dist(x, theta_var)
-        # Minimize L(θ) = -log p_θ(y) = -(log p(x∣θ) + log│det ∂x/∂y│).
-        loss = -(log_density + logabsdet).sum()
-        gradients = torch.autograd.grad(loss, grad_leaves, allow_unused=True)
-        scale = self.lambda_.reciprocal()
-
-        for index, leaf, gradient in zip(
-            differentiable_indices, grad_leaves, gradients, strict=True
-        ):
-            # Single Euclidean step: θ' = θ - λ⁻¹∇_θL.
-            updated_leaves[index] = (
-                leaf if gradient is None else leaf - scale * gradient
-            )
-
-        return _pytree.tree_unflatten(updated_leaves, spec)
 
 
 class NaturalGaussianUpdater(nn.Module):
@@ -350,48 +256,3 @@ def discrete_probabilistic_kalman_update(
 
     obs_dist = MultivariateNormal(y, R)
     return probabilistic_kalman_update(obs_dist, state, H=H)
-
-
-class GaussianLatentStateUpdate(nn.Module):
-    r"""Perform a gradient based update assuming a latent Gaussian distribution.
-
-    .. math:: Jₜ(θ; θ₋, y_obs) = -\log q(y_obs∣θ) + λ\kl(𝓝(μ, Σ), 𝓝(μ₋, Σ₋))
-
-    where $θ = (μ, Σ)$ are the parameters of the latent Gaussian distribution,
-    $θ₋$ are the parameters before the update, and $y_obs$ is the observed value.
-    The first term is the negative log-likelihood of the observation under the current parameters,
-    and the second term is a KL divergence regularization that encourages the updated parameters
-    to stay close to the previous parameters.
-    """
-
-    def __init__(
-        self,
-        decoder: Callable[[tuple[Tensor, Tensor]], Distribution],
-        regularization_strength,
-        regularization_learnable: bool = True,
-    ) -> None:
-        super().__init__()
-        raise NotImplementedError
-
-    def update_covariance(
-        self, theta: tuple[Tensor, Tensor], y_obs: Tensor
-    ) -> tuple[Tensor, Tensor]:
-        r"""Gradient step assuming parameterization $θ=(μ, Σ)$."""
-        raise NotImplementedError
-
-    def update_cholesky(
-        self, theta: tuple[Tensor, Tensor], y_obs: Tensor
-    ) -> tuple[Tensor, Tensor]:
-        r"""Gradient step assuming parameterization $θ=(μ, L)$, with $Σ=LLᵀ$."""
-        mu, sigma = theta
-        mu_dash = nn.Parameter(mu)
-        sigma_dash = nn.Parameter(sigma)
-        grad_fn = torch.func.grad(kl, argnums=0)
-        grad_fn((mu_dash, sigma_dash), (mu, sigma), parametrization="cholesky")
-        raise NotImplementedError
-
-    def update_precision(
-        self, theta: tuple[Tensor, Tensor], y_obs: Tensor
-    ) -> tuple[Tensor, Tensor]:
-        r"""Gradient step assuming parameterization $θ=(μ, Λ)$, with $Σ=Λ⁻¹$."""
-        raise NotImplementedError
