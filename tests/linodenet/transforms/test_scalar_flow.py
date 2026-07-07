@@ -5,14 +5,17 @@ from torch.func import grad, vmap
 from linodenet.mappings.transforms.scalar import (
     CELU,
     ELU,
+    ConjugatedAffineFlow,
     EntLU,
     Sigmoid,
+    Sinh,
     SmoothSoftsign,
     Softplus,
     Softsign,
     Tanh,
     Tanhshrink,
 )
+from linodenet.nn.containers import Constant
 
 from .base import TestTransform
 
@@ -26,6 +29,7 @@ SCALAR_TRANSFORMS = {
     "celu": CELU(),
     "entlu": EntLU(),
     "tanhshrink": Tanhshrink(),
+    "sinh": Sinh(),
 }
 
 
@@ -107,3 +111,56 @@ class TestScalarFlow(TestTransform):
         else:
             atol, rtol = 1e-6, 1e-6
         self.assert_close(actual, expected, atol=atol, rtol=rtol)
+
+    @pytest.mark.parametrize(
+        ("conjugate_map", "x", "y"),
+        [
+            pytest.param(
+                Sinh(),
+                torch.linspace(-2, 2, BATCH_SIZE),
+                torch.linspace(-2, 2, BATCH_SIZE),
+                id="sinh",
+            ),
+            pytest.param(
+                Tanh(),
+                torch.linspace(-2, 2, BATCH_SIZE),
+                torch.linspace(-0.3, 0.9, BATCH_SIZE),
+                id="tanh",
+            ),
+            pytest.param(
+                CELU(alpha=0.7),
+                torch.linspace(-2, 2, BATCH_SIZE),
+                torch.linspace(-0.1, 2, BATCH_SIZE),
+                id="celu",
+            ),
+        ],
+    )
+    def test_conjugated_affine_flow(
+        self, conjugate_map, x: torch.Tensor, y: torch.Tensor
+    ) -> None:
+        transform = ConjugatedAffineFlow(
+            conjugate_map,
+            alpha_map=Constant(0.6),
+            beta_map=Constant(0.2),
+        )
+
+        encoded = transform.encode(x)
+        assert not torch.allclose(encoded, x)
+
+        self.assert_invertible(
+            transform,
+            x,
+            y,
+            atol=1e-5,
+            rtol=1e-5,
+            logdet_atol=1e-5,
+            logdet_rtol=1e-5,
+        )
+
+        _, actual = transform.encode_and_logabsdet(x)
+        grad_fn = vmap(grad(transform.encode))
+        derivatives = grad_fn(x)
+        expected = derivatives.abs().log()
+        assert actual.isfinite().all()
+        assert expected.isfinite().all()
+        self.assert_close(actual, expected, atol=1e-6, rtol=1e-6)

@@ -8,8 +8,10 @@ __all__ = [
     "SmoothSoftsign",
     "Softplus",
     "Softsign",
+    "Sinh",
     "Tanh",
     "Tanhshrink",
+    "ConjugatedAffineFlow",
 ]
 
 
@@ -22,7 +24,38 @@ from torch.nn import functional as F
 
 from linodenet.domains import ScalarDomain, ScalarDomains
 from linodenet.mappings.abstract import Transform
+from linodenet.nn.containers import Constant
 from signatures import signature
+
+_LOG2 = math.log(2.0)
+
+
+class Sinh(nn.Module, Transform):
+    r"""Maps tensor elementwise via $x ↦ \sinh(x) = (eˣ - e⁻ˣ)/2$.
+
+    The inverse is $y ↦ \asinh(y) = \log(y + √(y² + 1))$.
+
+    The derivative is: $\frac{d}{dx}\sinh(x) = \cosh(x)$.
+
+    The logabsdet is: $\log\cosh(x) = ...$
+    """
+
+    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+
+    @signature("(...) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        return x.sinh()
+
+    @signature("(...) -> (...)")
+    def inverse(self, y: Tensor, /) -> Tensor:
+        return y.arcsinh()
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        return x.sinh(), x.cosh().log()
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        return y.arcsinh(), -0.5 * y.square().log1p()
 
 
 class Sigmoid(nn.Module, Transform):
@@ -68,18 +101,18 @@ class Tanh(nn.Module, Transform):
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        return torch.tanh(x)
+        return x.tanh()
 
     @signature("(...) -> (...)")
     def inverse(self, y: Tensor, /) -> Tensor:
-        return torch.atanh(y)
+        return y.arctanh()
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         # d/dx tanh(x) = 1/cosh(x)²;
         # log(cosh(x)) = log(0.5) + log(e⁻ˣ + eˣ)
         # log(1/cosh(x)²) = -2 log(cosh(x)) = -2 (log(0.5) + log(e⁻ˣ + eˣ))
         y = self.forward(x)
-        logabsdet = -2.0 * (math.log(0.5) + torch.logaddexp(x, -x))
+        logabsdet = -2.0 * (-_LOG2 + torch.logaddexp(x, -x))
         return y, logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
@@ -95,6 +128,9 @@ class Softsign(nn.Module, Transform):
 
     The derivative is: $\frac{d}{dx}\frac{x}{1+|x|} = \frac{1}{(1+|x|)²}$.
     """
+
+    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = ScalarDomains.OPEN_UNIT_BALL
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -138,7 +174,7 @@ class SmoothSoftsign(nn.Module, Transform):
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         y = self.forward(x)
         root = torch.sqrt(1 + 4 * x.square())
-        logabsdet = math.log(2.0) - torch.log(root) - torch.log1p(root)
+        logabsdet = _LOG2 - torch.log(root) - torch.log1p(root)
         return y, logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
@@ -185,6 +221,8 @@ class ELU(nn.Module, Transform):
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = ScalarDomains.Interval("(-1, ∞)")
+
     alpha: Final[float]
 
     def __init__(self, alpha: float = 1.0) -> None:
@@ -268,6 +306,9 @@ class EntLU(nn.Module, Transform):
     Here, $H(x)$ is PyTorch's entropy primitive. (EntLU = Entropic Linear Unit)
     """
 
+    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = ScalarDomains.POSITIVE_REALS
+
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         # one_m_x avoids NaN production in entr, helps with gradients.
@@ -300,6 +341,9 @@ class Tanhshrink(nn.Module, Transform):
     The derivative is: $\frac{d}{dx}(x-\tanh(x)) = \tanh²(x)$.
     """
 
+    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         return F.tanhshrink(x)
@@ -315,3 +359,59 @@ class Tanhshrink(nn.Module, Transform):
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         raise NotImplementedError("https://github.com/pytorch/pytorch/issues/108948")
+
+
+class ConjugatedAffineFlow(nn.Module, Transform):
+    r"""Maps tensors elements-wise via $x ↦ ϕ⁻¹(α(ε)⋅ϕ(x)+β(ε))$.
+
+    Here, $ϕ$ is a diffeomorphism, and both $α(0)=1$, $β(0)=0$ are smooth with $α(ε)≠0$.
+
+    simple choices are: $α(z)=ℯᶜᶻ$, $β(z)=dz$ for some constants $c,d∈ℝ$.
+    """
+
+    def __init__(
+        self,
+        conjugate_map: Transform,
+        *,
+        alpha_map: nn.Module | None,
+        beta_map: nn.Module | None,
+    ) -> None:
+        super().__init__()
+        self.conjugate_map = conjugate_map
+        self.parameter = nn.Parameter(torch.tensor(0.0))
+        self.alpha_map = Constant(1.0) if alpha_map is None else alpha_map
+        self.beta_map = nn.Identity() if beta_map is None else beta_map
+
+    def encode(self, x: Tensor, /) -> Tensor:
+        # y = ϕ⁻¹(α(ε)⋅ϕ(x)+β(ε))
+        u = self.conjugate_map.encode(x)
+        alpha = self.alpha_map(self.parameter)
+        beta = self.beta_map(self.parameter)
+        z = alpha * u + beta
+        return self.conjugate_map.decode(z)
+
+    def decode(self, y: Tensor, /) -> Tensor:
+        # x = ϕ⁻¹( (ϕ(y) - β(ε))/α(ε))
+        u = self.conjugate_map.encode(y)
+        alpha = self.alpha_map(self.parameter)
+        beta = self.beta_map(self.parameter)
+        z = (u - beta) / alpha
+        return self.conjugate_map.decode(z)
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        # y = ϕ⁻¹(α(ε)⋅ϕ(x)+β(ε))
+        u, ldj_enc = self.conjugate_map.encode_and_logabsdet(x)
+        alpha = self.alpha_map(self.parameter)
+        beta = self.beta_map(self.parameter)
+        z = alpha * u + beta
+        y, ldj_dec = self.conjugate_map.decode_and_logabsdet(z)
+        return y, (ldj_enc + alpha.abs().log() + ldj_dec)
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        # x = ϕ⁻¹( (ϕ(y) - β(ε))/α(ε))
+        u, ldj_enc = self.conjugate_map.encode_and_logabsdet(y)
+        alpha = self.alpha_map(self.parameter)
+        beta = self.beta_map(self.parameter)
+        z = (u - beta) / alpha
+        x, ldj_dec = self.conjugate_map.decode_and_logabsdet(z)
+        return x, (ldj_enc - alpha.abs().log() + ldj_dec)
