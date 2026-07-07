@@ -358,7 +358,7 @@ class KalmanCell(nn.Module, VectorStateUpdate):
 
         # Push the covariance-factor columns through 𝐃h(x) to obtain 𝐃h(x)L(x).
         batched_jvp_fn = torch.func.vmap(jvp_fn, -1, -1)
-        MHL = (~missing).unsqueeze(-1) * batched_jvp_fn(L)  # shape: (..., n, m)
+        MHL = ~missing[..., None] * batched_jvp_fn(L)  # shape: (..., n, m)
         assert MHL.shape == (*batch_shape, self.input_size, self.hidden_size)
 
         # u = (M(𝐃h(x)LLᵀ𝐃h(x)ᵀ + JJᵀ)M + I_missing)⁻¹r
