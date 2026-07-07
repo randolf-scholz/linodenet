@@ -27,6 +27,11 @@ Example: Gradient update with probabilistic forecasting.
     compute the exact gradient update.
 """
 
+__all__ = [
+    "GradientStepUpdater",
+    "GaussianGradientStepUpdater",
+]
+
 from math import expm1, log
 from typing import Any, Callable
 
