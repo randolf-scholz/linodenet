@@ -90,8 +90,8 @@ class GradientStepUpdater(nn.Module):
         )
         self.step_size = nn.Parameter(torch.as_tensor(step_size))
 
-    def value_and_grad(self, z_prev: Tensor, y: Tensor) -> tuple[Tensor, Tensor]:
-        r"""Computes f(z) and ∇₟ℒ(z) at z_prev, where ℒ(z) = ℓ(f(z), y) + λ d(z, z_prev)."""
+    def forward(self, z_prev: Tensor, y: Tensor) -> Tensor:
+        r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ d(z, z_prev)."""
         grad_fn = torch.func.grad(
             lambda z: (
                 self.loss(self.decoder(z), y)
