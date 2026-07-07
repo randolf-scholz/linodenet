@@ -142,7 +142,8 @@ class LinearCell(nn.Module, VectorStateUpdate):
             case nn.Module():
                 self.gain = gain
             case "constant":
-                self.gain = Constant((hidden_size, input_size))
+                value = torch.randn((hidden_size, input_size))
+                self.gain = Constant(value, learnable=True)
             case "attention":
                 self.gain = AttentionGain(hidden_size, input_size)
             case str():
@@ -261,7 +262,8 @@ class KalmanCell(nn.Module, VectorStateUpdate):
                 self.covariance_factor = covariance_factor
 
             case "constant":
-                self.covariance_factor = Constant((m, m))
+                value = torch.randn((m, n))
+                self.covariance_factor = Constant(value, learnable=True)
                 register_parametrization(
                     self.covariance_factor,
                     "value",

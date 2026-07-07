@@ -30,22 +30,21 @@ class Constant(Module):
 
     def __init__(
         self,
-        shape_or_tensor: tuple[int, ...] | Tensor,
+        value: Tensor | float,
         /,
         *,
-        learnable: bool = True,
+        learnable: bool = False,
     ) -> None:
         super().__init__()
-        match shape_or_tensor:
-            case tuple(shape):
-                self.value = nn.Parameter(torch.randn(shape), requires_grad=learnable)
-                nn.init.kaiming_uniform_(self.value)
+        match value:
+            case float(value) | int(value):
+                self.value = nn.Parameter(
+                    torch.as_tensor(value), requires_grad=learnable
+                )
             case Tensor() as tensor:
                 self.value = nn.Parameter(tensor, requires_grad=learnable)
             case _:
-                raise TypeError(
-                    f"Expected shape or tensor, got {type(shape_or_tensor)!r}"
-                )
+                raise TypeError(f"Expected shape or tensor, got {type(value)!r}")
 
     def forward(self, _: Tensor) -> Tensor:
         return self.value
