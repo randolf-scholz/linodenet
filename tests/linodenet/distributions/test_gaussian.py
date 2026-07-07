@@ -116,10 +116,22 @@ def test_kl_precision_matches_torch_distribution() -> None:
     "parametrization",
     ["covariance", "precision", "cholesky", "log-cholesky"],
 )
-def test_log_prob_matches_torch_distribution(parametrization: str) -> None:
+@pytest.mark.parametrize(
+    ("sample_shape", "batch_shape"),
+    [
+        ((), ()),
+        ((5,), ()),
+        ((), (2, 3)),
+        ((5,), (2, 3)),
+        ((4, 2), (3,)),
+    ],
+)
+def test_log_prob_matches_torch_distribution(
+    parametrization: str,
+    sample_shape: tuple[int, ...],
+    batch_shape: tuple[int, ...],
+) -> None:
     r"""Test the Gaussian log-density against PyTorch in all parametrizations."""
-    batch_shape = (2, 3)
-    sample_shape = (5,)
     dim = 4
 
     mean = torch.randn(*batch_shape, dim)
@@ -141,6 +153,7 @@ def test_log_prob_matches_torch_distribution(parametrization: str) -> None:
     actual = log_prob(value, theta, parametrization=parametrization)
     expected = MultivariateNormal(mean, covariance_matrix=covariance).log_prob(value)
 
+    assert actual.shape == (*sample_shape, *batch_shape)
     assert torch.allclose(actual, expected)
 
 
