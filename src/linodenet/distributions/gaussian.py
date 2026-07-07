@@ -38,10 +38,12 @@ __all__ = [
     "multivariate_gaussian_log_likelihood",
     "MultivariateNormal",
     "MultiHeadGaussian",
+    "CovarianceType",
 ]
 
 import math
 from collections.abc import Callable
+from enum import StrEnum
 from typing import Final, Optional, Self
 
 import torch
@@ -52,6 +54,15 @@ from torch.linalg import cholesky, solve_triangular, vecdot
 from .base import DistributionBase
 
 type GaussianParams = tuple[Tensor, Tensor]
+
+
+class CovarianceType(StrEnum):
+    r"""Gaussian parametrizations."""
+
+    COVARIANCE = "covariance"  # Σ ⪰ 0
+    PRECISION = "precision"  # Λ ⪰ 0, Σ=Λ⁻¹
+    CHOLESKY = "cholesky"  # L lower triangular, diag(L) > 0, Σ=LLᵀ
+    LOG_CHOLESKY = "log-cholesky"  # L lower triangular, diag(L) holds logvals, Σ=LLᵀ
 
 
 def argmin_proximal_kl(
@@ -78,8 +89,7 @@ def argmin_proximal_kl(
         fun: Scalar objective function to linearize at `theta`.
         theta: Linearization point $θ⁎$ in the selected parametrization.
         gamma: KL regularization strength.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`,
-            or `"log-cholesky"`.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
     """
     mean, matrix = theta
     gamma = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
@@ -89,8 +99,8 @@ def argmin_proximal_kl(
     # and G is the covariance/precision/Cholesky gradient.
     g, G = torch.func.grad(fun)(theta)
 
-    match parametrization:
-        case "covariance":
+    match CovarianceType(parametrization):
+        case CovarianceType.COVARIANCE:
             # μ' = μ - γ⁻¹Σg,  Σ'⁻¹ = Σ⁻¹ + 2γ⁻¹ sym(G).
             covariance = matrix
             grad_covariance = 0.5 * (G + G.mT)
@@ -118,7 +128,7 @@ def argmin_proximal_kl(
             covariance_posterior = torch.cholesky_inverse(chol_precision)
             return mean_posterior, covariance_posterior
 
-        case "precision":
+        case CovarianceType.PRECISION:
             # μ' = μ - γ⁻¹Σg,  Λ' = L U diag(2/(1 + √(1 + 8b/γ))) UᵀLᵀ
             # where sym(LᵀGL) = U diag(b) Uᵀ and Λ = LLᵀ.
             precision = matrix
@@ -150,7 +160,7 @@ def argmin_proximal_kl(
             precision_posterior = 0.5 * (precision_posterior + precision_posterior.mT)
             return mean_posterior, precision_posterior
 
-        case "cholesky":
+        case CovarianceType.CHOLESKY:
             # μ' = μ - γ⁻¹Σg,  L' = LM with
             # M = tril(-LᵀG/γ, -1) + diag((-a + √(a² + 4γ²))/(2γ)),
             # a = diag(LᵀG).
@@ -175,7 +185,7 @@ def argmin_proximal_kl(
             cholesky_posterior = torch.tril(chol @ whitened_cholesky)
             return mean_posterior, cholesky_posterior
 
-        case "log-cholesky":
+        case CovarianceType.LOG_CHOLESKY:
             # μ' = μ - γ⁻¹Σg,  X' = logchol(LW) with
             # Wᵢⱼ = -(LᵀGₗ)ᵢⱼ/γ for i>j and
             # wᵢᵢ = (-aᵢ + √(aᵢ² + 4γ(γ-gᵢ)))/(2γ),
@@ -257,10 +267,10 @@ def fisher(
     Args:
         theta: Gaussian parameters in the selected parametrization.
         tangent: Tangent/cotangent-like direction to which the metric is applied.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, or `"log-cholesky"`.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
     """
-    match parametrization:
-        case "covariance":
+    match CovarianceType(parametrization):
+        case CovarianceType.COVARIANCE:
             # F(δμ, δΣ) = (Σ⁻¹δμ, ½Σ⁻¹ sym(δΣ) Σ⁻¹).
             _, covariance = theta
             tangent_mean, tangent_covariance = tangent
@@ -273,7 +283,7 @@ def fisher(
                 @ precision,
             )
 
-        case "precision":
+        case CovarianceType.PRECISION:
             # F(δμ, δΛ) = (Λδμ, ½Σ sym(δΛ) Σ), where Σ = Λ⁻¹.
             _, precision = theta
             tangent_mean, tangent_precision = tangent
@@ -286,7 +296,7 @@ def fisher(
                 @ covariance,
             )
 
-        case "cholesky":
+        case CovarianceType.CHOLESKY:
             # F(δμ, δL) = (Σ⁻¹δμ, L⁻ᵀ(L⁻¹δL + diag(L⁻¹δL))) for lower-triangular δL.
             _, chol = theta
             tangent_mean, tangent_cholesky = tangent
@@ -298,7 +308,7 @@ def fisher(
                 torch.cholesky_solve(tangent_cholesky + chol @ diag, chol),
             )
 
-        case "log-cholesky":
+        case CovarianceType.LOG_CHOLESKY:
             # F(δμ, δX) = (Σ⁻¹δμ, JₓᵀF_L(JₓδX)),
             # JₓδX = tril(δX, -1) + diag(Lᵢᵢ δxᵢᵢ).
             mean, log_chol = theta
@@ -354,8 +364,8 @@ def inverse_fisher(
         cotangent: Cotangent-like direction to which the inverse metric is applied.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, or `"log-cholesky"`.
     """
-    match parametrization:
-        case "covariance":
+    match CovarianceType(parametrization):
+        case CovarianceType.COVARIANCE:
             # F⁻¹(g, G) = (Σg, 2Σ sym(G) Σ).
             _, covariance = theta
             cotangent_mean, cotangent_covariance = cotangent
@@ -366,7 +376,7 @@ def inverse_fisher(
                 @ covariance,
             )
 
-        case "precision":
+        case CovarianceType.PRECISION:
             # F⁻¹(g, G) = (Σg, 2Λ sym(G) Λ), where Σ = Λ⁻¹.
             _, precision = theta
             cotangent_mean, cotangent_precision = cotangent
@@ -379,7 +389,7 @@ def inverse_fisher(
                 precision @ (cotangent_precision + cotangent_precision.mT) @ precision,
             )
 
-        case "cholesky":
+        case CovarianceType.CHOLESKY:
             # F⁻¹(g, G) = (Σg, L(tril(LᵀG) - ½diag(LᵀG))).
             _, chol = theta
             cotangent_mean, cotangent_cholesky = cotangent
@@ -391,7 +401,7 @@ def inverse_fisher(
                 chol @ whitened,
             )
 
-        case "log-cholesky":
+        case CovarianceType.LOG_CHOLESKY:
             # F⁻¹(g, G) = (Σg, Jₓ⁻¹F_L⁻¹(Jₓ^{-ᵀ}G)),
             # Jₓ⁻¹ΔL = tril(ΔL, -1) + diag(ΔLᵢᵢ / Lᵢᵢ).
             mean, log_chol = theta
@@ -433,20 +443,18 @@ def kl(
     *,
     parametrization: str = "covariance",
 ) -> Tensor:
-    r"""Return the Gaussian KL divergence in the chosen parametrization.
+    r"""Return the KL divergence between two Normal Distributions.
 
     Args:
         p: Gaussian parameters in the selected parametrization.
         q: Gaussian parameters in the selected parametrization.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`,
-            or `"log_cholesky"`.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, or `"log-cholesky"`.
 
     Returns:
         The KL divergence `KL(p, q)`.
     """
-    parametrization = parametrization.replace("-", "_")
-    match parametrization:
-        case "covariance":
+    match CovarianceType(parametrization):
+        case CovarianceType.COVARIANCE:
             # KL = ½(tr(Σᵥ⁻¹Σᵤ) - d + (μᵥ-μᵤ)ᵀΣᵥ⁻¹(μᵥ-μᵤ) + log det Σᵥ - log det Σᵤ).
             mean_p, covariance_p = p
             mean_q, covariance_q = q
@@ -470,7 +478,7 @@ def kl(
             dim = mean_p.shape[-1]
             return 0.5 * (trace_term + mahalanobis - dim + logdet_q - logdet_p)
 
-        case "precision":
+        case CovarianceType.PRECISION:
             # KL = ½(tr(ΛᵥΛᵤ⁻¹) - d + (μᵥ-μᵤ)ᵀΛᵥ(μᵥ-μᵤ) + log det Λᵤ - log det Λᵥ).
             mean_p, precision_p = p
             mean_q, precision_q = q
@@ -490,7 +498,7 @@ def kl(
             dim = mean_p.shape[-1]
             return 0.5 * (trace_term + mahalanobis - dim + logdet_p - logdet_q)
 
-        case "cholesky":
+        case CovarianceType.CHOLESKY:
             # KL = ½(‖Lᵥ⁻¹Lᵤ‖² + ‖Lᵥ⁻¹(μᵥ-μᵤ)‖² - d + log det Σᵥ - log det Σᵤ).
             mean_p, chol_p = p
             mean_q, chol_q = q
@@ -512,7 +520,7 @@ def kl(
             dim = mean_p.shape[-1]
             return 0.5 * (trace_term + mahalanobis - dim + logdet_q - logdet_p)
 
-        case "log_cholesky":
+        case CovarianceType.LOG_CHOLESKY:
             # KL = KL((μ, L(X)) \| (ν, L(Y))) with
             # L(X) = tril(X, -1) + diag(exp(diag(X))).
             mean_p, log_chol_p = p

@@ -628,7 +628,7 @@ def test_argmin_proximal_kl_rejects_unknown_parametrization() -> None:
     factor = torch.randn(dim, dim)
     covariance = factor @ factor.mT + torch.eye(dim)
 
-    with pytest.raises(ValueError, match="Expected parametrization"):
+    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
         argmin_proximal_kl(
             lambda theta: theta[0].sum() + theta[1].sum(),
             (mean, covariance),
@@ -643,7 +643,7 @@ def test_fisher_rejects_unknown_parametrization() -> None:
     factor = torch.randn(dim, dim)
     covariance = factor @ factor.mT + torch.eye(dim)
 
-    with pytest.raises(ValueError, match="Expected parametrization"):
+    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
         fisher((mean, covariance), (mean, covariance), parametrization="unknown")
 
 
@@ -654,7 +654,7 @@ def test_inverse_fisher_rejects_unknown_parametrization() -> None:
     factor = torch.randn(dim, dim)
     covariance = factor @ factor.mT + torch.eye(dim)
 
-    with pytest.raises(ValueError, match="Expected parametrization"):
+    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
         inverse_fisher(
             (mean, covariance),
             (mean, covariance),
