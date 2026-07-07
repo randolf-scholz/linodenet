@@ -39,6 +39,7 @@ from .mnf import Moses
 from .neural_flow import NeuralFlow
 from .profiti import ProFITi
 
+# TODO: allow time marginal gaussian models to be treated as point predictiors.
 POINT_FORECASTING_MODELS: dict[str, type[PointForecastingModel]] = {
     "grafiti": Grafiti,
     "gru_d": GRU_D,
