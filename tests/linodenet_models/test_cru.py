@@ -7,7 +7,7 @@ import pytest
 import torch
 import yaml
 
-from linodenet.forecasting.cru import (
+from linodenet_models.cru import (
     CRU,
     CRUConfig,
     Decoder,
@@ -17,7 +17,7 @@ from linodenet.forecasting.cru import (
     build_cru,
     update_masked,
 )
-from linodenet.forecasting.utils import SplitTimeData
+from linodenet_models.utils import SplitTimeData
 
 from .base import TestForecastingModel
 

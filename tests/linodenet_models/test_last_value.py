@@ -9,8 +9,8 @@ import torch
 from torch.nn import functional as F
 from torch.testing import assert_close
 
-from linodenet.forecasting import LastValue
-from linodenet.forecasting.utils import SplitTimeData
+from linodenet_models import LastValue
+from linodenet_models.utils import SplitTimeData
 from tests.testing import PROJECT
 
 from .base import TestForecastingModel

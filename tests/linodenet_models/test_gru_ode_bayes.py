@@ -6,7 +6,7 @@ import pytest
 import torch
 from torch import nan
 
-from linodenet.forecasting.gru_ode_bayes import (
+from linodenet_models.gru_ode_bayes import (
     GRU_ODE,
     Decoder,
     GRU_Bayes,
@@ -18,7 +18,7 @@ from linodenet.forecasting.gru_ode_bayes import (
     gaussian_kl_logvar,
     update_masked,
 )
-from linodenet.forecasting.utils import SplitTimeData
+from linodenet_models.utils import SplitTimeData
 
 from .base import TestForecastingModel
 

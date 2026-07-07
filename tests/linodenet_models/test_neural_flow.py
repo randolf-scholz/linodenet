@@ -6,8 +6,8 @@ import pytest
 import torch
 from torch import nan
 
-from linodenet.forecasting.gru_ode_bayes import GRU_Bayes, GRU_ODE_Bayes
-from linodenet.forecasting.neural_flow import (
+from linodenet_models.gru_ode_bayes import GRU_Bayes, GRU_ODE_Bayes
+from linodenet_models.neural_flow import (
     CouplingFlow,
     FlowModelName,
     GRUFlow,
@@ -15,7 +15,7 @@ from linodenet.forecasting.neural_flow import (
     NeuralFlowConfig,
     ResNetFlow,
 )
-from linodenet.forecasting.utils import SplitTimeData
+from linodenet_models.utils import SplitTimeData
 
 from .base import TestForecastingModel
 

@@ -9,7 +9,7 @@ import torch
 from torch import Tensor, nan, nn
 from torch.testing import assert_close
 
-from linodenet.forecasting.utils import SplitTimeData
+from linodenet_models.utils import SplitTimeData
 
 
 def make_forecasting_request(

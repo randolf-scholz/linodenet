@@ -9,8 +9,8 @@ from torch import nn
 from torch.func import grad, vmap
 from torch.testing import assert_close
 
-from linodenet.forecasting.grafiti import Grafiti
-from linodenet.forecasting.profiti import (
+from linodenet_models.grafiti import Grafiti
+from linodenet_models.profiti import (
     ConditionalFlowSequence,
     ProFITi,
     ProFITiBlock,
@@ -18,7 +18,7 @@ from linodenet.forecasting.profiti import (
     Shiesh,
     TriangularAttention,
 )
-from linodenet.forecasting.utils import SplitTimeData
+from linodenet_models.utils import SplitTimeData
 
 from .base import TestForecastingModel
 

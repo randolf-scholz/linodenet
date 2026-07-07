@@ -9,7 +9,7 @@ from torch import Tensor, nan
 from torch.testing import assert_close
 from typing_extensions import TypedDict
 
-from linodenet.forecasting.utils import (
+from linodenet_models.utils import (
     EventBatch,
     JointTimeData,
     SplitTimeData,

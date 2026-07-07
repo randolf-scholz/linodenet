@@ -8,8 +8,8 @@ from torch import nan
 from torch.nn import functional as F
 from torch.testing import assert_close
 
-from linodenet.forecasting.grafiti import Grafiti, gather_target_embeddings
-from linodenet.forecasting.utils import (
+from linodenet_models.grafiti import Grafiti, gather_target_embeddings
+from linodenet_models.utils import (
     SplitTimeData,
     TripletTimeData,
 )

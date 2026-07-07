@@ -7,8 +7,8 @@ import torch
 from torch import nan
 from torch.nn import functional as F
 
-from linodenet.forecasting.gru_d import GRU_D
-from linodenet.forecasting.utils import SplitTimeData
+from linodenet_models.gru_d import GRU_D
+from linodenet_models.utils import SplitTimeData
 
 from .base import TestForecastingModel
 

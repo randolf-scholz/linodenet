@@ -8,13 +8,13 @@ from torch.distributions import MultivariateNormal
 from torch.nn import functional as F
 from torch.testing import assert_close
 
-from linodenet.forecasting.continuous_kalman_filter import (
+from linodenet_models.continuous_kalman_filter import (
     ContinuousKalmanFilter,
     marginal_gaussian_log_prob,
     marginal_gaussian_sample,
     marginal_gaussian_sample_and_log_prob,
 )
-from linodenet.forecasting.utils import SplitTimeData
+from linodenet_models.utils import SplitTimeData
 
 from .base import TestForecastingModel
 

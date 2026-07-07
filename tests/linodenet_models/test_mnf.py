@@ -8,7 +8,7 @@ import torch
 from torch import Tensor
 from torch.testing import assert_close
 
-from linodenet.forecasting.mnf import (
+from linodenet_models.mnf import (
     ConditionalGaussian,
     ConditionalLRS,
     ConditionalSplineFlow,
@@ -19,7 +19,7 @@ from linodenet.forecasting.mnf import (
     MultiHeadAttention,
     SeparableEncoder,
 )
-from linodenet.forecasting.utils import SplitTimeData
+from linodenet_models.utils import SplitTimeData
 
 from .base import TestForecastingModel, make_forecasting_request
 
@@ -349,7 +349,7 @@ class TestMoses(TestForecastingModel[Moses]):
 
     def loss(
         self,
-        model: Moses,
+        model: Moses,  # noqa: ARG002
         predictions: tuple[Tensor, ...],
         targets: Tensor,
     ) -> Tensor:
