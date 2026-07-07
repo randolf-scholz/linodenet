@@ -10,6 +10,7 @@ from linodenet.distributions.gaussian import (
     fisher,
     inverse_fisher,
     kl,
+    log_prob,
 )
 
 
@@ -107,6 +108,38 @@ def test_kl_precision_matches_torch_distribution() -> None:
         MultivariateNormal(mean_p, covariance_matrix=cov_p),
         MultivariateNormal(mean_q, covariance_matrix=cov_q),
     )
+
+    assert torch.allclose(actual, expected)
+
+
+@pytest.mark.parametrize(
+    "parametrization",
+    ["covariance", "precision", "cholesky", "log-cholesky"],
+)
+def test_log_prob_matches_torch_distribution(parametrization: str) -> None:
+    r"""Test the Gaussian log-density against PyTorch in all parametrizations."""
+    batch_shape = (2, 3)
+    sample_shape = (5,)
+    dim = 4
+
+    mean = torch.randn(*batch_shape, dim)
+    factor = torch.randn(*batch_shape, dim, dim)
+    covariance = factor @ factor.mT + torch.eye(dim)
+    precision = torch.cholesky_inverse(torch.linalg.cholesky(covariance))
+    chol = torch.linalg.cholesky(covariance)
+    log_chol = chol.tril(diagonal=-1) + torch.diag_embed(
+        chol.diagonal(dim1=-2, dim2=-1).log()
+    )
+    value = torch.randn(*sample_shape, *batch_shape, dim)
+
+    theta = {
+        "covariance": (mean, covariance),
+        "precision": (mean, precision),
+        "cholesky": (mean, chol),
+        "log-cholesky": (mean, log_chol),
+    }[parametrization]
+    actual = log_prob(value, theta, parametrization=parametrization)
+    expected = MultivariateNormal(mean, covariance_matrix=covariance).log_prob(value)
 
     assert torch.allclose(actual, expected)
 
@@ -660,3 +693,14 @@ def test_inverse_fisher_rejects_unknown_parametrization() -> None:
             (mean, covariance),
             parametrization="unknown",
         )
+
+
+def test_log_prob_rejects_unknown_parametrization() -> None:
+    r"""Test that the public log-density dispatch rejects unknown parametrizations."""
+    dim = 4
+    mean = torch.randn(dim)
+    factor = torch.randn(dim, dim)
+    covariance = factor @ factor.mT + torch.eye(dim)
+
+    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
+        log_prob(mean, (mean, covariance), parametrization="unknown")

@@ -35,6 +35,7 @@ __all__ = [
     "fisher",
     "inverse_fisher",
     "kl",
+    "log_prob",
     "multivariate_gaussian_log_likelihood",
     "MultivariateNormal",
     "MultiHeadGaussian",
@@ -44,7 +45,7 @@ __all__ = [
 import math
 from collections.abc import Callable
 from enum import StrEnum
-from typing import Final, Optional, Self
+from typing import Final, Optional, Self, assert_never
 
 import torch
 import torch.nn.functional as F
@@ -63,6 +64,68 @@ class CovarianceType(StrEnum):
     PRECISION = "precision"  # Λ ⪰ 0, Σ=Λ⁻¹
     CHOLESKY = "cholesky"  # L lower triangular, diag(L) > 0, Σ=LLᵀ
     LOG_CHOLESKY = "log-cholesky"  # L lower triangular, diag(L) holds logvals, Σ=LLᵀ
+
+
+def log_prob(
+    x: Tensor,  # (*S, ..., D)
+    theta: GaussianParams,  # (..., D), (..., D, D)
+    /,
+    *,
+    parametrization: str = "covariance",
+) -> Tensor:  # (*S, ...)
+    r"""Compute the Gaussian log-density at `x` in the chosen parametrization."""
+    match CovarianceType(parametrization):
+        case CovarianceType.COVARIANCE:
+            mean, covariance = theta
+            residual = x - mean
+            chol = cholesky(covariance)
+            whitened = solve_triangular(
+                chol,
+                residual.unsqueeze(-1),
+                upper=False,
+            ).squeeze(-1)
+            logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+            mahalanobis = vecdot(whitened, whitened, dim=-1)
+            dim = residual.shape[-1]
+            return -0.5 * (dim * math.log(2 * math.pi) + logdet + mahalanobis)
+        case CovarianceType.PRECISION:
+            mean, precision = theta
+            residual = x - mean
+            chol = cholesky(precision)
+            projected = (chol.mT @ residual.unsqueeze(-1)).squeeze(-1)
+            logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+            mahalanobis = vecdot(projected, projected, dim=-1)
+            dim = residual.shape[-1]
+            return 0.5 * (logdet - dim * math.log(2 * math.pi) - mahalanobis)
+        case CovarianceType.CHOLESKY:
+            mean, chol = theta
+            residual = x - mean
+            whitened = solve_triangular(
+                chol,
+                residual.unsqueeze(-1),
+                upper=False,
+            ).squeeze(-1)
+            logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+            mahalanobis = vecdot(whitened, whitened, dim=-1)
+            dim = residual.shape[-1]
+            return -0.5 * (dim * math.log(2 * math.pi) + logdet + mahalanobis)
+        case CovarianceType.LOG_CHOLESKY:
+            mean, log_chol = theta
+            residual = x - mean
+            chol = log_chol.tril(diagonal=-1) + torch.diag_embed(
+                log_chol.diagonal(dim1=-2, dim2=-1).exp()
+            )
+            whitened = solve_triangular(
+                chol,
+                residual.unsqueeze(-1),
+                upper=False,
+            ).squeeze(-1)
+            logdet = 2 * log_chol.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
+            mahalanobis = vecdot(whitened, whitened, dim=-1)
+            dim = residual.shape[-1]
+            return -0.5 * (dim * math.log(2 * math.pi) + logdet + mahalanobis)
+        case other:
+            assert_never(other)  # pyrefly: ignore[bad-argument-type]
 
 
 def argmin_proximal_kl(
