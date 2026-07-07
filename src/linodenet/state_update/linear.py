@@ -196,7 +196,7 @@ class KalmanCell(nn.Module, VectorStateUpdate):
     Here, $h(x)$ is the observation map, $𝐃h(x)$ is its local linearization at
     the current hidden state, and $Σ(x)$ is the hidden-state covariance. The
     masked observation model is $y_{\text{obs}} = My$, with local observation
-    covariance $Σᵧᵧ(x) = 𝐃h(x)Σ(x)𝐃h(x)ᵀ + R$. In the implementation, $Σ(x)$ is
+    covariance $Σ₞₞(x) = 𝐃h(x)Σ(x)𝐃h(x)ᵀ + R$. In the implementation, $Σ(x)$ is
     represented through a covariance factor $L(x)$, typically a Cholesky
     factor, such that $Σ(x)=L(x)L(x)ᵀ$. The Jacobian action $𝐃h(x)L(x)$ is
     obtained by pushing the columns of $L(x)$ through the JVP of $h$ at $x$.
@@ -371,7 +371,7 @@ class KalmanCell(nn.Module, VectorStateUpdate):
         u = solve_triangular(J.mT, w, upper=True).squeeze(-1)  # J⁻ᵀw (..., n)
         assert u.shape == (*batch_shape, self.input_size)
 
-        # δ = Σₓᵧu = L(x)L(x)ᵀ𝐃h(x)ᵀu
+        # δ = Σₓ₞u = L(x)L(x)ᵀ𝐃h(x)ᵀu
         d = torch.einsum("...n, ...nm, ...km -> ...k", u, MHL, L)  # (..., m)
 
         return x - self.gate(d)
