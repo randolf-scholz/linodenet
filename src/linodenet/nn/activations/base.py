@@ -33,6 +33,7 @@ from .imported import (
     hard_bend,
     mixture_to_gaussian,
 )
+from .misc import EntLU, entlu
 
 type GenericActivation = Callable[..., Tensor | tuple[Tensor, ...]]
 r"""Type alias for generic activation functions (may require additional args!)."""
@@ -59,6 +60,8 @@ class Activations(StrEnum):
     BIMODAL_TO_GAUSSIAN = "bimodal-to-gaussian"
     GAUSSIAN_TO_MIXTURE = "gaussian-to-mixture"
     MIXTURE_TO_GAUSSIAN = "mixture-to-gaussian"
+    ENTLU = "entlu"
+
     CELU = "celu"
     ELU = "elu"
     GELU = "gelu"
@@ -157,6 +160,7 @@ ACTIVATIONS: dict[Activations, type[nn.Module]] = {
     Activations.BIMODAL_TO_GAUSSIAN: BimodalToGaussian,
     Activations.GAUSSIAN_TO_MIXTURE: GaussianToMixture,
     Activations.MIXTURE_TO_GAUSSIAN: MixtureToGaussian,
+    Activations.ENTLU: EntLU,
     # torch imports
     Activations.CELU: nn.CELU,
     Activations.ELU: nn.ELU,
@@ -187,7 +191,8 @@ r"""Dictionary mapping activation enum values to module classes."""
 
 
 ACTIVATION_FNS: dict[str, Activation] = {
-    "hard_bend": hard_bend,
+    "hard_bend"          : hard_bend,
+    "entlu"              : entlu,
     "gaussian_to_bimodal": gaussian_to_bimodal,
     "bimodal_to_gaussian": bimodal_to_gaussian,
     # torch imports
