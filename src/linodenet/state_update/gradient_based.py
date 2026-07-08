@@ -118,10 +118,13 @@ class GaussianGradientStepUpdater(nn.Module):
 
     def __init__(
         self,
+        *,
         decoder: nn.Module,  # & Transform[Tensor, Tensor]
         parametrization: str,
         regularization_strength: float = 1e-3,
         step_size: float = 1e-2,
+        step_size_mean: float | None = None,
+        step_size_cov: float | None = None,
     ) -> None:
         super().__init__()
         if parametrization != CovarianceType.LOG_CHOLESKY:
@@ -135,7 +138,12 @@ class GaussianGradientStepUpdater(nn.Module):
         self.regularization_strength = nn.Parameter(
             torch.as_tensor(regularization_strength)
         )
-        self.step_size = nn.Parameter(torch.as_tensor(step_size))
+        self.step_size_mean = nn.Parameter(
+            torch.as_tensor(step_size if step_size_mean is None else step_size_mean)
+        )
+        self.step_size_cov = nn.Parameter(
+            torch.as_tensor(step_size if step_size_cov is None else step_size_cov)
+        )
 
     def log_prob(self, vals: Tensor, theta: GaussianParams, /) -> Tensor:
         r"""Compute the log probability of the input values under the current parameters."""
@@ -158,6 +166,6 @@ class GaussianGradientStepUpdater(nn.Module):
         )
         grad_mean, grad_cov = grad_fn(*theta)
 
-        mean_post = theta[0] - self.step_size * grad_mean
-        cov_post = theta[1] - self.step_size * grad_cov
+        mean_post = theta[0] - self.step_size_mean * grad_mean
+        cov_post = theta[1] - self.step_size_cov * grad_cov
         return mean_post, cov_post
