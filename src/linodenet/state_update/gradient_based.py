@@ -31,6 +31,7 @@ __all__ = [
     "LpLoss",
     "GradientStepUpdater",
     "GaussianGradientStepUpdater",
+    "lp_loss",
 ]
 
 from functools import partial
@@ -47,8 +48,27 @@ from linodenet.distributions.gaussian import (
 from linodenet.mappings import Transform
 
 
+def lp_loss(
+    x: Tensor,  # (..., d)
+    y: Tensor,  # (..., d)
+    /,
+    *,
+    p: float = 2.0,
+    dim: int = -1,
+    aggregation: str = "mean",
+) -> Tensor:  # (...)
+    r"""Compute a per-batch-element $Lᵖ$ reconstruction loss $‖x-y‖ₚᵖ$."""
+    match aggregation:
+        case "sum":
+            return (x - y).abs().pow(p).sum(dim=dim)
+        case "mean":
+            return (x - y).abs().pow(p).mean(dim=dim)
+        case _:
+            raise ValueError(f"Unexpected aggregation: {aggregation!r}")
+
+
 class LpLoss(nn.Module):
-    r"""Compute a per-batch-element $Lᵖ$ reconstruction loss."""
+    r"""Compute a per-batch-element $Lᵖ$ reconstruction loss $‖x-y‖ₚᵖ$."""
 
     def __init__(
         self,
@@ -69,15 +89,7 @@ class LpLoss(nn.Module):
         self.aggregation = aggregation
 
     def forward(self, x: Tensor, y: Tensor, /) -> Tensor:
-        r"""Return the aggregated $|x-y|ᵖ$ loss over the feature dimension."""
-        diff = x - y
-        match self.aggregation:
-            case "sum":
-                return diff.abs().pow(self.p).sum(dim=self.dim)
-            case "mean":
-                return diff.abs().pow(self.p).mean(dim=self.dim)
-            case _:
-                raise RuntimeError(f"Unexpected aggregation: {self.aggregation!r}")
+        return lp_loss(x, y, p=self.p, dim=self.dim, aggregation=self.aggregation)
 
 
 class GradientStepUpdater(nn.Module):
