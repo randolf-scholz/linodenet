@@ -73,9 +73,7 @@ class LpLoss(nn.Module):
         diff = x - y
         match self.aggregation:
             case "sum":
-                return torch.linalg.vector_norm(diff, ord=self.p, dim=self.dim).pow(
-                    self.p
-                )
+                return diff.abs().pow(self.p).sum(dim=self.dim)
             case "mean":
                 return diff.abs().pow(self.p).mean(dim=self.dim)
             case _:
@@ -244,7 +242,7 @@ class GaussianGradientStepUpdater(nn.Module):
 
     def grad_fn(
         self, theta: GaussianParams, theta_prev: GaussianParams, y_obs: Tensor, /
-    ) -> Tensor:
+    ) -> GaussianParams:
         r"""Return the gradient while preserving the input batch shape."""
         mean, cov = theta
         mean_prev, cov_prev = theta_prev
