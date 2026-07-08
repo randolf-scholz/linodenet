@@ -2,7 +2,7 @@ r"""Latent State Space Model."""
 
 __all__ = [
     # Classes
-    "LatentStateSpaceModel",
+    "EncoderDecoderLSSM",
 ]
 
 import logging
@@ -40,8 +40,57 @@ _DEFAULT_LSSM_CONFIG = {
 }
 
 
-class LatentStateSpaceModel(nn.Module):
-    r"""General purpose Latent State Space Model.
+class LSSM[State](nn.Module):
+    batch_first: Final[bool]
+
+    def forward(
+        self,
+        *,
+        context_values: Tensor,  # (..., $N, D)
+        timestamps: Tensor,  # (..., $N)
+        initial_state: State | None = None,
+        initial_time: Tensor | None = None,
+    ) -> list[State]:
+
+        seq_dim = -2 if self.batch_first else -1
+        T = timestamps[..., None].movedim(seq_dim, 0).squeeze(-1)  # ($N, ...)
+        X = context_values.movedim(seq_dim, 0)  # ($N, ..., D)
+
+        posterior_state = (
+            initial_state if initial_state is not None else self.initial_state
+        )
+        t_prev = initial_time if initial_time is not None else T[0]
+
+        prior_states: list[State] = []
+        posterior_state: list[State] = []
+
+        for t, x in zip(T, X, strict=True):
+            prior_state = self.propagate_state(posterior_state, t_prev, t)
+            posterior_state = self.update_state(prior_state, x)
+
+            t_prev = t
+
+            prior_states.append(prior_state)
+            posterior_state.append(posterior_state)
+
+        return posterior_state
+
+
+class EncoderDecoderLSSM(nn.Module):
+    r"""Latent State Space Model with Encoder-Decoder architecture.
+
+    Contrary to a regular LSSM, this model applies the filter in data-space,
+    and obtains the updated latent state from the encoder.
+
+        **Model Sketch**::
+
+            ⟶ [ODE] ⟶ (ẑᵢ)                (ẑᵢ') ⟶ [ODE] ⟶
+                       ↓                   ↑
+                      [Ψ]                 [Φ]
+                       ↓                   ↑
+                      (x̂ᵢ) → [ filter ] → (x̂ᵢ')
+                                 ↑
+                              (tᵢ, xᵢ)
 
     +---------------------------------------------------+--------------------------------------+
     | Component                                         | Formula                              |
@@ -218,16 +267,6 @@ class LatentStateSpaceModel(nn.Module):
     ) -> Tensor:
         r"""Forward pass of the Latent State Space Model.
 
-        **Model Sketch**::
-
-            ⟶ [ODE] ⟶ (ẑᵢ)                (ẑᵢ') ⟶ [ODE] ⟶
-                       ↓                   ↑
-                      [Ψ]                 [Φ]
-                       ↓                   ↑
-                      (x̂ᵢ) → [ filter ] → (x̂ᵢ')
-                                 ↑
-                              (tᵢ, xᵢ)
-
         Args:
             T: Tensor, shape=(...,LEN) or PackedSequence
                 The timestamps of the observations.
@@ -310,7 +349,7 @@ class LatentStateSpaceModel(nn.Module):
         return yhat
 
     @staticmethod
-    def from_config(cfg: dict[str, Any]) -> LatentStateSpaceModel:
+    def from_config(cfg: dict[str, Any]) -> EncoderDecoderLSSM:
         r"""Constructs a new model from a configuration dictionary."""
         LOGGER = logging.getLogger(f"{__package__}.from_config")
         config = deep_dict_update(_DEFAULT_LSSM_CONFIG, cfg)
@@ -348,7 +387,7 @@ class LatentStateSpaceModel(nn.Module):
         LOGGER.debug("Initializing Filter %s", config["Encoder"])
         filter: nn.Module = initialize(config["Filter"])  # noqa: A001
 
-        return LatentStateSpaceModel(
+        return EncoderDecoderLSSM(
             encoder=encoder,
             state_propagation=system,
             decoder=decoder,
