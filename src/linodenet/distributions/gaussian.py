@@ -65,6 +65,10 @@ class CovarianceType(StrEnum):
     CHOLESKY = "cholesky"  # L lower triangular, diag(L) > 0, Σ=LLᵀ
     LOG_CHOLESKY = "log-cholesky"  # L lower triangular, diag(L) holds logvals, Σ=LLᵀ
 
+    # possible further parametrizatrions:
+    # - exp(S), S symmetric  (matrix exp)
+    # - diag(σ) + UUᵀ  (low rank perturbation)
+
 
 def log_prob(
     x: Tensor,  # (*S, ..., D)
