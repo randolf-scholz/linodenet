@@ -55,7 +55,7 @@ class GradientStepUpdater(nn.Module):
     def __init__(
         self,
         *,
-        decoder: Transform[Tensor, Tensor],
+        decoder: nn.Module,
         loss: nn.Module | str = "l2",
         regularizer: nn.Module | str = "l2",
         regularization_strength: float = 1e-3,
@@ -118,7 +118,7 @@ class GaussianGradientStepUpdater(nn.Module):
 
     def __init__(
         self,
-        decoder: Transform[Tensor, Tensor],
+        decoder: nn.Module,  # & Transform[Tensor, Tensor]
         parametrization: str,
         regularization_strength: float = 1e-3,
         step_size: float = 1e-2,
@@ -129,7 +129,7 @@ class GaussianGradientStepUpdater(nn.Module):
                 "Only 'log-cholesky' parametrization is currently supported."
             )
 
-        self.decoder = decoder
+        self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore[assignment]
         self.parametrization = parametrization
 
         self.regularization_strength = nn.Parameter(
