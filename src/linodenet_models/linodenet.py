@@ -2,6 +2,7 @@ r"""Minimal, unoptimized reimplementation of LinODEnet."""
 
 __all__ = ["LinODEnet"]
 
+from collections.abc import Callable
 from typing import Final, Optional, cast
 
 import torch
@@ -522,93 +523,18 @@ class KalmanCell(nn.Module):
         return x - self.gate(d)
 
 
-class LinODEnet_v2(nn.Module):
-    r"""Decoder-Only Latent Linear ODE Network."""
-
-    initial_state: Tensor
-    batch_first: bool
-
-    # buffers
-    prior_latent_states: Tensor  # (..., $N, L) or ($N, ..., L)
-    posterior_latent_states: Tensor  # (..., $N, L) or ($N, ..., L)
-    prior_predictions: Tensor  # (..., $N, D) or ($N, ..., D)
-    posterior_predictions: Tensor  # (..., $N, D) or ($N, ..., D)
-
-    def __init__(
-        self,
-        input_size: int,
-        latent_size: int,
-        *,
-        batch_first: bool = True,
-    ) -> None:
-        super().__init__()
-        self.batch_first = batch_first
-        self.initial_state = nn.Parameter(torch.zeros(latent_size))
-        self.register_buffer("prior_latent_states", None, persistent=False)
-        self.register_buffer("posterior_latent_states", None, persistent=False)
-        self.register_buffer("prior_predictions", None, persistent=False)
-        self.register_buffer("posterior_predictions", None, persistent=False)
-
-    def forward(
-        self,
-        *,
-        timestamps: Tensor,  # Float[..., $T], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[..., $T, D], padded False
-        context_values: Tensor,  # Float[..., $T, D], padded Nan, sparse
-        context_mask: Tensor,  # Bool[..., $T, D], padded False
-        initial_state: Tensor | None = None,  # (..., H)
-        initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> Tensor:
-        seq_dim = -2 if self.batch_first else -1
-        T = timestamps[..., None].movedim(seq_dim, 0).squeeze(-1)  # ($N, ...)
-        X = context_values.movedim(seq_dim, 0)  # ($N, ..., D)
-        Q = query_mask.movedim(seq_dim, 0)
-        M = context_mask.movedim(seq_dim, 0)
-        T0 = T[[0]] if initial_time is None else initial_time
-        DT = T.diff(dim=0, prepend=T0)
-
-        prior_states: list[Tensor] = []
-        post_states: list[Tensor] = []
-        prior_preds: list[Tensor] = []
-        post_preds: list[Tensor] = []
-
-        posterior_state: Tensor = (
-            initial_state if initial_state is not None else self.initial_state
-        )
-
-        for delta_t, x_obs, obs_mask, q in zip(DT, X, M, Q, strict=True):
-            # zₜ = flow(z(t-∆t), ∆t)
-            prior_state = self.propagate_state(delta_t, posterior_state)
-
-            # zₜ' = F(zₜ, xₜ)
-            posterior_state = self.filter(prior_state, x_obs)
-
-            # x̂ₜ = ϕ(zₜ)
-            prior_pred = self.decoder(prior_state)
-
-            # x̂ₜ' = ϕ(zₜ')
-            post_pred = self.decoder(posterior_state)
-
-            prior_states.append(prior_state)
-            post_states.append(posterior_state)
-            prior_preds.append(prior_pred)
-            post_preds.append(post_pred)
-
-        stack_dim = -2 if self.batch_first else 0
-        self.prior_latent_states = torch.stack(prior_states, dim=stack_dim)
-        self.posterior_latent_states = torch.stack(post_states, dim=stack_dim)
-        self.prior_predictions = torch.stack(prior_preds, dim=seq_dim)
-        self.posterior_predictions = torch.stack(post_preds, dim=seq_dim)
-
-        return self.posterior_predictions
-
-
 class LinODEnet(nn.Module):
     r"""Encoder-Decoder Latent Linear ODE Network."""
 
     initial_state: Tensor
     batch_first: bool
 
+    # submodules
+    propagate_state: Callable[[Tensor, Tensor], Tensor]
+    update_state: Callable[[Tensor, Tensor], Tensor]
+    decoder: Callable[[Tensor], Tensor]
+    encoder: Callable[[Tensor], Tensor]
+
     # buffers
     prior_latent_states: Tensor  # (..., $N, L) or ($N, ..., L)
     posterior_latent_states: Tensor  # (..., $N, L) or ($N, ..., L)
@@ -634,10 +560,10 @@ class LinODEnet(nn.Module):
         self,
         *,
         timestamps: Tensor,  # Float[..., $T], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[..., $T, D], padded False
+        query_mask: Tensor,  # Bool[..., $T, F], padded False
         context_values: Tensor,  # Float[..., $T, D], padded Nan, sparse
         context_mask: Tensor,  # Bool[..., $T, D], padded False
-        initial_state: Tensor | None = None,  # (..., H)
+        initial_state: Tensor | None = None,  # Float[..., L]
         initial_time: Tensor | None = None,  # t₀, () or (...)
     ) -> Tensor:  # (..., $T, F)
         seq_dim = -2 if self.batch_first else -1
@@ -692,9 +618,9 @@ class LinODEnet(nn.Module):
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
-        initial_state: Tensor | None = None,  # (..., H)
+        initial_state: Tensor | None = None,  # Float[..., L]
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> Tensor:  # (..., $K, F)
+    ) -> Tensor:  # Float[..., $K, F]
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -704,8 +630,125 @@ class LinODEnet(nn.Module):
             batch_first=self.batch_first,
         )
         predictions = self.forward(
-            timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
-            context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
+            timestamps=combined.timestamps,  # Float[..., $T], padded NaN, non-decreasing
+            context_values=combined.context_values,  # Float[..., $T, D], padded NaN, sparse
+            context_mask=combined.context_mask,  # Bool[..., $T, D], padded False
+            query_mask=combined.query_mask,  # Bool[..., $T, F], padded False
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        result = predictions[combined.query_indices]
+        assert result.shape == query_mask.shape
+        return result
+
+
+class LinODEnet_v2(nn.Module):
+    r"""Decoder-Only Latent Linear ODE Network."""
+
+    initial_state: Tensor
+    batch_first: bool
+
+    # submodules
+    propagate_state: Callable[[Tensor, Tensor], Tensor]
+    update_state: Callable[[Tensor, Tensor], Tensor]
+    decoder: Callable[[Tensor], Tensor]
+
+    # buffers
+    prior_latent_states: Tensor  # (..., $N, L) or ($N, ..., L)
+    posterior_latent_states: Tensor  # (..., $N, L) or ($N, ..., L)
+    prior_predictions: Tensor  # (..., $N, D) or ($N, ..., D)
+    posterior_predictions: Tensor  # (..., $N, D) or ($N, ..., D)
+
+    def __init__(
+        self,
+        input_size: int,
+        latent_size: int,
+        *,
+        batch_first: bool = True,
+    ) -> None:
+        super().__init__()
+        self.batch_first = batch_first
+        self.initial_state = nn.Parameter(torch.zeros(latent_size))
+        self.register_buffer("prior_latent_states", None, persistent=False)
+        self.register_buffer("posterior_latent_states", None, persistent=False)
+        self.register_buffer("prior_predictions", None, persistent=False)
+        self.register_buffer("posterior_predictions", None, persistent=False)
+
+    def forward(
+        self,
+        *,
+        timestamps: Tensor,  # Float[..., $T], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $T, F], padded False
+        context_values: Tensor,  # Float[..., $T, D], padded Nan, sparse
+        context_mask: Tensor,  # Bool[..., $T, D], padded False
+        initial_state: Tensor | None = None,  # Float[..., L]
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> Tensor:
+        seq_dim = -2 if self.batch_first else -1
+        T = timestamps[..., None].movedim(seq_dim, 0).squeeze(-1)  # ($N, ...)
+        X = context_values.movedim(seq_dim, 0)  # ($N, ..., D)
+        Q = query_mask.movedim(seq_dim, 0)
+        M = context_mask.movedim(seq_dim, 0)
+        T0 = T[[0]] if initial_time is None else initial_time
+        DT = T.diff(dim=0, prepend=T0)
+
+        prior_states: list[Tensor] = []
+        post_states: list[Tensor] = []
+        prior_preds: list[Tensor] = []
+        post_preds: list[Tensor] = []
+
+        posterior_state: Tensor = (
+            initial_state if initial_state is not None else self.initial_state
+        )
+
+        for delta_t, x_obs, obs_mask, q in zip(DT, X, M, Q, strict=True):
+            # zₜ = flow(z(t-∆t), ∆t)
+            prior_state = self.propagate_state(delta_t, posterior_state)
+
+            # zₜ' = F(zₜ, xₜ)
+            posterior_state = self.update_state(prior_state, x_obs)
+
+            # x̂ₜ = ϕ(zₜ)
+            prior_pred = self.decoder(prior_state)
+
+            # x̂ₜ' = ϕ(zₜ')
+            post_pred = self.decoder(posterior_state)
+
+            prior_states.append(prior_state)
+            post_states.append(posterior_state)
+            prior_preds.append(prior_pred)
+            post_preds.append(post_pred)
+
+        stack_dim = -2 if self.batch_first else 0
+        self.prior_latent_states = torch.stack(prior_states, dim=stack_dim)
+        self.posterior_latent_states = torch.stack(post_states, dim=stack_dim)
+        self.prior_predictions = torch.stack(prior_preds, dim=seq_dim)
+        self.posterior_predictions = torch.stack(post_preds, dim=seq_dim)
+
+        return self.posterior_predictions
+
+    def predict(
+        self,
+        *,
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        initial_state: Tensor | None = None,  # Float[..., L]
+        initial_time: Tensor | None = None,  # t₀, () or (...)
+    ) -> Tensor:  # Float[..., $K, F]
+        combined = EventBatch.from_request(
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            batch_first=self.batch_first,
+        )
+        predictions = self.forward(
+            timestamps=combined.timestamps,  # Float[..., $T], padded NaN, non-decreasing
+            context_values=combined.context_values,  # Float[..., $T, D], padded NaN, sparse
             context_mask=combined.context_mask,  # Bool[..., $T, D], padded False
             query_mask=combined.query_mask,  # Bool[..., $T, F], padded False
             initial_state=initial_state,
