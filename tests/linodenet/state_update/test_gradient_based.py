@@ -94,12 +94,11 @@ def _reference_gaussian_step(
         mean.detach(),
         scale_tril=_scale_tril(log_chol.detach()),
     )
-    objective = (
-        -current.log_prob(y_obs - shift).mean()
-        + regularization_strength * kl_divergence(current, previous).mean()
-    )
+    objective = -current.log_prob(
+        y_obs - shift
+    ) + regularization_strength * kl_divergence(current, previous)
     grad_mean, grad_log_chol = torch.autograd.grad(
-        objective,
+        objective.sum(),
         (mean, log_chol),
         create_graph=True,
     )
@@ -370,7 +369,7 @@ class TestGaussianGradientStepUpdater:
         torch.testing.assert_close(actual[1], expected[1])
 
     def test_batched_forward(self) -> None:
-        r"""Batched parameters should use the mean objective for all loss terms."""
+        r"""Batched parameters should use a per-sample objective."""
         decoder = ShiftTransform(shift=0.1)
         updater = GaussianGradientStepUpdater(
             decoder=decoder,
@@ -412,6 +411,57 @@ class TestGaussianGradientStepUpdater:
 
         torch.testing.assert_close(actual_mean, expected_mean)
         torch.testing.assert_close(actual_log_chol, expected_log_chol)
+
+    def test_grad_fn_returns_per_batch_gradient(self) -> None:
+        r"""The Gaussian gradient helper should preserve the batch shape."""
+        decoder = ShiftTransform(shift=0.1)
+        updater = GaussianGradientStepUpdater(
+            decoder=decoder,
+            parametrization="log-cholesky",
+            regularization_strength=1.0,
+            step_size_mean=0.2,
+            step_size_cov=0.35,
+        )
+        mean = torch.tensor([[0.2, -0.4, 0.6], [-0.4, 0.3, 0.1]])
+        log_chol = torch.tensor(
+            [
+                [
+                    [0.0, 0.0, 0.0],
+                    [0.1, 0.2, 0.0],
+                    [-0.2, 0.3, -0.1],
+                ],
+                [
+                    [0.3, 0.0, 0.0],
+                    [-0.1, -0.2, 0.0],
+                    [0.2, 0.1, 0.4],
+                ],
+            ]
+        )
+        y_obs = torch.tensor([[0.7, -1.2, 0.4], [-1.2, 0.5, 0.8]])
+
+        actual_grad_mean, actual_grad_log_chol = updater.grad_fn(
+            (mean, log_chol), (mean, log_chol), y_obs
+        )
+
+        mean_ref = mean.detach().clone().requires_grad_()
+        log_chol_ref = log_chol.detach().clone().requires_grad_()
+        current = MultivariateNormal(mean_ref, scale_tril=_scale_tril(log_chol_ref))
+        previous = MultivariateNormal(
+            mean_ref.detach(),
+            scale_tril=_scale_tril(log_chol_ref.detach()),
+        )
+        objective = -current.log_prob(
+            y_obs - decoder.shift
+        ) + updater.regularization_strength * kl_divergence(current, previous)
+        expected_grad_mean, expected_grad_log_chol = torch.autograd.grad(
+            objective.sum(),
+            (mean_ref, log_chol_ref),
+        )
+
+        assert actual_grad_mean.shape == mean.shape
+        assert actual_grad_log_chol.shape == log_chol.shape
+        torch.testing.assert_close(actual_grad_mean, expected_grad_mean)
+        torch.testing.assert_close(actual_grad_log_chol, expected_grad_log_chol)
 
     def test_gradients_wrt_theta(self) -> None:
         r"""The update should remain differentiable with respect to the prior."""

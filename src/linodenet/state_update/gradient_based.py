@@ -33,8 +33,6 @@ __all__ = [
     "GaussianGradientStepUpdater",
 ]
 
-from functools import partial
-
 import torch
 from torch import Tensor, nn
 
@@ -134,7 +132,7 @@ class GradientStepUpdater(nn.Module):
         )
 
     def grad_fn(self, z: Tensor, z_prev: Tensor, y: Tensor) -> Tensor:
-        losses, vjp = torch.func.vjp(
+        losses, vjp, *_ = torch.func.vjp(
             lambda current: self.objective(current, z_prev, y), z
         )
         (grad,) = vjp(torch.ones_like(losses))
@@ -197,17 +195,27 @@ class GaussianGradientStepUpdater(nn.Module):
         z, logabsdet = self.decoder.encode_and_logabsdet(vals)
         return log_prob(z, theta, parametrization=self.parametrization) + logabsdet
 
-    @partial(torch.func.grad, argnums=1)
+    def objective(
+        self, theta: GaussianParams, theta_prev: GaussianParams, y_obs: Tensor, /
+    ) -> Tensor:
+        r"""Return the per-batch-element Gaussian update objective."""
+        return (
+            -self.log_prob(y_obs, theta)  # -log q(y∣θ)
+            + (  # λ d(θ, θ₋)
+                self.regularization_strength
+                * kl(theta, theta_prev, parametrization=self.parametrization)
+            )
+        )
+
     def grad_fn(
         self, theta: GaussianParams, theta_prev: GaussianParams, y_obs: Tensor, /
     ) -> Tensor:
-        return (
-            -self.log_prob(y_obs, theta).mean()  # -log q(y∣θ)
-            + (  # λ d(θ, θ₋)
-                self.regularization_strength
-                * kl(theta, theta_prev, parametrization=self.parametrization).mean()
-            )
+        losses, vjp, *_ = torch.func.vjp(
+            lambda current: self.objective(current, theta_prev, y_obs), theta
         )
+        cotangents = torch.ones_like(losses)
+        (grad_theta,) = vjp(cotangents)
+        return grad_theta
 
     def forward(self, theta: GaussianParams, y_obs: Tensor) -> GaussianParams:
         r"""Return the updated Gaussian parameters $(μ', Σ')$."""
