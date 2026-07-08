@@ -119,14 +119,14 @@ class GaussianGradientStepUpdater(nn.Module):
     def __init__(
         self,
         decoder: Transform[Tensor, Tensor],
+        parametrization: str,
         regularization_strength: float = 1e-3,
-        parametrization: str = "log-cholesky",
         step_size: float = 1e-2,
     ) -> None:
         super().__init__()
         if parametrization != CovarianceType.LOG_CHOLESKY:
             raise NotImplementedError(
-                "Only log-cholesky parametrization is currently supported."
+                "Only 'log-cholesky' parametrization is currently supported."
             )
 
         self.decoder = decoder
@@ -149,7 +149,9 @@ class GaussianGradientStepUpdater(nn.Module):
                 -self.log_prob(y_obs, (mean, cov)).mean()
                 + (
                     self.regularization_strength
-                    * kl((mean, cov), theta, parametrization=self.parametrization)
+                    * kl(
+                        (mean, cov), theta, parametrization=self.parametrization
+                    ).mean()
                 )
             ),
             argnums=(0, 1),

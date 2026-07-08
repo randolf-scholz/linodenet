@@ -2,8 +2,13 @@ r"""Tests for gradient-based state updates."""
 
 import torch
 from torch import Tensor, nn
+from torch.distributions import MultivariateNormal
+from torch.distributions.kl import kl_divergence
 
-from linodenet.state_update.gradient_based import GradientStepUpdater
+from linodenet.state_update.gradient_based import (
+    GaussianGradientStepUpdater,
+    GradientStepUpdater,
+)
 
 
 class ScaleDecoder(nn.Module):
@@ -15,6 +20,61 @@ class ScaleDecoder(nn.Module):
 
     def forward(self, z: Tensor, /) -> Tensor:
         return self.weight * z
+
+
+class ShiftTransform(nn.Module):
+    r"""Simple scalar translation transform with an analytic log-Jacobian."""
+
+    def __init__(self, shift: float) -> None:
+        super().__init__()
+        self.shift = nn.Parameter(torch.tensor(shift))
+
+    def forward(self, z: Tensor, /) -> Tensor:
+        return z + self.shift
+
+    def inverse(self, y: Tensor, /) -> Tensor:
+        return y - self.shift
+
+    def encode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        return self.inverse(y), y.new_zeros(y.shape[:-1])
+
+    def decode_and_logabsdet(self, z: Tensor, /) -> tuple[Tensor, Tensor]:
+        return self.forward(z), z.new_zeros(z.shape[:-1])
+
+
+def _scale_tril(log_chol: Tensor, /) -> Tensor:
+    r"""Convert log-Cholesky parameters to a lower-triangular scale matrix."""
+    return log_chol.tril(diagonal=-1) + torch.diag_embed(
+        log_chol.diagonal(dim1=-2, dim2=-1).exp()
+    )
+
+
+def _reference_gaussian_step(
+    mean: Tensor,
+    log_chol: Tensor,
+    y_obs: Tensor,
+    /,
+    *,
+    shift: Tensor,
+    regularization_strength: Tensor,
+    step_size: Tensor,
+) -> tuple[Tensor, Tensor]:
+    r"""Compute the Gaussian gradient step using PyTorch distributions."""
+    current = MultivariateNormal(mean, scale_tril=_scale_tril(log_chol))
+    previous = MultivariateNormal(
+        mean.detach(),
+        scale_tril=_scale_tril(log_chol.detach()),
+    )
+    objective = (
+        -current.log_prob(y_obs - shift).mean()
+        + regularization_strength * kl_divergence(current, previous).mean()
+    )
+    grad_mean, grad_log_chol = torch.autograd.grad(
+        objective,
+        (mean, log_chol),
+        create_graph=True,
+    )
+    return mean - step_size * grad_mean, log_chol - step_size * grad_log_chol
 
 
 class TestGradientStepUpdater:
@@ -126,3 +186,184 @@ class TestGradientStepUpdater:
         actual = updater(z_prev, y)
 
         torch.testing.assert_close(actual, z_prev)
+
+
+class TestGaussianGradientStepUpdater:
+    def test_forward_and_backward(self) -> None:
+        r"""Forward output and parameter gradients should match the closed form."""
+        decoder = ShiftTransform(shift=0.2)
+        updater = GaussianGradientStepUpdater(
+            decoder=decoder,
+            parametrization="log-cholesky",
+            regularization_strength=0.0,
+            step_size=0.3,
+        )
+        mean = torch.tensor([0.4, -0.3, 0.8])
+        log_chol = torch.tensor(
+            [
+                [0.1, 0.0, 0.0],
+                [0.2, -0.2, 0.0],
+                [-0.1, 0.3, 0.4],
+            ]
+        )
+        y_obs = torch.tensor([1.1, -0.7, 0.5])
+
+        actual_mean, actual_log_chol = updater((mean, log_chol), y_obs)
+
+        mean_ref = mean.detach().clone().requires_grad_()
+        log_chol_ref = log_chol.detach().clone().requires_grad_()
+        expected_mean, expected_log_chol = _reference_gaussian_step(
+            mean_ref,
+            log_chol_ref,
+            y_obs,
+            shift=decoder.shift,
+            regularization_strength=updater.regularization_strength,
+            step_size=updater.step_size,
+        )
+
+        torch.testing.assert_close(actual_mean, expected_mean)
+        torch.testing.assert_close(actual_log_chol, expected_log_chol)
+
+        objective = actual_mean.sum() + actual_log_chol.sum()
+        actual_grad_shift, actual_grad_step_size = torch.autograd.grad(
+            objective,
+            (decoder.shift, updater.step_size),
+        )
+        expected_objective = expected_mean.sum() + expected_log_chol.sum()
+        expected_grad_shift, expected_grad_step_size = torch.autograd.grad(
+            expected_objective,
+            (decoder.shift, updater.step_size),
+        )
+
+        torch.testing.assert_close(actual_grad_shift, expected_grad_shift)
+        torch.testing.assert_close(actual_grad_step_size, expected_grad_step_size)
+
+    def test_compile_fullgraph(self) -> None:
+        r"""The updater should compile under `torch.compile(fullgraph=True)`."""
+        updater = GaussianGradientStepUpdater(
+            decoder=ShiftTransform(shift=-0.1),
+            parametrization="log-cholesky",
+            regularization_strength=0.0,
+            step_size=0.2,
+        )
+        compiled = torch.compile(updater, fullgraph=True)
+
+        mean = torch.tensor([-0.3, 0.6, 0.1])
+        log_chol = torch.tensor(
+            [
+                [0.25, 0.0, 0.0],
+                [-0.2, 0.1, 0.0],
+                [0.15, -0.05, -0.3],
+            ]
+        )
+        y_obs = torch.tensor([0.7, -0.4, 0.5])
+
+        expected = updater((mean, log_chol), y_obs)
+        actual = compiled((mean, log_chol), y_obs)
+
+        torch.testing.assert_close(actual[0], expected[0])
+        torch.testing.assert_close(actual[1], expected[1])
+
+    def test_batched_forward(self) -> None:
+        r"""Batched parameters should use the mean objective for all loss terms."""
+        decoder = ShiftTransform(shift=0.1)
+        updater = GaussianGradientStepUpdater(
+            decoder=decoder,
+            parametrization="log-cholesky",
+            regularization_strength=1.0,
+            step_size=0.2,
+        )
+        mean = torch.tensor([[0.2, -0.4, 0.6], [-0.4, 0.3, 0.1]])
+        log_chol = torch.tensor(
+            [
+                [
+                    [0.0, 0.0, 0.0],
+                    [0.1, 0.2, 0.0],
+                    [-0.2, 0.3, -0.1],
+                ],
+                [
+                    [0.3, 0.0, 0.0],
+                    [-0.1, -0.2, 0.0],
+                    [0.2, 0.1, 0.4],
+                ],
+            ]
+        )
+        y_obs = torch.tensor([[0.7, -1.2, 0.4], [-1.2, 0.5, 0.8]])
+
+        actual_mean, actual_log_chol = updater((mean, log_chol), y_obs)
+
+        mean_ref = mean.detach().clone().requires_grad_()
+        log_chol_ref = log_chol.detach().clone().requires_grad_()
+        expected_mean, expected_log_chol = _reference_gaussian_step(
+            mean_ref,
+            log_chol_ref,
+            y_obs,
+            shift=decoder.shift,
+            regularization_strength=updater.regularization_strength,
+            step_size=updater.step_size,
+        )
+
+        torch.testing.assert_close(actual_mean, expected_mean)
+        torch.testing.assert_close(actual_log_chol, expected_log_chol)
+
+    def test_gradients_wrt_theta(self) -> None:
+        r"""The update should remain differentiable with respect to the prior."""
+        decoder = ShiftTransform(shift=0.25)
+        updater = GaussianGradientStepUpdater(
+            decoder=decoder,
+            parametrization="log-cholesky",
+            regularization_strength=0.0,
+            step_size=0.15,
+        )
+        mean = torch.tensor([0.1, -0.2, 0.5], requires_grad=True)
+        log_chol = torch.tensor(
+            [
+                [-0.2, 0.0, 0.0],
+                [0.1, 0.3, 0.0],
+                [-0.3, 0.2, 0.1],
+            ],
+            requires_grad=True,
+        )
+        y_obs = torch.tensor([0.9, -0.6, 0.2])
+
+        mean_post, log_chol_post = updater((mean, log_chol), y_obs)
+        objective = mean_post.sum() + log_chol_post.sum()
+        actual_grad_mean, actual_grad_log_chol = torch.autograd.grad(
+            objective,
+            (mean, log_chol),
+        )
+
+        expected_mean, expected_log_chol = _reference_gaussian_step(
+            mean,
+            log_chol,
+            y_obs,
+            shift=decoder.shift,
+            regularization_strength=updater.regularization_strength,
+            step_size=updater.step_size,
+        )
+        expected_objective = expected_mean.sum() + expected_log_chol.sum()
+        expected_grad_mean, expected_grad_log_chol = torch.autograd.grad(
+            expected_objective,
+            (mean, log_chol),
+        )
+
+        torch.testing.assert_close(actual_grad_mean, expected_grad_mean)
+        torch.testing.assert_close(actual_grad_log_chol, expected_grad_log_chol)
+
+    def test_is_consistent_for_exact_decoder_mean(self) -> None:
+        r"""For $y_obs = decoder(μ₋)$ and unit variance, the mean should not update."""
+        decoder = ShiftTransform(shift=-0.4)
+        updater = GaussianGradientStepUpdater(
+            decoder=decoder,
+            parametrization="log-cholesky",
+            regularization_strength=2.0,
+            step_size=0.7,
+        )
+        mean = torch.tensor([0.75, -0.25, 0.5])
+        log_chol = torch.zeros(3, 3)
+        y_obs = decoder(mean)
+
+        actual_mean, actual_log_chol = updater((mean, log_chol), y_obs)
+
+        torch.testing.assert_close(actual_mean, mean)
+        torch.testing.assert_close(actual_log_chol, torch.diag(torch.full((3,), -0.7)))
