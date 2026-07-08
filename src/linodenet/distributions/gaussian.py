@@ -57,6 +57,9 @@ from .base import DistributionBase
 type GaussianParams = tuple[Tensor, Tensor]
 
 
+_LOG2PI: Final = math.log(2 * math.pi)
+
+
 class CovarianceType(StrEnum):
     r"""Gaussian parametrizations."""
 
@@ -68,6 +71,39 @@ class CovarianceType(StrEnum):
     # possible further parametrizatrions:
     # - exp(S), S symmetric  (matrix exp)
     # - diag(σ) + UUᵀ  (low rank perturbation)
+
+
+def multivariate_gaussian_log_likelihood(
+    value: Tensor,
+    /,
+    *,
+    mean: Tensor,
+    covariance_matrix: Tensor,
+) -> Tensor:
+    r"""Return the log-likelihood of a multivariate Gaussian.
+
+    Args:
+        value: Evaluation point $x$ with shape `(..., d)`.
+        mean: Mean $μ$ with shape `(..., d)`.
+        covariance_matrix: Covariance $Σ$ with shape `(..., d, d)`.
+
+    Returns:
+        The log-density
+
+        .. math:: \log 𝓝(x; μ, Σ) = -½(d\log(2π) + \log\det Σ + (x-μ)ᵀΣ⁻¹(x-μ))
+    """
+    # Factor Σ = LLᵀ so the Mahalanobis term becomes ‖L⁻¹(x-μ)‖².
+    residual = value - mean
+    L = cholesky(covariance_matrix)
+    whitened = solve_triangular(
+        L,
+        residual.unsqueeze(-1),
+        upper=False,
+    ).squeeze(-1)
+    dim = residual.shape[-1]
+    logdet = 2 * L.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+    mahalanobis = vecdot(whitened, whitened, dim=-1)
+    return -0.5 * (dim * _LOG2PI + logdet + mahalanobis)
 
 
 def log_prob(
@@ -91,7 +127,8 @@ def log_prob(
             logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
             mahalanobis = vecdot(whitened, whitened, dim=-1)
             dim = residual.shape[-1]
-            return -0.5 * (dim * math.log(2 * math.pi) + logdet + mahalanobis)
+            return -0.5 * (dim * _LOG2PI + logdet + mahalanobis)
+
         case CovarianceType.PRECISION:
             mean, precision = theta
             residual = x - mean
@@ -100,7 +137,8 @@ def log_prob(
             logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
             mahalanobis = vecdot(projected, projected, dim=-1)
             dim = residual.shape[-1]
-            return 0.5 * (logdet - dim * math.log(2 * math.pi) - mahalanobis)
+            return 0.5 * (logdet - dim * _LOG2PI - mahalanobis)
+
         case CovarianceType.CHOLESKY:
             mean, chol = theta
             residual = x - mean
@@ -112,7 +150,8 @@ def log_prob(
             logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
             mahalanobis = vecdot(whitened, whitened, dim=-1)
             dim = residual.shape[-1]
-            return -0.5 * (dim * math.log(2 * math.pi) + logdet + mahalanobis)
+            return -0.5 * (dim * _LOG2PI + logdet + mahalanobis)
+
         case CovarianceType.LOG_CHOLESKY:
             mean, log_chol = theta
             residual = x - mean
@@ -127,7 +166,8 @@ def log_prob(
             logdet = 2 * log_chol.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
             mahalanobis = vecdot(whitened, whitened, dim=-1)
             dim = residual.shape[-1]
-            return -0.5 * (dim * math.log(2 * math.pi) + logdet + mahalanobis)
+            return -0.5 * (dim * _LOG2PI + logdet + mahalanobis)
+
         case other:
             assert_never(other)  # pyrefly: ignore[bad-argument-type]
 
@@ -624,39 +664,6 @@ def kl(
             )
 
 
-def multivariate_gaussian_log_likelihood(
-    value: Tensor,
-    /,
-    *,
-    mean: Tensor,
-    covariance_matrix: Tensor,
-) -> Tensor:
-    r"""Return the log-likelihood of a multivariate Gaussian.
-
-    Args:
-        value: Evaluation point $x$ with shape `(..., d)`.
-        mean: Mean $μ$ with shape `(..., d)`.
-        covariance_matrix: Covariance $Σ$ with shape `(..., d, d)`.
-
-    Returns:
-        The log-density
-
-        .. math:: \log 𝓝(x; μ, Σ) = -½(d\log(2π) + \log\det Σ + (x-μ)ᵀΣ⁻¹(x-μ))
-    """
-    # Factor Σ = LLᵀ so the Mahalanobis term becomes ‖L⁻¹(x-μ)‖².
-    residual = value - mean
-    L = cholesky(covariance_matrix)
-    whitened = solve_triangular(
-        L,
-        residual.unsqueeze(-1),
-        upper=False,
-    ).squeeze(-1)
-    dim = residual.shape[-1]
-    logdet = 2 * L.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
-    mahalanobis = vecdot(whitened, whitened, dim=-1)
-    return -0.5 * (dim * math.log(2 * math.pi) + logdet + mahalanobis)
-
-
 class MultivariateNormal(dist.MultivariateNormal):
     r"""Augmented Multivariate Normal distribution.
 
@@ -727,9 +734,7 @@ class MultiHeadGaussian(DistributionBase):
         # CONSTANTS
         self.num_heads = int(n_heads)
         self.num_features = int(n_feats)
-        normalization_constant = (
-            0.5 * self.num_features * math.log(2 * math.pi)
-        )  # -log (2π)^{-k/2}
+        normalization_constant = 0.5 * self.num_features * _LOG2PI  # -log (2π)^{-k/2}
         self.register_buffer(
             "normalization_constant", torch.tensor(normalization_constant)
         )
@@ -849,10 +854,10 @@ class MultiHeadGaussian(DistributionBase):
 
         # compute the base log probability
         # ½*log(2π) + ½\log(σ²) + ½‖x-μ‖²/σ² = ½*log(2π) +  ½‖x‖²
-        log_prob = self.normalization_constant + 0.5 * vecdot(z, z, dim=-1)  # (..., H)
-        log_prob = log_prob - ldj  # (..., H)
-        self.log_probs = log_prob  # store buffer for post-hoc analysis
-        return log_prob
+        log_probs = self.normalization_constant + 0.5 * vecdot(z, z, dim=-1)  # (..., H)
+        log_probs = log_probs - ldj  # (..., H)
+        self.log_probs = log_probs  # store buffer for post-hoc analysis
+        return log_probs
 
     def marginalize(self, indices: Tensor, /) -> MultiHeadGaussian:
         r"""Marginalize the distribution over the given indices."""
