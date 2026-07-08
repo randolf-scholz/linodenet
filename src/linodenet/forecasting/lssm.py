@@ -281,22 +281,18 @@ class LatentStateSpaceModel(nn.Module):
 
         z_post = z0
 
-        for dt, y_obs in zip(DT, Y_OBS, strict=True):
+        for delta_t, y_obs in zip(DT, Y_OBS, strict=True):
             # Propagate the latent state forward in time.
-            z_pre = self.state_propagation(
-                dt, z_post
-            )  # (...,), (..., LAT) -> (..., LAT)
+            z_pre = self.state_propagation(delta_t, z_post)
 
             # Decode the latent state at the observation time.
-            y_pre = self.decoder(z_pre)  # (..., LAT) -> (..., DIM)
+            y_pre = self.decoder(z_pre)
 
             # Update the state estimate by filtering the observation.
-            y_post = self.state_update(
-                y_obs, y_pre
-            )  # (..., DIM), (..., DIM) → (..., DIM)
+            y_post = self.state_update(y_obs, y_pre)
 
             # Encode the latent state at the observation time.
-            z_post = self.encoder(y_post)  # (..., DIM) → (..., LAT)
+            z_post = self.encoder(y_post)
 
             # Save all tensors for later.
             Zhat_pre.append(z_pre)
