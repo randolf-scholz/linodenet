@@ -32,6 +32,7 @@ __all__ = [
     "GaussianGradientStepUpdater",
 ]
 
+from functools import partial
 
 import torch
 from torch import Tensor, nn
@@ -89,17 +90,16 @@ class GradientStepUpdater(nn.Module):
             case _:
                 raise ValueError(f"Unknown regularizer: {regularizer!r}")
 
+    @partial(torch.func.grad, argnums=1)
+    def grad_fn(self, z: Tensor, z_prev: Tensor, y: Tensor) -> Tensor:
+        return (
+            self.loss(self.decoder(z), y)  # ℓ(f(z), y)
+            + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
+        )
+
     def forward(self, z_prev: Tensor, y: Tensor) -> Tensor:
         r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ d(z, z_prev)."""
-        grad_fn = torch.func.grad(
-            lambda z: (
-                self.loss(self.decoder(z), y)
-                + self.regularization_strength * self.regularizer(z, z_prev)
-            )
-        )
-        grad = grad_fn(z_prev)
-        z_post = z_prev - self.step_size * grad
-        return z_post
+        return z_prev - self.step_size * self.grad_fn(z_prev, z_prev, y)
 
 
 class GaussianGradientStepUpdater(nn.Module):
