@@ -33,6 +33,8 @@ __all__ = [
     "GaussianGradientStepUpdater",
 ]
 
+from functools import partial
+
 import torch
 from torch import Tensor, nn
 
@@ -131,17 +133,27 @@ class GradientStepUpdater(nn.Module):
             + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
         )
 
-    def grad_fn(self, z: Tensor, z_prev: Tensor, y: Tensor) -> Tensor:
-        losses, vjp, *_ = torch.func.vjp(
-            lambda current: self.objective(current, z_prev, y), z
+    @partial(torch.func.vmap, in_dims=(None, 0, 0, 0))
+    @partial(torch.func.grad, argnums=1)
+    def _grad_fn_flat_batch(self, z: Tensor, z_prev: Tensor, y: Tensor, /) -> Tensor:
+        return (
+            self.loss(self.decoder(z), y)  # ℓ(f(z), y)
+            + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
         )
-        (grad,) = vjp(torch.ones_like(losses))
-        return grad
+
+    def grad_fn(self, z: Tensor, z_prev: Tensor, y: Tensor, /) -> Tensor:
+        r"""Return the gradient while preserving the input batch shape."""
+        z_flat = z.reshape(-1, z.shape[-1])
+        z_prev_flat = z_prev.reshape(-1, z_prev.shape[-1])
+        y_flat = y.reshape(-1, y.shape[-1])
+        grad = self._grad_fn_flat_batch(z_flat, z_prev_flat, y_flat)
+        return grad.reshape_as(z)
 
     def forward(
         self,
         z: Tensor,  # (..., d)
         y: Tensor,  # (..., e)
+        /,
     ) -> Tensor:  # (..., d)
         r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ d(z, z_prev)."""
         return z - self.step_size * self.grad_fn(z, z, y)
@@ -207,20 +219,51 @@ class GaussianGradientStepUpdater(nn.Module):
             )
         )
 
+    @partial(torch.func.vmap, in_dims=(None, (0, 0), (0, 0), 0))
+    @partial(torch.func.grad, argnums=1)
+    def _grad_fn_flat_batch(
+        self,
+        theta: GaussianParams,
+        theta_prev: GaussianParams,
+        y_obs: Tensor,
+        /,
+    ) -> Tensor:
+        mean, cov = theta
+        mean_prev, cov_prev = theta_prev
+        return (
+            -self.log_prob(y_obs, (mean, cov))  # -log q(y∣θ)
+            + (  # λ d(θ, θ₋)
+                self.regularization_strength
+                * kl(
+                    (mean, cov),
+                    (mean_prev, cov_prev),
+                    parametrization=self.parametrization,
+                )
+            )
+        )
+
     def grad_fn(
         self, theta: GaussianParams, theta_prev: GaussianParams, y_obs: Tensor, /
     ) -> Tensor:
-        losses, vjp, *_ = torch.func.vjp(
-            lambda current: self.objective(current, theta_prev, y_obs), theta
+        r"""Return the gradient while preserving the input batch shape."""
+        mean, cov = theta
+        mean_prev, cov_prev = theta_prev
+        mean_flat = mean.reshape(-1, mean.shape[-1])
+        cov_flat = cov.reshape(-1, cov.shape[-2], cov.shape[-1])
+        grad_mean, grad_cov = self._grad_fn_flat_batch(
+            (mean_flat, cov_flat),
+            (
+                mean_prev.reshape_as(mean_flat),
+                cov_prev.reshape_as(cov_flat),
+            ),
+            y_obs.reshape(-1, y_obs.shape[-1]),
         )
-        cotangents = torch.ones_like(losses)
-        (grad_theta,) = vjp(cotangents)
-        return grad_theta
+        return grad_mean.reshape_as(mean), grad_cov.reshape_as(cov)
 
-    def forward(self, theta: GaussianParams, y_obs: Tensor) -> GaussianParams:
+    def forward(self, theta: GaussianParams, y_obs: Tensor, /) -> GaussianParams:
         r"""Return the updated Gaussian parameters $(μ', Σ')$."""
+        mean, cov = theta
         grad_mean, grad_cov = self.grad_fn(theta, theta, y_obs)
-
-        mean_post = theta[0] - self.step_size_mean * grad_mean
-        cov_post = theta[1] - self.step_size_cov * grad_cov
+        mean_post = mean - self.step_size_mean * grad_mean
+        cov_post = cov - self.step_size_cov * grad_cov
         return mean_post, cov_post
