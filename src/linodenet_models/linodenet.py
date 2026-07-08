@@ -559,30 +559,35 @@ class LinODEnet_v2(nn.Module):
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
     ) -> Tensor:
-
         seq_dim = -2 if self.batch_first else -1
         T = timestamps[..., None].movedim(seq_dim, 0).squeeze(-1)  # ($N, ...)
         X = context_values.movedim(seq_dim, 0)  # ($N, ..., D)
         Q = query_mask.movedim(seq_dim, 0)
         M = context_mask.movedim(seq_dim, 0)
-
-        posterior_state: Tensor = (
-            initial_state if initial_state is not None else self.initial_state
-        )
-        t_prev = initial_time if initial_time is not None else T[0]
+        T0 = T[[0]] if initial_time is None else initial_time
+        DT = T.diff(dim=0, prepend=T0)
 
         prior_states: list[Tensor] = []
         post_states: list[Tensor] = []
         prior_preds: list[Tensor] = []
         post_preds: list[Tensor] = []
 
-        for t, x_obs in zip(T, X, strict=True):
-            prior_state = self.propagate_state(posterior_state, t_prev, t)
-            posterior_state = self.update_state(prior_state, x_obs)
+        posterior_state: Tensor = (
+            initial_state if initial_state is not None else self.initial_state
+        )
 
+        for delta_t, x_obs, obs_mask, q in zip(DT, X, M, Q, strict=True):
+            # zₜ = flow(z(t-∆t), ∆t)
+            prior_state = self.propagate_state(delta_t, posterior_state)
+
+            # zₜ' = F(zₜ, xₜ)
+            posterior_state = self.filter(prior_state, x_obs)
+
+            # x̂ₜ = ϕ(zₜ)
             prior_pred = self.decoder(prior_state)
+
+            # x̂ₜ' = ϕ(zₜ')
             post_pred = self.decoder(posterior_state)
-            t_prev = t
 
             prior_states.append(prior_state)
             post_states.append(posterior_state)
@@ -635,30 +640,34 @@ class LinODEnet(nn.Module):
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
     ) -> Tensor:  # (..., $T, F)
-
         seq_dim = -2 if self.batch_first else -1
         T = timestamps[..., None].movedim(seq_dim, 0).squeeze(-1)  # ($N, ...)
         X = context_values.movedim(seq_dim, 0)  # ($N, ..., D)
         Q = query_mask.movedim(seq_dim, 0)
         M = context_mask.movedim(seq_dim, 0)
-
-        posterior_state: Tensor = (
-            initial_state if initial_state is not None else self.initial_state
-        )
-        t_prev = initial_time if initial_time is not None else T[0]
+        T0 = T[[0]] if initial_time is None else initial_time
+        DT = T.diff(dim=0, prepend=T0)
 
         prior_states: list[Tensor] = []
         post_states: list[Tensor] = []
         prior_preds: list[Tensor] = []
         post_preds: list[Tensor] = []
 
-        for t, x_obs, m, q in zip(T, X, M, Q, strict=True):
-            prior_state = self.propagate_state(t, t_prev, posterior_state)
+        posterior_state: Tensor = (
+            initial_state if initial_state is not None else self.initial_state
+        )
 
+        for delta_t, x_obs, m, q in zip(DT, X, M, Q, strict=True):
+            # zₜ = flow(z(t-∆t), ∆t)
+            prior_state = self.propagate_state(delta_t, posterior_state)
+
+            # x̂ₜ = ϕ(zₜ)
             prior_prediction = self.decoder(prior_state)
 
+            # x̂ₜ' = F(x̂ₜ, xₜ)
             posterior_prediction = self.filter(prior_prediction, x_obs)
 
+            # zₜ' = ϕ⁻¹(x̂ₜ')
             post_state = self.encoder(posterior_prediction)
 
             prior_states.append(prior_state)
@@ -670,10 +679,10 @@ class LinODEnet(nn.Module):
         stack_dim = -2 if self.batch_first else 0
         self.prior_latent_states = torch.stack(prior_state, dim=stack_dim)
         self.posterior_latent_states = torch.stack(post_states, dim=stack_dim)
-        self.prior_predicted_states = torch.stack(prior_preds, dim=stack_dim)
-        self.posterior_predicted_states = torch.stack(post_preds, dim=stack_dim)
+        self.prior_predictions = torch.stack(prior_preds, dim=stack_dim)
+        self.posterior_predictions = torch.stack(post_preds, dim=stack_dim)
 
-        return self.posterior_predicted_states.masked_fill(~query_mask, nan)
+        return self.posterior_predictions
 
     def predict(
         self,
