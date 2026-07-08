@@ -97,7 +97,11 @@ class GradientStepUpdater(nn.Module):
             + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
         )
 
-    def forward(self, z: Tensor, y: Tensor) -> Tensor:
+    def forward(
+        self,
+        z: Tensor,  # (..., d)
+        y: Tensor,  # (..., e)
+    ) -> Tensor:  # (..., d)
         r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ d(z, z_prev)."""
         return z - self.step_size * self.grad_fn(z, z, y)
 
