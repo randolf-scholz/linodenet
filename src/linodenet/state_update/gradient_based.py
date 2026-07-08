@@ -36,7 +36,12 @@ __all__ = [
 import torch
 from torch import Tensor, nn
 
-from linodenet.distributions.gaussian import GaussianParams, log_prob
+from linodenet.distributions.gaussian import (
+    CovarianceType,
+    GaussianParams,
+    kl,
+    log_prob,
+)
 from linodenet.mappings import Transform
 
 
@@ -114,14 +119,17 @@ class GaussianGradientStepUpdater(nn.Module):
     def __init__(
         self,
         decoder: Transform[Tensor, Tensor],
-        regularizer: nn.Module,
         regularization_strength: float = 1e-3,
-        parametrization: str = "covariance",
+        parametrization: str = "log-cholesky",
         step_size: float = 1e-2,
     ) -> None:
         super().__init__()
+        if parametrization != CovarianceType.LOG_CHOLESKY:
+            raise NotImplementedError(
+                "Only log-cholesky parametrization is currently supported."
+            )
+
         self.decoder = decoder
-        self.regularizer = regularizer
         self.parametrization = parametrization
 
         self.regularization_strength = nn.Parameter(
@@ -139,7 +147,10 @@ class GaussianGradientStepUpdater(nn.Module):
         grad_fn = torch.func.grad(
             lambda mean, cov: (
                 -self.log_prob(y_obs, (mean, cov)).mean()
-                + self.regularization_strength * self.regularizer(mean, theta)
+                + (
+                    self.regularization_strength
+                    * kl((mean, cov), theta, parametrization=self.parametrization)
+                )
             ),
             argnums=(0, 1),
         )
