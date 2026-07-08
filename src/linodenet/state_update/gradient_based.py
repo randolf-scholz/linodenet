@@ -97,9 +97,9 @@ class GradientStepUpdater(nn.Module):
             + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
         )
 
-    def forward(self, z_prev: Tensor, y: Tensor) -> Tensor:
+    def forward(self, z: Tensor, y: Tensor) -> Tensor:
         r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ d(z, z_prev)."""
-        return z_prev - self.step_size * self.grad_fn(z_prev, z_prev, y)
+        return z - self.step_size * self.grad_fn(z, z, y)
 
 
 class GaussianGradientStepUpdater(nn.Module):
@@ -150,21 +150,21 @@ class GaussianGradientStepUpdater(nn.Module):
         z, logabsdet = self.decoder.encode_and_logabsdet(vals)
         return log_prob(z, theta, parametrization=self.parametrization) + logabsdet
 
+    @partial(torch.func.grad, argnums=1)
+    def grad_fn(
+        self, theta: GaussianParams, theta_prev: GaussianParams, y_obs: Tensor, /
+    ) -> Tensor:
+        return (
+            -self.log_prob(y_obs, theta).mean()  # -log q(y∣θ)
+            + (  # λ d(θ, θ₋)
+                self.regularization_strength
+                * kl(theta, theta_prev, parametrization=self.parametrization).mean()
+            )
+        )
+
     def forward(self, theta: GaussianParams, y_obs: Tensor) -> GaussianParams:
         r"""Return the updated Gaussian parameters $(μ', Σ')$."""
-        grad_fn = torch.func.grad(
-            lambda mean, cov: (
-                -self.log_prob(y_obs, (mean, cov)).mean()
-                + (
-                    self.regularization_strength
-                    * kl(
-                        (mean, cov), theta, parametrization=self.parametrization
-                    ).mean()
-                )
-            ),
-            argnums=(0, 1),
-        )
-        grad_mean, grad_cov = grad_fn(*theta)
+        grad_mean, grad_cov = self.grad_fn(theta, theta, y_obs)
 
         mean_post = theta[0] - self.step_size_mean * grad_mean
         cov_post = theta[1] - self.step_size_cov * grad_cov
