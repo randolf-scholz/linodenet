@@ -2,46 +2,27 @@ r"""Latent State Space Model."""
 
 __all__ = [
     # Classes
+    "LSSM",
     "EncoderDecoderLSSM",
 ]
 
-import logging
-import warnings
-from typing import Any, Final, Optional
+from collections.abc import Callable
+from typing import Final
 
-import torch
 from torch import Tensor, nn
-
-from blueprint import Blueprint, initialize
-from linodenet.mappings import ConcatEmbedding, ConcatProjection
-from linodenet.nn import ResNet
-from linodenet.state_propagation import ContinuousFlow, LinearFlow
-from linodenet.state_update import MissingValueCell, VectorStateUpdate
-from linodenet.utils import deep_dict_update
-from linodenet_special import pad
-from signatures import signature
-
-
-def _module_config(cls: type[nn.Module]) -> dict[str, Any]:
-    return {"__module__": cls.__module__, "__name__": cls.__qualname__}
-
-
-_DEFAULT_LSSM_CONFIG = {
-    "input_size": None,
-    "hidden_size": None,
-    "latent_size": None,
-    "output_size": None,
-    "System": _module_config(LinearFlow),
-    "Embedding": _module_config(ConcatEmbedding),
-    "Projection": _module_config(ConcatProjection),
-    "Filter": _module_config(MissingValueCell),
-    "Encoder": _module_config(ResNet),
-    "Decoder": _module_config(ResNet),
-}
 
 
 class LSSM[State](nn.Module):
+    r"""Decoder-Only Latent State Space Model."""
+
     batch_first: Final[bool]
+    propagate_state: Callable[[State, Tensor, Tensor], State]
+    update_state: Callable[[State, Tensor], State]
+    initial_state: State
+
+    def __init__(self, batch_first: bool = True) -> None:
+        super().__init__()
+        self.batch_first = batch_first
 
     def forward(
         self,
@@ -56,27 +37,27 @@ class LSSM[State](nn.Module):
         T = timestamps[..., None].movedim(seq_dim, 0).squeeze(-1)  # ($N, ...)
         X = context_values.movedim(seq_dim, 0)  # ($N, ..., D)
 
-        posterior_state = (
+        posterior_state: State = (
             initial_state if initial_state is not None else self.initial_state
         )
         t_prev = initial_time if initial_time is not None else T[0]
 
         prior_states: list[State] = []
-        posterior_state: list[State] = []
+        posterior_states: list[State] = []
 
-        for t, x in zip(T, X, strict=True):
+        for t, x_obs in zip(T, X, strict=True):
             prior_state = self.propagate_state(posterior_state, t_prev, t)
-            posterior_state = self.update_state(prior_state, x)
+            posterior_state = self.update_state(prior_state, x_obs)
 
             t_prev = t
 
             prior_states.append(prior_state)
-            posterior_state.append(posterior_state)
+            posterior_states.append(posterior_state)
 
-        return posterior_state
+        return posterior_states
 
 
-class EncoderDecoderLSSM(nn.Module):
+class EncoderDecoderLSSM[State](nn.Module):
     r"""Latent State Space Model with Encoder-Decoder architecture.
 
     Contrary to a regular LSSM, this model applies the filter in data-space,
@@ -105,292 +86,51 @@ class EncoderDecoderLSSM(nn.Module):
     +---------------------------------------------------+--------------------------------------+
     """
 
-    LOGGER = logging.getLogger(f"{__package__}/{__qualname__}")
+    batch_first: Final[bool]
+    propagate_state: Callable[[State, Tensor, Tensor], State]
+    decoder: Callable[[State], Tensor]
+    encoder: Callable[[Tensor], State]
+    update_prediction: Callable[[Tensor, Tensor], Tensor]
 
-    name: Final[str] = __name__
-    r"""str: The name of the model."""
+    initial_state: State
 
-    # Constants
-    input_size: Final[int]
-    r"""CONST: The dimensionality of the inputs."""
-    latent_size: Final[int]
-    r"""CONST: The dimensionality of the linear ODE."""
-    hidden_size: Final[int]
-    r"""CONST: The dimensionality of the padding."""
-    padding_size: Final[int]
-    r"""CONST: The dimensionality of the padded state."""
-    output_size: Final[int]
-    r"""CONST: The dimensionality of the outputs."""
-
-    # Buffers
-    ZERO: Tensor
-    r"""BUFFER: A tensor of value float(0.0)"""
-    NAN: Tensor
-    r"""BUFFER: A tensor of value float(0.0)"""
-    xhat_pre: Tensor
-    r"""BUFFER: Stores pre-jump values."""
-    xhat_post: Tensor
-    r"""BUFFER: Stores post-jump values."""
-    zhat_pre: Tensor
-    r"""BUFFER: Stores pre-jump latent values."""
-    zhat_post: Tensor
-    r"""BUFFER: Stores post-jump latent values."""
-    timedeltas: Tensor
-    r"""BUFFER: Stores the timedelta values."""
-
-    # Parameters:
-    kernel: Tensor
-    r"""PARAM: The system matrix of the linear ODE component."""
-    z0: Tensor
-    r"""PARAM: The initial latent state."""
-
-    # Sub-Modules
-    # encoder: Any
-    # r"""MODULE: Responsible for embedding `x̂→ẑ`."""
-    # embedding: nn.Module
-    # r"""MODULE: Responsible for embedding `x̂→ẑ`."""
-    # system: nn.Module
-    # r"""MODULE: Responsible for propagating `ẑₜ→ẑ_{t+∆t}`."""
-    # decoder: nn.Module
-    # r"""MODULE: Responsible for projecting `ẑ→x̂`."""
-    # projection: nn.Module
-    # r"""MODULE: Responsible for projecting `ẑ→x̂`."""
-    # filter: nn.Module
-    # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
-
-    @property
-    def config(self) -> dict:
-        return {
-            "encoder": self.encoder,
-            "system": self.state_propagation,
-            "decoder": self.decoder,
-            "filter": self.state_update,
-            "padding_size": self.padding_size,
-        }
-
-    def __init__(
-        self,
-        *,
-        encoder: nn.Module | Blueprint[nn.Module],
-        state_propagation: nn.Module | Blueprint[nn.Module],
-        decoder: nn.Module | Blueprint[nn.Module],
-        state_update: nn.Module | Blueprint[nn.Module],
-        padding_size: int = 0,
-    ) -> None:
+    def __init__(self, batch_first: bool = True) -> None:
         super().__init__()
-        self.encoder = initialize(encoder)
-        self.state_propagation = initialize(state_propagation)
-        self.decoder = initialize(decoder)
-        self.state_update = initialize(state_update)
+        self.batch_first = batch_first
 
-        # ensure filter and system satisfy the protocols
-        assert isinstance(self.state_update, VectorStateUpdate)
-        assert isinstance(self.state_propagation, ContinuousFlow)
-
-        self.input_size = int(self.state_update.input_size)
-        self.output_size = int(self.state_update.hidden_size)
-        self.latent_size = int(self.state_propagation.input_size)
-        self.hidden_size = -1
-        self.padding_size = padding_size
-        self.validate_sizes()
-
-        # self.padding_size = padding_size
-        kernel = getattr(self.state_propagation, "kernel", None)
-        if not isinstance(kernel, Tensor):
-            raise TypeError("The system must have a kernel attribute")
-        self.kernel = kernel
-        self.z0 = nn.Parameter(torch.randn(self.latent_size))
-
-        # Buffers
-        self.register_buffer("ZERO", torch.tensor(0.0), persistent=False)
-        self.register_buffer("NAN", torch.tensor(float("nan")), persistent=False)
-        self.register_buffer("timedeltas", torch.tensor(()), persistent=False)
-        self.register_buffer("xhat_pre", torch.tensor(()), persistent=False)
-        self.register_buffer("xhat_post", torch.tensor(()), persistent=False)
-        self.register_buffer("zhat_pre", torch.tensor(()), persistent=False)
-        self.register_buffer("zhat_post", torch.tensor(()), persistent=False)
-
-    def validate_sizes(self) -> None:
-        assert isinstance(self.state_update, VectorStateUpdate)
-        assert isinstance(self.state_propagation, ContinuousFlow)
-        filter_input = int(self.state_update.input_size)
-        filter_hidden = int(self.state_update.hidden_size)
-        if filter_input != filter_hidden:
-            raise ValueError(
-                "Filter input_size must match hidden_size; "
-                f"got {filter_input} and {filter_hidden}."
-            )
-
-        system_input = int(getattr(self.state_propagation, "input_size", -1))
-        system_output = int(
-            getattr(self.state_propagation, "output_size", system_input)
-        )
-        if system_input != system_output:
-            raise ValueError(
-                "System input_size must match output_size; "
-                f"got {system_input} and {system_output}."
-            )
-
-        decoder_input = int(getattr(self.decoder, "input_size", -1))
-        decoder_output = int(getattr(self.decoder, "output_size", decoder_input))
-        if decoder_input != system_input:
-            raise ValueError(
-                "Decoder input_size must match system input_size; "
-                f"got {decoder_input} and {system_input}."
-            )
-        if decoder_output != filter_input:
-            raise ValueError(
-                "Decoder output_size must match filter input_size; "
-                f"got {decoder_output} and {filter_input}."
-            )
-
-        encoder_input = int(getattr(self.encoder, "input_size", -1))
-        encoder_output = int(getattr(self.encoder, "output_size", -1))
-        if encoder_input != filter_input:
-            raise ValueError(
-                "Encoder input_size must match filter input_size; "
-                f"got {encoder_input} and {filter_input}."
-            )
-        if encoder_output != system_input:
-            raise ValueError(
-                "Encoder output_size must match system input_size; "
-                f"got {encoder_output} and {system_input}."
-            )
-
-    @signature("[(..., $n), (..., $n, d)] -> (..., $n, d)")
     def forward(
         self,
-        T: Tensor,
-        Y_OBS: Tensor,
-        t0: Optional[Tensor] = None,
-        z0: Optional[Tensor] = None,
-    ) -> Tensor:
-        r"""Forward pass of the Latent State Space Model.
+        *,
+        context_values: Tensor,  # (..., $N, D)
+        timestamps: Tensor,  # (..., $N)
+        initial_state: State | None = None,
+        initial_time: Tensor | None = None,
+    ) -> list[State]:
 
-        Args:
-            T: Tensor, shape=(...,LEN) or PackedSequence
-                The timestamps of the observations.
-            Y_OBS: Tensor, shape=(..., LEN, DIM) or PackedSequence
-                The observed, noisy values at times $t∈T$. Use ``NaN`` to indicate missing values.
-            t0: Tensor, shape=(..., 1), optional
-                The timestamps of the initial condition. Defaults to ``T[...,0]``.
-            z0: Tensor, shape=(..., DIM), optional
-                The initial condition. Defaults to ``z0 = self.z0``.
+        seq_dim = -2 if self.batch_first else -1
+        T = timestamps[..., None].movedim(seq_dim, 0).squeeze(-1)  # ($N, ...)
+        X = context_values.movedim(seq_dim, 0)  # ($N, ..., D)
 
-        Returns:
-            X̂_post: Tensor, shape=(..., LEN, DIM)
-                The estimated true state of the system at the times $t⁺∈T$ (post-update).
-
-        References:
-            - https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
-        """
-        # Pad the input
-        if self.padding_size:
-            # TODO: write bug report for bogus behaviour
-            # dim = -1
-            # shape = list(X.shape)
-            # shape[dim] = self.padding_size
-            # z = torch.full(shape, float("nan"), dtype=X.dtype, device=X.device)
-            # X = torch.cat([X, z], dim=dim)
-            Y_OBS = pad(Y_OBS, float("nan"), self.padding_size)
-
-        ## prepend a single zero for the first iteration.
-        # DT = torch.diff(T, prepend=T[..., 0].unsqueeze(-1))  # (..., LEN) → (..., LEN)
-
-        ## Move sequence to the front
-        # DT = DT.movedim(-1, 0)  # (..., LEN) → (LEN, ...)
-        # X = torch.movedim(X, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
-
-        # prepend a single zero for the first iteration.
-        # T = pad(T, 0.0, 1, prepend=True)
-        # DT = torch.diff(T)  # (..., LEN) → (..., LEN)
-        t0 = t0 if t0 is not None else T[..., 0].unsqueeze(-1)
-        z0 = z0 if z0 is not None else self.z0
-
-        # Move sequence to the front
-        DT = torch.diff(T, prepend=t0)  # (..., LEN) → (..., LEN)
-        DT = DT.movedim(-1, 0)  # (..., LEN) → (LEN, ...)
-        Y_OBS = torch.movedim(Y_OBS, -2, 0)  # (...,LEN,DIM) → (LEN,...,DIM)
-
-        # Initialize buffers
-        Zhat_pre: list[Tensor] = []
-        Xhat_pre: list[Tensor] = []
-        Xhat_post: list[Tensor] = []
-        Zhat_post: list[Tensor] = []
-
-        z_post = z0
-
-        for delta_t, y_obs in zip(DT, Y_OBS, strict=True):
-            # Propagate the latent state forward in time.
-            z_pre = self.state_propagation(delta_t, z_post)
-
-            # Decode the latent state at the observation time.
-            y_pre = self.decoder(z_pre)
-
-            # Update the state estimate by filtering the observation.
-            y_post = self.state_update(y_obs, y_pre)
-
-            # Encode the latent state at the observation time.
-            z_post = self.encoder(y_post)
-
-            # Save all tensors for later.
-            Zhat_pre.append(z_pre)
-            Xhat_pre.append(y_pre)
-            Xhat_post.append(y_post)
-            Zhat_post.append(z_post)
-
-        self.xhat_pre = torch.stack(Xhat_pre, dim=-2)
-        self.xhat_post = torch.stack(Xhat_post, dim=-2)
-        self.zhat_pre = torch.stack(Zhat_pre, dim=-2)
-        self.zhat_post = torch.stack(Zhat_post, dim=-2)
-        self.timedeltas = DT.movedim(0, -1)
-
-        yhat = self.xhat_pre[..., : self.output_size]
-        return yhat
-
-    @staticmethod
-    def from_config(cfg: dict[str, Any]) -> EncoderDecoderLSSM:
-        r"""Constructs a new model from a configuration dictionary."""
-        LOGGER = logging.getLogger(f"{__package__}.from_config")
-        config = deep_dict_update(_DEFAULT_LSSM_CONFIG, cfg)
-        input_size = config["input_size"]
-        latent_size = config["latent_size"]
-        hidden_size = config.get("hidden_size", input_size)
-        # padding_size = hidden_size - input_size
-        # output_size = config.get("output_size", input_size)
-
-        if hidden_size < input_size:
-            warnings.warn(
-                "hidden_size < input_size. Falling back to using no hidden units.",
-                RuntimeWarning,
-                stacklevel=2,
-            )
-
-            hidden_size = input_size
-        if not (hidden_size >= input_size):
-            raise ValueError(
-                f"{hidden_size=} must be greater than or equal to {input_size=}"
-            )
-
-        config["Encoder"] |= {"input_size": latent_size}
-        config["Decoder"] |= {"input_size": latent_size}
-        config["System"] |= {"input_size": latent_size}
-        config["Filter"] |= {"input_size": hidden_size}
-        config["Filter"] |= {"hidden_size": hidden_size}
-
-        LOGGER.debug("Initializing Encoder %s", config["Encoder"])
-        encoder: nn.Module = initialize(config["Encoder"])
-        LOGGER.debug("Initializing System %s", config["Encoder"])
-        system: nn.Module = initialize(config["System"])
-        LOGGER.debug("Initializing Decoder %s", config["Encoder"])
-        decoder: nn.Module = initialize(config["Decoder"])
-        LOGGER.debug("Initializing Filter %s", config["Encoder"])
-        filter: nn.Module = initialize(config["Filter"])  # noqa: A001
-
-        return EncoderDecoderLSSM(
-            encoder=encoder,
-            state_propagation=system,
-            decoder=decoder,
-            state_update=filter,
-            padding_size=hidden_size - input_size,
+        posterior_state = (
+            initial_state if initial_state is not None else self.initial_state
         )
+        t_prev = initial_time if initial_time is not None else T[0]
+
+        prior_states: list[State] = []
+        posterior_states: list[State] = []
+
+        for t, x_obs in zip(T, X, strict=True):
+            prior_state = self.propagate_state(posterior_state, t_prev, t)
+
+            prior_prediction = self.decoder(prior_state)
+
+            posterior_prediction = self.update_prediction(prior_prediction, x_obs)
+
+            posterior_state = self.encoder(posterior_prediction)
+
+            t_prev = t
+
+            prior_states.append(prior_state)
+            posterior_states.append(posterior_state)
+
+        return posterior_states
