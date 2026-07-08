@@ -11,6 +11,7 @@ from torch.distributions.kl import kl_divergence
 from linodenet.state_update.gradient_based import (
     GaussianGradientStepUpdater,
     GradientStepUpdater,
+    LpLoss,
 )
 
 
@@ -43,6 +44,30 @@ class ShiftTransform(nn.Module):
 
     def decode_and_logabsdet(self, z: Tensor, /) -> tuple[Tensor, Tensor]:
         return self.forward(z), z.new_zeros(z.shape[:-1])
+
+
+class TestLpLoss:
+    def test_mean_returns_per_batch_element_loss(self) -> None:
+        r"""Mean aggregation should preserve the batch shape."""
+        loss = LpLoss(p=2.0, dim=-1, aggregation="mean")
+        x = torch.tensor([[1.0, -2.0, 0.5], [0.0, 3.0, -1.0]])
+        y = torch.tensor([[0.0, 1.0, -1.5], [2.0, -1.0, 0.5]])
+
+        actual = loss(x, y)
+        expected = (x - y).abs().pow(2).mean(dim=-1)
+
+        torch.testing.assert_close(actual, expected)
+
+    def test_sum_matches_vector_norm_power(self) -> None:
+        r"""Sum aggregation should match the powered vector norm."""
+        loss = LpLoss(p=2.0, dim=-1, aggregation="sum")
+        x = torch.tensor([[1.0, -2.0, 0.5], [0.0, 3.0, -1.0]])
+        y = torch.tensor([[0.0, 1.0, -1.5], [2.0, -1.0, 0.5]])
+
+        actual = loss(x, y)
+        expected = torch.linalg.vector_norm(x - y, ord=2.0, dim=-1).pow(2)
+
+        torch.testing.assert_close(actual, expected)
 
 
 def _scale_tril(log_chol: Tensor, /) -> Tensor:
@@ -119,6 +144,28 @@ class TestGradientStepUpdater:
         torch.testing.assert_close(actual_grad_weight, expected_grad_weight)
         torch.testing.assert_close(actual_grad_step_size, expected_grad_step_size)
 
+    def test_grad_fn_returns_per_batch_gradient(self) -> None:
+        r"""The gradient helper should return one gradient per batch element."""
+        decoder = ScaleDecoder(weight=1.7)
+        updater = GradientStepUpdater(
+            decoder=decoder,
+            loss="l2",
+            regularizer="l2",
+            regularization_strength=0.0,
+            step_size=0.2,
+        )
+        z = torch.tensor([[1.0, 2.0, -0.5], [0.5, -1.5, 2.0]])
+        y = torch.tensor([[0.5, -1.0, 1.5], [-0.25, 0.75, 1.0]])
+
+        actual = updater.grad_fn(z, z, y)
+
+        d = z.shape[-1]
+        weight = decoder.weight.detach()
+        expected = (2 * weight / d) * (weight * z - y)
+
+        assert actual.shape == z.shape
+        torch.testing.assert_close(actual, expected)
+
     def test_compile_fullgraph(self) -> None:
         r"""The updater should compile under `torch.compile(fullgraph=True)`."""
         updater = GradientStepUpdater(
@@ -157,7 +204,7 @@ class TestGradientStepUpdater:
         except (AssertionError, RuntimeError) as err:
             pytest.xfail(
                 "torch.export.export currently does not support this updater "
-                f"with torch.func.grad: {err}"
+                f"with torch.func.vjp: {err}"
             )
 
         with tempfile.NamedTemporaryFile(suffix=".pt2") as f:

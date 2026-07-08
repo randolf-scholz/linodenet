@@ -28,6 +28,7 @@ Example: Gradient update with probabilistic forecasting.
 """
 
 __all__ = [
+    "LpLoss",
     "GradientStepUpdater",
     "GaussianGradientStepUpdater",
 ]
@@ -44,6 +45,41 @@ from linodenet.distributions.gaussian import (
     log_prob,
 )
 from linodenet.mappings import Transform
+
+
+class LpLoss(nn.Module):
+    r"""Compute a per-batch-element $Lᵖ$ reconstruction loss."""
+
+    def __init__(
+        self,
+        p: float = 2.0,
+        dim: int = -1,
+        aggregation: str = "mean",
+    ) -> None:
+        super().__init__()
+        if p <= 0:
+            raise ValueError(f"Expected p > 0, got {p!r}.")
+        if aggregation not in {"sum", "mean"}:
+            raise ValueError(
+                f"Expected aggregation to be 'sum' or 'mean', got {aggregation!r}."
+            )
+
+        self.p = p
+        self.dim = dim
+        self.aggregation = aggregation
+
+    def forward(self, x: Tensor, y: Tensor, /) -> Tensor:
+        r"""Return the aggregated $|x-y|ᵖ$ loss over the feature dimension."""
+        diff = x - y
+        match self.aggregation:
+            case "sum":
+                return torch.linalg.vector_norm(diff, ord=self.p, dim=self.dim).pow(
+                    self.p
+                )
+            case "mean":
+                return diff.abs().pow(self.p).mean(dim=self.dim)
+            case _:
+                raise RuntimeError(f"Unexpected aggregation: {self.aggregation!r}")
 
 
 class GradientStepUpdater(nn.Module):
@@ -74,9 +110,9 @@ class GradientStepUpdater(nn.Module):
             case nn.Module():
                 self.loss = loss
             case "l1":
-                self.loss = nn.L1Loss()
+                self.loss = LpLoss(p=1.0)
             case "l2":
-                self.loss = nn.MSELoss()
+                self.loss = LpLoss(p=2.0)
             case _:
                 raise ValueError(f"Unknown loss: {loss!r}")
 
@@ -84,18 +120,25 @@ class GradientStepUpdater(nn.Module):
             case nn.Module():
                 self.regularizer = regularizer
             case "l1":
-                self.regularizer = nn.L1Loss()
+                self.regularizer = LpLoss(p=1.0)
             case "l2":
-                self.regularizer = nn.MSELoss()
+                self.regularizer = LpLoss(p=2.0)
             case _:
                 raise ValueError(f"Unknown regularizer: {regularizer!r}")
 
-    @partial(torch.func.grad, argnums=1)
-    def grad_fn(self, z: Tensor, z_prev: Tensor, y: Tensor) -> Tensor:
+    def objective(self, z: Tensor, z_prev: Tensor, y: Tensor, /) -> Tensor:
+        r"""Return the per-batch-element objective value."""
         return (
             self.loss(self.decoder(z), y)  # ℓ(f(z), y)
             + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
         )
+
+    def grad_fn(self, z: Tensor, z_prev: Tensor, y: Tensor) -> Tensor:
+        losses, vjp = torch.func.vjp(
+            lambda current: self.objective(current, z_prev, y), z
+        )
+        (grad,) = vjp(torch.ones_like(losses))
+        return grad
 
     def forward(
         self,
