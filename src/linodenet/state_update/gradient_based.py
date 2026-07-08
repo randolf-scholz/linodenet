@@ -34,6 +34,7 @@ __all__ = [
     "lp_loss",
 ]
 
+from collections.abc import Callable
 from functools import partial
 
 import torch
@@ -88,6 +89,8 @@ class LpLoss(nn.Module):
         self.dim = dim
         self.aggregation = aggregation
 
+    __call__: Callable[[Tensor, Tensor], Tensor]
+
     def forward(self, x: Tensor, y: Tensor, /) -> Tensor:
         return lp_loss(x, y, p=self.p, dim=self.dim, aggregation=self.aggregation)
 
@@ -136,13 +139,6 @@ class GradientStepUpdater(nn.Module):
             case _:
                 raise ValueError(f"Unknown regularizer: {regularizer!r}")
 
-    def objective(self, z: Tensor, z_prev: Tensor, y: Tensor, /) -> Tensor:
-        r"""Return the per-batch-element objective value."""
-        return (
-            self.loss(self.decoder(z), y)  # ℓ(f(z), y)
-            + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
-        )
-
     @partial(torch.func.vmap, in_dims=(None, 0, 0, 0))
     @partial(torch.func.grad, argnums=1)
     def _grad_fn_flat_batch(self, z: Tensor, z_prev: Tensor, y: Tensor, /) -> Tensor:
@@ -158,6 +154,8 @@ class GradientStepUpdater(nn.Module):
         y_flat = y.reshape(-1, y.shape[-1])
         grad = self._grad_fn_flat_batch(z_flat, z_prev_flat, y_flat)
         return grad.reshape_as(z)
+
+    __call__: Callable[[Tensor, Tensor], Tensor]
 
     def forward(
         self,
@@ -217,18 +215,6 @@ class GaussianGradientStepUpdater(nn.Module):
         z, logabsdet = self.decoder.encode_and_logabsdet(vals)
         return log_prob(z, theta, parametrization=self.parametrization) + logabsdet
 
-    def objective(
-        self, theta: GaussianParams, theta_prev: GaussianParams, y_obs: Tensor, /
-    ) -> Tensor:
-        r"""Return the per-batch-element Gaussian update objective."""
-        return (
-            -self.log_prob(y_obs, theta)  # -log q(y∣θ)
-            + (  # λ d(θ, θ₋)
-                self.regularization_strength
-                * kl(theta, theta_prev, parametrization=self.parametrization)
-            )
-        )
-
     @partial(torch.func.vmap, in_dims=(None, (0, 0), (0, 0), 0))
     @partial(torch.func.grad, argnums=1)
     def _grad_fn_flat_batch(
@@ -238,17 +224,11 @@ class GaussianGradientStepUpdater(nn.Module):
         y_obs: Tensor,
         /,
     ) -> Tensor:
-        mean, cov = theta
-        mean_prev, cov_prev = theta_prev
         return (
-            -self.log_prob(y_obs, (mean, cov))  # -log q(y∣θ)
-            + (  # λ d(θ, θ₋)
+            -self.log_prob(y_obs, theta)  # -log q(y∣θ)
+            + (  # λ⋅d(θ, θ₋)
                 self.regularization_strength
-                * kl(
-                    (mean, cov),
-                    (mean_prev, cov_prev),
-                    parametrization=self.parametrization,
-                )
+                * kl(theta, theta_prev, parametrization=self.parametrization)
             )
         )
 
@@ -260,6 +240,7 @@ class GaussianGradientStepUpdater(nn.Module):
         mean_prev, cov_prev = theta_prev
         mean_flat = mean.reshape(-1, mean.shape[-1])
         cov_flat = cov.reshape(-1, cov.shape[-2], cov.shape[-1])
+
         grad_mean, grad_cov = self._grad_fn_flat_batch(
             (mean_flat, cov_flat),
             (
@@ -269,6 +250,8 @@ class GaussianGradientStepUpdater(nn.Module):
             y_obs.reshape(-1, y_obs.shape[-1]),
         )
         return grad_mean.reshape_as(mean), grad_cov.reshape_as(cov)
+
+    __call__: Callable[[GaussianParams, Tensor], GaussianParams]
 
     def forward(self, theta: GaussianParams, y_obs: Tensor, /) -> GaussianParams:
         r"""Return the updated Gaussian parameters $(μ', Σ')$."""
