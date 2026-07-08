@@ -36,6 +36,7 @@ __all__ = [
 import torch
 from torch import Tensor, nn
 
+from linodenet.distributions.gaussian import GaussianParams, log_prob
 from linodenet.mappings import Transform
 
 
@@ -58,6 +59,10 @@ class GradientStepUpdater(nn.Module):
         super().__init__()
 
         self.decoder = decoder
+        self.regularization_strength = nn.Parameter(
+            torch.as_tensor(regularization_strength)
+        )
+        self.step_size = nn.Parameter(torch.as_tensor(step_size))
 
         match loss:
             case nn.Module():
@@ -78,11 +83,6 @@ class GradientStepUpdater(nn.Module):
                 self.regularizer = nn.MSELoss()
             case _:
                 raise ValueError(f"Unknown regularizer: {regularizer!r}")
-
-        self.regularization_strength = nn.Parameter(
-            torch.as_tensor(regularization_strength)
-        )
-        self.step_size = nn.Parameter(torch.as_tensor(step_size))
 
     def forward(self, z_prev: Tensor, y: Tensor) -> Tensor:
         r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ d(z, z_prev)."""
@@ -115,17 +115,36 @@ class GaussianGradientStepUpdater(nn.Module):
         self,
         decoder: Transform[Tensor, Tensor],
         regularizer: nn.Module,
-        regularization_strength: float,
+        regularization_strength: float = 1e-3,
         parametrization: str = "covariance",
+        step_size: float = 1e-2,
     ) -> None:
         super().__init__()
         self.decoder = decoder
         self.regularizer = regularizer
-        self.regularization_strength = regularization_strength
         self.parametrization = parametrization
 
-    def forward(
-        self, theta: tuple[Tensor, Tensor], y_obs: Tensor
-    ) -> tuple[Tensor, Tensor]:
+        self.regularization_strength = nn.Parameter(
+            torch.as_tensor(regularization_strength)
+        )
+        self.step_size = nn.Parameter(torch.as_tensor(step_size))
+
+    def log_prob(self, vals: Tensor, theta: GaussianParams, /) -> Tensor:
+        r"""Compute the log probability of the input values under the current parameters."""
+        z, logabsdet = self.decoder.encode_and_logabsdet(vals)
+        return log_prob(z, theta, parametrization=self.parametrization) + logabsdet
+
+    def forward(self, theta: GaussianParams, y_obs: Tensor) -> GaussianParams:
         r"""Return the updated Gaussian parameters $(μ', Σ')$."""
-        raise NotImplementedError
+        grad_fn = torch.func.grad(
+            lambda mean, cov: (
+                -self.log_prob(y_obs, (mean, cov)).mean()
+                + self.regularization_strength * self.regularizer(mean, theta)
+            ),
+            argnums=(0, 1),
+        )
+        grad_mean, grad_cov = grad_fn(*theta)
+
+        mean_post = theta[0] - self.step_size * grad_mean
+        cov_post = theta[1] - self.step_size * grad_cov
+        return mean_post, cov_post
