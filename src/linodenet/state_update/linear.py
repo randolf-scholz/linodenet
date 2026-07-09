@@ -58,7 +58,7 @@ class LinearCell(nn.Module, VectorStateUpdate):
 
     # PARAMETERS
     gain: nn.Module
-    r"""MODULE: The innovation gain producing matrices $K(x)$."""
+    r"""MODULE: The innovation gain producing $K(x)r$."""
     observation_map: nn.Module
     r"""MODULE: The observation map used in the innovation term."""
     gate: nn.Module
@@ -112,8 +112,8 @@ class LinearCell(nn.Module, VectorStateUpdate):
             observation_map="identity",
         )
         with torch.no_grad():
-            assert isinstance(cell.gain, Constant)
-            cell.gain.value.copy_(torch.eye(size))
+            assert isinstance(cell.gain, ConstantGain)
+            cell.gain.gain.value.copy_(torch.eye(size))
             if initial_gate_value is not None:
                 assert isinstance(cell.gate, ReZero)
                 cell.gate.scalar.copy_(torch.tensor(initial_gate_value))
@@ -138,8 +138,7 @@ class LinearCell(nn.Module, VectorStateUpdate):
             case nn.Module():
                 self.gain = gain
             case "constant":
-                value = torch.randn((hidden_size, input_size))
-                self.gain = Constant(value, learnable=True)
+                self.gain = ConstantGain(input_size, hidden_size)
             case "attention":
                 self.gain = AttentionGain(hidden_size, input_size)
             case _:
@@ -168,12 +167,11 @@ class LinearCell(nn.Module, VectorStateUpdate):
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         y_pred = self.observation_map(x)
         r = torch.where(y.isnan(), 0.0, y_pred - y)  # (..., input_size)
-        K = self.gain(x)  # (hidden_size, input_size) or (..., hidden_size, input_size)
-        correction = (r.unsqueeze(-2) @ K.mT).squeeze(-2)
+        correction = self.gain(r, x)
         return x - self.gate(correction)
 
 
-class ConditionalLinear(nn.Module):
+class ConstantGain(nn.Module):
     r"""Computes $(v, x) ↦ K(x)v$."""
 
     def __init__(
@@ -262,11 +260,11 @@ class AttentionGain(nn.Module):
         )
         self.scale = self.attention_size**-0.5
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, v: Tensor, x: Tensor) -> Tensor:
         query = self.query(x).unflatten(-1, (self.hidden_size, self.attention_size))
         key = self.key(x).unflatten(-1, (self.input_size, self.attention_size))
         scores = self.scale * (query @ key.mT)
-        return scores.softmax(dim=-1)
+        return (scores.softmax(dim=-1) @ v.unsqueeze(-1)).squeeze(-1)
 
 
 class KalmanCell(nn.Module, VectorStateUpdate):
@@ -345,7 +343,7 @@ class KalmanCell(nn.Module, VectorStateUpdate):
                 self.covariance_factor = covariance_factor
 
             case "constant":
-                value = torch.randn((m, n))
+                value = torch.randn((m, m))
                 self.covariance_factor = Constant(value, learnable=True)
                 register_parametrization(
                     self.covariance_factor,

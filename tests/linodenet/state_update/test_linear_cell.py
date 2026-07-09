@@ -3,17 +3,16 @@ r"""Tests for linear innovation state updaters."""
 import pytest
 import torch
 from torch import nn
-from torch.nn import functional as F
 
-from linodenet.nn.containers import Constant
 from linodenet.nn.rezero import ReZero
 from linodenet.state_update import AttentionGain, LinearCell
+from linodenet.state_update.linear import ConstantGain
 
 
 def compute_correction(
     r: torch.Tensor, gain: nn.Module, x: torch.Tensor
 ) -> torch.Tensor:
-    return F.linear(r, gain(x))
+    return gain(r, x)
 
 
 class TestLinearCell:
@@ -23,7 +22,7 @@ class TestLinearCell:
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
-        assert isinstance(cell.gain, Constant)
+        assert isinstance(cell.gain, ConstantGain)
         assert isinstance(cell.observation_map, nn.Linear)
         innovation = cell.observation_map(x) - y
         expected = x - compute_correction(innovation, cell.gain, x)
@@ -48,9 +47,9 @@ class TestLinearCell:
         x = torch.randn(7, 5)
 
         with torch.no_grad():
-            assert isinstance(plain.gain, Constant)
-            assert isinstance(rezero.gain, Constant)
-            rezero.gain.value.copy_(plain.gain.value)
+            assert isinstance(plain.gain, ConstantGain)
+            assert isinstance(rezero.gain, ConstantGain)
+            rezero.gain.gain.value.copy_(plain.gain.gain.value)
             assert isinstance(plain.observation_map, nn.Linear)
             assert isinstance(rezero.observation_map, nn.Linear)
             rezero.observation_map.weight.copy_(plain.observation_map.weight)
@@ -78,17 +77,17 @@ class TestLinearCell:
         x = torch.randn(7, 4)
         y = torch.randn(7, 4)
 
-        assert isinstance(cell.gain, Constant)
+        assert isinstance(cell.gain, ConstantGain)
         assert isinstance(cell.observation_map, nn.Identity)
-        torch.testing.assert_close(cell.gain.value, torch.eye(4))
+        torch.testing.assert_close(cell.gain.gain.value, torch.eye(4))
         torch.testing.assert_close(cell(y, x), y)
 
     def test_accepts_custom_gain(self) -> None:
         r"""Custom gains should be used verbatim."""
 
         class DiagonalGain(nn.Module):
-            def forward(self, x: torch.Tensor) -> torch.Tensor:
-                return torch.diag(x.mean(dim=0))
+            def forward(self, r: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+                return r @ torch.diag(x.mean(dim=0)).mT
 
         gain = DiagonalGain()
         cell = LinearCell(3, 3, gain=gain, gate="identity")
@@ -157,17 +156,23 @@ class TestLinearCell:
     def test_attention_gain_uses_attention_module(self) -> None:
         r"""The attention gain option should instantiate `AttentionGain`."""
         cell = LinearCell(3, 5, gain="attention", gate="identity")
+        r = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
         assert isinstance(cell.gain, AttentionGain)
-        gain = cell.gain(x)
-
-        assert gain.shape == (7, 5, 3)
-        assert torch.isfinite(gain).all()
-        torch.testing.assert_close(
-            gain.sum(dim=-1),
-            torch.ones(7, 5),
+        correction = cell.gain(r, x)
+        query = cell.gain.query(x).unflatten(
+            -1, (cell.gain.hidden_size, cell.gain.attention_size)
         )
+        key = cell.gain.key(x).unflatten(
+            -1, (cell.gain.input_size, cell.gain.attention_size)
+        )
+        scores = cell.gain.scale * (query @ key.mT)
+        expected = (scores.softmax(dim=-1) @ r.unsqueeze(-1)).squeeze(-1)
+
+        assert correction.shape == (7, 5)
+        assert torch.isfinite(correction).all()
+        torch.testing.assert_close(correction, expected)
 
     def test_accepts_custom_observation_map(self) -> None:
         r"""Custom observation maps should be used verbatim."""
@@ -191,9 +196,9 @@ class TestLinearCell:
         x = torch.randn(7, 5)
 
         with torch.no_grad():
-            assert isinstance(none_gate.gain, Constant)
-            assert isinstance(identity_gate.gain, Constant)
-            none_gate.gain.value.copy_(identity_gate.gain.value)
+            assert isinstance(none_gate.gain, ConstantGain)
+            assert isinstance(identity_gate.gain, ConstantGain)
+            none_gate.gain.gain.value.copy_(identity_gate.gain.gain.value)
             assert isinstance(none_gate.observation_map, nn.Linear)
             assert isinstance(identity_gate.observation_map, nn.Linear)
             none_gate.observation_map.weight.copy_(identity_gate.observation_map.weight)
