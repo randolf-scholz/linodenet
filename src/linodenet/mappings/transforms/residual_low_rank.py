@@ -1,6 +1,6 @@
 r"""Low-rank perturbation layers."""
 
-__all__ = ["LowRankTransform", "SymmetricLowRankTransform"]
+__all__ = ["LowRankTransform", "SPDLowRankTransform"]
 
 from math import sqrt
 from typing import Final
@@ -158,8 +158,8 @@ class LowRankTransform(nn.Module, Transform):
         return y - u, -logabsdet.expand(y.shape[:-1])
 
 
-class SymmetricLowRankTransform(nn.Module, Transform):
-    r"""An invertible, efficient symmetric low-rank perturbation layer.
+class SPDLowRankTransform(nn.Module, Transform):
+    r"""An invertible, efficient symmetric positive definite low-rank perturbation layer.
 
     .. math:: y = (𝕀ₙ + UUᵀ)x
 

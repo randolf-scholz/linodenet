@@ -2,7 +2,7 @@ import pytest
 import torch
 from torch import nn
 
-from linodenet.mappings.transforms import LowRankTransform, SymmetricLowRankTransform
+from linodenet.mappings.transforms import LowRankTransform, SPDLowRankTransform
 from tests.testing import SEEDS_10
 
 from .base import TestTransform
@@ -67,7 +67,7 @@ class TestSymmetricLowRankFlow(TestTransform):
     def test_invertibility(self, seed: int, input_size: int, rank: int) -> None:
         r"""Check forward/inverse round trips and logabsdet cancellation."""
         torch.manual_seed(seed)
-        flow = SymmetricLowRankTransform(input_size, rank=min(rank, input_size))
+        flow = SPDLowRankTransform(input_size, rank=min(rank, input_size))
 
         x = torch.randn(self.BATCH_SIZE, input_size)
         y = torch.randn(self.BATCH_SIZE, input_size)

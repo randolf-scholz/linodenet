@@ -64,7 +64,7 @@ __all__ = [
     "ResidualContraction",
     "ResidualContractionFallback",
     "SplineTransform",
-    "SymmetricLowRankTransform",
+    "SPDLowRankTransform",
     "TriangularTransform",
 ]
 
@@ -83,7 +83,7 @@ from .residual_contraction import (
     ResidualContraction,
     ResidualContractionFallback,
 )
-from .residual_low_rank import LowRankTransform, SymmetricLowRankTransform
+from .residual_low_rank import LowRankTransform, SPDLowRankTransform
 from .scalar import *
 from .triangular import TriangularTransform
 
