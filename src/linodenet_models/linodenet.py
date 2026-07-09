@@ -278,6 +278,8 @@ class LinODEnet_v0(nn.Module):
         batch_first: bool = True,
     ) -> None:
         super().__init__()
+        self.input_size = input_size
+        self.latent_size = latent_size
 
         self.decoder = decoder
         self.encoder = encoder
@@ -405,6 +407,8 @@ class LinODEnet_v2(nn.Module):
         batch_first: bool = True,
     ) -> None:
         super().__init__()
+        self.input_size = input_size
+        self.latent_size = latent_size
 
         self.decoder = decoder
         self.state_update = state_updater
