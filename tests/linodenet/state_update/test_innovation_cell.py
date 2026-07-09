@@ -51,7 +51,7 @@ class TestInnovationCell:
         with torch.no_grad():
             assert isinstance(plain.gain, ConstantGain)
             assert isinstance(rezero.gain, ConstantGain)
-            rezero.gain.gain.value.copy_(plain.gain.gain.value)
+            rezero.gain.weight.copy_(plain.gain.weight)
             assert isinstance(plain.observation_map, nn.Linear)
             assert isinstance(rezero.observation_map, nn.Linear)
             rezero.observation_map.weight.copy_(plain.observation_map.weight)
@@ -81,7 +81,7 @@ class TestInnovationCell:
 
         assert isinstance(cell.gain, ConstantGain)
         assert isinstance(cell.observation_map, nn.Identity)
-        torch.testing.assert_close(cell.gain.gain.value, torch.eye(4))
+        torch.testing.assert_close(cell.gain.weight, torch.eye(4))
         torch.testing.assert_close(cell(y, x), y)
 
     def test_accepts_custom_gain(self) -> None:
@@ -192,7 +192,7 @@ class TestInnovationCell:
         with torch.no_grad():
             match none_gate.gain, identity_gate.gain:
                 case ConstantGain(), ConstantGain():
-                    none_gate.gain.gain.value.copy_(identity_gate.gain.gain.value)
+                    none_gate.gain.weight.copy_(identity_gate.gain.weight)
                 case AttentionGain(), AttentionGain():
                     none_gate.gain.query.weight.copy_(identity_gate.gain.query.weight)
                     none_gate.gain.key.weight.copy_(identity_gate.gain.key.weight)

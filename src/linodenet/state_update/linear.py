@@ -155,7 +155,7 @@ class InnovationCell(nn.Module, VectorStateUpdate):
         )
         with torch.no_grad():
             assert isinstance(cell.gain, ConstantGain)
-            cell.gain.gain.value.copy_(torch.eye(size))
+            cell.gain.weight.copy_(torch.eye(size))
             if initial_gate_value is not None:
                 assert isinstance(cell.gate, ReZero)
                 cell.gate.scalar.copy_(torch.tensor(initial_gate_value))
@@ -220,27 +220,15 @@ class InnovationCell(nn.Module, VectorStateUpdate):
 class ConstantGain(nn.Module):
     r"""Computes $(v, x) ↦ K(x)v$."""
 
-    def __init__(
-        self,
-        /,
-        input_size: int,
-        output_size: int,
-        *,
-        kind: str = "constant",
-    ) -> None:
+    def __init__(self, input_size: int, output_size: int) -> None:
         super().__init__()
         self.input_size = input_size
         self.output_size = output_size
+        self.weight = nn.Parameter(torch.randn(output_size, input_size))
+        nn.init.xavier_uniform_(self.weight)
 
-        match kind:
-            case "constant":
-                value = torch.randn((output_size, input_size))
-                self.gain = Constant(value, learnable=True)
-            case _:
-                raise NotImplementedError
-
-    def forward(self, v: Tensor, x: Tensor) -> Tensor:
-        return F.linear(v, self.gain(x))
+    def forward(self, v: Tensor, _: Tensor, /) -> Tensor:
+        return F.linear(v, self.weight)
 
 
 class AttentionGain(nn.Module):
