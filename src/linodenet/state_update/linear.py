@@ -536,7 +536,7 @@ class AttentionCovarianceFactor(nn.Module):
 
     .. math:: Lᵢⱼ(x) =
         \begin{cases}
-            \frac{ϕᵢ(x)^⊤ϕⱼ(x)}{\sqrt{dₐ}}, & i > j, \\
+            \frac{ϕᵢ(x)ᵀϕⱼ(x)}{\sqrt{dₐ}}, & i > j, \\
             \softplus(dᵢ(x)) + ε, & i = j, \\
             0, & i < j,
         \end{cases}
