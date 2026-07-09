@@ -100,6 +100,7 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "SmoothSoftsign"       : transforms.scalar.SmoothSoftsign,
     "Softplus"             : transforms.scalar.Softplus,
     "Softsign"             : transforms.scalar.Softsign,
+    "Sinh"                 : transforms.scalar.Sinh,
     "Tanh"                 : transforms.scalar.Tanh,
     "Tanhshrink"           : transforms.scalar.Tanhshrink,
 }  # fmt: skip
