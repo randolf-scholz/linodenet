@@ -80,7 +80,12 @@ class LowRankTransform(nn.Module, Transform):
         }
 
     def __init__(
-        self, input_size: int, *, rank: int, rho: float = 0.9, delta: float = 1e-6
+        self,
+        input_size: int,
+        *,
+        rank: int,
+        rho: float = 0.9,
+        delta: float = 1e-6,
     ) -> None:
         super().__init__()
         if not 0 < rho < 1:
@@ -93,9 +98,10 @@ class LowRankTransform(nn.Module, Transform):
         self.delta = delta
         self.U = nn.Parameter(torch.empty(input_size, rank))
         self.V = nn.Parameter(torch.empty(input_size, rank))
-        self.theta = nn.Parameter(torch.zeros(rank))
+        self.theta = nn.Parameter(torch.empty(rank))
         nn.init.normal_(self.U, std=1 / sqrt(rank))
         nn.init.normal_(self.V, std=1 / sqrt(input_size))
+        nn.init.zeros_(self.theta)
         self.register_buffer("eye", torch.eye(rank), persistent=True)
 
     def diag_values(self, VtU: Tensor, /) -> Tensor:

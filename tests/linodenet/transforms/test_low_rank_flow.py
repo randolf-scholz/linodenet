@@ -1,5 +1,6 @@
 import pytest
 import torch
+from torch import nn
 
 from linodenet.mappings.transforms import LowRankTransform, SymmetricLowRankTransform
 from tests.testing import SEEDS_10
@@ -21,8 +22,8 @@ class TestLowRankFlow(TestTransform):
         r"""Check forward/inverse round trips and logabsdet cancellation."""
         torch.manual_seed(seed)
         flow = LowRankTransform(input_size, rank=min(rank, input_size))
-        with torch.no_grad():
-            flow.theta.copy_(torch.linspace(-20.0, 20.0, flow.rank))
+        # Override the zero initialization so the test exercises a nontrivial low-rank scaling.
+        nn.init.normal_(flow.theta)
 
         x = torch.randn(self.BATCH_SIZE, input_size)
         y = torch.randn(self.BATCH_SIZE, input_size)
@@ -45,8 +46,8 @@ class TestLowRankFlow(TestTransform):
         r"""Check that the cheap scaling keeps the rank-space residual bounded by ρ."""
         torch.manual_seed(seed)
         flow = LowRankTransform(input_size, rank=min(rank, input_size))
-        with torch.no_grad():
-            flow.theta.copy_(torch.linspace(-20.0, 20.0, flow.rank))
+        # Override the zero initialization so the test exercises a nontrivial low-rank scaling.
+        nn.init.normal_(flow.theta)
 
         VtU = torch.einsum("ni, nj -> ij", flow.V, flow.U)
         residual = flow.diag_values(VtU)[:, None] * VtU
