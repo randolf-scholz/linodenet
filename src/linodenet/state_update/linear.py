@@ -97,15 +97,11 @@ class LinearCell(nn.Module, VectorStateUpdate):
                 initial_gate_value = 0.0
             case None | "identity" | "rezero" | nn.Module():
                 gate_module = gate
-            case str():
+            case _:
                 raise ValueError(
                     f"Unknown direct-observation gate: {gate!r}. Expected "
                     "'last-value', 'average-value', 'first-value', 'keep-state', "
                     "'rezero', 'identity', None, or an nn.Module."
-                )
-            case _:
-                raise TypeError(
-                    f"gate must be a string, nn.Module, or None, got {type(gate)!r}."
                 )
 
         cell = LinearCell(
@@ -146,14 +142,10 @@ class LinearCell(nn.Module, VectorStateUpdate):
                 self.gain = Constant(value, learnable=True)
             case "attention":
                 self.gain = AttentionGain(hidden_size, input_size)
-            case str():
+            case _:
                 raise ValueError(
                     "Unknown gain: "
                     f"{gain!r}. Expected 'constant', 'attention', or an nn.Module."
-                )
-            case _:
-                raise TypeError(
-                    f"gain must be a string or nn.Module, got {type(gain)!r}."
                 )
 
         match observation_map:
@@ -167,15 +159,10 @@ class LinearCell(nn.Module, VectorStateUpdate):
                         "observation_map='identity' requires input_size == hidden_size!"
                     )
                 self.observation_map = nn.Identity()
-            case str():
+            case _:
                 raise ValueError(
                     f"Unknown observation_map: {observation_map!r}. "
                     "Expected 'linear', 'identity', or an nn.Module."
-                )
-            case _:
-                raise TypeError(
-                    "observation_map must be a string or nn.Module, "
-                    f"got {type(observation_map)!r}."
                 )
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -461,8 +448,8 @@ class AttentionGain(nn.Module):
         attention_size: int | None = None,
     ) -> None:
         super().__init__()
-        self.hidden_size = hidden_size
         self.input_size = input_size
+        self.hidden_size = hidden_size
         self.attention_size = (
             min(hidden_size, input_size, 32)
             if attention_size is None
