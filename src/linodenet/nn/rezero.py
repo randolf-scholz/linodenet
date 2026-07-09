@@ -9,12 +9,10 @@ References:
 
 __all__ = [
     "ReZero",
-    "ReZeroResNet",
     "resolve_gate",
 ]
 
 import warnings
-from collections.abc import Iterable
 from typing import cast
 
 import torch
@@ -72,30 +70,6 @@ class ReZero[
             return None
 
         return self.module.right_inverse(y / self.scalar_map(self.scalar))  # type: ignore[call]
-
-
-class ReZeroResNet(nn.ModuleList):
-    r"""A Residual Network with ReZero scalars."""
-
-    @property
-    def config(self) -> dict:
-        return {"modules": list(self)}
-
-    def __init__(self, modules: Iterable[nn.Module]) -> None:
-        module_list = list(modules)
-
-        for i, module in enumerate(module_list):
-            # pass if already a ReZeroCell
-            if isinstance(module, ReZero):
-                continue
-            module_list[i] = ReZero(module)
-
-        super().__init__(module_list)
-
-    def forward(self, x: Tensor, /) -> Tensor:
-        for block in self:
-            x = x + block(x)
-        return x
 
 
 def resolve_gate(

@@ -19,7 +19,7 @@ def test_instantiation(use_rezero: bool) -> None:
         num_blocks=num_blocks,
         layers_per_block=layers_per_block,
         latent_size=latent_size,
-        activation="ReLU",
+        activation="relu",
         use_rezero=use_rezero,
     )
 

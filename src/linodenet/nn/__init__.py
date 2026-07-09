@@ -21,17 +21,16 @@ __all__ = [
     "MLP",
     "ResNet",
     "ReZero",
-    "ReZeroResNet",
-    "ReverseDense",
 ]
 
 from . import activations, containers, parametrize
 from .containers import ModuleMapping, ModuleSequence
 from .mlp import MLP
 from .resnet import ResNet
-from .reverse_dense import ReverseDense
-from .rezero import ReZero, ReZeroResNet
+from .rezero import ReZero
 
+# blocker statement to prevent formatter from changing import order.
+# activations must be imported last.
 pass  # noqa: PIE790
 
 from .activations import *

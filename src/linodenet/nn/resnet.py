@@ -8,8 +8,8 @@ from torch import Tensor, nn
 
 from signatures import signature
 
+from .activations import Activations
 from .containers import ModuleSequence
-from .reverse_dense import ReverseDense
 from .rezero import ReZero
 
 
@@ -43,7 +43,7 @@ class ResNet(ModuleSequence[nn.Module]):
         num_block: int | None = None,
         layers_per_block: int = 2,
         latent_size: int | None = None,
-        activation: str | nn.Module = "ReLU",
+        activation: str | nn.Module = "relu",
         use_rezero: bool = True,
         scalar_map: Optional[nn.Module] = None,
         use_batchnorm: bool = False,
@@ -79,6 +79,26 @@ class ResNet(ModuleSequence[nn.Module]):
         super().__init__(blocks)
 
     @staticmethod
+    def _make_dense_layer(
+        input_size: int,
+        output_size: int,
+        /,
+        *,
+        activation: str | nn.Module,
+        use_batchnorm: bool,
+    ) -> list[nn.Module]:
+        linear = nn.Linear(input_size, output_size)
+        if isinstance(activation, str):
+            nn.init.kaiming_uniform_(linear.weight, nonlinearity=activation)  # type: ignore[arg-type]
+            if linear.bias is not None:
+                nn.init.kaiming_uniform_(linear.bias[None], nonlinearity=activation)  # type: ignore[arg-type]
+
+        layers: list[nn.Module] = [Activations.new(activation), linear]
+        if use_batchnorm:
+            layers.append(nn.BatchNorm1d(output_size))
+        return layers
+
+    @staticmethod
     def _make_block(
         *,
         input_size: int,
@@ -90,25 +110,42 @@ class ResNet(ModuleSequence[nn.Module]):
         use_batchnorm: bool,
     ) -> nn.Module:
         layers: list[nn.Module] = []
-
-        def add_layer(input_dim: int, output_dim: int, /) -> None:
-            layers.append(
-                ReverseDense(
-                    input_size=input_dim,
-                    output_size=output_dim,
+        if layers_per_block == 1:
+            layers.extend(
+                ResNet._make_dense_layer(
+                    input_size,
+                    input_size,
                     activation=activation,
+                    use_batchnorm=use_batchnorm,
                 )
             )
-            if use_batchnorm:
-                layers.append(nn.BatchNorm1d(output_dim))
-
-        if layers_per_block == 1:
-            add_layer(input_size, input_size)
         else:
-            add_layer(input_size, latent_size)
-            for _ in range(layers_per_block - 2):
-                add_layer(latent_size, latent_size)
-            add_layer(latent_size, input_size)
+            layers.extend(
+                ResNet._make_dense_layer(
+                    input_size,
+                    latent_size,
+                    activation=activation,
+                    use_batchnorm=use_batchnorm,
+                )
+            )
+            layers.extend(
+                module
+                for _ in range(layers_per_block - 2)
+                for module in ResNet._make_dense_layer(
+                    latent_size,
+                    latent_size,
+                    activation=activation,
+                    use_batchnorm=use_batchnorm,
+                )
+            )
+            layers.extend(
+                ResNet._make_dense_layer(
+                    latent_size,
+                    input_size,
+                    activation=activation,
+                    use_batchnorm=use_batchnorm,
+                )
+            )
 
         block = nn.Sequential(*layers)
         if use_rezero:
