@@ -173,6 +173,102 @@ class LinearCell(nn.Module, VectorStateUpdate):
         return x - self.gate(correction)
 
 
+class ConditionalLinear(nn.Module):
+    r"""Computes $(v, x) ↦ K(x)v$."""
+
+    def __init__(
+        self,
+        /,
+        input_size: int,
+        output_size: int,
+        *,
+        kind: str = "constant",
+    ) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.output_size = output_size
+
+        match kind:
+            case "constant":
+                value = torch.randn((output_size, input_size))
+                self.gain = Constant(value, learnable=True)
+            case _:
+                raise NotImplementedError
+
+    def forward(self, v: Tensor, x: Tensor) -> Tensor:
+        return F.linear(v, self.gain(x))
+
+
+class AttentionGain(nn.Module):
+    r"""Predict a gain matrix with scaled dot-product attention.
+
+    For hidden state $x$, the gain entries are computed as
+
+    .. math:: Kᵢⱼ(x) = \softmax_j(\frac{qᵢ(x)ᵀkⱼ(x)}{\sqrt{dₐ}})
+
+    where $qᵢ(x)$ and $kⱼ(x)$ are row- and column-specific query/key vectors,
+    and $dₐ$ is the shared attention feature size.
+    """
+
+    query: nn.Linear
+    r"""MODULE: Projects the hidden state to row queries."""
+    key: nn.Linear
+    r"""MODULE: Projects the hidden state to column keys."""
+    hidden_size: int
+    r"""CONST: Number of rows in the gain matrix."""
+    input_size: int
+    r"""CONST: Number of columns in the gain matrix."""
+    attention_size: int
+    r"""CONST: Shared query/key feature dimension."""
+    scale: float
+    r"""CONST: Scale factor for attention logits."""
+
+    @property
+    def config(self) -> dict:
+        return {
+            "hidden_size": self.hidden_size,
+            "input_size": self.input_size,
+            "attention_size": self.attention_size,
+        }
+
+    def __init__(
+        self,
+        /,
+        hidden_size: int,
+        input_size: int,
+        *,
+        attention_size: int | None = None,
+    ) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.attention_size = (
+            min(hidden_size, input_size, 32)
+            if attention_size is None
+            else int(attention_size)
+        )
+        if self.attention_size <= 0:
+            raise ValueError("attention_size must be a positive integer.")
+
+        self.query = nn.Linear(
+            hidden_size,
+            hidden_size * self.attention_size,
+            bias=False,
+        )
+        self.key = nn.Linear(
+            hidden_size,
+            input_size * self.attention_size,
+            bias=False,
+        )
+        self.scale = self.attention_size**-0.5
+
+    def forward(self, x: Tensor) -> Tensor:
+        query = self.query(x).unflatten(-1, (self.hidden_size, self.attention_size))
+        key = self.key(x).unflatten(-1, (self.input_size, self.attention_size))
+        scores = self.scale * (query @ key.mT)
+        return scores.softmax(dim=-1)
+
+
 class KalmanCell(nn.Module, VectorStateUpdate):
     r"""Kalman-style hidden-state update with masked observations.
 
@@ -405,76 +501,6 @@ class LinearRNNCell(nn.Module, VectorStateUpdate):
         .. math:: F(y，x) =  Ux + Vy + b
         """
         return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
-
-
-class AttentionGain(nn.Module):
-    r"""Predict a gain matrix with scaled dot-product attention.
-
-    For hidden state $x$, the gain entries are computed as
-
-    .. math:: Kᵢⱼ(x) = \softmax_j(\frac{qᵢ(x)ᵀkⱼ(x)}{\sqrt{dₐ}})
-
-    where $qᵢ(x)$ and $kⱼ(x)$ are row- and column-specific query/key vectors,
-    and $dₐ$ is the shared attention feature size.
-    """
-
-    query: nn.Linear
-    r"""MODULE: Projects the hidden state to row queries."""
-    key: nn.Linear
-    r"""MODULE: Projects the hidden state to column keys."""
-    hidden_size: int
-    r"""CONST: Number of rows in the gain matrix."""
-    input_size: int
-    r"""CONST: Number of columns in the gain matrix."""
-    attention_size: int
-    r"""CONST: Shared query/key feature dimension."""
-    scale: float
-    r"""CONST: Scale factor for attention logits."""
-
-    @property
-    def config(self) -> dict:
-        return {
-            "hidden_size": self.hidden_size,
-            "input_size": self.input_size,
-            "attention_size": self.attention_size,
-        }
-
-    def __init__(
-        self,
-        /,
-        hidden_size: int,
-        input_size: int,
-        *,
-        attention_size: int | None = None,
-    ) -> None:
-        super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.attention_size = (
-            min(hidden_size, input_size, 32)
-            if attention_size is None
-            else int(attention_size)
-        )
-        if self.attention_size <= 0:
-            raise ValueError("attention_size must be a positive integer.")
-
-        self.query = nn.Linear(
-            hidden_size,
-            hidden_size * self.attention_size,
-            bias=False,
-        )
-        self.key = nn.Linear(
-            hidden_size,
-            input_size * self.attention_size,
-            bias=False,
-        )
-        self.scale = self.attention_size**-0.5
-
-    def forward(self, x: Tensor) -> Tensor:
-        query = self.query(x).unflatten(-1, (self.hidden_size, self.attention_size))
-        key = self.key(x).unflatten(-1, (self.input_size, self.attention_size))
-        scores = self.scale * (query @ key.mT)
-        return scores.softmax(dim=-1)
 
 
 class AttentionCovarianceFactor(nn.Module):
