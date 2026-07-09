@@ -6,7 +6,7 @@ from torch import nn
 from torch.nn import functional as F
 
 from linodenet.nn.rezero import ReZero
-from linodenet.state_update import AttentionGain, LinearCell
+from linodenet.state_update import AttentionGain, InnovationCell
 from linodenet.state_update.linear import ConstantGain
 
 
@@ -16,11 +16,11 @@ def compute_correction(
     return gain(r, x)
 
 
-class TestLinearCell:
+class TestInnovationCell:
     @pytest.mark.parametrize("gain_name", ["constant", "attention"])
     def test_identity_gate_matches_plain_update(self, gain_name: str) -> None:
         r"""The identity gate should preserve the plain innovation update."""
-        cell = LinearCell(3, 5, gain=gain_name, gate="identity")
+        cell = InnovationCell(3, 5, gain=gain_name, gate="identity")
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
@@ -33,7 +33,7 @@ class TestLinearCell:
 
     def test_rezero_starts_as_identity(self) -> None:
         r"""ReZero mode should initialize the innovation path at zero."""
-        cell = LinearCell(3, 5)
+        cell = InnovationCell(3, 5)
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
@@ -43,8 +43,8 @@ class TestLinearCell:
 
     def test_rezero_scalar_controls_correction(self) -> None:
         r"""Setting the ReZero scalar to one should recover the plain innovation update."""
-        plain = LinearCell(3, 5, gate="identity")
-        rezero = LinearCell(3, 5)
+        plain = InnovationCell(3, 5, gate="identity")
+        rezero = InnovationCell(3, 5)
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
@@ -62,7 +62,7 @@ class TestLinearCell:
 
     def test_identity_observation_map_uses_x_directly(self) -> None:
         r"""Identity observation maps should use the hidden state directly."""
-        cell = LinearCell(4, 4, observation_map="identity", gate="identity")
+        cell = InnovationCell(4, 4, observation_map="identity", gate="identity")
         y = torch.randn(7, 4)
         x = torch.randn(7, 4)
 
@@ -75,7 +75,7 @@ class TestLinearCell:
 
     def test_from_direct_observation_model_recovers_observation(self) -> None:
         r"""The direct-observation constructor should recover the observation exactly."""
-        cell = LinearCell.from_direct_observation_model(4, gate="identity")
+        cell = InnovationCell.from_direct_observation_model(4, gate="identity")
         x = torch.randn(7, 4)
         y = torch.randn(7, 4)
 
@@ -92,7 +92,7 @@ class TestLinearCell:
                 return r @ torch.diag(x.mean(dim=0)).mT
 
         gain = DiagonalGain()
-        cell = LinearCell(3, 3, gain=gain, gate="identity")
+        cell = InnovationCell(3, 3, gain=gain, gate="identity")
         x = torch.randn(7, 3)
         y = torch.randn(7, 3)
 
@@ -105,7 +105,7 @@ class TestLinearCell:
 
     def test_from_direct_observation_model_last_value_gate(self) -> None:
         r"""The last-value preset should initialize ReZero at one."""
-        cell = LinearCell.from_direct_observation_model(4)
+        cell = InnovationCell.from_direct_observation_model(4)
         x = torch.randn(7, 4)
         y = torch.randn(7, 4)
 
@@ -115,7 +115,7 @@ class TestLinearCell:
 
     def test_from_direct_observation_model_average_value_gate(self) -> None:
         r"""The average-value preset should initialize ReZero at one half."""
-        cell = LinearCell.from_direct_observation_model(4, gate="average-value")
+        cell = InnovationCell.from_direct_observation_model(4, gate="average-value")
         x = torch.randn(7, 4)
         y = torch.randn(7, 4)
 
@@ -125,7 +125,7 @@ class TestLinearCell:
 
     def test_from_direct_observation_model_keep_state_gate(self) -> None:
         r"""The keep-state preset should initialize ReZero at zero."""
-        cell = LinearCell.from_direct_observation_model(4, gate="keep-state")
+        cell = InnovationCell.from_direct_observation_model(4, gate="keep-state")
         x = torch.randn(7, 4)
         y = torch.randn(7, 4)
 
@@ -135,7 +135,7 @@ class TestLinearCell:
 
     def test_from_direct_observation_model_copies_only_observed_values(self) -> None:
         r"""The direct-observation constructor should overwrite only observed coordinates."""
-        cell = LinearCell.from_direct_observation_model(4, gate="identity")
+        cell = InnovationCell.from_direct_observation_model(4, gate="identity")
         x = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
         y = torch.tensor([[10.0, float("nan"), -5.0, float("nan")]])
 
@@ -153,7 +153,7 @@ class TestLinearCell:
                 r"'rezero', 'identity', None, or an nn.Module."
             ),
         ):
-            LinearCell.from_direct_observation_model(4, gate="other")
+            InnovationCell.from_direct_observation_model(4, gate="other")
 
     @pytest.mark.parametrize(
         ("gain_name", "gain_cls"),
@@ -163,29 +163,29 @@ class TestLinearCell:
         self, gain_name: str, gain_cls: type[nn.Module]
     ) -> None:
         r"""Built-in gain strings should instantiate the expected module."""
-        cell = LinearCell(3, 5, gain=gain_name, gate="identity")
+        cell = InnovationCell(3, 5, gain=gain_name, gate="identity")
 
         assert isinstance(cell.gain, gain_cls)
 
     def test_accepts_custom_observation_map(self) -> None:
         r"""Custom observation maps should be used verbatim."""
         observation_map = nn.Linear(5, 3, bias=False)
-        cell = LinearCell(3, 5, observation_map=observation_map)
+        cell = InnovationCell(3, 5, observation_map=observation_map)
 
         assert cell.observation_map is observation_map
 
     def test_accepts_custom_gate(self) -> None:
         r"""Custom gates should be used verbatim."""
         gate = nn.Tanh()
-        cell = LinearCell(3, 5, gate=gate)
+        cell = InnovationCell(3, 5, gate=gate)
 
         assert cell.gate is gate
 
     @pytest.mark.parametrize("gain_name", ["constant", "attention"])
     def test_none_gate_maps_to_identity(self, gain_name: str) -> None:
         r"""A None gate should behave like the identity gate."""
-        none_gate = LinearCell(3, 5, gain=gain_name, gate=None)
-        identity_gate = LinearCell(3, 5, gain=gain_name, gate="identity")
+        none_gate = InnovationCell(3, 5, gain=gain_name, gate=None)
+        identity_gate = InnovationCell(3, 5, gain=gain_name, gate="identity")
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
@@ -210,7 +210,7 @@ class TestLinearCell:
         r"""Masked observations should not introduce NaNs into outputs or gradients."""
         torch.manual_seed(0)
 
-        cell = LinearCell(5, 7, gain=gain_name, gate="identity")
+        cell = InnovationCell(5, 7, gain=gain_name, gate="identity")
         x = torch.randn(8, 7, requires_grad=True)
         y = torch.randn(8, 5)
         mask = torch.rand(8, 5) < 0.5
@@ -234,7 +234,7 @@ class TestLinearCell:
             ValueError,
             match=r"observation_map='identity' requires input_size == hidden_size!",
         ):
-            LinearCell(3, 5, observation_map="identity")
+            InnovationCell(3, 5, observation_map="identity")
 
     def test_rejects_unknown_gain(self) -> None:
         r"""Unknown gain strings should fail explicitly."""
@@ -242,7 +242,7 @@ class TestLinearCell:
             ValueError,
             match=r"Unknown gain: 'other'. Expected 'constant', 'attention', or an nn.Module.",
         ):
-            LinearCell(3, 5, gain="other")
+            InnovationCell(3, 5, gain="other")
 
     def test_rejects_unknown_gate(self) -> None:
         r"""Unknown gate strings should fail explicitly."""
@@ -250,7 +250,7 @@ class TestLinearCell:
             ValueError,
             match=r"Unknown gate: 'other'. Expected 'rezero', 'identity', None, or an nn.Module.",
         ):
-            LinearCell(3, 5, gate="other")
+            InnovationCell(3, 5, gate="other")
 
 
 def test_attention_gain_matches_manual_attention_formula() -> None:
@@ -325,7 +325,7 @@ def test_builtin_gain_backward_has_finite_gradients(gain_name: str) -> None:
     r"""Built-in gains should support stable forward and backward passes."""
     torch.manual_seed(0)
 
-    cell = LinearCell(4, 6, gain=gain_name, gate="identity")
+    cell = InnovationCell(4, 6, gain=gain_name, gate="identity")
     x = torch.randn(8, 6, requires_grad=True)
     y = torch.randn(8, 4)
     y[torch.rand(8, 4) < 0.4] = float("nan")

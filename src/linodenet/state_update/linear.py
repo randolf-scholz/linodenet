@@ -5,7 +5,7 @@ __all__ = [
     "ConstantGain",
     "AttentionGain",
     "AttentionCovarianceFactor",
-    "LinearCell",
+    "InnovationCell",
     "KalmanCell",
 ]
 
@@ -67,8 +67,8 @@ class LinearRNNCell(nn.Module, VectorStateUpdate):
         return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
 
 
-class LinearCell(nn.Module, VectorStateUpdate):
-    r"""Linear innovation state update.
+class InnovationCell(nn.Module, VectorStateUpdate):
+    r"""State update that is linear/affine in the residual $h(x)-y$.
 
     .. math:: x' = x - ρ(K(x)⋅(h(x) - y))
 
@@ -109,7 +109,7 @@ class LinearCell(nn.Module, VectorStateUpdate):
     @classmethod
     def from_direct_observation_model(
         cls, /, size: int, *, gate: str | nn.Module | None = "last-value"
-    ) -> LinearCell:
+    ) -> InnovationCell:
         r"""Construct a square direct-observation linear cell.
 
         This constructor fixes $h(x)=x$ and initializes $K(x)=I$, yielding
@@ -146,7 +146,7 @@ class LinearCell(nn.Module, VectorStateUpdate):
                     "'rezero', 'identity', None, or an nn.Module."
                 )
 
-        cell = LinearCell(
+        cell = InnovationCell(
             size,
             size,
             gain="constant",

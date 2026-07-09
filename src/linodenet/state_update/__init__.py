@@ -30,7 +30,7 @@ __all__ = [
     "LinearRNNCell",
     "AttentionGain",
     "AttentionCovarianceFactor",
-    "LinearCell",
+    "InnovationCell",
     "KalmanCell",
     "NonLinearUpdate",
     "NonLinearKalmanUpdate",
@@ -59,8 +59,8 @@ from .kalman import NonLinearKalmanUpdate, NonLinearUpdate
 from .linear import (
     AttentionCovarianceFactor,
     AttentionGain,
+    InnovationCell,
     KalmanCell,
-    LinearCell,
     LinearRNNCell,
 )
 
@@ -72,7 +72,7 @@ STATE_UPDATERS: dict[str, type[VectorStateUpdate]] = {
     # custom state updaters
     "LinearRNNCell": LinearRNNCell,
     "KalmanCell": KalmanCell,
-    "LinearCell": LinearCell,
+    "InnovationCell": InnovationCell,
     "MissingValueCell": MissingValueCell,
     "NonLinearKalmanUpdate": NonLinearKalmanUpdate,
     "NonLinearUpdate": NonLinearUpdate,
