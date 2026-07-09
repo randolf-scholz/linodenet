@@ -105,8 +105,6 @@ def resolve_gate(
     scalar_map: nn.Module | None = None,
 ) -> nn.Module:
     match gate:
-        case "rezero":
-            return ReZero(scalar_map=scalar_map)
         case None | "identity":
             if scalar_map is not None:
                 warnings.warn(
@@ -114,6 +112,10 @@ def resolve_gate(
                     stacklevel=3,
                 )
             return nn.Identity()
+
+        case "rezero":
+            return ReZero(scalar_map=scalar_map)
+
         case nn.Module():
             if scalar_map is not None:
                 warnings.warn(
@@ -121,6 +123,7 @@ def resolve_gate(
                     stacklevel=3,
                 )
             return gate
+
         case str():
             raise ValueError(
                 f"Unknown gate: {gate!r}. "
