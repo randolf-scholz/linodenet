@@ -1,8 +1,9 @@
 r"""Minimal, unoptimized reimplementation of LinODEnet."""
 
-__all__ = ["LinODEnet"]
+__all__ = ["LinODEnet_v0"]
 
 from collections.abc import Callable
+from functools import partial
 from typing import Final, Optional, cast
 
 import torch
@@ -10,6 +11,124 @@ from torch import Tensor, nan, nn
 from torch.linalg import solve, solve_triangular
 
 from .utils import EventBatch
+
+
+def lp_loss(
+    x: Tensor,  # (..., d)
+    y: Tensor,  # (..., d)
+    /,
+    *,
+    p: float = 2.0,
+    dim: int = -1,
+    aggregation: str = "mean",
+) -> Tensor:  # (...)
+    r"""Compute a per-batch-element $Lᵖ$ reconstruction loss $‖x-y‖ₚᵖ$."""
+    match aggregation:
+        case "sum":
+            return (x - y).abs().pow(p).sum(dim=dim)
+        case "mean":
+            return (x - y).abs().pow(p).mean(dim=dim)
+        case _:
+            raise ValueError(f"Unexpected aggregation: {aggregation!r}")
+
+
+class LpLoss(nn.Module):
+    r"""Compute a per-batch-element $Lᵖ$ reconstruction loss $‖x-y‖ₚᵖ$."""
+
+    def __init__(
+        self,
+        p: float = 2.0,
+        dim: int = -1,
+        aggregation: str = "mean",
+    ) -> None:
+        super().__init__()
+        if p <= 0:
+            raise ValueError(f"Expected p > 0, got {p!r}.")
+        if aggregation not in {"sum", "mean"}:
+            raise ValueError(
+                f"Expected aggregation to be 'sum' or 'mean', got {aggregation!r}."
+            )
+
+        self.p = p
+        self.dim = dim
+        self.aggregation = aggregation
+
+    __call__: Callable[[Tensor, Tensor], Tensor]
+
+    def forward(self, x: Tensor, y: Tensor, /) -> Tensor:
+        return lp_loss(x, y, p=self.p, dim=self.dim, aggregation=self.aggregation)
+
+
+class GradientStepUpdater(nn.Module):
+    r"""Single gradient-step updater for latent distribution parameters.
+
+    .. math:: ℒ(z) = ∇₟ℓ(f(z), y) + λ d(z, z₋)
+                z' = z₋ - η∇₟ℒ(z₋)
+    """
+
+    def __init__(
+        self,
+        *,
+        decoder: nn.Module,
+        loss: nn.Module | str = "l2",
+        regularizer: nn.Module | str = "l2",
+        regularization_strength: float = 1e-3,
+        step_size: float = 1e-2,
+    ) -> None:
+        super().__init__()
+
+        self.decoder = decoder
+        self.regularization_strength = nn.Parameter(
+            torch.as_tensor(regularization_strength)
+        )
+        self.step_size = nn.Parameter(torch.as_tensor(step_size))
+
+        match loss:
+            case nn.Module():
+                self.loss = loss
+            case "l1":
+                self.loss = LpLoss(p=1.0)
+            case "l2":
+                self.loss = LpLoss(p=2.0)
+            case _:
+                raise ValueError(f"Unknown loss: {loss!r}")
+
+        match regularizer:
+            case nn.Module():
+                self.regularizer = regularizer
+            case "l1":
+                self.regularizer = LpLoss(p=1.0)
+            case "l2":
+                self.regularizer = LpLoss(p=2.0)
+            case _:
+                raise ValueError(f"Unknown regularizer: {regularizer!r}")
+
+    @partial(torch.func.vmap, in_dims=(None, 0, 0, 0))
+    @partial(torch.func.grad, argnums=1)
+    def _grad_fn_flat_batch(self, z: Tensor, z_prev: Tensor, y: Tensor, /) -> Tensor:
+        return (
+            self.loss(self.decoder(z), y)  # ℓ(f(z), y)
+            + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
+        )
+
+    def grad_fn(self, z: Tensor, z_prev: Tensor, y: Tensor, /) -> Tensor:
+        r"""Return the gradient while preserving the input batch shape."""
+        z_flat = z.reshape(-1, z.shape[-1])
+        z_prev_flat = z_prev.reshape(-1, z_prev.shape[-1])
+        y_flat = y.reshape(-1, y.shape[-1])
+        grad = self._grad_fn_flat_batch(z_flat, z_prev_flat, y_flat)
+        return grad.reshape_as(z)
+
+    __call__: Callable[[Tensor, Tensor], Tensor]
+
+    def forward(
+        self,
+        z: Tensor,  # (..., d)
+        y: Tensor,  # (..., e)
+        /,
+    ) -> Tensor:  # (..., d)
+        r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ d(z, z_prev)."""
+        return z - self.step_size * self.grad_fn(z, z, y)
 
 
 class ReZero[
@@ -135,16 +254,6 @@ class LinearFlow(nn.Module):
     r"""MODULE: Optional Initialization of the kernel."""
     kernel_parametrization: nn.Module | None
     r"""MODULE: Optional parametrization of the kernel."""
-
-    @property
-    def config(self) -> dict:
-        return {
-            "input_size": self.input_size,
-            "kernel_initialization": self.kernel_initialization,
-            "kernel_parametrization": self.kernel_parametrization,
-            "use_rezero": self.use_rezero,
-            "use_bias": self.use_bias,
-        }
 
     def __init__(
         self,
@@ -371,15 +480,6 @@ class KalmanCell(nn.Module):
     eye: Tensor
     r"""BUFFER: Identity matrix used to keep the covariance solve well-posed."""
 
-    @property
-    def config(self) -> dict:
-        return {
-            "input_size": self.input_size,
-            "hidden_size": self.hidden_size,
-            "noise": self.noise,
-            "gate": self.gate,
-        }
-
     def __init__(
         self,
         /,
@@ -523,17 +623,17 @@ class KalmanCell(nn.Module):
         return x - self.gate(d)
 
 
-class LinODEnet(nn.Module):
+class LinODEnet_v0(nn.Module):
     r"""Encoder-Decoder Latent Linear ODE Network."""
 
     initial_state: Tensor
     batch_first: bool
 
     # submodules
-    propagate_state: Callable[[Tensor, Tensor], Tensor]
-    update_state: Callable[[Tensor, Tensor], Tensor]
-    decoder: Callable[[Tensor], Tensor]
+    state_propagator: Callable[[Tensor, Tensor], Tensor]
+    state_updater: Callable[[Tensor, Tensor], Tensor]
     encoder: Callable[[Tensor], Tensor]
+    decoder: Callable[[Tensor], Tensor]
 
     # buffers
     prior_latent_states: Tensor  # (..., $N, L) or ($N, ..., L)
@@ -546,9 +646,19 @@ class LinODEnet(nn.Module):
         input_size: int,
         latent_size: int,
         *,
+        decoder: nn.Module,
+        encoder: nn.Module,
+        state_updater: nn.Module,
+        state_propagator: nn.Module,
         batch_first: bool = True,
     ) -> None:
         super().__init__()
+
+        self.decoder = decoder
+        self.encoder = encoder
+        self.state_update = state_updater
+        self.state_propagator = state_propagator
+
         self.batch_first = batch_first
         self.initial_state = nn.Parameter(torch.zeros(latent_size))
         self.register_buffer("prior_latent_states", None, persistent=False)
@@ -585,7 +695,7 @@ class LinODEnet(nn.Module):
 
         for delta_t, x_obs, m, q in zip(DT, X, M, Q, strict=True):
             # zₜ = flow(z(t-∆t), ∆t)
-            prior_state = self.propagate_state(delta_t, posterior_state)
+            prior_state = self.state_propagator(delta_t, posterior_state)
 
             # x̂ₜ = ϕ(zₜ)
             prior_prediction = self.decoder(prior_state)
@@ -649,8 +759,8 @@ class LinODEnet_v2(nn.Module):
     batch_first: bool
 
     # submodules
-    propagate_state: Callable[[Tensor, Tensor], Tensor]
-    update_state: Callable[[Tensor, Tensor], Tensor]
+    state_propagator: Callable[[Tensor, Tensor], Tensor]
+    state_updater: Callable[[Tensor, Tensor], Tensor]
     decoder: Callable[[Tensor], Tensor]
 
     # buffers
@@ -664,9 +774,17 @@ class LinODEnet_v2(nn.Module):
         input_size: int,
         latent_size: int,
         *,
+        decoder: nn.Module,
+        state_updater: nn.Module,
+        state_propagator: nn.Module,
         batch_first: bool = True,
     ) -> None:
         super().__init__()
+
+        self.decoder = decoder
+        self.state_update = state_updater
+        self.state_propagator = state_propagator
+
         self.batch_first = batch_first
         self.initial_state = nn.Parameter(torch.zeros(latent_size))
         self.register_buffer("prior_latent_states", None, persistent=False)
@@ -703,10 +821,10 @@ class LinODEnet_v2(nn.Module):
 
         for delta_t, x_obs, obs_mask, q in zip(DT, X, M, Q, strict=True):
             # zₜ = flow(z(t-∆t), ∆t)
-            prior_state = self.propagate_state(delta_t, posterior_state)
+            prior_state = self.state_propagator(delta_t, posterior_state)
 
             # zₜ' = F(zₜ, xₜ)
-            posterior_state = self.update_state(prior_state, x_obs)
+            posterior_state = self.state_updater(prior_state, x_obs)
 
             # x̂ₜ = ϕ(zₜ)
             prior_pred = self.decoder(prior_state)
