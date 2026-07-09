@@ -26,6 +26,47 @@ from signatures import signature
 from .base import VectorStateUpdate
 
 
+class LinearRNNCell(nn.Module, VectorStateUpdate):
+    r"""Linear state update.
+
+    .. math:: F(y，x) =  Ux + Vy + b
+
+    where $U$ and $V$ are learnable matrices, and $b$ is a learnable bias vector.
+    """
+
+    # PARAMETERS
+    U: Tensor
+    r"""PARAM: the hidden state matrix."""
+    V: Tensor
+    r"""PARAM: the observable matrix."""
+    bias: Optional[Tensor]
+    r"""PARAM: the bias vector."""
+
+    def __init__(
+        self,
+        /,
+        input_size: int,
+        hidden_size: int,
+        *,
+        bias: bool = True,
+    ) -> None:
+        super().__init__()
+        VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
+        m = self.hidden_size
+        n = self.input_size
+        self.U = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
+        self.V = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
+        self.bias = nn.Parameter(torch.zeros(m)) if bool(bias) else None
+
+    @signature("[(..., n), (..., m)] -> (..., m)")
+    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        r"""Forward pass of the state update.
+
+        .. math:: F(y，x) =  Ux + Vy + b
+        """
+        return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
+
+
 class LinearCell(nn.Module, VectorStateUpdate):
     r"""Linear innovation state update.
 
@@ -396,16 +437,10 @@ class KalmanCell(nn.Module, VectorStateUpdate):
             case "attention":
                 self.covariance_factor = AttentionCovarianceFactor(m)
 
-            case str():
+            case _:
                 raise ValueError(
                     "Unknown covariance_factor: "
                     f"{covariance_factor!r}. Expected 'constant', 'attention', or an nn.Module."
-                )
-
-            case _:
-                raise TypeError(
-                    "covariance_factor must be a string or nn.Module, "
-                    f"got {type(covariance_factor)!r}."
                 )
 
         match observation_map:
@@ -422,16 +457,10 @@ class KalmanCell(nn.Module, VectorStateUpdate):
                     )
                 self.observation_map = nn.Identity()
 
-            case str():
+            case _:
                 raise ValueError(
                     f"Unknown observation_map: {observation_map!r}. "
                     "Expected 'linear', 'identity', or an nn.Module."
-                )
-
-            case _:
-                raise TypeError(
-                    "observation_map must be a string or nn.Module, "
-                    f"got {type(observation_map)!r}."
                 )
 
         match noise:
@@ -453,13 +482,10 @@ class KalmanCell(nn.Module, VectorStateUpdate):
                     unsafe=True,
                 )
 
-            case str():
+            case _:
                 raise ValueError(
                     f"Unknown noise: {noise!r}. Expected 'scalar' or 'diagonal'."
                 )
-
-            case _:
-                raise TypeError(f"noise must be a string, got {type(noise)!r}.")
 
     @signature("[(..., n), (..., m)] -> (..., m)")
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
@@ -500,47 +526,6 @@ class KalmanCell(nn.Module, VectorStateUpdate):
         d = torch.einsum("...n, ...nm, ...km -> ...k", u, MHL, L)  # (..., m)
 
         return x - self.gate(d)
-
-
-class LinearRNNCell(nn.Module, VectorStateUpdate):
-    r"""Linear state update.
-
-    .. math:: F(y，x) =  Ux + Vy + b
-
-    where $U$ and $V$ are learnable matrices, and $b$ is a learnable bias vector.
-    """
-
-    # PARAMETERS
-    U: Tensor
-    r"""PARAM: the hidden state matrix."""
-    V: Tensor
-    r"""PARAM: the observable matrix."""
-    bias: Optional[Tensor]
-    r"""PARAM: the bias vector."""
-
-    def __init__(
-        self,
-        /,
-        input_size: int,
-        hidden_size: int,
-        *,
-        bias: bool = True,
-    ) -> None:
-        super().__init__()
-        VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
-        m = self.hidden_size
-        n = self.input_size
-        self.U = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
-        self.V = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
-        self.bias = nn.Parameter(torch.zeros(m)) if bool(bias) else None
-
-    @signature("[(..., n), (..., m)] -> (..., m)")
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Forward pass of the state update.
-
-        .. math:: F(y，x) =  Ux + Vy + b
-        """
-        return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
 
 
 class AttentionCovarianceFactor(nn.Module):
