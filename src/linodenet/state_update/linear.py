@@ -2,6 +2,7 @@ r"""Linear filters."""
 
 __all__ = [
     "LinearRNNCell",
+    "ConstantGain",
     "AttentionGain",
     "AttentionCovarianceFactor",
     "LinearCell",
@@ -140,7 +141,11 @@ class LinearCell(nn.Module, VectorStateUpdate):
             case "constant":
                 self.gain = ConstantGain(input_size, hidden_size)
             case "attention":
-                self.gain = AttentionGain(hidden_size, input_size)
+                self.gain = AttentionGain(
+                    input_size,
+                    hidden_size,
+                    context_size=hidden_size,
+                )
             case _:
                 raise ValueError(
                     "Unknown gain: "
@@ -200,7 +205,7 @@ class ConstantGain(nn.Module):
 class AttentionGain(nn.Module):
     r"""Predict a gain matrix with scaled dot-product attention.
 
-    For hidden state $x$, the gain entries are computed as
+    For context vector $x$, the gain entries are computed as
 
     .. math:: Kᵢⱼ(x) = \softmax_j(\frac{qᵢ(x)ᵀkⱼ(x)}{\sqrt{dₐ}})
 
@@ -208,63 +213,100 @@ class AttentionGain(nn.Module):
     and $dₐ$ is the shared attention feature size.
     """
 
-    query: nn.Linear
-    r"""MODULE: Projects the hidden state to row queries."""
-    key: nn.Linear
-    r"""MODULE: Projects the hidden state to column keys."""
-    hidden_size: int
-    r"""CONST: Number of rows in the gain matrix."""
+    query_proj: nn.Linear
+    r"""MODULE: Projects the context vector to flattened query heads."""
+    key_proj: nn.Linear
+    r"""MODULE: Projects the context vector to flattened key heads."""
     input_size: int
     r"""CONST: Number of columns in the gain matrix."""
-    attention_size: int
-    r"""CONST: Shared query/key feature dimension."""
-    scale: float
-    r"""CONST: Scale factor for attention logits."""
+    output_size: int
+    r"""CONST: Number of rows in the gain matrix."""
+    context_size: int
+    r"""CONST: Size of the context vector conditioning the gain."""
+    num_heads: int
+    r"""CONST: Number of attention heads used to score gain entries."""
+    head_dim: int
+    r"""CONST: Per-head query/key feature dimension."""
+    hidden_size: int
+    r"""CONST: Backward-compatible alias for the per-head query/key dimension."""
+
+    @property
+    def query(self) -> nn.Linear:
+        return self.query_proj
+
+    @property
+    def key(self) -> nn.Linear:
+        return self.key_proj
 
     @property
     def config(self) -> dict:
         return {
-            "hidden_size": self.hidden_size,
             "input_size": self.input_size,
-            "attention_size": self.attention_size,
+            "output_size": self.output_size,
+            "context_size": self.context_size,
+            "hidden_size": self.hidden_size,
         }
 
     def __init__(
         self,
         /,
-        hidden_size: int,
         input_size: int,
+        output_size: int,
         *,
-        attention_size: int | None = None,
+        context_size: int | None = None,
+        hidden_size: int | None = None,
     ) -> None:
         super().__init__()
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.attention_size = (
-            min(hidden_size, input_size, 32)
-            if attention_size is None
-            else int(attention_size)
+        self.input_size = int(input_size)
+        self.output_size = int(output_size)
+        self.context_size = (
+            self.output_size if context_size is None else int(context_size)
         )
-        if self.attention_size <= 0:
-            raise ValueError("attention_size must be a positive integer.")
+        self.num_heads = 1
+        self.hidden_size = (
+            min(self.input_size, self.output_size, self.context_size, 32)
+            if hidden_size is None
+            else int(hidden_size)
+        )
+        self.head_dim = self.hidden_size
+        if self.context_size <= 0:
+            raise ValueError("context_size must be a positive integer.")
+        if self.hidden_size <= 0:
+            raise ValueError("hidden_size must be a positive integer.")
 
-        self.query = nn.Linear(
-            hidden_size,
-            hidden_size * self.attention_size,
+        query_features = self.output_size * self.num_heads * self.head_dim
+        key_features = self.input_size * self.num_heads * self.head_dim
+
+        # The context emits one query vector per output row and one key vector
+        # per input column, flattened across heads.
+        self.query_proj = nn.Linear(
+            self.context_size,
+            query_features,
             bias=False,
         )
-        self.key = nn.Linear(
-            hidden_size,
-            input_size * self.attention_size,
+        self.key_proj = nn.Linear(
+            self.context_size,
+            key_features,
             bias=False,
         )
-        self.scale = self.attention_size**-0.5
 
-    def forward(self, v: Tensor, x: Tensor) -> Tensor:
-        query = self.query(x).unflatten(-1, (self.hidden_size, self.attention_size))
-        key = self.key(x).unflatten(-1, (self.input_size, self.attention_size))
-        scores = self.scale * (query @ key.mT)
-        return (scores.softmax(dim=-1) @ v.unsqueeze(-1)).squeeze(-1)
+    def forward(self, v: Tensor, x: Tensor, /) -> Tensor:
+        # (..., output_size, H, d_h)
+        q = (
+            self.query_proj(x)  # (..., output_size * H * d_h)
+            .unflatten(-1, (self.output_size, self.num_heads, self.head_dim))
+            .swapaxes(-2, -3)  # (..., H, output_size, d_h)
+        )
+        k = (
+            self.key_proj(x)  # (..., input_size * H * d_h)
+            .unflatten(-1, (self.input_size, self.num_heads, self.head_dim))
+            .swapaxes(-2, -3)  # (..., H, input_size, d_h)
+        )
+        v = v[..., None, None].swapaxes(-2, -3)  # (..., H, input_size, 1)
+
+        # (..., H, output_size, 1)  (note: H=1)
+        attended = F.scaled_dot_product_attention(q, k, v, dropout_p=0.0)
+        return attended.squeeze(-3).squeeze(-1)  # (..., output_size)
 
 
 class KalmanCell(nn.Module, VectorStateUpdate):

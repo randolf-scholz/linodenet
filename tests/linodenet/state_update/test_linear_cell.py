@@ -3,6 +3,7 @@ r"""Tests for linear innovation state updaters."""
 import pytest
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from linodenet.nn.rezero import ReZero
 from linodenet.state_update import AttentionGain, LinearCell
@@ -16,13 +17,14 @@ def compute_correction(
 
 
 class TestLinearCell:
-    def test_identity_gate_matches_plain_update(self) -> None:
+    @pytest.mark.parametrize("gain_name", ["constant", "attention"])
+    def test_identity_gate_matches_plain_update(self, gain_name: str) -> None:
         r"""The identity gate should preserve the plain innovation update."""
-        cell = LinearCell(3, 5, gate="identity")
+        cell = LinearCell(3, 5, gain=gain_name, gate="identity")
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
-        assert isinstance(cell.gain, ConstantGain)
+        assert isinstance(cell.gain, (ConstantGain, AttentionGain))
         assert isinstance(cell.observation_map, nn.Linear)
         innovation = cell.observation_map(x) - y
         expected = x - compute_correction(innovation, cell.gain, x)
@@ -153,26 +155,17 @@ class TestLinearCell:
         ):
             LinearCell.from_direct_observation_model(4, gate="other")
 
-    def test_attention_gain_uses_attention_module(self) -> None:
-        r"""The attention gain option should instantiate `AttentionGain`."""
-        cell = LinearCell(3, 5, gain="attention", gate="identity")
-        r = torch.randn(7, 3)
-        x = torch.randn(7, 5)
+    @pytest.mark.parametrize(
+        ("gain_name", "gain_cls"),
+        [("constant", ConstantGain), ("attention", AttentionGain)],
+    )
+    def test_builtin_gain_option_instantiates_expected_module(
+        self, gain_name: str, gain_cls: type[nn.Module]
+    ) -> None:
+        r"""Built-in gain strings should instantiate the expected module."""
+        cell = LinearCell(3, 5, gain=gain_name, gate="identity")
 
-        assert isinstance(cell.gain, AttentionGain)
-        correction = cell.gain(r, x)
-        query = cell.gain.query(x).unflatten(
-            -1, (cell.gain.hidden_size, cell.gain.attention_size)
-        )
-        key = cell.gain.key(x).unflatten(
-            -1, (cell.gain.input_size, cell.gain.attention_size)
-        )
-        scores = cell.gain.scale * (query @ key.mT)
-        expected = (scores.softmax(dim=-1) @ r.unsqueeze(-1)).squeeze(-1)
-
-        assert correction.shape == (7, 5)
-        assert torch.isfinite(correction).all()
-        torch.testing.assert_close(correction, expected)
+        assert isinstance(cell.gain, gain_cls)
 
     def test_accepts_custom_observation_map(self) -> None:
         r"""Custom observation maps should be used verbatim."""
@@ -188,17 +181,23 @@ class TestLinearCell:
 
         assert cell.gate is gate
 
-    def test_none_gate_maps_to_identity(self) -> None:
+    @pytest.mark.parametrize("gain_name", ["constant", "attention"])
+    def test_none_gate_maps_to_identity(self, gain_name: str) -> None:
         r"""A None gate should behave like the identity gate."""
-        none_gate = LinearCell(3, 5, gate=None)
-        identity_gate = LinearCell(3, 5, gate="identity")
+        none_gate = LinearCell(3, 5, gain=gain_name, gate=None)
+        identity_gate = LinearCell(3, 5, gain=gain_name, gate="identity")
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
         with torch.no_grad():
-            assert isinstance(none_gate.gain, ConstantGain)
-            assert isinstance(identity_gate.gain, ConstantGain)
-            none_gate.gain.gain.value.copy_(identity_gate.gain.gain.value)
+            match none_gate.gain, identity_gate.gain:
+                case ConstantGain(), ConstantGain():
+                    none_gate.gain.gain.value.copy_(identity_gate.gain.gain.value)
+                case AttentionGain(), AttentionGain():
+                    none_gate.gain.query.weight.copy_(identity_gate.gain.query.weight)
+                    none_gate.gain.key.weight.copy_(identity_gate.gain.key.weight)
+                case _:
+                    raise AssertionError("Unexpected gain types.")
             assert isinstance(none_gate.observation_map, nn.Linear)
             assert isinstance(identity_gate.observation_map, nn.Linear)
             none_gate.observation_map.weight.copy_(identity_gate.observation_map.weight)
@@ -206,11 +205,12 @@ class TestLinearCell:
         assert isinstance(none_gate.gate, nn.Identity)
         torch.testing.assert_close(none_gate(y, x), identity_gate(y, x))
 
-    def test_masked_backward_has_finite_gradients(self) -> None:
+    @pytest.mark.parametrize("gain_name", ["constant", "attention"])
+    def test_masked_backward_has_finite_gradients(self, gain_name: str) -> None:
         r"""Masked observations should not introduce NaNs into outputs or gradients."""
         torch.manual_seed(0)
 
-        cell = LinearCell(5, 7, gate="identity")
+        cell = LinearCell(5, 7, gain=gain_name, gate="identity")
         x = torch.randn(8, 7, requires_grad=True)
         y = torch.randn(8, 5)
         mask = torch.rand(8, 5) < 0.5
@@ -253,11 +253,79 @@ class TestLinearCell:
             LinearCell(3, 5, gate="other")
 
 
-def test_attention_gain_backward_has_finite_gradients() -> None:
-    r"""Attention-based gains should support stable forward and backward passes."""
+def test_attention_gain_matches_manual_attention_formula() -> None:
+    r"""AttentionGain should match the manual softmax attention formula."""
+    gain = AttentionGain(3, 5, hidden_size=2)
+    r = torch.randn(2, 7, 3)
+    x = torch.randn(2, 7, 5)
+
+    correction = gain(r, x)
+    query = gain.query_proj(x).unflatten(
+        -1, (gain.output_size, gain.num_heads, gain.head_dim)
+    )
+    key = gain.key_proj(x).unflatten(
+        -1, (gain.input_size, gain.num_heads, gain.head_dim)
+    )
+    scores = gain.head_dim**-0.5 * (query.swapaxes(-2, -3) @ key.swapaxes(-2, -3).mT)
+    expected = (
+        (scores.softmax(dim=-1) @ r.unsqueeze(-1).unsqueeze(-3)).squeeze(-3).squeeze(-1)
+    )
+
+    assert correction.shape == (2, 7, 5)
+    torch.testing.assert_close(correction, expected)
+
+
+def test_attention_gain_matches_scaled_dot_product_attention() -> None:
+    r"""AttentionGain should agree with scaled_dot_product_attention directly."""
+    gain = AttentionGain(6, 4, hidden_size=3)
+    r = torch.randn(8, 6)
+    x = torch.randn(8, 4)
+
+    query = gain.query_proj(x).unflatten(
+        -1, (gain.output_size, gain.num_heads, gain.head_dim)
+    )
+    key = gain.key_proj(x).unflatten(
+        -1, (gain.input_size, gain.num_heads, gain.head_dim)
+    )
+    expected = (
+        F.scaled_dot_product_attention(
+            query.swapaxes(-2, -3),
+            key.swapaxes(-2, -3),
+            r.unsqueeze(-1).unsqueeze(-1).swapaxes(-2, -3),
+            dropout_p=0.0,
+        )
+        .squeeze(-3)
+        .squeeze(-1)
+    )
+
+    torch.testing.assert_close(gain(r, x), expected)
+
+
+def test_attention_gain_defaults_context_size_to_output_size() -> None:
+    r"""AttentionGain should default the context size to the output size."""
+    gain = AttentionGain(3, 5, hidden_size=2)
+
+    assert gain.context_size == gain.output_size == 5
+
+
+def test_attention_gain_rejects_non_positive_hidden_size() -> None:
+    r"""AttentionGain should reject non-positive hidden sizes."""
+    with pytest.raises(ValueError, match=r"hidden_size must be a positive integer."):
+        AttentionGain(3, 5, hidden_size=0)
+
+
+def test_attention_gain_rejects_non_positive_context_size() -> None:
+    r"""AttentionGain should reject non-positive context sizes."""
+    with pytest.raises(ValueError, match=r"context_size must be a positive integer."):
+        AttentionGain(3, 5, context_size=0)
+
+
+@pytest.mark.parametrize("gain_name", ["constant", "attention"])
+def test_builtin_gain_backward_has_finite_gradients(gain_name: str) -> None:
+    r"""Built-in gains should support stable forward and backward passes."""
     torch.manual_seed(0)
 
-    cell = LinearCell(4, 6, gain="attention", gate="identity")
+    cell = LinearCell(4, 6, gain=gain_name, gate="identity")
     x = torch.randn(8, 6, requires_grad=True)
     y = torch.randn(8, 4)
     y[torch.rand(8, 4) < 0.4] = float("nan")
