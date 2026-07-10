@@ -215,7 +215,7 @@ class LinearFlow(nn.Module):
         # initialize buffers
         self.register_buffer("kernel", self.kernel_parametrization(self.weight))
 
-    def step(
+    def forward(
         self,
         timedeltas: Tensor,  # (...)
         x0: Tensor,  # (..., d)
@@ -225,9 +225,9 @@ class LinearFlow(nn.Module):
 
         .. math:: step(∆t, x) = e^{ρ(π(A))∆t}x
         """
-        return self.forward(timedeltas.unsqueeze(-1), x0).squeeze(-2)
+        return self.propagate(timedeltas.unsqueeze(-1), x0).squeeze(-2)
 
-    def forward(
+    def propagate(
         self,
         timedeltas: Tensor,  # (..., $n)
         x0: Tensor,  # (..., d)
