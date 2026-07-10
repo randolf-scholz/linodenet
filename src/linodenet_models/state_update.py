@@ -238,8 +238,9 @@ class GradientStepUpdater(nn.Module):
         /,
     ) -> Tensor:  # (B)
         return (
-            self.loss(self.decoder(z), y, mask=mask)  # ℓ(f(z), y)
-            + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
+            # ℓ(f(z), y)
+            self.loss(self.decoder(z), y, mask=mask)  # pyright: ignore[reportCallIssue]
+            + self.regularization_strength * self.regularizer(z, z_prev)  # λ⋅‖z-z₋‖²
         )
 
     def grad_fn(
@@ -421,9 +422,14 @@ class InnovationCell(nn.Module):
                     "Expected 'linear', 'identity', or an nn.Module."
                 )
 
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        y_pred = self.observation_map(x)
-        r = torch.where(y.isnan(), 0.0, y_pred - y)  # (..., input_size)
+    def forward(self, y: Tensor, x: Tensor, /, mask: Tensor | None = None) -> Tensor:
+        assert y.shape[-1] == self.input_size
+        assert x.shape[-1] == self.hidden_size
+        r = self.observation_map(x) - y
+
+        if mask is not None:
+            r = torch.where(mask, r, 0.0)  # (..., input_size)
+
         correction = self.gain(r, x)
         return x - self.gate(correction)
 
@@ -720,42 +726,46 @@ class KalmanCell(nn.Module):
                 )
 
     # @signature("[(..., n), (..., m)] -> (..., m)")
-    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
+    def forward(self, y: Tensor, x: Tensor, /, mask: Tensor | None = None) -> Tensor:
+        assert y.shape[-1] == self.input_size
+        assert x.shape[-1] == self.hidden_size
         *batch_shape, _ = x.shape
-        missing = y.isnan()
 
         y_pred, jvp_fn = torch.func.linearize(self.observation_map, x)
+        batched_jvp_fn = torch.func.vmap(jvp_fn, -1, -1)
 
         # TODO: consider solving only over unmasked coordinates (requires flattening).
         L = self.covariance_factor(x).expand(
             *batch_shape, self.hidden_size, self.hidden_size
         )
-        assert L.shape == (*batch_shape, self.hidden_size, self.hidden_size)
-
-        # mask columns for unobserved values in cholesky factor
-        J = torch.where(missing.unsqueeze(-2), self.eye, self.noise_cholesky())
-        assert J.shape == (*batch_shape, self.input_size, self.input_size)
-
-        # Restrict the residual r = Mh(x) - y_obs to the observed coordinates.
-        r = torch.where(missing, torch.zeros_like(y_pred), y_pred - y)
-
         # Push the covariance-factor columns through 𝐃h(x) to obtain 𝐃h(x)L(x).
-        batched_jvp_fn = torch.func.vmap(jvp_fn, -1, -1)
-        MHL = ~missing[..., None] * batched_jvp_fn(L)  # shape: (..., n, m)
-        assert MHL.shape == (*batch_shape, self.input_size, self.hidden_size)
+        HL = batched_jvp_fn(L)
+        J = self.noise_cholesky().expand(*batch_shape, self.input_size, self.input_size)
+        r = y_pred - y
+
+        if mask is not None:
+            # Restrict the residual r = Mh(x) - y_obs to the observed coordinates.
+            r = torch.where(mask, r, 0.0)
+            # Replace unobserved noise blocks by the identity to keep the solve well-posed.
+            J = torch.where(mask.unsqueeze(-2), J, self.eye)
+            HL = torch.where(mask[..., None], HL, 0.0)  # shape: (..., n, m)
+
+        assert L.shape == (*batch_shape, self.hidden_size, self.hidden_size)
+        assert J.shape == (*batch_shape, self.input_size, self.input_size)
+        assert HL.shape == (*batch_shape, self.input_size, self.hidden_size)
 
         # u = (M(𝐃h(x)LLᵀ𝐃h(x)ᵀ + JJᵀ)M + I_missing)⁻¹r
         # note: M(𝐃h(x)LLᵀ𝐃h(x)ᵀ + JJᵀ)M + I_missing = J(𝕀 + BBᵀ)Jᵀ, B = J⁻¹M𝐃h(x)L
         # solve via: z = J⁻¹r, w = (𝕀 + BBᵀ)⁻¹z, u = J⁻ᵀw
         # middle part via woodbury: (𝕀 + BBᵀ)⁻¹ = 𝕀 - B(𝕀 + BᵀB)⁻¹Bᵀ (good if m>n)
-        B = solve_triangular(J, MHL, upper=False)  # J⁻¹M𝐃h(x)L (..., n, m)
+        B = solve_triangular(J, HL, upper=False)  # J⁻¹M𝐃h(x)L (..., n, m)
         z = solve_triangular(J, r.unsqueeze(-1), upper=False)  # J⁻¹r
         w = solve(self.eye + B @ B.mT, z)  # shape: (..., n, 1)
         u = solve_triangular(J.mT, w, upper=True).squeeze(-1)  # J⁻ᵀw (..., n)
         assert u.shape == (*batch_shape, self.input_size)
 
         # δ = Σₓ₞u = L(x)L(x)ᵀ𝐃h(x)ᵀu
-        d = torch.einsum("...n, ...nm, ...km -> ...k", u, MHL, L)  # (..., m)
+        d = torch.einsum("...n, ...nm, ...km -> ...k", u, HL, L)  # (..., m)
 
         return x - self.gate(d)
 
