@@ -106,6 +106,7 @@ class TestForecastingModel[M: nn.Module](ABC):
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
     OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
     GRADIENT_WARMUP_STEPS: ClassVar[int] = 0
+    NUM_STEPS: ClassVar[int] = 3
 
     @abstractmethod
     def make_model(self, model_config: object, /) -> M:
@@ -439,6 +440,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         output_shape: tuple[int, ...],
         input_missingness: bool,
     ) -> None:
+        assert self.GRADIENT_WARMUP_STEPS < self.NUM_STEPS
         torch.manual_seed(seed)
         data = make_forecasting_request(
             seed=seed,
@@ -462,7 +464,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         predictions = self.forecast(model, data)
         initial_loss = self.loss(model, predictions, data.target_values)
 
-        for step in range(3):
+        for step in range(self.NUM_STEPS):
             optimizer.zero_grad()
             predictions = self.forecast(model, data)
             loss = self.loss(model, predictions, data.target_values)
@@ -504,6 +506,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         batch_shape: tuple[int, ...],
         input_missingness: bool,
     ) -> None:
+        assert self.GRADIENT_WARMUP_STEPS < self.NUM_STEPS
         torch.manual_seed(seed)
         data = make_forecasting_request(
             seed=seed,
@@ -531,7 +534,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         predictions = self.forecast(model, data)
         initial_loss = self.loss(model, predictions, data.target_values)
 
-        for step in range(3):
+        for step in range(self.NUM_STEPS):
             optimizer.zero_grad()
             predictions = self.forecast(model, data)
             loss = self.loss(model, predictions, data.target_values)

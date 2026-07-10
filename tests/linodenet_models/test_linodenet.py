@@ -25,6 +25,8 @@ class LinODEnetTestConfig(NamedTuple):
 class TestLinODEnet(TestForecastingModel[LinODEnet]):
     r"""Shared forecasting-model tests for LinODEnet."""
 
+    GRADIENT_WARMUP_STEPS = 1
+
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
     OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
     STANDARD_CONFIG: ClassVar[LinODEnetTestConfig] = LinODEnetTestConfig(
