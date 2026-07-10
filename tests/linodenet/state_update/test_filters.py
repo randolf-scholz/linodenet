@@ -9,7 +9,7 @@ from linodenet.state_update.gradient_based import GradientStepUpdater
 from linodenet.state_update.linear import ConstantGain
 
 
-def test_filter_consistency() -> None:
+def test_innovation_cell_consistency() -> None:
     r"""Identity-observation linear cells should satisfy $x=y ⟹ F(y, x)=x$."""
     decoder = nn.Identity()
     cell = InnovationCell(16, 16, gate="identity", observation_map=decoder)
@@ -21,7 +21,7 @@ def test_filter_consistency() -> None:
     assert is_consistent_update(cell, decoder=decoder)
 
 
-def test_filter_consistency_with_decoder() -> None:
+def test_innovation_cell_consistency_with_decoder() -> None:
     r"""Decoder-consistent cells should satisfy $ϕ(x)=y ⟹ F(y, x)=x$."""
     decoder = nn.Linear(16, 8, bias=False)
     cell = InnovationCell(8, 16, gate="identity", observation_map=decoder)
@@ -29,7 +29,7 @@ def test_filter_consistency_with_decoder() -> None:
     assert is_consistent_update(cell, decoder=decoder)
 
 
-def test_kalman_filter_consistency_with_decoder() -> None:
+def test_kalman_cell_consistency_with_decoder() -> None:
     r"""Kalman cells should satisfy $ϕ(x)=y ⟹ F(y, x)=x$."""
     decoder = nn.Linear(16, 8, bias=False)
     cell = KalmanCell(8, 16, gate="identity", observation_map=decoder)
