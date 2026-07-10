@@ -54,16 +54,24 @@ def lp_loss(
     y: Tensor,  # (..., d)
     /,
     *,
+    mask: Tensor | None = None,  # (..., d)
     p: float = 2.0,
     dim: int = -1,
-    aggregation: str = "mean",
+    aggregation: str = "sum",
 ) -> Tensor:  # (...)
     r"""Compute a per-batch-element $Lᵖ$ reconstruction loss $‖x-y‖ₚᵖ$."""
+    r = x - y
+    if mask is not None:
+        r = torch.where(mask, r, 0.0)
+        count = mask.sum(dim=dim)
+    else:
+        count = r.shape[-1]
+
     match aggregation:
         case "sum":
-            return (x - y).abs().pow(p).sum(dim=dim)
+            return r.abs().pow(p).sum(dim=dim)
         case "mean":
-            return (x - y).abs().pow(p).mean(dim=dim)
+            return r.abs().pow(p).sum(dim=dim).div(count)
         case _:
             raise ValueError(f"Unexpected aggregation: {aggregation!r}")
 
@@ -91,8 +99,15 @@ class LpLoss(nn.Module):
 
     __call__: Callable[[Tensor, Tensor], Tensor]
 
-    def forward(self, x: Tensor, y: Tensor, /) -> Tensor:
-        return lp_loss(x, y, p=self.p, dim=self.dim, aggregation=self.aggregation)
+    def forward(self, x: Tensor, y: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
+        return lp_loss(
+            x,
+            y,
+            mask=mask,
+            p=self.p,
+            dim=self.dim,
+            aggregation=self.aggregation,
+        )
 
 
 class GradientStepUpdater(nn.Module):
