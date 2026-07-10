@@ -20,7 +20,7 @@ __all__ = [
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final, NotRequired, TypedDict, cast
+from typing import Final, NotRequired, TypedDict
 
 import torch
 from torch import Tensor, nan, nn
@@ -294,30 +294,23 @@ def update_masked[R: Tensor | tuple[Tensor, ...]](
 ) -> R:  # (*(..., *eᵢ),)
     r"""Update ``target`` with ``fn`` applied to selected batch elements."""
     assert batch_mask.dtype == torch.bool
-    batch_shape = batch_mask.shape
-    batch_rank = len(batch_shape)
-    mask_flat = batch_mask.flatten()
 
-    ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
-
-    if isinstance(ys_flat, Tensor):
+    ys = fn(*(x[batch_mask] for x in args))
+    if isinstance(ys, Tensor):
         assert isinstance(target, Tensor)
-        return cast(
-            "R",
-            target.reshape(-1, *target.shape[batch_rank:])
-            .index_put([mask_flat], ys_flat)
-            .reshape(*batch_shape, *target.shape[batch_rank:]),
+        return target.masked_scatter(  # pyrefly: ignore[bad-return]
+            batch_mask.reshape(
+                *batch_mask.shape, *(1,) * (target.ndim - batch_mask.ndim)
+            ),
+            ys,
         )
 
-    assert isinstance(ys_flat, tuple)
     assert isinstance(target, tuple)
-    assert len(ys_flat) == len(target)
-
     return tuple(  # type: ignore[return-value]
-        t.reshape(-1, *t.shape[batch_rank:])
-        .index_put([mask_flat], y)
-        .reshape(*batch_shape, *t.shape[batch_rank:])
-        for y, t in zip(ys_flat, target, strict=True)
+        t.masked_scatter(
+            batch_mask.reshape(*batch_mask.shape, *(1,) * (t.ndim - batch_mask.ndim)), y
+        )
+        for t, y in zip(target, ys, strict=True)
     )
 
 
