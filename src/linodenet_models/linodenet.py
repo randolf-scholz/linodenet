@@ -466,7 +466,7 @@ class LinODEnet(nn.Module):
             # prior_state = self.state_propagator(delta_t, posterior_state)
             prior_state = update_masked(
                 posterior_state,
-                fn=self.state_propagator,
+                self.state_propagator,
                 args=(delta_t, posterior_state),
                 batch_mask=active,
             )
@@ -546,27 +546,14 @@ def make_linodenet(
 
 def update_masked(
     target: Tensor,  # (..., *e)
-    /,
     fn: Callable[..., Tensor],  # [*(..., *dᵢ)] -> (..., *e)
-    args: tuple[Tensor, ...],
+    /,
     *,
-    batch_mask: Tensor,  # (...)
+    args: tuple[Tensor, ...],
+    batch_mask: Tensor,  # Bool[...]
 ) -> Tensor:  # (..., *e)
     r"""Update ``target`` with ``fn`` applied to selected batch elements."""
-    assert batch_mask.dtype == torch.bool
-    batch_shape = batch_mask.shape
-    batch_rank = len(batch_shape)
-
-    event_shape = target.shape[batch_rank:]
-    assert target.shape == batch_shape + event_shape
-
-    # flatten batch dims, apply fn only to selected batch elements.
-    mask_flat = batch_mask.flatten()
-    ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
-
-    # scatter results into the target tensor.
-    return (
-        target.reshape(-1, *event_shape)
-        .index_put([mask_flat], ys_flat)
-        .reshape(*batch_shape, *event_shape)
+    return target.masked_scatter(
+        batch_mask.reshape(*batch_mask.shape, *(1,) * (target.ndim - batch_mask.ndim)),
+        fn(*(x[batch_mask] for x in args)),
     )
