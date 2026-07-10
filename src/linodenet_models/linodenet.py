@@ -462,7 +462,7 @@ class LinODEnet(nn.Module):
             prior_state = self.state_propagator(delta_t, posterior_state)
 
             # zₜ' = F(zₜ, xₜ)
-            posterior_state = self.state_updater(prior_state, x_obs)
+            posterior_state = self.state_updater(prior_state, x_obs, mask=obs_mask)
 
             # x̂ₜ = ϕ(zₜ)
             prior_pred = self.decoder(prior_state)

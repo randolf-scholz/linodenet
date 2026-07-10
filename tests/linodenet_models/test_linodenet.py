@@ -1,13 +1,102 @@
 r"""Tests for LinODEnet model construction helpers."""
 
 from types import MappingProxyType
+from typing import ClassVar, NamedTuple
 
+import pytest
 import torch
-from torch import nn
+from torch import nan, nn
+from torch.nn import functional as F
 
 from linodenet_models.linodenet import LinearFlow, LinODEnet, make_linodenet
 from linodenet_models.state_update import GradientStepUpdater, LpLoss
-from tests.linodenet_models.base import make_forecasting_request
+from linodenet_models.utils import SplitTimeData
+
+from .base import TestForecastingModel, make_forecasting_request
+
+
+class LinODEnetTestConfig(NamedTuple):
+    r"""Configuration used by shared LinODEnet forecasting-model tests."""
+
+    input_size: int
+    latent_size: int
+
+
+class TestLinODEnet(TestForecastingModel[LinODEnet]):
+    r"""Shared forecasting-model tests for LinODEnet."""
+
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    STANDARD_CONFIG: ClassVar[LinODEnetTestConfig] = LinODEnetTestConfig(
+        input_size=CONTEXT_SHAPE[0],
+        latent_size=4,
+    )
+
+    @pytest.fixture
+    def model_config(self) -> LinODEnetTestConfig:
+        r"""Configuration used to instantiate the LinODEnet model under test."""
+        return self.STANDARD_CONFIG
+
+    @pytest.fixture(params=[False, True], ids=["no_missingness", "input_missingness"])
+    def input_missingness(self, request: pytest.FixtureRequest) -> bool:
+        r"""Whether to randomly mask half of the context values with NaN."""
+        return request.param
+
+    def make_model(self, model_config: object, /) -> LinODEnet:
+        r"""Instantiate a LinODEnet model from :attr:`STANDARD_CONFIG`."""
+        if not isinstance(model_config, LinODEnetTestConfig):
+            raise TypeError("model_config must be a LinODEnetTestConfig.")
+        return make_linodenet(
+            linodenet={
+                "input_size": model_config.input_size,
+                "latent_size": model_config.latent_size,
+            },
+            decoder={
+                "in_features": model_config.latent_size,
+                "out_features": model_config.input_size,
+            },
+            state_propagator={
+                "input_size": model_config.latent_size,
+                "kernel_initialization": "zero",
+                "kernel_parametrization": "identity",
+                "use_rezero": False,
+            },
+            state_updater={},
+        )
+
+    def forecast(
+        self,
+        model: LinODEnet,
+        inputs: SplitTimeData,
+        /,
+    ) -> tuple[torch.Tensor, ...]:
+        r"""Return LinODEnet predictions for sequential forecasting inputs."""
+        assert inputs.target_values is not None
+        query_valid = inputs.query_mask.any(dim=-1)
+        pred = model.predict(
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            context_mask=inputs.context_mask,
+            query_times=inputs.query_times,
+            query_mask=inputs.query_mask,
+        ).masked_fill(~inputs.query_mask, nan)
+
+        assert pred.shape == inputs.target_values.shape
+        assert pred[query_valid].isfinite().all()
+        assert pred[~query_valid].isnan().all()
+        return (pred,)
+
+    def loss(
+        self,
+        model: LinODEnet,
+        predictions: tuple[torch.Tensor, ...],
+        targets: torch.Tensor,
+    ) -> torch.Tensor:
+        r"""Return mean squared error for LinODEnet predictions."""
+        del model
+        (forecast,) = predictions
+        mask = targets.isfinite()
+        return F.mse_loss(forecast[mask], targets[mask])
 
 
 def test_make_linodenet_instantiates_expected_components() -> None:
