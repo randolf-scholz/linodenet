@@ -286,8 +286,8 @@ class CRUConfigDict(TypedDict):
 
 def update_masked[R: Tensor | tuple[Tensor, ...]](
     target: R,  # (*(..., *eᵢ),)
-    /,
     fn: Callable[..., R],  # [*(..., *dᵢ)] -> (*(..., *eᵢ),)
+    /,
     *,
     args: tuple[Tensor, ...],
     batch_mask: Tensor,  # (...)
@@ -646,7 +646,7 @@ class CRU(nn.Module):
         y_variances = context_values.new_full((*context_values.shape[:-1], d), nan)
         y_means, y_variances = update_masked(  # (..., $N+$K, d) each
             (y_means, y_variances),
-            fn=self.encoder,
+            self.encoder,
             args=(context_values,),
             batch_mask=has_context,
         )
@@ -695,7 +695,7 @@ class CRU(nn.Module):
             # Propagate only for active batch elements; restore old state for inactive.
             prior_mean, prior_cov = update_masked(
                 (post_mean, post_cov),
-                fn=self.propagate_state,
+                self.propagate_state,
                 args=(delta, post_mean, post_cov),
                 batch_mask=active,
             )
@@ -703,7 +703,7 @@ class CRU(nn.Module):
             # Update only for batch elements that have context at this step.
             post_mean, post_cov = update_masked(
                 (prior_mean, prior_cov),
-                fn=self.update_state,
+                self.update_state,
                 args=(y, y_var, ctx_mask, prior_mean, prior_cov),
                 batch_mask=active & ctx_mask,
             )
