@@ -35,8 +35,8 @@ def make_forecasting_request(
     qry_lengths = torch.randint(  # (...)
         min_steps, max_steps + 1, size=batch_shape, generator=rng
     )
-    ctx_size = int(ctx_lengths.max())
-    qry_size = int(qry_lengths.max())
+    ctx_size = max_steps  # int(ctx_lengths.max())
+    qry_size = max_steps  # int(qry_lengths.max())
 
     # sample values
     ctx_values = torch.randn(*batch_shape, ctx_size, *context_shape, generator=rng)
