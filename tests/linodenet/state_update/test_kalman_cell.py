@@ -2,7 +2,7 @@ r"""Tests for linear Kalman-style state updaters."""
 
 import pytest
 import torch
-from torch import nn
+from torch import nan, nn
 
 from linodenet.nn.containers import Constant
 from linodenet.state_update import AttentionCovarianceFactor, KalmanCell
@@ -13,7 +13,8 @@ class TestKalmanCell:
         r"""The default update should match the masked closed-form BLUP with scalar noise."""
         cell = KalmanCell(3, 3, gate="identity")
         x = torch.tensor([[1.0, 2.0, 3.0]])
-        y = torch.tensor([[4.0, float("nan"), 9.0]])
+        y = torch.tensor([[4.0, nan, 9.0]])
+        mask = torch.tensor([[True, False, True]])
 
         with torch.no_grad():
             assert isinstance(cell.observation_map, nn.Linear)
@@ -34,13 +35,14 @@ class TestKalmanCell:
         )
         expected = x + expected_correction
 
-        torch.testing.assert_close(cell(y, x), expected)
+        torch.testing.assert_close(cell(y, x, mask=mask), expected)
 
     def test_matches_general_masked_formula_with_diagonal_noise(self) -> None:
         r"""The update should match the masked LMMSE formula with diagonal noise."""
         cell = KalmanCell(3, 2, noise="diagonal", gate="identity")
         x = torch.tensor([[1.0, -1.0]])
-        y = torch.tensor([[2.0, float("nan"), 0.5]])
+        y = torch.tensor([[2.0, nan, 0.5]])
+        mask = torch.tensor([[True, False, True]])
 
         H = torch.tensor([[1.0, 0.0], [0.0, 2.0], [1.0, -1.0]])
         sigma_xx = torch.tensor([[4.0, 1.0], [1.0, 9.0]])
@@ -64,7 +66,7 @@ class TestKalmanCell:
         )
         expected = x - expected_correction
 
-        torch.testing.assert_close(cell(y, x), expected)
+        torch.testing.assert_close(cell(y, x, mask=mask), expected)
 
     def test_rejects_dense_noise(self) -> None:
         r"""Dense observation noise is currently unsupported."""
@@ -86,7 +88,8 @@ class TestKalmanCell:
         r"""Identity observation maps should use the hidden state directly."""
         cell = KalmanCell(3, 3, observation_map="identity", gate="identity")
         x = torch.tensor([[1.0, 2.0, 3.0]])
-        y = torch.tensor([[4.0, float("nan"), 9.0]])
+        y = torch.tensor([[4.0, nan, 9.0]])
+        mask = torch.tensor([[True, False, True]])
 
         with torch.no_grad():
             assert isinstance(cell.covariance_factor, Constant)
@@ -107,7 +110,7 @@ class TestKalmanCell:
         )
         expected = x + expected_correction
 
-        torch.testing.assert_close(cell(y, x), expected)
+        torch.testing.assert_close(cell(y, x, mask=mask), expected)
 
     def test_accepts_custom_observation_map(self) -> None:
         r"""Custom observation maps should be used verbatim."""
@@ -160,11 +163,12 @@ class TestKalmanCell:
         )
         x = torch.randn(6, 4, requires_grad=True)
         y = torch.randn(6, 4)
-        y[torch.rand(6, 4) < 0.4] = float("nan")
+        mask = torch.rand(6, 4) < 0.6
+        y[~mask] = nan
 
         assert cell.covariance_factor is covariance_factor
 
-        output = cell(y, x)
+        output = cell(y, x, mask=mask)
         loss = output.square().mean()
         loss.backward()
 
@@ -183,9 +187,10 @@ class TestKalmanCell:
         cell = KalmanCell(4, 6, covariance_factor="attention", gate="identity")
         x = torch.randn(8, 6, requires_grad=True)
         y = torch.randn(8, 4)
-        y[torch.rand(8, 4) < 0.4] = float("nan")
+        mask = torch.rand(8, 4) < 0.6
+        y[~mask] = nan
 
-        output = cell(y, x)
+        output = cell(y, x, mask=mask)
         loss = output.square().mean()
         loss.backward()
 
@@ -209,9 +214,11 @@ class TestKalmanCell:
         r"""If no coordinates are observed, the state should remain unchanged."""
         cell = KalmanCell(4, 6, gate="identity")
         x = torch.randn(5, 6)
-        y = torch.full((5, 4), float("nan"))
+        y = torch.zeros(5, 4)
+        mask = torch.zeros(5, 4, dtype=torch.bool)
+        y[~mask] = nan
 
-        torch.testing.assert_close(cell(y, x), x)
+        torch.testing.assert_close(cell(y, x, mask=mask), x)
 
     def test_gate_variants(self) -> None:
         r"""Identity-like gates should match and ReZero should start at zero correction."""
@@ -220,7 +227,8 @@ class TestKalmanCell:
         rezero_gate = KalmanCell(3, 3)
 
         x = torch.tensor([[1.0, 2.0, 3.0]])
-        y = torch.tensor([[4.0, float("nan"), 9.0]])
+        y = torch.tensor([[4.0, nan, 9.0]])
+        mask = torch.tensor([[True, False, True]])
 
         with torch.no_grad():
             for cell in (none_gate, identity_gate, rezero_gate):
@@ -233,20 +241,23 @@ class TestKalmanCell:
                 )
                 cell.noise_cholesky.copy_(torch.sqrt(torch.tensor(3.0)) * torch.eye(3))
 
-        torch.testing.assert_close(none_gate(y, x), identity_gate(y, x))
-        torch.testing.assert_close(rezero_gate(y, x), x)
+        torch.testing.assert_close(
+            none_gate(y, x, mask=mask),
+            identity_gate(y, x, mask=mask),
+        )
+        torch.testing.assert_close(rezero_gate(y, x, mask=mask), x)
 
     def test_masked_backward_has_finite_gradients(self) -> None:
-        r"""Masked observations should not introduce NaNs into gradients."""
+        r"""Masked observations should not destabilize gradients."""
         torch.manual_seed(0)
 
         cell = KalmanCell(5, 7, noise="diagonal", gate="identity")
         x = torch.randn(8, 7, requires_grad=True)
         y = torch.randn(8, 5)
         mask = torch.rand(8, 5) < 0.5
-        y = y.masked_fill(mask, float("nan"))
+        y[~mask] = nan
 
-        output = cell(y, x)
+        output = cell(y, x, mask=mask)
         loss = output.square().mean()
         loss.backward()
 

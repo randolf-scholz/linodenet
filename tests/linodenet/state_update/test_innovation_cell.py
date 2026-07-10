@@ -137,11 +137,12 @@ class TestInnovationCell:
         r"""The direct-observation constructor should overwrite only observed coordinates."""
         cell = InnovationCell.from_direct_observation_model(4, gate="identity")
         x = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
-        y = torch.tensor([[10.0, float("nan"), -5.0, float("nan")]])
+        y = torch.tensor([[10.0, 0.0, -5.0, 0.0]])
+        mask = torch.tensor([[True, False, True, False]])
 
         expected = torch.tensor([[10.0, 2.0, -5.0, 4.0]])
 
-        torch.testing.assert_close(cell(y, x), expected)
+        torch.testing.assert_close(cell(y, x, mask=mask), expected)
 
     def test_from_direct_observation_model_rejects_unknown_gate(self) -> None:
         r"""Unknown direct-observation gate presets should fail explicitly."""
@@ -207,16 +208,15 @@ class TestInnovationCell:
 
     @pytest.mark.parametrize("gain_name", ["constant", "attention"])
     def test_masked_backward_has_finite_gradients(self, gain_name: str) -> None:
-        r"""Masked observations should not introduce NaNs into outputs or gradients."""
+        r"""Masked observations should not destabilize outputs or gradients."""
         torch.manual_seed(0)
 
         cell = InnovationCell(5, 7, gain=gain_name, gate="identity")
         x = torch.randn(8, 7, requires_grad=True)
         y = torch.randn(8, 5)
         mask = torch.rand(8, 5) < 0.5
-        y = y.masked_fill(mask, float("nan"))
 
-        output = cell(y, x)
+        output = cell(y, x, mask=mask)
         loss = output.square().mean()
         loss.backward()
 
@@ -328,9 +328,9 @@ def test_builtin_gain_backward_has_finite_gradients(gain_name: str) -> None:
     cell = InnovationCell(4, 6, gain=gain_name, gate="identity")
     x = torch.randn(8, 6, requires_grad=True)
     y = torch.randn(8, 4)
-    y[torch.rand(8, 4) < 0.4] = float("nan")
+    mask = torch.rand(8, 4) < 0.6
 
-    output = cell(y, x)
+    output = cell(y, x, mask=mask)
     loss = output.square().mean()
     loss.backward()
 
