@@ -1,13 +1,21 @@
 r"""Minimal, unoptimized reimplementation of LinODEnet."""
 
-__all__ = ["LinODEnet_v0"]
+__all__ = [
+    "LinODEnet_v0",
+    "LinODEnet",
+    "LinearFlow",
+    "ReZero",
+    "make_linodenet",
+    "linear_flow",
+]
 
-from collections.abc import Callable
-from typing import Final, Optional, cast
+from collections.abc import Callable, Mapping
+from typing import Any, Final, Optional, cast
 
 import torch
 from torch import Tensor, nn
 
+from .state_update import GradientStepUpdater, InnovationCell
 from .utils import EventBatch
 
 
@@ -200,7 +208,8 @@ class LinearFlow(nn.Module):
                 raise NotImplementedError
 
         self.kernel_parametrization = nn.Sequential(
-            [parametrization, ReZero() if self.use_rezero else nn.Identity()]
+            parametrization,
+            ReZero() if self.use_rezero else nn.Identity(),
         )
 
         # initialize buffers
@@ -379,7 +388,7 @@ class LinODEnet_v0(nn.Module):
         return result
 
 
-class LinODEnet_v2(nn.Module):
+class LinODEnet(nn.Module):
     r"""Decoder-Only Latent Linear ODE Network."""
 
     initial_state: Tensor
@@ -504,3 +513,22 @@ class LinODEnet_v2(nn.Module):
         result = predictions[combined.query_indices]
         assert result.shape == query_mask.shape
         return result
+
+
+def make_linodenet(
+    *,
+    linodenet: Mapping[str, Any],
+    state_updater: Mapping[str, Any],
+    state_propagator: Mapping[str, Any],
+    decoder: Mapping[str, Any],
+) -> LinODEnet:
+    r"""Instantiate :class:`LinODEnet` from constructor kwargs mappings."""
+    decoder_module = nn.Linear(**dict(decoder))
+    updater = GradientStepUpdater(decoder=decoder_module, **dict(state_updater))
+    propagator = LinearFlow(**dict(state_propagator))
+    return LinODEnet(
+        decoder=decoder_module,
+        state_updater=updater,
+        state_propagator=propagator,
+        **dict(linodenet),
+    )
