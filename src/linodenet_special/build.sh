@@ -21,6 +21,9 @@ LIBTORCH_CUDA="cu${CUDA_VERSION//./}" # e.g. cu124
 LIBTORCH_ARCHIVE="libtorch-shared-with-deps-$LIBTORCH_VERSION.zip"
 LIBTORCH_URL="https://download.pytorch.org/libtorch/$LIBTORCH_CUDA/$LIBTORCH_ARCHIVE"
 
+echo "CUDA_VERSION: ${CUDA_VERSION}"
+echo "TORCH_VERSION: ${TORCH_VERSION}"
+
 # map known libtorch versions to their expected sha256 hashes
 declare -A LIBTORCH_HASHES=(
   ["2.2.0+cu121"]="0a1a034b1980199543ec5cbc8d42215f55b188ac188b3dac42d83aeb449922bb"
@@ -91,7 +94,7 @@ if [ ! -d "$LIBTORCH_DIR" ]; then
   fi
 
   # extract "libtorch" directory from the zip file
-  echo "Extracting libtorch..."
+  echo "Extracting libtorch ${LIBTORCH_VERSION}..."
   rm -rf "$LIBTORCH_DIR"
   unzip -q "$LIBTORCH_ARCHIVE" "libtorch/*"
 fi
