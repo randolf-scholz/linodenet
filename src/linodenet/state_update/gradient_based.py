@@ -141,18 +141,57 @@ class GradientStepUpdater(nn.Module):
 
     @partial(torch.func.vmap, in_dims=(None, 0, 0, 0))
     @partial(torch.func.grad, argnums=1)
-    def _grad_fn_flat_batch(self, z: Tensor, z_prev: Tensor, y: Tensor, /) -> Tensor:
+    def _grad_fn_no_mask(
+        self,
+        z: Tensor,  # (B, d)
+        z_prev: Tensor,  # (B, d)
+        y: Tensor,  # (B, e)
+        /,
+    ) -> Tensor:  # (B)
         return (
             self.loss(self.decoder(z), y)  # ℓ(f(z), y)
             + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
         )
 
-    def grad_fn(self, z: Tensor, z_prev: Tensor, y: Tensor, /) -> Tensor:
+    @partial(torch.func.vmap, in_dims=(None, 0, 0, 0, 0))
+    @partial(torch.func.grad, argnums=1)
+    def _grad_fn_with_mask(
+        self,
+        z: Tensor,  # (B, d)
+        z_prev: Tensor,  # (B, d)
+        y: Tensor,  # (B, e)
+        mask: Tensor,  # (B, e)
+        /,
+    ) -> Tensor:  # (B)
+        return (
+            # ℓ(f(z), y)
+            self.loss(self.decoder(z), y, mask=mask)  # pyright: ignore[reportCallIssue]
+            + self.regularization_strength * self.regularizer(z, z_prev)  # λ⋅‖z-z₋‖²
+        )
+
+    def grad_fn(
+        self, z: Tensor, z_prev: Tensor, y: Tensor, /, *, mask: Tensor | None = None
+    ) -> Tensor:
         r"""Return the gradient while preserving the input batch shape."""
         z_flat = z.reshape(-1, z.shape[-1])
         z_prev_flat = z_prev.reshape(-1, z_prev.shape[-1])
         y_flat = y.reshape(-1, y.shape[-1])
-        grad = self._grad_fn_flat_batch(z_flat, z_prev_flat, y_flat)
+
+        grad = (
+            self._grad_fn_no_mask(
+                z_flat,
+                z_prev_flat,
+                y_flat,
+            )
+            if mask is None
+            else self._grad_fn_with_mask(
+                z_flat,
+                z_prev_flat,
+                y_flat,
+                mask.reshape(-1, mask.shape[-1]),
+            )
+        )
+
         return grad.reshape_as(z)
 
     __call__: Callable[[Tensor, Tensor], Tensor]
@@ -162,9 +201,10 @@ class GradientStepUpdater(nn.Module):
         z: Tensor,  # (..., d)
         y: Tensor,  # (..., e)
         /,
+        mask: Tensor | None = None,  # (..., e)
     ) -> Tensor:  # (..., d)
-        r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ d(z, z_prev)."""
-        return z - self.step_size * self.grad_fn(z, z, y)
+        r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ⋅d(z, z_prev)."""
+        return z - self.step_size * self.grad_fn(z, z, y, mask=mask)
 
 
 class GaussianGradientStepUpdater(nn.Module):
