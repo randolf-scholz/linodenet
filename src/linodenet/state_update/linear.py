@@ -211,6 +211,8 @@ class InnovationCell(nn.Module, VectorStateUpdate):
                 )
 
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
+        assert y.shape[-1] == self.input_size
+        assert x.shape[-1] == self.hidden_size
         y_pred = self.observation_map(x)
         r = torch.where(y.isnan(), 0.0, y_pred - y)  # (..., input_size)
         correction = self.gain(r, x)
