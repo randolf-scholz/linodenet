@@ -122,7 +122,7 @@ class TestGradientStepUpdater:
         z_prev = torch.tensor([1.0, 2.0, -0.5])
         y = torch.tensor([0.5, -1.0, 1.5])
 
-        actual = updater(z_prev, y)
+        actual = updater(y, z_prev)
 
         n = z_prev.numel()
         weight = decoder.weight.detach()
@@ -156,7 +156,7 @@ class TestGradientStepUpdater:
         z = torch.tensor([[1.0, 2.0, -0.5], [0.5, -1.5, 2.0]])
         y = torch.tensor([[0.5, -1.0, 1.5], [-0.25, 0.75, 1.0]])
 
-        actual = updater.grad_fn(z, z, y)
+        actual = updater.grad_fn(y, z, z)
 
         d = z.shape[-1]
         weight = decoder.weight.detach()
@@ -179,8 +179,8 @@ class TestGradientStepUpdater:
         z_prev = torch.tensor([0.25, -0.75, 1.5])
         y = torch.tensor([1.0, -0.5, 0.75])
 
-        expected = updater(z_prev, y)
-        actual = compiled(z_prev, y)
+        expected = updater(y, z_prev)
+        actual = compiled(y, z_prev)
 
         torch.testing.assert_close(actual, expected)
 
@@ -200,7 +200,7 @@ class TestGradientStepUpdater:
         y = torch.tensor([1.0, -0.5, 0.75])
 
         try:
-            exported = torch.export.export(updater, (z_prev, y))
+            exported = torch.export.export(updater, (y, z_prev))
         except (AssertionError, RuntimeError) as err:
             pytest.xfail(
                 "torch.export.export currently does not support this updater "
@@ -211,9 +211,9 @@ class TestGradientStepUpdater:
             torch.export.save(exported, f.name)
             loaded = torch.export.load(f.name)
 
-        expected = updater(z_prev, y)
-        actual_compiled = compiled(z_prev, y)
-        actual_loaded = loaded.module()(z_prev, y)
+        expected = updater(y, z_prev)
+        actual_compiled = compiled(y, z_prev)
+        actual_loaded = loaded.module()(y, z_prev)
 
         torch.testing.assert_close(actual_compiled, expected)
         torch.testing.assert_close(actual_loaded, expected)
@@ -231,7 +231,7 @@ class TestGradientStepUpdater:
         z_prev = torch.tensor([1.0, -2.0, 0.5], requires_grad=True)
         y = torch.tensor([0.0, 1.0, -1.5])
 
-        objective = updater(z_prev, y).sum()
+        objective = updater(y, z_prev).sum()
         (actual_grad,) = torch.autograd.grad(objective, z_prev)
 
         n = z_prev.numel()
@@ -270,7 +270,7 @@ class TestGradientStepUpdater:
         z_prev = torch.tensor([0.75, -1.25, 0.5, 2.0])
         y = decoder(z_prev)
 
-        actual = updater(z_prev, y)
+        actual = updater(y, z_prev)
 
         torch.testing.assert_close(actual, z_prev)
 
@@ -296,7 +296,7 @@ class TestGaussianGradientStepUpdater:
         )
         y_obs = torch.tensor([1.1, -0.7, 0.5])
 
-        actual_mean, actual_log_chol = updater((mean, log_chol), y_obs)
+        actual_mean, actual_log_chol = updater(y_obs, (mean, log_chol))
 
         mean_ref = mean.detach().clone().requires_grad_()
         log_chol_ref = log_chol.detach().clone().requires_grad_()
@@ -363,8 +363,8 @@ class TestGaussianGradientStepUpdater:
         )
         y_obs = torch.tensor([0.7, -0.4, 0.5])
 
-        expected = updater((mean, log_chol), y_obs)
-        actual = compiled((mean, log_chol), y_obs)
+        expected = updater(y_obs, (mean, log_chol))
+        actual = compiled(y_obs, (mean, log_chol))
 
         torch.testing.assert_close(actual[0], expected[0])
         torch.testing.assert_close(actual[1], expected[1])
@@ -396,7 +396,7 @@ class TestGaussianGradientStepUpdater:
         )
         y_obs = torch.tensor([[0.7, -1.2, 0.4], [-1.2, 0.5, 0.8]])
 
-        actual_mean, actual_log_chol = updater((mean, log_chol), y_obs)
+        actual_mean, actual_log_chol = updater(y_obs, (mean, log_chol))
 
         mean_ref = mean.detach().clone().requires_grad_()
         log_chol_ref = log_chol.detach().clone().requires_grad_()
@@ -441,7 +441,7 @@ class TestGaussianGradientStepUpdater:
         y_obs = torch.tensor([[0.7, -1.2, 0.4], [-1.2, 0.5, 0.8]])
 
         actual_grad_mean, actual_grad_log_chol = updater.grad_fn(
-            (mean, log_chol), (mean, log_chol), y_obs
+            y_obs, (mean, log_chol), (mean, log_chol)
         )
 
         mean_ref = mean.detach().clone().requires_grad_()
@@ -485,7 +485,7 @@ class TestGaussianGradientStepUpdater:
         )
         y_obs = torch.tensor([0.9, -0.6, 0.2])
 
-        mean_post, log_chol_post = updater((mean, log_chol), y_obs)
+        mean_post, log_chol_post = updater(y_obs, (mean, log_chol))
         objective = mean_post.sum() + log_chol_post.sum()
         actual_grad_mean, actual_grad_log_chol = torch.autograd.grad(
             objective,
@@ -524,7 +524,7 @@ class TestGaussianGradientStepUpdater:
         log_chol = torch.zeros(3, 3)
         y_obs = decoder(mean)
 
-        actual_mean, actual_log_chol = updater((mean, log_chol), y_obs)
+        actual_mean, actual_log_chol = updater(y_obs, (mean, log_chol))
 
         torch.testing.assert_close(actual_mean, mean)
         torch.testing.assert_close(actual_log_chol, torch.diag(torch.full((3,), -0.7)))

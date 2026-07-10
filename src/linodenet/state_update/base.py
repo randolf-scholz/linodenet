@@ -41,10 +41,10 @@ __all__ = [
     "MissingValueCell",
     # functions
     "is_vector_state_updater",
-    "is_idempotent_update",
+    "is_consistent_update",
 ]
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from typing import Final, Protocol, TypeIs, cast
 
 import torch
@@ -344,23 +344,26 @@ class MissingValueCell[F: VectorStateUpdate](nn.Module, SparseVectorStateUpdate)
         return self.state_updater(u, x)
 
 
-def is_idempotent_update(
+def is_consistent_update(
     update: SparseVectorStateUpdate,
     /,
     *,
+    decoder: Callable[[Tensor], Tensor] | None = None,
     batch_shape: tuple[int, ...] = (8,),
     check_sparse_observations: bool = True,
     rtol: float = 1e-5,
     atol: float = 1e-8,
 ) -> bool:
-    r"""Check the square-update idempotency condition on random data.
+    r"""Check the decoder-consistency condition on random data.
 
-    This checks the direct-observation criterion $x=y ⟹ F(y, x)=x$ for a
-    square state updater.
+    This checks the fixed-point criterion $ϕ(x)=y ⟹ F(y, x)=x$, where $ϕ$ is an
+    optional decoder from hidden state to observation space. If no decoder is
+    provided, the identity map is used, so `update` must be square.
 
     Args:
-        update: The state updater to test. Must satisfy
-            `update.input_size == update.hidden_size`.
+        update: The state updater to test.
+        decoder: Optional decoder $ϕ$ mapping hidden states to observations. If
+            `None`, use the identity map.
         batch_shape: Optional leading batch dimensions for the random test data.
         check_sparse_observations: Whether to also test the sparse-observation
             case where only a random subset of coordinates is observed.
@@ -368,29 +371,37 @@ def is_idempotent_update(
         atol: Absolute tolerance for the equality check.
 
     Returns:
-        `True` if the update is idempotent on the sampled data, else `False`.
+        `True` if the update satisfies the criterion on the sampled data, else
+        `False`.
 
     Raises:
-        ValueError: If the updater is not square.
+        ValueError: If `decoder` is `None` and the updater is not square, or if
+            `decoder` returns a tensor with the wrong shape.
     """
-    if update.input_size != update.hidden_size:
+    if decoder is None and update.input_size != update.hidden_size:
         raise ValueError(
-            "Idempotency requires a square state updater with "
+            "Identity decoding requires a square state updater with "
             f"{update.input_size=} and {update.hidden_size=}."
         )
 
     device = get_device(update)
     x = torch.randn(*batch_shape, update.hidden_size, device=device)
     with torch.no_grad():
-        # check that y=x ⟹ F(y,x)=x
-        y = x.clone()
+        y = x.clone() if decoder is None else decoder(x)
+        if y.shape != (*batch_shape, update.input_size):
+            raise ValueError(
+                "decoder must map hidden states to observation tensors with shape "
+                f"{(*batch_shape, update.input_size)}, but got {tuple(y.shape)}."
+            )
+
+        # check that ϕ(x)=y ⟹ F(y, x)=x
         if not torch.allclose(update(y, x), x, rtol=rtol, atol=atol):
             return False
 
         if not check_sparse_observations:
             return True
 
-        # check that y=x ⟹ F([m ? y : NaN], x)=x for a random binary mask m
+        # check that ϕ(x)=y ⟹ F([m ? y : NaN], x)=x for a random binary mask m
         mask = torch.rand(*batch_shape, update.input_size, device=device) > 0.5
         y_obs = torch.where(mask, y, torch.nan)
         x_new = update(y_obs, x, mask=mask)
