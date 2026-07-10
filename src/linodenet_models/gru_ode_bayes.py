@@ -109,27 +109,17 @@ def _marginal_logvar_gaussian_sample_and_log_prob(
 
 
 def update_masked(
+    target: Tensor,  # (..., *e)
+    /,
     fn: Callable[..., Tensor],  # [*(..., *dᵢ)] -> (..., *e)
     args: tuple[Tensor, ...],
     *,
-    target: Tensor,  # (..., *e)
-    batch_mask: Tensor,  # (...)
+    batch_mask: Tensor,  # Bool[...]
 ) -> Tensor:  # (..., *e)
     r"""Update ``target`` with ``fn`` applied to selected batch elements."""
-    assert batch_mask.dtype == torch.bool
-    batch_shape = batch_mask.shape
-    batch_rank = len(batch_shape)
-
-    event_shape = target.shape[batch_rank:]
-    assert target.shape == batch_shape + event_shape
-
-    mask_flat = batch_mask.flatten()
-    ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
-
-    return (
-        target.reshape(-1, *event_shape)
-        .index_put([mask_flat], ys_flat)
-        .reshape(*batch_shape, *event_shape)
+    return target.masked_scatter(
+        batch_mask.reshape(*batch_mask.shape, *(1,) * (target.ndim - batch_mask.ndim)),
+        fn(*(x[batch_mask] for x in args)),
     )
 
 
@@ -730,9 +720,9 @@ class GRU_ODE_Bayes(nn.Module):
             delta = torch.where(active, t_obs - t, torch.zeros_like(t_obs - t))
             t = torch.where(active, t_obs, t)
             prior_state = update_masked(
+                post_state,
                 self.propagate_state,
                 (delta, post_state),
-                target=post_state,
                 batch_mask=active,
             )
 
@@ -741,9 +731,9 @@ class GRU_ODE_Bayes(nn.Module):
 
             # update the state
             post_state = update_masked(
+                prior_state,
                 self.update_cell,
                 (prior_state, observation, prior_mean, prior_logvar),
-                target=prior_state,
                 batch_mask=active & ctx_mask,
             )
 

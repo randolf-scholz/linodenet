@@ -592,9 +592,9 @@ class TestGRUODEBayes:
         mask = torch.zeros(2, dtype=torch.bool)
 
         result = update_masked(
+            state,
             model.update_state,
             (state, observation),
-            target=state,
             batch_mask=mask,
         )
 
