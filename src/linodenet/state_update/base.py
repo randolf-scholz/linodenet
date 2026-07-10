@@ -44,13 +44,12 @@ __all__ = [
     "is_idempotent_update",
 ]
 
-from collections.abc import Iterable, Mapping
-from typing import Any, Final, Protocol, TypeIs, cast
+from collections.abc import Iterable
+from typing import Final, Protocol, TypeIs, cast
 
 import torch
 from torch import Tensor, nn
 
-from linodenet.constants import EMPTY_MAP
 from linodenet.nn import ModuleSequence
 from linodenet.nn.rezero import resolve_gate
 from linodenet.testing.utils import get_device
@@ -96,6 +95,7 @@ class VectorStateUpdate(AbstractStateUpdate[Tensor, Tensor], Protocol):
 class SparseVectorStateUpdate(VectorStateUpdate, Protocol):
     r"""Protocol for vector-valued state updaters that can handle missing values."""
 
+    @signature("[(..., d), (..., h), (..., d)?] -> (..., h)")
     def __call__(
         self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None
     ) -> Tensor:
@@ -107,6 +107,7 @@ class SparseVectorStateUpdate(VectorStateUpdate, Protocol):
             mask: Mask indicating which coordinates of `y` are observed. If
                 `None`, observed coordinates are inferred from finite values in `y`.
         """
+        ...
 
 
 def is_vector_state_updater(arg: object, /) -> TypeIs[VectorStateUpdate]:
@@ -221,7 +222,7 @@ class ResidualCell[C: VectorStateUpdate](nn.Module, VectorStateUpdate):
         return x - self.gate(self.cell(y, x))
 
 
-class MissingValueCell(nn.Module, SparseVectorStateUpdate):
+class MissingValueCell[F: VectorStateUpdate](nn.Module, SparseVectorStateUpdate):
     r"""Wraps an existing state updater $F$ so that it can handle missing values.
 
     .. math:: x' &= F(u，x)   &   u = impute(y, x; mask=m)
@@ -244,6 +245,9 @@ class MissingValueCell(nn.Module, SparseVectorStateUpdate):
     .. math:: u' = concat([impute(y, x; mask=m)，m])
     """
 
+    state_updater: F
+    imputer: ImputerProtocol
+
     # CONSTANTS
     concat_mask: Final[bool]
     r"""CONST: Whether to concatenate the mask to the input or not."""
@@ -260,8 +264,7 @@ class MissingValueCell(nn.Module, SparseVectorStateUpdate):
         return {
             "input_size": self.input_size,
             "hidden_size": self.hidden_size,
-            "filter_type": self.filter_type,
-            "filter_kwargs": dict(self.filter_kwargs),
+            "filter": self.state_updater,
             "concat_mask": self.concat_mask,
             "imputation": self.imputation,
         }
@@ -271,25 +274,29 @@ class MissingValueCell(nn.Module, SparseVectorStateUpdate):
         input_size: int,
         hidden_size: int,
         *,
-        filter_type: type[VectorStateUpdate],
-        filter_kwargs: Mapping[str, Any] = EMPTY_MAP,
+        state_updater: F,
         concat_mask: bool = True,
         imputation: str | float | Tensor | nn.Module = "zero",
     ) -> None:
         super().__init__()
         VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
-        self.filter_type = filter_type
-        self.filter_kwargs = dict(filter_kwargs)
         self.imputation = imputation
         self.concat_mask = bool(concat_mask)
 
-        # initialize state updater
-        filter_input_size = self.input_size * (1 + self.concat_mask)
-        filter_options = dict(filter_kwargs) | {
-            "input_size": filter_input_size,
-            "hidden_size": hidden_size,
-        }
-        self.filter = filter_type(**filter_options)
+        expected_input_size = self.input_size * (1 + self.concat_mask)
+        if getattr(state_updater, "input_size", None) != expected_input_size:
+            raise ValueError(
+                "MissingValueCell requires a filter with "
+                f"input_size={expected_input_size}, got "
+                f"{getattr(state_updater, 'input_size', None)!r}."
+            )
+        if getattr(state_updater, "hidden_size", None) != self.hidden_size:
+            raise ValueError(
+                "MissingValueCell requires a filter with "
+                f"hidden_size={self.hidden_size}, got "
+                f"{getattr(state_updater, 'hidden_size', None)!r}."
+            )
+        self.state_updater = state_updater
 
         # initialize imputation strategy
         # imputation_strategy: ImputationStrategy
@@ -334,7 +341,7 @@ class MissingValueCell(nn.Module, SparseVectorStateUpdate):
         if self.concat_mask:
             u = torch.cat([u, self.mask], dim=-1)
 
-        return self.filter(u, x)
+        return self.state_updater(u, x)
 
 
 def is_idempotent_update(

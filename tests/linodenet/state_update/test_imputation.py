@@ -1,5 +1,6 @@
 r"""Tests for state-update imputers and missing-value wrappers."""
 
+import pytest
 import torch
 from torch import Tensor, nn
 
@@ -109,7 +110,7 @@ class TestMissingValueCell:
         cell = MissingValueCell(
             input_size=3,
             hidden_size=3,
-            filter_type=RecorderFilter,
+            state_updater=RecorderFilter(3, 3),
             concat_mask=False,
             imputation=imputer,
         )
@@ -130,7 +131,7 @@ class TestMissingValueCell:
         cell = MissingValueCell(
             input_size=3,
             hidden_size=3,
-            filter_type=RecorderFilter,
+            state_updater=RecorderFilter(6, 3),
             concat_mask=True,
             imputation=CaptureImputer(),
         )
@@ -143,6 +144,19 @@ class TestMissingValueCell:
         torch.testing.assert_close(cell.mask, torch.tensor([[False, True, False]]))
         torch.testing.assert_close(cell.imputed, torch.tensor([[1.0, -1.0, 3.0]]))
         torch.testing.assert_close(
-            cell.filter.last_u,
+            cell.state_updater.last_u,
             torch.tensor([[1.0, -1.0, 3.0, 0.0, 1.0, 0.0]]),
         )
+
+    def test_rejects_filter_with_wrong_input_size(self) -> None:
+        r"""MissingValueCell should validate the supplied filter dimensions."""
+        with pytest.raises(
+            ValueError,
+            match=r"MissingValueCell requires a filter with input_size=6, got 3\.",
+        ):
+            MissingValueCell(
+                input_size=3,
+                hidden_size=3,
+                state_updater=RecorderFilter(3, 3),
+                concat_mask=True,
+            )
