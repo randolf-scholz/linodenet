@@ -420,7 +420,7 @@ class LinODEnet(nn.Module):
         self.latent_size = latent_size
 
         self.decoder = decoder
-        self.state_update = state_updater
+        self.state_updater = state_updater
         self.state_propagator = state_propagator
 
         self.batch_first = batch_first
