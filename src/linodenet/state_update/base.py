@@ -33,6 +33,7 @@ __all__ = [
     # Protocols
     "AbstractStateUpdate",
     "VectorStateUpdate",
+    "SparseVectorStateUpdate",
     # classes
     "CellSequence",
     "ResidualCellSequence",
@@ -92,6 +93,22 @@ class VectorStateUpdate(AbstractStateUpdate[Tensor, Tensor], Protocol):
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor: ...
 
 
+class SparseVectorStateUpdate(VectorStateUpdate, Protocol):
+    r"""Protocol for vector-valued state updaters that can handle missing values."""
+
+    def __call__(
+        self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None
+    ) -> Tensor:
+        r"""Update the state vector using an optional observation mask.
+
+        Args:
+            y: Observation vector.
+            x: Current state estimate.
+            mask: Mask indicating which coordinates of `y` are observed. If
+                `None`, observed coordinates are inferred from finite values in `y`.
+        """
+
+
 def is_vector_state_updater(arg: object, /) -> TypeIs[VectorStateUpdate]:
     r"""Check whether an object is a state updater."""
     return (
@@ -137,7 +154,7 @@ class CellSequence[C: VectorStateUpdate](ModuleSequence[C], VectorStateUpdate): 
         VectorStateUpdate.__init__(self, input_size, hidden_size)
 
     @signature("[(..., m), (..., n)] -> (..., n)")
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+    def forward(self, y: Tensor, x: Tensor, /) -> Tensor:
         for cell in self:
             x = cell(y, x)
         return x
@@ -204,10 +221,10 @@ class ResidualCell[C: VectorStateUpdate](nn.Module, VectorStateUpdate):
         return x - self.gate(self.cell(y, x))
 
 
-class MissingValueCell(nn.Module, VectorStateUpdate):
+class MissingValueCell(nn.Module, SparseVectorStateUpdate):
     r"""Wraps an existing state updater $F$ so that it can handle missing values.
 
-    .. math:: x' &= F(u，x)   &   (u, m) = impute(y, x)
+    .. math:: x' &= F(u，x)   &   u = impute(y, x; mask=m)
 
     where $u$ is an imputed value that is free of missing values.
     There are several available imputation strategies:
@@ -219,9 +236,12 @@ class MissingValueCell(nn.Module, VectorStateUpdate):
     4. "decoder": Replace missing values with the output of the decoder: $s = h(x)$.
     5. Tensor: replaces missing values with a fixed tensor. (for example, the mean of the data)
 
-    Optionally, the mask can be concatenated to the input.
+    Here `m=True` marks the coordinates that should be imputed. If `m=None`,
+    the imputation mask defaults to `y.isnan()`.
 
-    .. math:: u = concat([impute(y, x)₀，impute(y, x)₁])
+    Optionally, the imputation mask can be concatenated to the input.
+
+    .. math:: u' = concat([impute(y, x; mask=m)，m])
     """
 
     # CONSTANTS
@@ -231,7 +251,7 @@ class MissingValueCell(nn.Module, VectorStateUpdate):
     r"""CONST: The strategy to use for imputation."""
     # BUFFERS
     mask: Tensor
-    r"""BUFFER: The mask tensor (true if observed)."""
+    r"""BUFFER: The mask tensor (true where values were imputed)."""
     imputed: Tensor
     r"""BUFFER: The most recent imputed value."""
 
@@ -293,7 +313,7 @@ class MissingValueCell(nn.Module, VectorStateUpdate):
             case (Tensor() | float()) as value:
                 imputation_strategy = ImputationStrategy.CONSTANT
                 imputer = ConstantImputer(value)
-            case nn.Module as module:
+            case nn.Module() as module:
                 imputation_strategy = "other"
                 imputer = cast("ImputerProtocol", module)
             case _:
@@ -305,9 +325,10 @@ class MissingValueCell(nn.Module, VectorStateUpdate):
         self.imputer = imputer
 
     @signature("[(..., m), (..., n)] -> (..., n)")
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        # impute missing values and store the inferred observation mask
-        self.imputed, self.mask = self.imputer(y, x)
+    def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
+        # impute missing values and store the imputation mask
+        self.mask = y.isnan() if mask is None else mask
+        self.imputed = self.imputer(y, x, mask=self.mask)
         u = self.imputed
 
         if self.concat_mask:
@@ -317,7 +338,7 @@ class MissingValueCell(nn.Module, VectorStateUpdate):
 
 
 def is_idempotent_update(
-    update: VectorStateUpdate,
+    update: SparseVectorStateUpdate,
     /,
     *,
     batch_shape: tuple[int, ...] = (8,),
@@ -365,4 +386,6 @@ def is_idempotent_update(
         # check that y=x ⟹ F([m ? y : NaN], x)=x for a random binary mask m
         mask = torch.rand(*batch_shape, update.input_size, device=device) > 0.5
         y_obs = torch.where(mask, y, torch.nan)
-        return torch.allclose(update(y_obs, x), x, rtol=rtol, atol=atol)
+        x_new = update(y_obs, x, mask=mask)
+        assert x_new.isfinite().all()
+        return torch.allclose(x_new, x, rtol=rtol, atol=atol)

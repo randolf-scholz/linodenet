@@ -28,17 +28,19 @@ from signatures import signature
 class ImputerProtocol(Protocol):
     r"""Protocol for imputer."""
 
-    @signature("[(..., m), (..., n)] -> [(..., m), (..., m)]")
-    def __call__(self, y_obs: Tensor, x: Tensor, /) -> tuple[Tensor, Tensor]:
+    @signature("[(..., m), (..., n)] -> (..., m)")
+    def __call__(
+        self, y_obs: Tensor, x: Tensor, /, *, mask: Tensor | None = None
+    ) -> Tensor:
         r"""Impute missing values in a tensor.
 
         Args:
             y_obs: Observed state.
             x: Estimated state.
+            mask: Mask indicating which values to impute. If `None`, uses `y_obs.isnan()`.
 
         Returns:
-            y: Imputed state, where missing values have been replaced with imputed values.
-            m: Mask indicating which values were observed (True) vs imputed (False).
+            Imputed state, where the masked values have been replaced.
         """
         ...
 
@@ -56,33 +58,35 @@ class LinearImputer(nn.Module):
         super().__init__()
         self.linear = nn.Linear(hidden_size, input_size, bias=use_bias)
 
-    def forward(self, y: Tensor, x: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Impute missing values with a linear function.
 
-        .. math:: (y, x) ⟼ (u, m), \quad u = ⟦m ? y : Hx+b⟧
+        .. math:: (y, x) ⟼ u, \quad u = ⟦m ? Hx+b : y⟧
 
         Args:
             y: Observed state.
             x: Estimated state.
+            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
         """
-        mask = ~y.isnan()
-        return torch.where(mask, y, self.linear(x)), mask
+        mask = y.isnan() if mask is None else mask
+        return torch.where(mask, self.linear(x), y)
 
 
 class ZeroImputer(nn.Module):
     r"""Impute missing values with zero."""
 
-    def forward(self, y: Tensor, _: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, y: Tensor, _: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Impute missing values with zero.
 
-        .. math:: (y, *) ⟼ (u, m), \quad u = ⟦m ? y : 0⟧
+        .. math:: (y, *) ⟼ u, \quad u = ⟦m ? 0 : y⟧
 
         Args:
-            y (Tensor): Observed state.
-            _ (Tensor): Hidden state.
+            y: Observed state.
+            _: Hidden state. Unused.
+            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
         """
-        mask = ~y.isnan()
-        return torch.where(mask, y, torch.zeros_like(y)), mask
+        mask = y.isnan() if mask is None else mask
+        return torch.where(mask, 0.0, y)
 
 
 class ConstantImputer(nn.Module):
@@ -95,17 +99,18 @@ class ConstantImputer(nn.Module):
         super().__init__()
         self.register_buffer("value", torch.as_tensor(constant))
 
-    def forward(self, y: Tensor, _: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, y: Tensor, _: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Impute missing values with a constant.
 
-        .. math:: (y, *) ⟼ (u, m), \quad u = ⟦m ? y : c⟧
+        .. math:: (y, *) ⟼ u, \quad u = ⟦m ? c : y⟧
 
         Args:
-            y (Tensor): Observed state.
-            _ (Tensor): Hidden state.
+            y: Observed state.
+            _: Hidden state. Unused.
+            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
         """
-        mask = ~y.isnan()
-        return torch.where(mask, y, self.value), mask
+        mask = y.isnan() if mask is None else mask
+        return torch.where(mask, self.value, y)
 
 
 class CorrelationImputer(nn.Module):
@@ -148,12 +153,13 @@ class CorrelationImputer(nn.Module):
         L = self.get_cholesky()
         return L @ L.mT
 
-    def forward(self, y: Tensor, x: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Impute missing values with the conditional Gaussian posterior mean.
 
         Let $ŷ = decoder(x)$ and assume the true observation follows
-        $y ∼ 𝓝(ŷ, Σ)$. Conditioning on the observed coordinates selected by the
-        mask $Π$ gives the full-vector update
+        $y ∼ 𝓝(ŷ, Σ)$. If `mask=True` marks the coordinates to impute, then
+        conditioning on the observed coordinates selected by $Π = I - diag(mask)$
+        gives the full-vector update
 
         .. math:: y' = ŷ - Σ (ΠΣΠ + 𝕀 - Π)⁻¹ Π(ŷ - y)
 
@@ -164,8 +170,10 @@ class CorrelationImputer(nn.Module):
         Args:
             y: Observed state, possibly containing NaNs at missing coordinates.
             x: Hidden state used by the decoder.
+            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
         """
-        mask = ~y.isnan()
+        mask = y.isnan() if mask is None else mask
+        observed_mask = ~mask
         y_hat = self.decoder(x)
         if y_hat.shape[-1] != self.input_size:
             raise ValueError(
@@ -174,14 +182,14 @@ class CorrelationImputer(nn.Module):
             )
 
         covariance = self.get_covariance()
-        residual = torch.where(mask, y_hat - y, y_hat.new_zeros(()))
+        residual = torch.where(observed_mask, y_hat - y, y_hat.new_zeros(()))
 
-        observed = torch.einsum("...i, ...j -> ...ij", mask, mask)
+        observed = torch.einsum("...i, ...j -> ...ij", observed_mask, observed_mask)
         innovation_covariance = torch.where(observed, covariance, self.identity)
 
         L = torch.linalg.cholesky(innovation_covariance)
         z = torch.cholesky_solve(residual.unsqueeze(-1), L).squeeze(-1)
-        return y_hat - torch.einsum("ij, ...j -> ...i", covariance, z), mask
+        return y_hat - torch.einsum("ij, ...j -> ...i", covariance, z)
 
 
 class LearnableImputer(nn.Module):
@@ -199,17 +207,18 @@ class LearnableImputer(nn.Module):
         )
         self.value = nn.Parameter(torch.randn(self.input_shape))
 
-    def forward(self, y: Tensor, _: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, y: Tensor, _: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Impute missing values with a learnable value.
 
-        .. math:: (y, *) ⟼ (u, m), \quad u = ⟦m ? y : c⟧
+        .. math:: (y, *) ⟼ u, \quad u = ⟦m ? c : y⟧
 
         Args:
-            y (Tensor): Observed state.
-            _ (Tensor): Hidden state.
+            y: Observed state.
+            _: Hidden state. Unused.
+            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
         """
-        mask = ~y.isnan()
-        return torch.where(mask, y, self.value), mask
+        mask = y.isnan() if mask is None else mask
+        return torch.where(mask, self.value, y)
 
 
 class LastValueImputer(nn.Module):
@@ -225,20 +234,21 @@ class LastValueImputer(nn.Module):
         self.register_buffer("last_value", torch.zeros(()))
         self.decay = nn.Parameter(torch.tensor(decay), requires_grad=decay_learnable)
 
-    def forward(self, y: Tensor, _: Tensor) -> tuple[Tensor, Tensor]:
+    def forward(self, y: Tensor, _: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Impute missing values with the last observed value.
 
-        .. math:: (yₖ, *) ⟼ (u, m), \quad u = ⟦m ? yₖ : \tilde{y}ₖ₋₁⟧
+        .. math:: (yₖ, *) ⟼ u, \quad u = ⟦m ? \tilde{y}ₖ₋₁ : yₖ⟧
 
         Args:
-            y (Tensor): Observed state.
-            _ (Tensor): Hidden state.
+            y: Observed state.
+            _: Hidden state. Unused.
+            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
         """
-        mask = ~y.isnan()
+        mask = y.isnan() if mask is None else mask
         # convex combination of last value and current value
-        z = torch.where(mask, y, self.last_value)
+        z = torch.where(mask, self.last_value, y)
         self.last_value = self.decay * self.last_value + (1 - self.decay) * z
-        return self.last_value, mask
+        return self.last_value
 
 
 IMPUTERS: dict[str, type[ImputerProtocol]] = {
