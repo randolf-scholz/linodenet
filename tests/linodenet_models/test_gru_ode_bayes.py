@@ -594,7 +594,7 @@ class TestGRUODEBayes:
         result = update_masked(
             state,
             model.update_state,
-            (state, observation),
+            args=(state, observation),
             batch_mask=mask,
         )
 

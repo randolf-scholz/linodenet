@@ -110,10 +110,10 @@ def _marginal_logvar_gaussian_sample_and_log_prob(
 
 def update_masked(
     target: Tensor,  # (..., *e)
-    /,
     fn: Callable[..., Tensor],  # [*(..., *dᵢ)] -> (..., *e)
-    args: tuple[Tensor, ...],
+    /,
     *,
+    args: tuple[Tensor, ...],
     batch_mask: Tensor,  # Bool[...]
 ) -> Tensor:  # (..., *e)
     r"""Update ``target`` with ``fn`` applied to selected batch elements."""
@@ -722,7 +722,7 @@ class GRU_ODE_Bayes(nn.Module):
             prior_state = update_masked(
                 post_state,
                 self.propagate_state,
-                (delta, post_state),
+                args=(delta, post_state),
                 batch_mask=active,
             )
 
@@ -733,7 +733,7 @@ class GRU_ODE_Bayes(nn.Module):
             post_state = update_masked(
                 prior_state,
                 self.update_cell,
-                (prior_state, observation, prior_mean, prior_logvar),
+                args=(prior_state, observation, prior_mean, prior_logvar),
                 batch_mask=active & ctx_mask,
             )
 
