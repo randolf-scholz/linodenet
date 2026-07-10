@@ -23,7 +23,7 @@ from linodenet.nn.parametrize import register_parametrization
 from linodenet.nn.rezero import ReZero, resolve_gate
 from signatures import signature
 
-from .base import VectorStateUpdate
+from .base import SparseVectorStateUpdate, VectorStateUpdate
 
 
 class LinearRNNCell(nn.Module, VectorStateUpdate):
@@ -67,7 +67,7 @@ class LinearRNNCell(nn.Module, VectorStateUpdate):
         return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
 
 
-class InnovationCell(nn.Module, VectorStateUpdate):
+class InnovationCell(nn.Module, SparseVectorStateUpdate):
     r"""State update that is linear/affine in the residual $h(x)-y$.
 
     .. math:: x' = x - ρ(K(x)⋅(h(x) - y))
@@ -173,7 +173,9 @@ class InnovationCell(nn.Module, VectorStateUpdate):
         observation_map: str | nn.Module = "linear",
     ) -> None:
         super().__init__()
-        VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
+        SparseVectorStateUpdate.__init__(
+            self, input_size=input_size, hidden_size=hidden_size
+        )
         self.gate = resolve_gate(gate)
 
         match gain:
@@ -343,7 +345,7 @@ class AttentionGain(nn.Module):
         return attended.squeeze(-3).squeeze(-1)  # (..., output_size)
 
 
-class KalmanCell(nn.Module, VectorStateUpdate):
+class KalmanCell(nn.Module, SparseVectorStateUpdate):
     r"""Kalman-style hidden-state update with masked observations.
 
     .. math::
@@ -408,7 +410,9 @@ class KalmanCell(nn.Module, VectorStateUpdate):
         observation_map: str | nn.Module = "linear",
     ) -> None:
         super().__init__()
-        VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
+        SparseVectorStateUpdate.__init__(
+            self, input_size=input_size, hidden_size=hidden_size
+        )
         m = self.hidden_size
         n = self.input_size
         self.gate = resolve_gate(gate)
