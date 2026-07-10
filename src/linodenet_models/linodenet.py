@@ -447,6 +447,8 @@ class LinODEnet(nn.Module):
         M = context_mask.movedim(seq_dim, 0)
         T0 = T[[0]] if initial_time is None else initial_time
         DT = T.diff(dim=0, prepend=T0)
+        valid_steps = (M | Q).any(dim=-1)
+        _, *batch_shape = T.shape
 
         prior_states: list[Tensor] = []
         post_states: list[Tensor] = []
@@ -454,12 +456,20 @@ class LinODEnet(nn.Module):
         post_preds: list[Tensor] = []
 
         posterior_state: Tensor = (
-            initial_state if initial_state is not None else self.initial_state
+            initial_state
+            if initial_state is not None
+            else self.initial_state.expand(*batch_shape, self.latent_size)
         )
 
-        for delta_t, x_obs, obs_mask, q in zip(DT, X, M, Q, strict=True):
+        for delta_t, x_obs, obs_mask, active in zip(DT, X, M, valid_steps, strict=True):
             # zₜ = flow(z(t-∆t), ∆t)
-            prior_state = self.state_propagator(delta_t, posterior_state)
+            # prior_state = self.state_propagator(delta_t, posterior_state)
+            prior_state = update_masked(
+                posterior_state,
+                fn=self.state_propagator,
+                args=(delta_t, posterior_state),
+                batch_mask=active,
+            )
 
             # zₜ' = F(zₜ, xₜ)
             posterior_state = self.state_updater(x_obs, prior_state, mask=obs_mask)
@@ -531,4 +541,32 @@ def make_linodenet(
         state_updater=updater,
         state_propagator=propagator,
         **dict(linodenet),
+    )
+
+
+def update_masked(
+    target: Tensor,  # (..., *e)
+    /,
+    fn: Callable[..., Tensor],  # [*(..., *dᵢ)] -> (..., *e)
+    args: tuple[Tensor, ...],
+    *,
+    batch_mask: Tensor,  # (...)
+) -> Tensor:  # (..., *e)
+    r"""Update ``target`` with ``fn`` applied to selected batch elements."""
+    assert batch_mask.dtype == torch.bool
+    batch_shape = batch_mask.shape
+    batch_rank = len(batch_shape)
+
+    event_shape = target.shape[batch_rank:]
+    assert target.shape == batch_shape + event_shape
+
+    # flatten batch dims, apply fn only to selected batch elements.
+    mask_flat = batch_mask.flatten()
+    ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
+
+    # scatter results into the target tensor.
+    return (
+        target.reshape(-1, *event_shape)
+        .index_put([mask_flat], ys_flat)
+        .reshape(*batch_shape, *event_shape)
     )
