@@ -292,7 +292,7 @@ class LinODEnet_v0(nn.Module):
 
         self.decoder = decoder
         self.encoder = encoder
-        self.state_update = state_updater
+        self.state_updater = state_updater
         self.state_propagator = state_propagator
 
         self.batch_first = batch_first
@@ -337,7 +337,7 @@ class LinODEnet_v0(nn.Module):
             prior_prediction = self.decoder(prior_state)
 
             # x̂ₜ' = F(x̂ₜ, xₜ)
-            posterior_prediction = self.filter(prior_prediction, x_obs)
+            posterior_prediction = self.state_updater(x_obs, prior_prediction)
 
             # zₜ' = ϕ⁻¹(x̂ₜ')
             post_state = self.encoder(posterior_prediction)
@@ -462,7 +462,7 @@ class LinODEnet(nn.Module):
             prior_state = self.state_propagator(delta_t, posterior_state)
 
             # zₜ' = F(zₜ, xₜ)
-            posterior_state = self.state_updater(prior_state, x_obs, mask=obs_mask)
+            posterior_state = self.state_updater(x_obs, prior_state, mask=obs_mask)
 
             # x̂ₜ = ϕ(zₜ)
             prior_pred = self.decoder(prior_state)

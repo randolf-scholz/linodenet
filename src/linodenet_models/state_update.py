@@ -214,71 +214,72 @@ class GradientStepUpdater(nn.Module):
                 raise ValueError(f"Unknown regularizer: {regularizer!r}")
 
     @partial(torch.func.vmap, in_dims=(None, 0, 0, 0))
-    @partial(torch.func.grad, argnums=1)
+    @partial(torch.func.grad, argnums=2)
     def _grad_fn_no_mask(
         self,
-        z: Tensor,  # (B, d)
-        z_prev: Tensor,  # (B, d)
         y: Tensor,  # (B, e)
+        x: Tensor,  # (B, d)
+        x_prev: Tensor,  # (B, d)
         /,
     ) -> Tensor:  # (B)
         return (
-            self.loss(self.decoder(z), y)  # ℓ(f(z), y)
-            + self.regularization_strength * self.regularizer(z, z_prev)  # λ‖z-z₋‖²
+            self.loss(self.decoder(x), y)  # ℓ(f(x), y)
+            + self.regularization_strength * self.regularizer(x, x_prev)  # λ‖x-x₋‖²
         )
 
     @partial(torch.func.vmap, in_dims=(None, 0, 0, 0, 0))
-    @partial(torch.func.grad, argnums=1)
+    @partial(torch.func.grad, argnums=2)
     def _grad_fn_with_mask(
         self,
-        z: Tensor,  # (B, d)
-        z_prev: Tensor,  # (B, d)
         y: Tensor,  # (B, e)
+        x: Tensor,  # (B, d)
+        x_prev: Tensor,  # (B, d)
         mask: Tensor,  # (B, e)
         /,
     ) -> Tensor:  # (B)
         return (
-            # ℓ(f(z), y)
-            self.loss(self.decoder(z), y, mask=mask)  # pyright: ignore[reportCallIssue]
-            + self.regularization_strength * self.regularizer(z, z_prev)  # λ⋅‖z-z₋‖²
+            # ℓ(f(x), y)
+            self.loss(self.decoder(x), y, mask=mask)  # pyright: ignore[reportCallIssue]
+            + self.regularization_strength * self.regularizer(x, x_prev)  # λ⋅‖x-x₋‖²
         )
 
     def grad_fn(
-        self, z: Tensor, z_prev: Tensor, y: Tensor, /, *, mask: Tensor | None = None
+        self, y: Tensor, x: Tensor, x_prev: Tensor, /, *, mask: Tensor | None = None
     ) -> Tensor:
         r"""Return the gradient while preserving the input batch shape."""
-        z_flat = z.reshape(-1, z.shape[-1])
-        z_prev_flat = z_prev.reshape(-1, z_prev.shape[-1])
         y_flat = y.reshape(-1, y.shape[-1])
+        x_flat = x.reshape(-1, x.shape[-1])
+        x_prev_flat = x_prev.reshape(-1, x_prev.shape[-1])
 
         grad = (
             self._grad_fn_no_mask(
-                z_flat,
-                z_prev_flat,
                 y_flat,
+                x_flat,
+                x_prev_flat,
             )
             if mask is None
             else self._grad_fn_with_mask(
-                z_flat,
-                z_prev_flat,
                 y_flat,
+                x_flat,
+                x_prev_flat,
                 mask.reshape(-1, mask.shape[-1]),
             )
         )
 
-        return grad.reshape_as(z)
+        return grad.reshape_as(x)
 
     __call__: Callable[[Tensor, Tensor], Tensor]
 
     def forward(
         self,
-        z: Tensor,  # (..., d)
         y: Tensor,  # (..., e)
+        x: Tensor,  # (..., d)
         /,
+        *,
         mask: Tensor | None = None,  # (..., e)
     ) -> Tensor:  # (..., d)
-        r"""Computes z_prev - η∇₟ℒ(z_prev), where ℒ(z) = ℓ(f(z), y) + λ⋅d(z, z_prev)."""
-        return z - self.step_size * self.grad_fn(z, z, y, mask=mask)
+        r"""Compute $x - η∇ₓℒ(x)$ with canonical state-update argument order."""
+        return x - self.step_size * self.grad_fn(y, x, x, mask=mask)
 
 
 class LinearRNNCell(nn.Module):
