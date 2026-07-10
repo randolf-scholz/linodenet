@@ -61,11 +61,12 @@ class TestUpdateMasked:
             ]
         )
         mask = x.isfinite().all(dim=-1)
+        target = torch.full_like(x, -1.0)
 
-        (result,) = update_masked(
-            lambda v: (torch.square(v),),
-            (x,),
-            target=(torch.full_like(x, -1.0),),
+        result = update_masked(
+            target,
+            torch.square,
+            args=(x,),
             batch_mask=mask,
         )
 
@@ -94,11 +95,11 @@ class TestUpdateMasked:
             ]
         )
         mask = x.isfinite().all(dim=-1) & y.isfinite().all(dim=-1)
-
-        (result,) = update_masked(
-            lambda a, b: (torch.add(a, b),),
-            (x, y),
-            target=(torch.zeros_like(x),),
+        target = torch.zeros_like(x)
+        result = update_masked(
+            target,
+            torch.add,
+            args=(x, y),
             batch_mask=mask,
         )
 
@@ -116,11 +117,12 @@ class TestUpdateMasked:
         x[0, 1] = torch.nan
         x[1, 2] = torch.nan
         mask = x.isfinite().all(dim=-1)
+        target = torch.full_like(x, torch.nan)
 
-        (result,) = update_masked(
-            lambda v: (torch.sin(v),),
-            (x,),
-            target=(torch.full_like(x, torch.nan),),
+        result = update_masked(
+            target,
+            torch.sin,
+            args=(x,),
             batch_mask=mask,
         )
 
@@ -135,19 +137,19 @@ class TestUpdateMasked:
 
         compiled = torch.compile(
             lambda values, t: update_masked(
-                lambda v: (torch.sin(v),),
-                (values,),
-                target=(t,),
+                t,
+                torch.sin,
+                args=(values,),
                 batch_mask=values.isfinite().all(dim=-1),
             ),
             fullgraph=True,
         )
 
-        (result,) = compiled(x, target)
-        (expected,) = update_masked(
-            lambda v: (torch.sin(v),),
-            (x,),
-            target=(target,),
+        result = compiled(x, target)
+        expected = update_masked(
+            target,
+            torch.sin,
+            args=(x,),
             batch_mask=x.isfinite().all(dim=-1),
         )
         mask = x.isfinite().all(dim=-1)
@@ -162,19 +164,17 @@ class TestUpdateMasked:
                 self.linear = torch.nn.Linear(4, 3)
 
             def forward(self, values: torch.Tensor) -> torch.Tensor:
-                (result,) = update_masked(
-                    lambda v: (self.linear(v),),
-                    (values,),
-                    target=(
-                        torch.zeros(
-                            [values.shape[0], 3],
-                            dtype=values.dtype,
-                            device=values.device,
-                        ),
-                    ),
+                target = torch.zeros(
+                    [values.shape[0], 3],
+                    dtype=values.dtype,
+                    device=values.device,
+                )
+                return update_masked(
+                    target,
+                    self.linear,
+                    args=(values,),
                     batch_mask=values.isfinite().all(dim=-1),
                 )
-                return result
 
         torch.manual_seed(0)
         model = MaskedLinear()
@@ -198,11 +198,12 @@ class TestUpdateMasked:
         x[3] = torch.nan
         x.requires_grad_()
         mask = x.isfinite().all(dim=-1)
+        target = torch.zeros(5, 3)
 
-        (result,) = update_masked(
-            lambda v: (linear(v),),
-            (x,),
-            target=(torch.zeros(5, 3),),
+        result = update_masked(
+            target,
+            linear,
+            args=(x,),
             batch_mask=mask,
         )
         loss = result.sum()

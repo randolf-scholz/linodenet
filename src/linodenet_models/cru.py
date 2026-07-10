@@ -20,7 +20,7 @@ __all__ = [
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Final, NotRequired, TypedDict
+from typing import Final, NotRequired, TypedDict, cast
 
 import torch
 from torch import Tensor, nan, nn
@@ -284,11 +284,12 @@ class CRUConfigDict(TypedDict):
     batch_first: NotRequired[bool]
 
 
-def update_masked[R: tuple[Tensor, ...]](
-    fn: Callable[..., R],  # [*(..., *dᵢ)] -> (*(..., *eᵢ),)
-    args: tuple[Tensor, ...],
-    *,
+def update_masked[R: Tensor | tuple[Tensor, ...]](
     target: R,  # (*(..., *eᵢ),)
+    /,
+    fn: Callable[..., R],  # [*(..., *dᵢ)] -> (*(..., *eᵢ),)
+    *,
+    args: tuple[Tensor, ...],
     batch_mask: Tensor,  # (...)
 ) -> R:  # (*(..., *eᵢ),)
     r"""Update ``target`` with ``fn`` applied to selected batch elements."""
@@ -298,6 +299,19 @@ def update_masked[R: tuple[Tensor, ...]](
     mask_flat = batch_mask.flatten()
 
     ys_flat = fn(*(x.reshape(-1, *x.shape[batch_rank:])[mask_flat] for x in args))
+
+    if isinstance(ys_flat, Tensor):
+        assert isinstance(target, Tensor)
+        return cast(
+            "R",
+            target.reshape(-1, *target.shape[batch_rank:])
+            .index_put([mask_flat], ys_flat)
+            .reshape(*batch_shape, *target.shape[batch_rank:]),
+        )
+
+    assert isinstance(ys_flat, tuple)
+    assert isinstance(target, tuple)
+    assert len(ys_flat) == len(target)
 
     return tuple(  # type: ignore[return-value]
         t.reshape(-1, *t.shape[batch_rank:])
@@ -638,9 +652,9 @@ class CRU(nn.Module):
         y_means = context_values.new_full((*context_values.shape[:-1], d), nan)
         y_variances = context_values.new_full((*context_values.shape[:-1], d), nan)
         y_means, y_variances = update_masked(  # (..., $N+$K, d) each
-            self.encoder,
-            (context_values,),
-            target=(y_means, y_variances),
+            (y_means, y_variances),
+            fn=self.encoder,
+            args=(context_values,),
             batch_mask=has_context,
         )
 
@@ -687,17 +701,17 @@ class CRU(nn.Module):
 
             # Propagate only for active batch elements; restore old state for inactive.
             prior_mean, prior_cov = update_masked(
-                self.propagate_state,
-                (delta, post_mean, post_cov),
-                target=(post_mean, post_cov),
+                (post_mean, post_cov),
+                fn=self.propagate_state,
+                args=(delta, post_mean, post_cov),
                 batch_mask=active,
             )
 
             # Update only for batch elements that have context at this step.
             post_mean, post_cov = update_masked(
-                self.update_state,
-                (y, y_var, ctx_mask, prior_mean, prior_cov),
-                target=(prior_mean, prior_cov),
+                (prior_mean, prior_cov),
+                fn=self.update_state,
+                args=(y, y_var, ctx_mask, prior_mean, prior_cov),
                 batch_mask=active & ctx_mask,
             )
 
