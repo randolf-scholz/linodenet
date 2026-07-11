@@ -355,9 +355,11 @@ def argmin_proximal_kl(
     )
 
 
-def _solve_forward_kl_parallel_variance(q: Tensor, gamma: Tensor, /) -> Tensor:
+def _solve_forward_kl_parallel_variance(gamma: Tensor, q: Tensor, /) -> Tensor:
     r"""Solve the forward-KL stationarity equation in the observed eigendirection."""
-    q, gamma = torch.broadcast_tensors(q, gamma)
+    if gamma.ndim != 0:
+        raise ValueError("Expected gamma to be a float or scalar tensor.")
+
     beta = (gamma - 1) / gamma
 
     if torch.any(gamma <= 1).item():
@@ -393,12 +395,115 @@ def _solve_forward_kl_parallel_variance(q: Tensor, gamma: Tensor, /) -> Tensor:
     return torch.where(q > 0, upper, beta)
 
 
+def _solve_s_newton(gamma: Tensor, q: Tensor, iters: int = 30) -> Tensor:
+    r"""Solve  (1 - γ)/s + γ - γ²q / (1 + γs)² = 0  for the positive root s.
+
+    Equivalent cubic in u = 1 + γs:
+        f(u) = u³ - γu² - γq·u + γq = 0,   s = (u - 1)/γ
+
+    Requires γ > 1 and q >= 0. Broadcasts over gamma / q.
+    Gradients are exact (implicit function theorem), not backprop-through-iterations.
+    """
+    gamma, q = torch.broadcast_tensors(gamma, q)
+    g = gamma.detach()
+    qq = q.detach()
+
+    # Cauchy bound: every root satisfies |u| < 1 + max|coeff| = 1 + γ·max(1, q).
+    # Starting above the largest root, in the convex region u > γ/3, Newton
+    # decreases monotonically to it -- no overshoot, no bracketing needed.
+    u = 1.0 + g * torch.clamp(qq, min=1.0)
+
+    for _ in range(iters):
+        f = ((u - g) * u - g * qq) * u + g * qq  # u³ - γu² - γqu + γq
+        df = (3.0 * u - 2.0 * g) * u - g * qq  # 3u² - 2γu - γq
+        u = u - f / df
+
+    # Re-attach gradients with one differentiable Newton step at the root.
+    # Since f(u*) = 0, this evaluates to u* in value, but carries the correct
+    # du/dγ, du/dq = -(∂f/∂θ) / (∂f/∂u).
+    f = ((u - gamma) * u - gamma * q) * u + gamma * q
+    df = (3.0 * u - 2.0 * gamma) * u - gamma * q
+    u = u - f / df
+
+    return (u - 1.0) / gamma
+
+
+def _solve_s_closed_form(gamma: Tensor, q: Tensor, *, use_fp64: bool = True) -> Tensor:
+    """Solve the 3rd order polynomial for the positive-s branch of the s-root.
+
+    Closed-form positive root of
+
+        (1 − γ)/s + γ − γ²q / (1 + γs)² = 0,      γ > 1,  q ≥ 0
+
+    via the trigonometric solution of the associated cubic.
+
+    Derivation
+    ----------
+    Multiplying by s(1 + γs)² and substituting u = 1 + γs  (so γs = u − 1 and
+    1 − γ + γs = u − γ) collapses the equation to
+
+        (u − γ)·u² − γq·(u − 1) = 0     ⟺     u³ − γu² − γq·u + γq = 0
+
+    with the root recovered as s = (u − 1)/γ.
+
+    For γ > 1, q > 0 all three roots are real: f(0) = γq > 0 and f(1) = 1 − γ < 0
+    place one root in u < 0, one in (0, 1) and one in u > 1 — i.e. one in each of
+    the intervals s < −1/γ, −1/γ < s < 0 and s > 0 cut out by the poles. The
+    positive-s branch is the largest root, u > 1, which is the one returned here.
+
+    Depressing with u = t + γ/3 gives t³ + p·t + Q = 0, where
+
+        p = −(γ²/3 + γq)
+        Q = γq − γ²q/3 − 2γ³/27
+
+    Since all roots are real this is the casus irreducibilis: Cardano's radicals
+    pass through ℂ, so the cosine form is used instead. With
+
+        m = √(−p/3) = √(γ(γ + 3q)) / 3
+
+                         2γ² + 9q(γ − 3)
+        cos θ = −Q/2m³ = ───────────────────
+                         2·√γ·(γ + 3q)^(3/2)
+
+    the largest root is t = 2m·cos(θ/3), and therefore
+
+              1     1     2
+        s  =  ─  −  ─  +  ──·√(γ(γ + 3q))·cos( ⅓·arccos( (2γ² + 9q(γ − 3))
+              3     γ    3γ                              / (2√γ·(γ + 3q)^(3/2)) ) )
+
+    The remaining two roots follow by replacing θ/3 with θ/3 − 2π/3 and
+    θ/3 − 4π/3.
+
+    Notes:
+        The arccos argument is ill-conditioned near ±1, so the interior arithmetic is
+        carried out in float64 regardless of the input dtype and cast back on return;
+        the clamp absorbs the residual float error that can push the argument a few
+        ulp outside [−1, 1]. Even so, `solve_s` (Newton) is the better default — this
+        function is most useful as an independent cross-check.
+    """
+    out_dtype = torch.promote_types(gamma.dtype, q.dtype)
+    γ, q = torch.broadcast_tensors(gamma, q)
+
+    if use_fp64:
+        γ = γ.to(torch.float64)
+        q = q.to(torch.float64)
+
+    disc = γ * (γ + 3.0 * q)  # γ(γ + 3q) = −3p
+    m = torch.sqrt(disc) / 3.0  # √(−p/3)
+    arg = (2.0 * γ**2 + 9.0 * q * (γ - 3.0)) / (2.0 * disc.pow(1.5) / γ)
+    arg = arg.clamp(-1.0, 1.0)  # guard fp drift
+    t = 2.0 * m * torch.cos(torch.acos(arg) / 3.0)  # largest root, depressed
+    u = t + γ / 3.0  # undo u = t + γ/3
+
+    return ((u - 1.0) / γ).to(out_dtype)
+
+
 def argmin_forward_kl(
     z: Tensor,  # (..., d)
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
-    gamma: Tensor | float,
+    gamma: Tensor | float,  # scalar
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact Gaussian minimizer of NLL plus forward-KL anchoring.
@@ -416,7 +521,7 @@ def argmin_forward_kl(
     - $μ₊ = μ₋ + cδ$, where $c = (1 + γs_∥)⁻¹$
     - $Σ₊ = βΣ₋ + αδδᵀ$, where $α = (s_∥ - β)/q$
 
-    and $s_∥ > β$ is the unique root of
+    and $s_∥ > β$ is the unique root of the cubic equation
 
     .. math:: \frac{1 - γ}{s} + γ - \frac{γ² q}{(1 + γs)²} = 0.
 
@@ -432,12 +537,16 @@ def argmin_forward_kl(
     so this function rejects $γ \le 1$.
     """
     if isinstance(gamma, float):
-        # not testing tensor to ensure torch.compile compatibility.
-        assert gamma > 1, "The exact forward-KL objective requires gamma > 1."
+        # skippingcheck for tensor gamma do ensure compile(fullgraph=True) compat.
+        assert gamma > 0, "Expected gamma to be a positive float."
 
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
     γ = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
+    assert γ.shape == (), "Expected gamma to be a scalar tensor."
+
+    β = (γ - 1) / γ
+    β_inv = γ / (γ - 1)
     δ = z - μ
     dim = matrix.shape[-1]
 
@@ -447,59 +556,42 @@ def argmin_forward_kl(
             L = cholesky(Σ)
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
-            q, γ = torch.broadcast_tensors(q, γ)
-            β = (γ - 1) / γ
-            s_parallel = _solve_forward_kl_parallel_variance(q, γ)
+            s_parallel = _solve_forward_kl_parallel_variance(γ, q)
             mean_scale = (1 + γ * s_parallel).reciprocal()
-            mean_post = μ + mean_scale[..., None] * δ
+            μ_new = μ + mean_scale[..., None] * δ
             outer = torch.einsum("...i, ...j -> ...ij", δ, δ)
-            coefficient = torch.where(q > 0, (s_parallel - β) / q, torch.zeros_like(q))
-            cov_post = β[..., None, None] * Σ + coefficient[..., None, None] * outer
-            cov_post = 0.5 * (cov_post + cov_post.mT)
-            return mean_post, cov_post
+            coefficient = torch.where(q > 0, (s_parallel - β) / q, 0.0)
+            Σ_new = β * Σ + coefficient[..., None, None] * outer
+            Σ_new = 0.5 * (Σ_new + Σ_new.mT)
+            return μ_new, Σ_new
 
         case CovarianceType.PRECISION:
             Λ = matrix
             projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
             q = vecdot(δ, projected, dim=-1)
-            q, γ = torch.broadcast_tensors(q, γ)
-            β = (γ - 1) / γ
-            β_inv = γ / (γ - 1)
-            s_parallel = _solve_forward_kl_parallel_variance(q, γ)
+            s_parallel = _solve_forward_kl_parallel_variance(γ, q)
             mean_scale = (1 + γ * s_parallel).reciprocal()
-            mean_post = μ + mean_scale[..., None] * δ
+            μ_new = μ + mean_scale[..., None] * δ
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
-            coefficient = torch.where(
-                q > 0,
-                β_inv * (1 - β / s_parallel) / q,
-                torch.zeros_like(q),
-            )
-            precision_post = (
-                β_inv[..., None, None] * Λ - coefficient[..., None, None] * outer
-            )
-            precision_post = 0.5 * (precision_post + precision_post.mT)
-            return mean_post, precision_post
+            coefficient = torch.where(q > 0, β_inv * (1 - β / s_parallel) / q, 0.0)
+            Λ_new = β_inv * Λ - coefficient[..., None, None] * outer
+            Λ_new = 0.5 * (Λ_new + Λ_new.mT)
+            return μ_new, Λ_new
 
         case CovarianceType.CHOLESKY:
             L = matrix
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
-            q, γ = torch.broadcast_tensors(q, γ)
-            β = (γ - 1) / γ
-            s_parallel = _solve_forward_kl_parallel_variance(q, γ)
+            s_parallel = _solve_forward_kl_parallel_variance(γ, q)
             mean_scale = (1 + γ * s_parallel).reciprocal()
-            mean_post = μ + mean_scale[..., None] * δ
+            μ_new = μ + mean_scale[..., None] * δ
             I = torch.eye(dim, dtype=L.dtype, device=L.device)
             outer = torch.einsum("...i, ...j -> ...ij", a, a)
-            coefficient = torch.where(
-                q > 0,
-                (s_parallel - β) / (β * q),
-                torch.zeros_like(q),
-            )
+            coefficient = torch.where(q > 0, (s_parallel - β) / (β * q), 0.0)
             local_cov = I + coefficient[..., None, None] * outer
             local_chol = cholesky(local_cov)
-            chol_post = β.sqrt()[..., None, None] * (L @ local_chol)
-            return mean_post, torch.tril(chol_post)
+            chol_post = β.sqrt() * (L @ local_chol)
+            return μ_new, torch.tril(chol_post)
 
         case CovarianceType.LOG_CHOLESKY:
             log_chol_prior = matrix
@@ -508,26 +600,20 @@ def argmin_forward_kl(
             )
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
-            q, γ = torch.broadcast_tensors(q, γ)
-            β = (γ - 1) / γ
-            s_parallel = _solve_forward_kl_parallel_variance(q, γ)
+            s_parallel = _solve_forward_kl_parallel_variance(γ, q)
             mean_scale = (1 + γ * s_parallel).reciprocal()
-            mean_post = μ + mean_scale[..., None] * δ
+            μ_new = μ + mean_scale[..., None] * δ
             I = torch.eye(dim, dtype=L.dtype, device=L.device)
             outer = torch.einsum("...i, ...j -> ...ij", a, a)
-            coefficient = torch.where(
-                q > 0,
-                (s_parallel - β) / (β * q),
-                torch.zeros_like(q),
-            )
+            coefficient = torch.where(q > 0, (s_parallel - β) / (β * q), 0.0)
             local_cov = I + coefficient[..., None, None] * outer
             local_chol = cholesky(local_cov)
-            chol_post = β.sqrt()[..., None, None] * (L @ local_chol)
+            chol_post = β.sqrt() * (L @ local_chol)
             chol_post = torch.tril(chol_post)
             log_chol_post = chol_post.tril(diagonal=-1) + torch.diag_embed(
                 chol_post.diagonal(dim1=-2, dim2=-1).log()
             )
-            return mean_post, log_chol_post
+            return μ_new, log_chol_post
 
         case _:
             raise ValueError(
@@ -542,7 +628,7 @@ def argmin_reverse_kl(
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
-    gamma: Tensor | float,
+    gamma: Tensor | float,  # scalar
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact Gaussian minimizer of NLL plus reverse-KL anchoring.
@@ -584,6 +670,8 @@ def argmin_reverse_kl(
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
     γ = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
+    assert γ.shape == ()
+
     η = (1 + γ).reciprocal()
     δ = z - μ
     mean_post = μ + η * δ

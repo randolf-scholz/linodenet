@@ -58,7 +58,9 @@ def _solve_forward_kl_parallel_variance_reference(
     q: Tensor, gamma: Tensor, /
 ) -> Tensor:
     r"""Solve the forward-KL scalar stationarity equation by bisection."""
-    q, gamma = torch.broadcast_tensors(q, gamma)
+    if gamma.ndim != 0:
+        raise ValueError("Expected gamma to be a float or scalar tensor.")
+
     beta = (gamma - 1) / gamma
 
     if torch.any(gamma <= 1).item():
@@ -986,7 +988,6 @@ class TestArgminForwardKL:
             upper=False,
         ).squeeze(-1)
         q = (whitened_delta * whitened_delta).sum(dim=-1)
-        q, gamma = torch.broadcast_tensors(q, gamma)
         beta = (gamma - 1) / gamma
         s_parallel = _solve_forward_kl_parallel_variance_reference(q, gamma)
         mean_scale = (1 + gamma * s_parallel).reciprocal()
@@ -1105,6 +1106,24 @@ class TestArgminForwardKL:
                 z_obs,
                 theta_prior,
                 gamma=gamma,
+                parametrization=parametrization,
+            )
+
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_rejects_non_scalar_gamma(self, parametrization: CovarianceType) -> None:
+        r"""Test that the exact forward-KL update rejects broadcast gamma tensors."""
+        dim = 4
+        mean_prior = torch.randn(dim)
+        factor = torch.randn(dim, dim)
+        covariance_prior = factor @ factor.mT + torch.eye(dim)
+        z_obs = torch.randn(dim)
+        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
+
+        with pytest.raises(AssertionError, match="scalar"):
+            argmin_forward_kl(
+                z_obs,
+                theta_prior,
+                gamma=torch.tensor([2.0]),
                 parametrization=parametrization,
             )
 
