@@ -346,7 +346,7 @@ def argmin_proximal_kl(
 
     This returns the exact minimizer of
 
-    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\kl(𝓝(θ₋)， 𝓝(θ))
+    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\kl(𝓝(θ)，𝓝(θ₋))
 
     where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
 
@@ -361,11 +361,16 @@ def argmin_proximal_kl(
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
 
     See Also:
-        `argmin_reverse_kl`:
-            Exact minimizer of the special reverse-KL objective
+        `argmin_forward_kl`:
+            Exact minimizer of the Gaussian observation objective
             $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ₋) ∥ 𝓝(θ))$.
-            In contrast, `argmin_proximal_kl` solves the linearized forward-KL
-            proximal problem for a general scalar loss.
+            In contrast, `argmin_proximal_kl` solves a generic linearized
+            forward-KL proximal problem.
+        `argmin_reverse_kl`:
+            Exact minimizer of the Gaussian observation objective
+            $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ₋))$.
+            In contrast, `argmin_proximal_kl` solves a generic linearized
+            forward-KL proximal problem.
     """
     return solve_proximal_kl(
         # ∇_θ ∑ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
@@ -487,6 +492,17 @@ def argmin_reverse_kl(
     has a finite minimizer for $γ_Σ > 1$. This function eagerly validates float
     inputs and assumes tensor inputs already satisfy those bounds to preserve
     `torch.compile(fullgraph=True)` compatibility.
+
+    See Also:
+        `argmin_forward_kl`:
+            Exact minimizer of the Gaussian observation objective
+            $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ₋) ∥ 𝓝(θ))$.
+            In contrast, `argmin_reverse_kl` uses the opposite KL direction.
+        `argmin_proximal_kl`:
+            Generic forward-KL proximal solver for a linearized scalar loss
+            $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ⁎))$.
+            In contrast, `argmin_reverse_kl` solves the exact Gaussian
+            observation objective above.
     """
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
@@ -632,11 +648,15 @@ def argmin_forward_kl(
         `torch.compile(fullgraph=True)` compatibility.
 
     See Also:
+        `argmin_reverse_kl`:
+            Exact minimizer of the Gaussian observation objective
+            $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ₋))$.
+            In contrast, `argmin_forward_kl` uses the opposite KL direction.
         `argmin_proximal_kl`:
             Generic forward-KL proximal solver for a linearized scalar loss
             $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ⁎))$.
-            In contrast, `argmin_reverse_kl` solves the exact reverse-KL
-            regularized Gaussian observation objective.
+            In contrast, `argmin_forward_kl` solves the exact Gaussian
+            observation objective above.
     """
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
