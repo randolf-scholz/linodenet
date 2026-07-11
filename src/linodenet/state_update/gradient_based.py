@@ -155,46 +155,34 @@ class GradientStepUpdater(nn.Module, SparseVectorStateUpdate):
             case _:
                 raise ValueError(f"Unknown loss: {loss!r}")
 
-    @partial(torch.func.vmap, in_dims=(None, 0, 0))
     @partial(torch.func.grad, argnums=2)
     def _grad_fn_no_mask(
         self,
-        y: Tensor,  # (B, e)
-        x: Tensor,  # (B, d)
+        y: Tensor,  # (..., e)
+        x: Tensor,  # (..., d)
         /,
-    ) -> Tensor:  # (B)
-        return self.loss(self.decoder(x), y)  # ℓ(f(x), y)
+    ) -> Tensor:  # (...,)
+        # Note: ∇_θ ∑ᵢ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
+        return self.loss(self.decoder(x), y).sum()  # ℓ(f(x), y)
 
-    @partial(torch.func.vmap, in_dims=(None, 0, 0, 0))
     @partial(torch.func.grad, argnums=2)
     def _grad_fn_with_mask(
         self,
-        y: Tensor,  # (B, e)
-        x: Tensor,  # (B, d)
-        mask: Tensor,  # (B, e)
+        y: Tensor,  # (..., e)
+        x: Tensor,  # (..., d)
+        mask: Tensor,  # (..., e)
         /,
-    ) -> Tensor:  # (B)
-        return self.loss(self.decoder(x), y, mask=mask)  # pyright: ignore[reportCallIssue]
+    ) -> Tensor:  # (...,)
+        # Note: ∇_θ ∑ᵢ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
+        return self.loss(self.decoder(x), y, mask=mask).sum()  # pyright: ignore[reportCallIssue]
 
     def grad_fn(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Return the gradient while preserving the input batch shape."""
-        y_flat = y.reshape(-1, y.shape[-1])
-        x_flat = x.reshape(-1, x.shape[-1])
-
-        grad = (
-            self._grad_fn_no_mask(
-                y_flat,
-                x_flat,
-            )
+        return (
+            self._grad_fn_no_mask(y, x)
             if mask is None
-            else self._grad_fn_with_mask(
-                y_flat,
-                x_flat,
-                mask.reshape(-1, mask.shape[-1]),
-            )
+            else self._grad_fn_with_mask(y, x, mask)
         )
-
-        return grad.reshape_as(x)
 
     def forward(
         self,
@@ -258,9 +246,8 @@ class GaussianGradientStepUpdater(
         z, logabsdet = self.decoder.encode_and_logabsdet(vals)
         return log_prob(z, theta, parametrization=self.parametrization) + logabsdet
 
-    @partial(torch.func.vmap, in_dims=(None, 0, (0, 0), (0, 0)))
     @partial(torch.func.grad, argnums=2)
-    def _grad_fn_flat_batch(
+    def grad_fn(
         self,
         y_obs: Tensor,
         theta: GaussianParams,
@@ -273,26 +260,7 @@ class GaussianGradientStepUpdater(
                 self.regularization_strength
                 * kl(theta, theta_prev, parametrization=self.parametrization)
             )
-        )
-
-    def grad_fn(
-        self, y_obs: Tensor, theta: GaussianParams, theta_prev: GaussianParams, /
-    ) -> GaussianParams:
-        r"""Return the gradient while preserving the input batch shape."""
-        mean, cov = theta
-        mean_prev, cov_prev = theta_prev
-        mean_flat = mean.reshape(-1, mean.shape[-1])
-        cov_flat = cov.reshape(-1, cov.shape[-2], cov.shape[-1])
-
-        grad_mean, grad_cov = self._grad_fn_flat_batch(
-            y_obs.reshape(-1, y_obs.shape[-1]),
-            (mean_flat, cov_flat),
-            (
-                mean_prev.reshape_as(mean_flat),
-                cov_prev.reshape_as(cov_flat),
-            ),
-        )
-        return grad_mean.reshape_as(mean), grad_cov.reshape_as(cov)
+        ).sum()  # Note: ∇_θ ∑ᵢ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
 
     def forward(self, y_obs: Tensor, theta: GaussianParams, /) -> GaussianParams:
         r"""Return the updated Gaussian parameters $(μ', Σ')$."""
