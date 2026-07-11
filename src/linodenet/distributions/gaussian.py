@@ -114,58 +114,40 @@ def log_prob(
     parametrization: str = "covariance",
 ) -> Tensor:  # (*S, ...)
     r"""Compute the Gaussian log-density at `x` in the chosen parametrization."""
+    mean, matrix = theta
+    residual = x - mean
+    dim = residual.shape[-1]
+
     match CovarianceType(parametrization):
         case CovarianceType.COVARIANCE:
-            mean, covariance = theta
-            residual = x - mean
-            chol = cholesky(covariance)
-            whitened = solve_triangular(
-                chol,
-                residual.unsqueeze(-1),
-                upper=False,
-            ).squeeze(-1)
-            logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
-            mahalanobis = vecdot(whitened, whitened, dim=-1)
-            dim = residual.shape[-1]
+            L = cholesky(matrix)
+            z = solve_triangular(L, residual.unsqueeze(-1), upper=False).squeeze(-1)
+            logdet = 2 * L.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+            mahalanobis = vecdot(z, z, dim=-1)
             return -0.5 * (dim * _LOG2PI + logdet + mahalanobis)
 
         case CovarianceType.PRECISION:
-            mean, precision = theta
-            residual = x - mean
-            chol = cholesky(precision)
-            projected = (chol.mT @ residual.unsqueeze(-1)).squeeze(-1)
-            logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+            L = cholesky(matrix)
+            projected = (L.mT @ residual.unsqueeze(-1)).squeeze(-1)
+            logdet = 2 * L.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
             mahalanobis = vecdot(projected, projected, dim=-1)
-            dim = residual.shape[-1]
             return 0.5 * (logdet - dim * _LOG2PI - mahalanobis)
 
         case CovarianceType.CHOLESKY:
-            mean, chol = theta
-            residual = x - mean
-            whitened = solve_triangular(
-                chol,
-                residual.unsqueeze(-1),
-                upper=False,
-            ).squeeze(-1)
-            logdet = 2 * chol.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
-            mahalanobis = vecdot(whitened, whitened, dim=-1)
-            dim = residual.shape[-1]
+            L = matrix
+            z = solve_triangular(L, residual.unsqueeze(-1), upper=False).squeeze(-1)
+            logdet = 2 * L.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+            mahalanobis = vecdot(z, z, dim=-1)
             return -0.5 * (dim * _LOG2PI + logdet + mahalanobis)
 
         case CovarianceType.LOG_CHOLESKY:
-            mean, log_chol = theta
-            residual = x - mean
-            chol = log_chol.tril(diagonal=-1) + torch.diag_embed(
+            log_chol = matrix
+            L = log_chol.tril(diagonal=-1) + torch.diag_embed(
                 log_chol.diagonal(dim1=-2, dim2=-1).exp()
             )
-            whitened = solve_triangular(
-                chol,
-                residual.unsqueeze(-1),
-                upper=False,
-            ).squeeze(-1)
+            z = solve_triangular(L, residual.unsqueeze(-1), upper=False).squeeze(-1)
             logdet = 2 * log_chol.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
-            mahalanobis = vecdot(whitened, whitened, dim=-1)
-            dim = residual.shape[-1]
+            mahalanobis = vecdot(z, z, dim=-1)
             return -0.5 * (dim * _LOG2PI + logdet + mahalanobis)
 
         case other:
