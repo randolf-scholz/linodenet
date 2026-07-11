@@ -2,6 +2,7 @@ r"""Test Gaussian distribution utilities."""
 
 import pytest
 import torch
+from torch import Tensor
 from torch.distributions import MultivariateNormal
 from torch.distributions.kl import kl_divergence
 
@@ -13,14 +14,21 @@ from linodenet.distributions.gaussian import (
     kl,
     log_prob,
 )
+from tests.testing import SEEDS_3
 
 
-def _symmetric(matrix: torch.Tensor, /) -> torch.Tensor:
+@pytest.fixture(params=SEEDS_3, ids="seed={}".format)
+def seed(request: pytest.FixtureRequest) -> int:
+    r"""Return a reproducible seed for randomized Gaussian distribution tests."""
+    return int(request.param)
+
+
+def _symmetric(matrix: Tensor, /) -> Tensor:
     r"""Return the symmetric part of a square matrix."""
     return 0.5 * (matrix + matrix.mT)
 
 
-def _directional_second_derivative(fn, /) -> torch.Tensor:
+def _directional_second_derivative(fn, /) -> Tensor:
     r"""Return the second derivative of `fn(t)` at `t = 0`."""
     t = torch.zeros((), requires_grad=True)
     value = fn(t)
@@ -29,10 +37,10 @@ def _directional_second_derivative(fn, /) -> torch.Tensor:
 
 
 def _parameter_inner_product(
-    left: tuple[torch.Tensor, torch.Tensor],
-    right: tuple[torch.Tensor, torch.Tensor],
+    left: tuple[Tensor, Tensor],
+    right: tuple[Tensor, Tensor],
     /,
-) -> torch.Tensor:
+) -> Tensor:
     r"""Return the Euclidean/Frobenius inner product on Gaussian parameters."""
     left_mean, left_matrix = left
     right_mean, right_matrix = right
@@ -170,8 +178,11 @@ class TestFisher:
     r"""Tests for the Fisher operator."""
 
     @pytest.mark.parametrize("parametrization", CovarianceType)
-    def test_matches_kl_curvature(self, parametrization: CovarianceType) -> None:
+    def test_matches_kl_curvature(
+        self, seed: int, parametrization: CovarianceType
+    ) -> None:
         r"""Test the Fisher metric against the local KL curvature."""
+        torch.manual_seed(seed)
         batch_shape = (2, 3)
         dim = 4
 
@@ -235,8 +246,9 @@ class TestFisher:
             fisher((mean, covariance), (mean, covariance), parametrization="unknown")
 
     @pytest.mark.parametrize("parametrization", CovarianceType)
-    def test_inverse_fisher(self, parametrization: CovarianceType) -> None:
+    def test_inverse_fisher(self, seed: int, parametrization: CovarianceType) -> None:
         r"""Test that the inverse Fisher operator inverts the Fisher operator."""
+        torch.manual_seed(seed)
         batch_shape = (2, 3)
         dim = 4
 
@@ -302,8 +314,11 @@ class TestArgminProximal:
     r"""Tests for the KL-proximal Gaussian update."""
 
     @pytest.mark.parametrize("parametrization", CovarianceType)
-    def test_solves_closed_form_problem(self, parametrization: CovarianceType) -> None:
+    def test_solves_closed_form_problem(
+        self, seed: int, parametrization: CovarianceType
+    ) -> None:
         r"""Test the KL-proximal Gaussian update."""
+        torch.manual_seed(seed)
         batch_shape = (2, 3)
         dim = 4
         gamma = torch.tensor(1.7)
@@ -330,9 +345,7 @@ class TestArgminProximal:
                 gradient_matrix = 0.5 * gamma * precision_shift
                 theta_prior = (mean_prior, covariance_prior)
 
-                def objective_fn(
-                    theta: tuple[torch.Tensor, torch.Tensor], /
-                ) -> torch.Tensor:
+                def objective_fn(theta: tuple[Tensor, Tensor], /) -> Tensor:
                     mean, covariance = theta
                     return (g * mean).sum() + (gradient_matrix * covariance).sum()
 
@@ -355,9 +368,7 @@ class TestArgminProximal:
                 )
                 theta_prior = (mean_prior, precision_prior)
 
-                def objective_fn(
-                    theta: tuple[torch.Tensor, torch.Tensor], /
-                ) -> torch.Tensor:
+                def objective_fn(theta: tuple[Tensor, Tensor], /) -> Tensor:
                     mean, precision = theta
                     return (g * mean).sum() + (gradient_matrix * precision).sum()
 
@@ -381,9 +392,7 @@ class TestArgminProximal:
                 gradient_matrix = torch.tril(torch.randn(*batch_shape, dim, dim))
                 theta_prior = (mean_prior, covariance_chol_prior)
 
-                def objective_fn(
-                    theta: tuple[torch.Tensor, torch.Tensor], /
-                ) -> torch.Tensor:
+                def objective_fn(theta: tuple[Tensor, Tensor], /) -> Tensor:
                     mean, chol = theta
                     return (g * mean).sum() + (gradient_matrix * chol).sum()
 
@@ -414,9 +423,7 @@ class TestArgminProximal:
                 )
                 theta_prior = (mean_prior, log_chol_prior)
 
-                def objective_fn(
-                    theta: tuple[torch.Tensor, torch.Tensor], /
-                ) -> torch.Tensor:
+                def objective_fn(theta: tuple[Tensor, Tensor], /) -> Tensor:
                     mean, log_chol = theta
                     return (g * mean).sum() + (gradient_matrix * log_chol).sum()
 
@@ -479,9 +486,10 @@ class TestArgminProximal:
 
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_raises_when_objective_has_no_finite_minimizer(
-        self, parametrization: CovarianceType
+        self, seed: int, parametrization: CovarianceType
     ) -> None:
         r"""Test that ill-posed linearized objectives are rejected."""
+        torch.manual_seed(seed)
         dim = 4
         mean_prior = torch.randn(dim)
         factor = torch.randn(dim, dim)
@@ -498,9 +506,7 @@ class TestArgminProximal:
             case CovarianceType.COVARIANCE:
                 theta_prior = (mean_prior, covariance_prior)
 
-                def objective_fn(
-                    theta: tuple[torch.Tensor, torch.Tensor], /
-                ) -> torch.Tensor:
+                def objective_fn(theta: tuple[Tensor, Tensor], /) -> Tensor:
                     return (mean_gradient * theta[0]).sum() + (
                         -precision_prior * theta[1]
                     ).sum()
@@ -508,9 +514,7 @@ class TestArgminProximal:
             case CovarianceType.PRECISION:
                 theta_prior = (mean_prior, precision_prior)
 
-                def objective_fn(
-                    theta: tuple[torch.Tensor, torch.Tensor], /
-                ) -> torch.Tensor:
+                def objective_fn(theta: tuple[Tensor, Tensor], /) -> Tensor:
                     return (mean_gradient * theta[0]).sum() + (
                         -torch.eye(dim) * theta[1]
                     ).sum()
@@ -523,9 +527,7 @@ class TestArgminProximal:
                 gradient_log_cholesky = torch.diag_embed(diagonal_gradient)
                 theta_prior = (mean_prior, log_chol_prior)
 
-                def objective_fn(
-                    theta: tuple[torch.Tensor, torch.Tensor], /
-                ) -> torch.Tensor:
+                def objective_fn(theta: tuple[Tensor, Tensor], /) -> Tensor:
                     return (mean_gradient * theta[0]).sum() + (
                         gradient_log_cholesky * theta[1]
                     ).sum()
