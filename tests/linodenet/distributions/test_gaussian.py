@@ -120,7 +120,7 @@ class TestForwardKLSolvers:
 
         for gamma_value in gamma:
             expected = _solve_forward_kl_parallel_variance_reference(q, gamma_value)
-            actual = gaussian_utils._solve_s_closed_form(gamma_value, q)  # noqa: SLF001
+            actual = gaussian_utils._solve_s_closed_form(q, gamma_value, gamma_value)  # noqa: SLF001
             assert torch.allclose(actual, expected, atol=atol, rtol=rtol)
 
 
@@ -1156,7 +1156,7 @@ class TestArgminForwardKL:
         z_obs = torch.randn(*batch_shape, dim)
         theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
 
-        with pytest.raises(AssertionError, match="requires gamma > 1"):
+        with pytest.raises(AssertionError, match="requires gamma_sigma > 1"):
             argmin_forward_kl(
                 z_obs,
                 theta_prior,

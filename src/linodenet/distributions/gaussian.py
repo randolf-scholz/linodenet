@@ -57,6 +57,8 @@ from torch.linalg import cholesky, solve_triangular, vecdot
 from .base import DistributionBase
 
 type GaussianParams = tuple[Tensor, Tensor]
+type ScalarLike = float | Tensor
+type GammaArg = ScalarLike | tuple[ScalarLike, ScalarLike]
 
 
 _LOG2PI: Final = math.log(2 * math.pi)
@@ -119,6 +121,25 @@ class CovarianceType(StrEnum):
 
             case other:
                 assert_never(other)
+
+
+def _split_gamma(gamma: GammaArg, /) -> tuple[ScalarLike, ScalarLike]:
+    r"""Return the mean and covariance regularization weights."""
+    return gamma if isinstance(gamma, tuple) else (gamma, gamma)
+
+
+def _as_scalar_gamma(
+    gamma: ScalarLike,
+    /,
+    *,
+    dtype: torch.dtype,
+    device: torch.device,
+    name: str,
+) -> Tensor:
+    r"""Return `gamma` as a scalar tensor on the target dtype and device."""
+    gamma_tensor = torch.as_tensor(gamma, dtype=dtype, device=device)
+    assert gamma_tensor.shape == (), f"Expected {name} to be a scalar tensor."
+    return gamma_tensor
 
 
 def log_prob(
@@ -355,51 +376,41 @@ def argmin_proximal_kl(
     )
 
 
-def _solve_s_closed_form(gamma: Tensor, q: Tensor, *, use_fp64: bool = True) -> Tensor:
-    r"""Solve the 3rd order polynomial for the positive-s branch of the s-root.
+def _solve_s_closed_form(
+    mahalanobis: Tensor,
+    gamma_mean: Tensor,
+    gamma_cov: Tensor,
+    /,
+    *,
+    use_fp64: bool = True,
+) -> Tensor:
+    r"""Solve the forward-KL scalar stationarity equation for the positive branch.
 
-    Closed-form positive root of
+    This returns the admissible root of
 
-        (1 − γ)/s + γ − γ²q / (1 + γs)² = 0,      γ > 1,  q ≥ 0
+        (1 − γ_Σ)/s + γ_Σ − γ_μ²q / (1 + γ_μ s)² = 0,
 
-    via the trigonometric solution of the associated cubic.
+    where $γ_μ ≥ 0$, $γ_Σ > 1$, and $q ≥ 0$.
 
     Derivation
     ----------
-    Multiplying by s(1 + γs)² and substituting u = 1 + γs  (so γs = u − 1 and
-    1 − γ + γs = u − γ) collapses the equation to
+    For $γ_μ > 0$, substituting $u = 1 + γ_μ s$ yields the cubic
 
-        (u − γ)·u² − γq·(u − 1) = 0     ⟺     u³ − γu² − γq·u + γq = 0
+        u³ - (1 + γ_μ(γ_Σ - 1)/γ_Σ)u² - (γ_μ²q/γ_Σ)u + γ_μ²q/γ_Σ = 0.
 
-    with the root recovered as s = (u − 1)/γ.
+    The admissible root is the largest real root $u > 1$, recovered as
+    $s = (u - 1)/γ_μ$. In the degenerate case $γ_μ = 0$, the mean snaps to the
+    observation and the covariance optimum reduces to the isotropic branch
+    $s = (γ_Σ - 1)/γ_Σ$ directly.
 
-    For γ > 1, q > 0 all three roots are real: f(0) = γq > 0 and f(1) = 1 − γ < 0
-    place one root in u < 0, one in (0, 1) and one in u > 1 — i.e. one in each of
-    the intervals s < −1/γ, −1/γ < s < 0 and s > 0 cut out by the poles. The
-    positive-s branch is the largest root, u > 1, which is the one returned here.
+    Depressing the monic cubic $u³ + au² + bu + c = 0$ with $u = t - a/3$ gives
+    $t³ + pt + r = 0$, where
 
-    Depressing with u = t + γ/3 gives t³ + p·t + Q = 0, where
+        p = b - a²/3
+        r = 2a³/27 - ab/3 + c.
 
-        p = −(γ²/3 + γq)
-        Q = γq − γ²q/3 − 2γ³/27
-
-    Since all roots are real this is the casus irreducibilis: Cardano's radicals
-    pass through ℂ, so the cosine form is used instead. With
-
-        m = √(−p/3) = √(γ(γ + 3q)) / 3
-
-                         2γ² + 9q(γ − 3)
-        cos θ = −Q/2m³ = ───────────────────
-                         2·√γ·(γ + 3q)^(3/2)
-
-    the largest root is t = 2m·cos(θ/3), and therefore
-
-              1     1     2
-        s  =  ─  −  ─  +  ──·√(γ(γ + 3q))·cos( ⅓·arccos( (2γ² + 9q(γ − 3))
-              3     γ    3γ                              / (2√γ·(γ + 3q)^(3/2)) ) )
-
-    The remaining two roots follow by replacing θ/3 with θ/3 − 2π/3 and
-    θ/3 − 4π/3.
+    In the admissible regime the discriminant is non-positive, so the largest real
+    root is obtained from the trigonometric form of Cardano's solution.
 
     Notes:
         The arccos argument is ill-conditioned near ±1, so the interior arithmetic is
@@ -407,21 +418,33 @@ def _solve_s_closed_form(gamma: Tensor, q: Tensor, *, use_fp64: bool = True) -> 
         the clamp absorbs the residual float error that can push the argument a few
         ulp outside [−1, 1].
     """
-    out_dtype = torch.promote_types(gamma.dtype, q.dtype)
-    γ, q = torch.broadcast_tensors(gamma, q)
+    q, γ_μ, γ_Σ = torch.broadcast_tensors(mahalanobis, gamma_mean, gamma_cov)
+    out_dtype = torch.promote_types(q.dtype, torch.promote_types(γ_μ.dtype, γ_Σ.dtype))
+    work_dtype = (
+        torch.float64 if use_fp64 else torch.promote_types(out_dtype, torch.float32)
+    )
 
-    if use_fp64:
-        γ = γ.to(torch.float64)
-        q = q.to(torch.float64)
+    γ_μ = γ_μ.to(work_dtype)
+    γ_Σ = γ_Σ.to(work_dtype)
+    q = q.to(work_dtype)
 
-    disc = γ * (γ + 3.0 * q)  # γ(γ + 3q) = −3p
-    m = torch.sqrt(disc) / 3.0  # √(−p/3)
-    arg = (2.0 * γ**2 + 9.0 * q * (γ - 3.0)) / (2.0 * disc.pow(1.5) / γ)
-    arg = arg.clamp(-1.0, 1.0)  # guard fp drift
-    t = 2.0 * m * torch.cos(torch.acos(arg) / 3.0)  # largest root, depressed
-    u = t + γ / 3.0  # undo u = t + γ/3
+    β = (γ_Σ - 1.0) / γ_Σ
+    γ_μ_safe = torch.where(γ_μ == 0, 1.0, γ_μ)
+    a = -(1.0 + γ_μ_safe * β)
+    b = -(γ_μ_safe.square() * q) / γ_Σ
+    c = -b
+    p = b - a.square() / 3.0
+    r = 2.0 * a.pow(3) / 27.0 - (a * b) / 3.0 + c
 
-    return ((u - 1.0) / γ).to(out_dtype)
+    # In the admissible regime p < 0, so the largest real root uses the cosine form.
+    m = torch.sqrt((-p).clamp_min(0.0) / 3.0)
+    arg = -r / (2.0 * m.pow(3).clamp_min(torch.finfo(m.dtype).tiny))
+    arg = arg.clamp(-1.0, 1.0)
+    t = 2.0 * m * torch.cos(torch.acos(arg) / 3.0)
+    u = t - a / 3.0
+    s = (u - 1.0) / γ_μ_safe
+
+    return torch.where(γ_μ == 0, β, s).to(dtype=out_dtype)
 
 
 def argmin_forward_kl(
@@ -429,27 +452,31 @@ def argmin_forward_kl(
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
-    gamma: Tensor | float,  # scalar
+    gamma: GammaArg,  # scalar or (gamma_mu, gamma_sigma)
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
-    r"""Return the exact Gaussian minimizer of NLL plus forward-KL anchoring.
+    r"""Return the exact minimizer of NLL plus separable forward-KL anchoring.
 
     This returns the exact minimizer of
 
-    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ)， 𝓝(θ₋))
+    .. math::
+        \argmin_θ -\log 𝓝(z; θ)
+        + γ_μ ½(μ - μ₋)ᵀΣ₋⁻¹(μ - μ₋)
+        + γ_Σ ½(\tr(ΣΣ₋⁻¹) - \log\det(ΣΣ₋⁻¹) - d)
 
     where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
+    Passing a single `gamma` ties the weights via $γ_μ = γ_Σ = γ$.
 
     Writing $δ = z - μ₋$, $Σ₋ = L₋L₋ᵀ$, $a = L₋⁻¹δ$, $q = aᵀa$ and
-    $β = (γ - 1)/γ$, the exact minimizer has the same prior-whitened
+    $β = (γ_Σ - 1)/γ_Σ$, the exact minimizer has the same prior-whitened
     eigenspaces as $aaᵀ$:
 
-    - $μ₊ = μ₋ + cδ$, where $c = (1 + γs_∥)⁻¹$
+    - $μ₊ = μ₋ + cδ$, where $c = (1 + γ_μ s_∥)⁻¹$
     - $Σ₊ = βΣ₋ + αδδᵀ$, where $α = (s_∥ - β)/q$
 
-    and $s_∥ > β$ is the unique root of the cubic equation
+    and $s_∥ > β$ is the unique admissible root of
 
-    .. math:: \frac{1 - γ}{s} + γ - \frac{γ² q}{(1 + γs)²} = 0.
+    .. math:: \frac{1 - γ_Σ}{s} + γ_Σ - \frac{γ_μ² q}{(1 + γ_μ s)²} = 0.
 
     In precision coordinates, if $Λ₋ = Σ₋⁻¹$ and $v = Λ₋δ$, then
 
@@ -459,20 +486,23 @@ def argmin_forward_kl(
 
     .. math:: L₊ = √β ⋅ L₋\chol(I + \frac{s_∥ - β}{βq}aaᵀ).
 
-    The exact forward-KL objective only has a finite minimizer for $γ > 1$,
-    so this function rejects $γ \le 1$.
+    The forward mean term is finite for $γ_μ ≥ 0$, while the covariance term only
+    has a finite minimizer for $γ_Σ > 1$. This function eagerly validates float
+    inputs and assumes tensor inputs already satisfy those bounds to preserve
+    `torch.compile(fullgraph=True)` compatibility.
     """
-    if isinstance(gamma, float):
-        # skippingcheck for tensor gamma do ensure compile(fullgraph=True) compat.
-        assert gamma > 1.0, "requires gamma > 1"
-
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
-    γ = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
-    assert γ.shape == (), "Expected gamma to be a scalar tensor."
+    gamma_mu, gamma_sigma = gamma if isinstance(gamma, tuple) else (gamma, gamma)
+    γ_μ = torch.as_tensor(gamma_mu, dtype=matrix.dtype, device=matrix.device)
+    γ_Σ = torch.as_tensor(gamma_sigma, dtype=matrix.dtype, device=matrix.device)
+    assert γ_μ.shape == (), "Expected gamma_mu to be a scalar."
+    assert γ_Σ.shape == (), "Expected gamma_sigma to be a scalar."
+    assert γ_μ >= 0.0, "requires gamma_mu >= 0"
+    assert γ_Σ > 1.0, "requires gamma_sigma > 1"
 
-    β = (γ - 1) / γ
-    β_inv = γ / (γ - 1)
+    β = (γ_Σ - 1) / γ_Σ
+    β_inv = γ_Σ / (γ_Σ - 1)
     δ = z - μ
     dim = matrix.shape[-1]
 
@@ -482,8 +512,8 @@ def argmin_forward_kl(
             L = cholesky(Σ)
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
-            s_parallel = _solve_s_closed_form(γ, q)
-            mean_scale = (1 + γ * s_parallel).reciprocal()
+            s_parallel = _solve_s_closed_form(q, γ_μ, γ_Σ)
+            mean_scale = (1 + γ_μ * s_parallel).reciprocal()
             μ_new = μ + mean_scale[..., None] * δ
             outer = torch.einsum("...i, ...j -> ...ij", δ, δ)
             coefficient = torch.where(q > 0, (s_parallel - β) / q, 0.0)
@@ -495,8 +525,8 @@ def argmin_forward_kl(
             Λ = matrix
             projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
             q = vecdot(δ, projected, dim=-1)
-            s_parallel = _solve_s_closed_form(γ, q)
-            mean_scale = (1 + γ * s_parallel).reciprocal()
+            s_parallel = _solve_s_closed_form(q, γ_μ, γ_Σ)
+            mean_scale = (1 + γ_μ * s_parallel).reciprocal()
             μ_new = μ + mean_scale[..., None] * δ
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
             coefficient = torch.where(q > 0, β_inv * (1 - β / s_parallel) / q, 0.0)
@@ -508,8 +538,8 @@ def argmin_forward_kl(
             L = matrix
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
-            s_parallel = _solve_s_closed_form(γ, q)
-            mean_scale = (1 + γ * s_parallel).reciprocal()
+            s_parallel = _solve_s_closed_form(q, γ_μ, γ_Σ)
+            mean_scale = (1 + γ_μ * s_parallel).reciprocal()
             μ_new = μ + mean_scale[..., None] * δ
             I = torch.eye(dim, dtype=L.dtype, device=L.device)
             outer = torch.einsum("...i, ...j -> ...ij", a, a)
@@ -526,8 +556,8 @@ def argmin_forward_kl(
             )
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
-            s_parallel = _solve_s_closed_form(γ, q)
-            mean_scale = (1 + γ * s_parallel).reciprocal()
+            s_parallel = _solve_s_closed_form(q, γ_μ, γ_Σ)
+            mean_scale = (1 + γ_μ * s_parallel).reciprocal()
             μ_new = μ + mean_scale[..., None] * δ
             I = torch.eye(dim, dtype=L.dtype, device=L.device)
             outer = torch.einsum("...i, ...j -> ...ij", a, a)
@@ -554,37 +584,49 @@ def argmin_reverse_kl(
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
-    gamma: Tensor | float,  # scalar
+    gamma: GammaArg,  # scalar or (gamma_mu, gamma_sigma)
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
-    r"""Return the exact Gaussian minimizer of NLL plus reverse-KL anchoring.
+    r"""Return the exact minimizer of NLL plus separable reverse-KL anchoring.
 
     This returns the exact minimizer of
 
-    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋)， 𝓝(θ))
+    .. math::
+        \argmin_θ -\log 𝓝(z; θ)
+        + γ_μ ½(μ - μ₋)ᵀΣ⁻¹(μ - μ₋)
+        + γ_Σ ½(\tr(Σ₋Σ⁻¹) - \log\det(Σ₋Σ⁻¹) - d)
 
     where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
+    Passing a single `gamma` ties the weights via $γ_μ = γ_Σ = γ$.
 
-    Writing $δ = z - μ₋$ and $η = (1 + γ)⁻¹$, the update in covariance coordinates is
+    Writing $δ = z - μ₋$, $η_μ = (1 + γ_μ)⁻¹$, and $η_Σ = (1 + γ_Σ)⁻¹$, the
+    update in covariance coordinates is
 
-    - $μ₊ = μ₋ + ηδ$
-    - $Σ₊ = (1 - η)Σ₋ + (1 - η)ηδδᵀ = (1 - η)(Σ₋ + ηδδᵀ)$
+    - $μ₊ = μ₋ + η_μδ$
+    - $Σ₊ = (1 - η_Σ)Σ₋ + η_Σ(1 - η_μ)δδᵀ$
 
     This function uses the structure of the requested parametrization:
 
-    - `covariance`: update $Σ$ directly via $Σ₊ = (1 - η)Σ₋ + (1 - η)ηδδᵀ$
+    - `covariance`: update $Σ$ directly via $Σ₊ = (1 - η_Σ)Σ₋ + η_Σ(1 - η_μ)δδᵀ$
     - `precision`: if $Λ₋ = Σ₋⁻¹$, $v = Λ₋δ$, and $q = δᵀv$, then
-                   $Λ₊ = ((1 + γ)/γ)⋅(Λ₋ - vvᵀ / (1 + γ + q))$
+                   $Λ₊ = ((1 + γ_Σ)/γ_Σ)⋅(Λ₋ - γ_μ vvᵀ / (γ_Σ(1 + γ_μ) + γ_μ q))$
     - `cholesky`: if $Σ₋ = LLᵀ$ and $a = L⁻¹δ$, then
-                  $L₊ = √(1 - η)⋅L\chol(I + ηaaᵀ)$
+                  $L₊ = √(1 - η_Σ)⋅L\chol(I + γ_μ aaᵀ / (γ_Σ(1 + γ_μ)))$
     - `log-cholesky`: compute the Cholesky update above
                       and then store the diagonal in log form
 
     Args:
         z: Observation already pulled back to latent space.
         theta: Prior Gaussian parameters in the selected parametrization.
-        gamma: Reverse-KL regularization strength.
+        gamma: Reverse-KL regularization strength, either shared or split as
+            `(gamma_mu, gamma_sigma)`.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
+
+    Notes:
+        The reverse mean term is finite for $γ_μ ≥ 0$, while the covariance term
+        requires $γ_Σ > 0$. This function eagerly validates float inputs and assumes
+        tensor inputs already satisfy those bounds to preserve
+        `torch.compile(fullgraph=True)` compatibility.
 
     See Also:
         `argmin_proximal_kl`:
@@ -595,26 +637,34 @@ def argmin_reverse_kl(
     """
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
-    γ = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
-    assert γ.shape == ()
+    gamma_mu, gamma_sigma = gamma if isinstance(gamma, tuple) else (gamma, gamma)
+    γ_μ = torch.as_tensor(gamma_mu, dtype=matrix.dtype, device=matrix.device)
+    γ_Σ = torch.as_tensor(gamma_sigma, dtype=matrix.dtype, device=matrix.device)
+    assert γ_μ.shape == (), "Expected gamma_mu to be a scalar."
+    assert γ_Σ.shape == (), "Expected gamma_sigma to be a scalar."
+    assert γ_μ >= 0.0, "requires gamma_mu >= 0"
+    assert γ_Σ > 0.0, "requires gamma_sigma > 0"
 
-    η = (1 + γ).reciprocal()
+    η_μ = (1 + γ_μ).reciprocal()
+    η_Σ = (1 + γ_Σ).reciprocal()
     δ = z - μ
-    mean_post = μ + η * δ
+    mean_post = μ + η_μ * δ
 
     match parametrization:
         case CovarianceType.COVARIANCE:
             Σ = matrix
-            cov_post = (1 - η) * (Σ + η * torch.einsum("...i, ...j -> ...ij", δ, δ))
+            cov_post = (1 - η_Σ) * Σ + η_Σ * (1 - η_μ) * torch.einsum(
+                "...i, ...j -> ...ij", δ, δ
+            )
             return mean_post, cov_post
 
         case CovarianceType.PRECISION:
             Λ = matrix
             projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
             mahalanobis = vecdot(δ, projected, dim=-1)
-            denom = 1 + γ + mahalanobis
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
-            Λ_new = ((1 + γ) / γ) * (Λ - outer / denom[..., None, None])
+            denom = γ_Σ * (1 + γ_μ) + γ_μ * mahalanobis
+            Λ_new = ((1 + γ_Σ) / γ_Σ) * (Λ - γ_μ * outer / denom[..., None, None])
             Λ_new = 0.5 * (Λ_new + Λ_new.mT)
             return mean_post, Λ_new
 
@@ -622,9 +672,10 @@ def argmin_reverse_kl(
             L = matrix
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
-            local_cov = I + η * torch.einsum("...i, ...j -> ...ij", u, u)
+            coefficient = γ_μ / (γ_Σ * (1 + γ_μ))
+            local_cov = I + coefficient * torch.einsum("...i, ...j -> ...ij", u, u)
             local_chol = cholesky(local_cov)
-            chol_post = (1.0 - η).sqrt() * (L @ local_chol)
+            chol_post = (1.0 - η_Σ).sqrt() * (L @ local_chol)
             return mean_post, torch.tril(chol_post)
 
         case CovarianceType.LOG_CHOLESKY:
@@ -634,9 +685,10 @@ def argmin_reverse_kl(
             )
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
-            local_cov = I + η * torch.einsum("...i, ...j -> ...ij", u, u)
+            coefficient = γ_μ / (γ_Σ * (1 + γ_μ))
+            local_cov = I + coefficient * torch.einsum("...i, ...j -> ...ij", u, u)
             local_chol = cholesky(local_cov)
-            chol_post = (1.0 - η).sqrt() * (L @ local_chol)
+            chol_post = (1.0 - η_Σ).sqrt() * (L @ local_chol)
             chol_post = torch.tril(chol_post)
             log_chol_post = chol_post.tril(diagonal=-1) + torch.diag_embed(
                 chol_post.diagonal(dim1=-2, dim2=-1).log()
