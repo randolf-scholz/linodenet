@@ -182,9 +182,9 @@ def solve_proximal_kl(
     # and G is the covariance/precision/Cholesky gradient.
     g, G = grad_fn(theta)
 
-    mu, matrix = theta
-    gamma = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
-    scale = gamma.reciprocal()
+    μ, matrix = theta
+    γ = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
+    scale = γ.reciprocal()
     eps = torch.finfo(matrix.dtype).eps
 
     match CovarianceType(parametrization):
@@ -192,7 +192,7 @@ def solve_proximal_kl(
             # μ' = μ - γ⁻¹Σg,  Σ'⁻¹ = Σ⁻¹ + 2γ⁻¹ sym(G).
             cov = matrix
             G = 0.5 * (G + G.mT)  # project gradient
-            mu_new = mu - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
+            mu_new = μ - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
 
             L = cholesky(cov)
             Λ = cholesky_inverse(L)
@@ -217,7 +217,7 @@ def solve_proximal_kl(
             Λ = matrix
             G = 0.5 * (G + G.mT)  # project gradient
             L = cholesky(Λ)
-            mu_new = mu - cholesky_solve((g * scale).unsqueeze(-1), L).squeeze(-1)
+            mu_new = μ - cholesky_solve((g * scale).unsqueeze(-1), L).squeeze(-1)
 
             local_grad = L.mT @ G @ L
             local_grad = 0.5 * (local_grad + local_grad.mT)
@@ -245,14 +245,14 @@ def solve_proximal_kl(
             L = matrix
             G = G.tril()  # project gradient
             cov = L @ L.mT
-            mu_new = mu - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
+            mu_new = μ - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
 
             local_grad = L.mT @ G
             diag_grad = local_grad.diagonal(dim1=-2, dim2=-1)
             diag_step = (
                 0.5
                 * scale
-                * (-diag_grad + torch.sqrt(diag_grad.square() + 4 * gamma.square()))
+                * (-diag_grad + torch.sqrt(diag_grad.square() + 4 * γ.square()))
             )
             local_chol = torch.diag_embed(diag_step) - scale * local_grad.tril(-1)
             chol_new = torch.tril(L @ local_chol)
@@ -268,7 +268,7 @@ def solve_proximal_kl(
                 log_chol.diagonal(dim1=-2, dim2=-1).exp()
             )
             cov = L @ L.mT
-            mu_new = mu - torch.einsum("...ij,...j->...i", cov, g * scale)
+            mu_new = μ - torch.einsum("...ij,...j->...i", cov, g * scale)
 
             g_log_chol = G.tril()  # project gradient
             g_off = torch.tril(g_log_chol, diagonal=-1)
@@ -277,17 +277,17 @@ def solve_proximal_kl(
             diag_lin = lin.diagonal(dim1=-2, dim2=-1)
 
             tolerance = (
-                16 * eps * (gamma.abs() + diag_grad.abs() + diag_lin.abs()).clamp_min(1)
+                16 * eps * (γ.abs() + diag_grad.abs() + diag_lin.abs()).clamp_min(1)
             )
 
-            if torch.any(diag_grad > gamma + tolerance).item():
+            if torch.any(diag_grad > γ + tolerance).item():
                 raise ValueError(
                     "The log-Cholesky-parametrized proximal Gaussian update does "
                     "not admit a finite minimizer. Try increasing gamma or "
                     "regularizing the diagonal log-Cholesky gradient."
                 )
 
-            radicand = diag_lin.square() + 4 * gamma * (gamma - diag_grad)
+            radicand = diag_lin.square() + 4 * γ * (γ - diag_grad)
             diag_step = 0.5 * scale * (-diag_lin + torch.sqrt(radicand.clamp_min(0)))
 
             if torch.any(diag_step <= tolerance).item():
