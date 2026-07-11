@@ -164,7 +164,8 @@ def argmin_proximal_kl(
 
             L = cholesky(cov)
             Λ = cholesky_inverse(L)
-            Λ_new = 0.5 * (Λ + 2 * G * scale + (Λ + 2 * G * scale).mT)
+            Λ_new = Λ + 2 * G * scale
+            Λ_new = 0.5 * (Λ_new + Λ_new.mT)
 
             try:
                 Λ_chol = cholesky(Λ_new)
