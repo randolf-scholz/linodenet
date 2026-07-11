@@ -7,7 +7,7 @@ import torch
 from torch import Tensor, nn
 from torch.distributions import MultivariateNormal
 
-from linodenet.distributions.gaussian import argmin_proximal_kl, argmin_reverse_kl
+from linodenet.distributions.gaussian import argmin_forward_kl, argmin_proximal_kl
 from linodenet.state_update.gradient_based import (
     GaussianKLProximalUpdater,
     GaussianReverseKLUpdater,
@@ -111,7 +111,7 @@ def _reference_gaussian_reverse_kl_step(
     regularization_strength: Tensor,
 ) -> tuple[Tensor, Tensor]:
     r"""Compute the exact Gaussian reverse-KL update in latent coordinates."""
-    return argmin_reverse_kl(
+    return argmin_forward_kl(
         y_obs - shift,
         (mean, log_chol),
         gamma=regularization_strength,

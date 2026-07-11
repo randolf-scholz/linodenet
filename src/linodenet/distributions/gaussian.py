@@ -31,8 +31,8 @@ Note:
 """
 
 __all__ = [
-    "argmin_forward_kl",
     "argmin_reverse_kl",
+    "argmin_forward_kl",
     "argmin_proximal_kl",
     "solve_proximal_kl",
     "fisher",
@@ -444,7 +444,7 @@ def _solve_s_closed_form(
     return torch.where(small, s_series, s_exact).to(dtype=out_dtype)
 
 
-def argmin_forward_kl(
+def argmin_reverse_kl(
     z: Tensor,  # (..., d)
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
@@ -582,7 +582,7 @@ def argmin_forward_kl(
             )
 
 
-def argmin_reverse_kl(
+def argmin_forward_kl(
     z: Tensor,  # (..., d)
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,

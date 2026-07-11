@@ -44,7 +44,7 @@ from torch import Tensor, nn
 from linodenet.distributions.gaussian import (
     CovarianceType,
     GaussianParams,
-    argmin_reverse_kl,
+    argmin_forward_kl,
     log_prob,
     solve_proximal_kl,
 )
@@ -332,7 +332,7 @@ class GaussianReverseKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Te
     def forward(self, y_obs: Tensor, theta: GaussianParams, /) -> GaussianParams:
         r"""Return the exact reverse-KL Gaussian update $(μ₊, Σ₊)$."""
         z, _ = self.decoder.encode_and_logabsdet(y_obs)
-        return argmin_reverse_kl(
+        return argmin_forward_kl(
             z,
             theta,
             gamma=self.regularization_strength,
