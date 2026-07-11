@@ -30,7 +30,7 @@ Example: Gradient update with probabilistic forecasting.
 __all__ = [
     "LpLoss",
     "GradientStepUpdater",
-    "GaussianGradientStepUpdater",
+    "GaussianKLProximalUpdater",
     "lp_loss",
 ]
 
@@ -196,20 +196,32 @@ class GradientStepUpdater(nn.Module, SparseVectorStateUpdate):
         return x - self.step_size * self.grad_fn(y, x, mask=mask)
 
 
-class GaussianGradientStepUpdater(
-    nn.Module, AbstractStateUpdate[GaussianParams, Tensor]
-):
-    r"""Perform a gradient based update assuming a latent Gaussian distribution.
+class GaussianKLProximalUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
+    r"""Perform a Gaussian KL-proximal update of the observation loss.
 
-    .. math:: Jₜ(θ; θ₋, y_obs) = -\log q(y_obs∣θ) + λ⋅\kl(𝓝(μ, Σ), 𝓝(μ₋, Σ₋))
+    Let $θ₋ = (μ₋, Σ₋)$ denote the current latent Gaussian parameters and let
+    $q(y_obs∣θ)$ be the predictive density induced by the decoder. This module
+    does not take an explicit Euclidean gradient step in parameter space.
+    Instead, it solves the closed-form KL-proximal problem for the first-order
+    linearization of the negative log-likelihood at $θ₋$:
 
-    where $q(y_obs∣θ) = p(ϕ⁻¹(y_obs)∣θ) |𝐃ϕ⁻¹(y_obs)|$ is the predictive distribution
-    obtained by pushing the latent Gaussian through a decoder $ϕ$, and $θ = (μ, Σ)$
-    are the parameters of the latent Gaussian distribution. $θ₋$ denote the parameters
-    before the update, and $y_obs$ is the observed value.
-    The first term is the negative log-likelihood of the observation under the current parameters,
-    and the second term is a KL divergence regularization that encourages the updated parameters
-    to stay close to the previous parameters.
+    .. math::
+        θ₊ = \argmin_θ -\log q(y_obs∣θ₋)
+            + ⟨ ∇_θ[-\log q(y_obs∣θ)]|_{θ=θ₋}, θ - θ₋ ⟩
+            + λ⋅\kl(𝓝(μ, Σ) ∣ 𝓝(μ₋, Σ₋))
+
+    Equivalently, the observation term contributes only through its gradient at
+    the current parameters, while the KL term supplies the update geometry and
+    keeps the result inside the Gaussian family.
+
+    The parameter ``regularization_strength`` is the proximal weight $λ$.
+    It acts both as the strength of the KL anchor and as an inverse step-size:
+
+    - larger $λ$ keeps $θ₊$ closer to $θ₋$ and yields a smaller update
+    - smaller $λ$ produces a more aggressive update
+
+    So unlike the Euclidean `GradientStepUpdater`, this module has no separate
+    step-size parameter. The update magnitude is controlled by $λ$ itself.
     """
 
     def __init__(
@@ -241,7 +253,7 @@ class GaussianGradientStepUpdater(
         return -log_probs.sum()
 
     def forward(self, y_obs: Tensor, theta: GaussianParams, /) -> GaussianParams:
-        r"""Return the updated Gaussian parameters $(μ', Σ')$."""
+        r"""Return the KL-proximal Gaussian update $(μ₊, Σ₊)$."""
         return solve_proximal_kl(
             lambda θ: self.grad_fn(y_obs, θ),
             theta,

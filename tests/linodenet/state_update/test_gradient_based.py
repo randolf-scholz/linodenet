@@ -9,7 +9,7 @@ from torch.distributions import MultivariateNormal
 
 from linodenet.distributions.gaussian import argmin_proximal_kl
 from linodenet.state_update.gradient_based import (
-    GaussianGradientStepUpdater,
+    GaussianKLProximalUpdater,
     GradientStepUpdater,
     LpLoss,
 )
@@ -259,7 +259,7 @@ class TestGaussianGradientStepUpdater:
     def test_forward_and_backward(self) -> None:
         r"""Forward output and parameter gradients should match the closed form."""
         decoder = ShiftTransform(shift=0.2)
-        updater = GaussianGradientStepUpdater(
+        updater = GaussianKLProximalUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=1.7,
@@ -305,7 +305,7 @@ class TestGaussianGradientStepUpdater:
 
     def test_compile_fullgraph(self) -> None:
         r"""The updater should compile under `torch.compile(fullgraph=True)`."""
-        updater = GaussianGradientStepUpdater(
+        updater = GaussianKLProximalUpdater(
             decoder=ShiftTransform(shift=-0.1),
             parametrization="log-cholesky",
             regularization_strength=1.2,
@@ -331,7 +331,7 @@ class TestGaussianGradientStepUpdater:
     def test_batched_forward(self) -> None:
         r"""Batched parameters should use a per-sample objective."""
         decoder = ShiftTransform(shift=0.1)
-        updater = GaussianGradientStepUpdater(
+        updater = GaussianKLProximalUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=1.0,
@@ -373,7 +373,7 @@ class TestGaussianGradientStepUpdater:
     def test_grad_fn_returns_per_batch_gradient(self) -> None:
         r"""The Gaussian gradient helper should preserve the batch shape."""
         decoder = ShiftTransform(shift=0.1)
-        updater = GaussianGradientStepUpdater(
+        updater = GaussianKLProximalUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=1.0,
@@ -416,7 +416,7 @@ class TestGaussianGradientStepUpdater:
     def test_gradients_wrt_theta(self) -> None:
         r"""The update should remain differentiable with respect to the prior."""
         decoder = ShiftTransform(shift=0.25)
-        updater = GaussianGradientStepUpdater(
+        updater = GaussianKLProximalUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=1.4,
@@ -458,7 +458,7 @@ class TestGaussianGradientStepUpdater:
     def test_is_consistent_for_exact_decoder_mean(self) -> None:
         r"""For $y_obs = decoder(μ₋)$ and unit variance, the mean should not update."""
         decoder = ShiftTransform(shift=-0.4)
-        updater = GaussianGradientStepUpdater(
+        updater = GaussianKLProximalUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=2.0,
