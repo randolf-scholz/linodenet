@@ -357,33 +357,87 @@ def argmin_reverse_kl(
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact Gaussian minimizer of NLL plus reverse-KL anchoring.
 
-    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ\kl(𝓝(θ), 𝓝(θ₋))
+    This returns the exact minimizer of
 
-    where $θ₋$ is the input `theta`, interpreted according to `parametrization`,
-    that is by default $θ=(μ, Σ)$.
+    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋)， 𝓝(θ))
 
-    The closed-form solution is evaluated in covariance coordinates and then
-    mapped back to the requested parametrization. A finite minimizer exists only
-    for $γ > 0$.
+    where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
+
+    Writing $δ = z - μ₋$ and $η = (1 + γ)⁻¹$, the update in covariance coordinates is
+
+    - $μ₊ = μ₋ + ηδ$
+    - $Σ₊ = (1 - η)Σ₋ + (1 - η)ηδδᵀ = (1 - η)(Σ₋ + ηδδᵀ)$
+
+    This function uses the structure of the requested parametrization:
+
+    - `covariance`: update $Σ$ directly via $Σ₊ = (1 - η)Σ₋ + (1 - η)ηδδᵀ$
+    - `precision`: if $Λ₋ = Σ₋⁻¹$, $v = Λ₋δ$, and $q = δᵀv$, then
+                   $Λ₊ = ((1 + γ)/γ)⋅(Λ₋ - vvᵀ / (1 + γ + q))$
+    - `cholesky`: if $Σ₋ = LLᵀ$ and $a = L⁻¹δ$, then
+                  $L₊ = √(1 - η)⋅L\chol(I + ηaaᵀ)$
+    - `log-cholesky`: compute the Cholesky update above
+                      and then store the diagonal in log form
 
     Args:
         z: Observation already pulled back to latent space.
         theta: Prior Gaussian parameters in the selected parametrization.
-        gamma: Reverse-KL regularization strength, must be positive.
+        gamma: Reverse-KL regularization strength.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
     """
     parametrization = CovarianceType(parametrization)
-    mean_prior, cov_prior = parametrization.to_covariance(theta)
-    gamma = torch.as_tensor(gamma, dtype=cov_prior.dtype, device=cov_prior.device)
+    μ, matrix = theta
+    γ = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
+    η = (1 + γ).reciprocal()
+    δ = z - μ
+    mean_post = μ + η * δ
 
-    eta = (1 + gamma).reciprocal()
-    delta = z - mean_prior
-    outer = torch.einsum("...i, ...j -> ...ij", delta, delta)
+    match parametrization:
+        case CovarianceType.COVARIANCE:
+            Σ = matrix
+            cov_post = (1 - η) * (Σ + η * torch.einsum("...i, ...j -> ...ij", δ, δ))
+            return mean_post, cov_post
 
-    mean_post = mean_prior + eta * delta
-    cov_post = (1 - eta) * cov_prior + (eta * (1 - eta)) * outer
+        case CovarianceType.PRECISION:
+            Λ = matrix
+            projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
+            mahalanobis = vecdot(δ, projected, dim=-1)
+            denom = 1 + γ + mahalanobis
+            outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
+            Λ_new = ((1 + γ) / γ) * (Λ - outer / denom[..., None, None])
+            Λ_new = 0.5 * (Λ_new + Λ_new.mT)
+            return mean_post, Λ_new
 
-    return parametrization.from_covariance((mean_post, cov_post))
+        case CovarianceType.CHOLESKY:
+            L = matrix
+            u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
+            I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
+            local_cov = I + η * torch.einsum("...i, ...j -> ...ij", u, u)
+            local_chol = cholesky(local_cov)
+            chol_post = (1.0 - η).sqrt() * (L @ local_chol)
+            return mean_post, torch.tril(chol_post)
+
+        case CovarianceType.LOG_CHOLESKY:
+            log_chol_prior = matrix
+            L = log_chol_prior.tril(diagonal=-1) + torch.diag_embed(
+                log_chol_prior.diagonal(dim1=-2, dim2=-1).exp()
+            )
+            u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
+            I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
+            local_cov = I + η * torch.einsum("...i, ...j -> ...ij", u, u)
+            local_chol = cholesky(local_cov)
+            chol_post = (1.0 - η).sqrt() * (L @ local_chol)
+            chol_post = torch.tril(chol_post)
+            log_chol_post = chol_post.tril(diagonal=-1) + torch.diag_embed(
+                chol_post.diagonal(dim1=-2, dim2=-1).log()
+            )
+            return mean_post, log_chol_post
+
+        case _:
+            raise ValueError(
+                "Expected parametrization to be one of "
+                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
+                f"got {parametrization!r}."
+            )
 
 
 def fisher(
