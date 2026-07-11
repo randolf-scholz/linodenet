@@ -694,6 +694,42 @@ class TestArgminReverseKL:
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_matches_covariance_branch(
+        self,
+        seed: int,
+        parametrization: CovarianceType,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Test that all parametrizations agree with the covariance update."""
+        torch.manual_seed(seed)
+        dim = 4
+        gamma = torch.tensor(1.7)
+
+        mean_prior = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance_prior = factor @ factor.mT + torch.eye(dim)
+        z_obs = torch.randn(*batch_shape, dim)
+
+        expected = argmin_reverse_kl(
+            z_obs,
+            (mean_prior, covariance_prior),
+            gamma=gamma,
+            parametrization="covariance",
+        )
+        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
+        actual = argmin_reverse_kl(
+            z_obs,
+            theta_prior,
+            gamma=gamma,
+            parametrization=parametrization,
+        )
+        actual_covariance = parametrization.to_covariance(actual)
+
+        assert (actual_covariance[0] - expected[0]).abs().amax() < 1e-5
+        assert (actual_covariance[1] - expected[1]).abs().amax() < 1e-5
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
+    @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_matches_closed_form(
         self,
         seed: int,
