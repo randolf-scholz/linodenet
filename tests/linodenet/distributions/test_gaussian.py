@@ -13,6 +13,7 @@ from linodenet.distributions.gaussian import (
     inverse_fisher,
     kl,
     log_prob,
+    solve_proximal_kl,
 )
 from tests.testing import SEEDS_3
 
@@ -299,6 +300,151 @@ class TestFisher:
 
 class TestArgminProximal:
     r"""Tests for the KL-proximal Gaussian update."""
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_solve_proximal_kl_supports_batched_theta(
+        self,
+        seed: int,
+        parametrization: CovarianceType,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Test the direct KL-proximal solver on vectorized linear gradients."""
+        torch.manual_seed(seed)
+        dim = 4
+        gamma = torch.tensor(1.7)
+
+        mean_prior = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        cov_prior = factor @ factor.mT + torch.eye(dim)
+        prec_prior = torch.cholesky_inverse(torch.linalg.cholesky(cov_prior))
+        g = torch.randn(*batch_shape, dim)
+        expected_mean = mean_prior - torch.einsum(
+            "...ij,...j->...i", cov_prior, g / gamma
+        )
+        prec_chol_prior = torch.linalg.cholesky(prec_prior)
+        chol_prior = torch.linalg.cholesky(cov_prior)
+        log_chol_prior = chol_prior.tril(diagonal=-1) + torch.diag_embed(
+            chol_prior.diagonal(dim1=-2, dim2=-1).log()
+        )
+
+        match parametrization:
+            case CovarianceType.COVARIANCE:
+                prec_shift_factor = torch.randn(*batch_shape, dim, dim)
+                prec_shift = prec_shift_factor @ prec_shift_factor.mT
+                grad_mat = 0.5 * gamma * prec_shift
+                theta_prior = (mean_prior, cov_prior)
+                expected_prec = 0.5 * (
+                    prec_prior + prec_shift + (prec_prior + prec_shift).mT
+                )
+                expected_matrix = torch.cholesky_inverse(
+                    torch.linalg.cholesky(expected_prec)
+                )
+                matrix_tol = 1e-4
+                mean_tol = 1e-6
+                projected_grad = _symmetric
+
+            case CovarianceType.PRECISION:
+                grad_prec_factor = torch.randn(*batch_shape, dim, dim)
+                grad_mat = grad_prec_factor @ grad_prec_factor.mT
+                theta_prior = (mean_prior, prec_prior)
+                white_grad = prec_chol_prior.mT @ grad_mat @ prec_chol_prior
+                white_grad = _symmetric(white_grad)
+                eigvals, eigvecs = torch.linalg.eigh(white_grad)
+                spectral_scale = 2 / (1 + torch.sqrt(1 + 8 * eigvals / gamma))
+                white_prec = eigvecs @ torch.diag_embed(spectral_scale) @ eigvecs.mT
+                expected_matrix = prec_chol_prior @ white_prec @ prec_chol_prior.mT
+                matrix_tol = 1e-4
+                mean_tol = 1e-5
+                projected_grad = _symmetric
+
+            case CovarianceType.CHOLESKY:
+                grad_mat = torch.tril(torch.randn(*batch_shape, dim, dim))
+                theta_prior = (mean_prior, chol_prior)
+                white_grad = chol_prior.mT @ grad_mat
+                diag_grad = white_grad.diagonal(dim1=-2, dim2=-1)
+                diag_update = (
+                    0.5
+                    * (-diag_grad + torch.sqrt(diag_grad.square() + 4 * gamma.square()))
+                    / gamma
+                )
+                white_chol = torch.tril(
+                    -white_grad / gamma, diagonal=-1
+                ) + torch.diag_embed(diag_update)
+                expected_matrix = torch.tril(chol_prior @ white_chol)
+                matrix_tol = 1e-5
+                mean_tol = 1e-5
+                projected_grad = torch.tril
+
+            case CovarianceType.LOG_CHOLESKY:
+                grad_mat = torch.tril(torch.randn(*batch_shape, dim, dim))
+                diag_grad = grad_mat.diagonal(dim1=-2, dim2=-1)
+                diag_grad = 0.5 * gamma * torch.tanh(diag_grad)
+                grad_mat = grad_mat.tril(diagonal=-1) + torch.diag_embed(diag_grad)
+                theta_prior = (mean_prior, log_chol_prior)
+                grad_off = torch.tril(grad_mat, diagonal=-1)
+                lin = chol_prior.mT @ grad_off
+                diag_lin = lin.diagonal(dim1=-2, dim2=-1)
+                diag_update = (
+                    0.5
+                    * (
+                        -diag_lin
+                        + torch.sqrt(
+                            diag_lin.square() + 4 * gamma * (gamma - diag_grad)
+                        )
+                    )
+                    / gamma
+                )
+                white_chol = torch.tril(-lin / gamma, diagonal=-1) + torch.diag_embed(
+                    diag_update
+                )
+                expected_chol = torch.tril(chol_prior @ white_chol)
+                expected_matrix = expected_chol.tril(diagonal=-1) + torch.diag_embed(
+                    expected_chol.diagonal(dim1=-2, dim2=-1).log()
+                )
+                matrix_tol = 1e-5
+                mean_tol = 1e-5
+                projected_grad = torch.tril
+
+        def grad_fn(theta: tuple[Tensor, Tensor], /) -> tuple[Tensor, Tensor]:
+            mean, matrix = theta
+            assert mean.shape == (*batch_shape, dim)
+            assert matrix.shape == (*batch_shape, dim, dim)
+            return g, grad_mat
+
+        mean_post, matrix_post = solve_proximal_kl(
+            grad_fn,
+            theta_prior,
+            gamma=gamma,
+            parametrization=parametrization,
+        )
+
+        assert mean_post.shape == (*batch_shape, dim)
+        assert matrix_post.shape == (*batch_shape, dim, dim)
+        assert (mean_post - expected_mean).abs().amax() < 1e-5
+        assert (matrix_post - expected_matrix).abs().amax() < 1e-5
+
+        mean_var = mean_post.detach().clone().requires_grad_(True)
+        matrix_var = matrix_post.detach().clone().requires_grad_(True)
+        objective = (
+            (g * (mean_var - mean_prior)).sum()
+            + (grad_mat * (matrix_var - theta_prior[1])).sum()
+            + gamma
+            * kl(
+                (mean_var, matrix_var),
+                theta_prior,
+                parametrization=parametrization,
+            ).sum()
+        )
+        mean_grad, matrix_grad = torch.autograd.grad(
+            objective,
+            (mean_var, matrix_var),
+        )
+
+        assert mean_grad.shape == (*batch_shape, dim)
+        assert matrix_grad.shape == (*batch_shape, dim, dim)
+        assert mean_grad.abs().amax() < mean_tol
+        assert projected_grad(matrix_grad).abs().amax() < matrix_tol
 
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_solves_closed_form_problem(
