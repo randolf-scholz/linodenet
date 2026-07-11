@@ -36,7 +36,6 @@ __all__ = [
     "inverse_fisher",
     "kl",
     "log_prob",
-    "multivariate_gaussian_log_likelihood",
     "MultivariateNormal",
     "MultiHeadGaussian",
     "CovarianceType",
@@ -71,39 +70,6 @@ class CovarianceType(StrEnum):
     # possible further parametrizatrions:
     # - exp(S), S symmetric  (matrix exp)
     # - diag(σ) + UUᵀ  (low rank perturbation)
-
-
-def multivariate_gaussian_log_likelihood(
-    value: Tensor,
-    /,
-    *,
-    mean: Tensor,
-    covariance_matrix: Tensor,
-) -> Tensor:
-    r"""Return the log-likelihood of a multivariate Gaussian.
-
-    Args:
-        value: Evaluation point $x$ with shape `(..., d)`.
-        mean: Mean $μ$ with shape `(..., d)`.
-        covariance_matrix: Covariance $Σ$ with shape `(..., d, d)`.
-
-    Returns:
-        The log-density
-
-        .. math:: \log 𝓝(x; μ, Σ) = -½(d\log(2π) + \log\det Σ + (x-μ)ᵀΣ⁻¹(x-μ))
-    """
-    # Factor Σ = LLᵀ so the Mahalanobis term becomes ‖L⁻¹(x-μ)‖².
-    residual = value - mean
-    L = cholesky(covariance_matrix)
-    whitened = solve_triangular(
-        L,
-        residual.unsqueeze(-1),
-        upper=False,
-    ).squeeze(-1)
-    dim = residual.shape[-1]
-    logdet = 2 * L.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
-    mahalanobis = vecdot(whitened, whitened, dim=-1)
-    return -0.5 * (dim * _LOG2PI + logdet + mahalanobis)
 
 
 def log_prob(

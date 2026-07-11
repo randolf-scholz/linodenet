@@ -41,9 +41,7 @@ from torch import Tensor, nn
 from torch.distributions import MultivariateNormal
 
 from linodenet.distributions import Dirac, Distribution, Empirical
-from linodenet.distributions.gaussian import (
-    multivariate_gaussian_log_likelihood,
-)
+from linodenet.distributions.gaussian import log_prob
 from linodenet.mappings import Transform
 
 
@@ -152,14 +150,7 @@ class NaturalGaussianUpdater(nn.Module):
 
         # Pull back y ↦ z so p_θ(y) = 𝓝(z; μ, Σ) · │det ∂z/∂y│.
         z, logabsdet = self.decoder.decode_and_logabsdet(y)
-        self.log_prob = (
-            multivariate_gaussian_log_likelihood(
-                z,
-                mean=mu,
-                covariance_matrix=sigma,
-            )
-            + logabsdet
-        )
+        self.log_prob = log_prob(z, (mu, sigma)) + logabsdet
 
         eta = (1 + self.lambda_).reciprocal()
         delta = z - mu
