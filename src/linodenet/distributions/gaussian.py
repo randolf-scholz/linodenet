@@ -122,7 +122,7 @@ def log_prob(
 
 def solve_proximal_kl(
     # (..., d), (..., d, d) -> (..., d), (..., d, d)
-    grad_fn: Callable[[GaussianParams], Tensor],
+    grad_fn: Callable[[GaussianParams], GaussianParams],
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
@@ -265,13 +265,13 @@ def solve_proximal_kl(
 
 
 def argmin_proximal_kl(
-    fun: Callable[[GaussianParams], Tensor],
-    theta: GaussianParams,
+    loss_fn: Callable[[GaussianParams], Tensor],  # (..., d), (..., d, d) -> (...)
+    theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
     gamma: float | Tensor = 1.0,
     parametrization: str = "covariance",
-) -> GaussianParams:
+) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the Gaussian KL-proximal minimizer in the chosen parametrization.
 
     This returns the solution of
@@ -285,13 +285,14 @@ def argmin_proximal_kl(
     precision, Cholesky, or log-Cholesky coordinates.
 
     Args:
-        fun: Scalar objective function to linearize at `theta`.
+        loss_fn: Scalar objective function to linearize at `theta`.
         theta: Linearization point $θ⁎$ in the selected parametrization.
         gamma: KL regularization strength.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
     """
     return solve_proximal_kl(
-        torch.func.grad(fun),
+        # ∇_θ ∑ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
+        torch.func.grad(lambda θ: loss_fn(θ).sum()),
         theta,
         gamma=gamma,
         parametrization=parametrization,
