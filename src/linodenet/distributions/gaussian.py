@@ -339,7 +339,7 @@ def argmin_proximal_kl(
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
-    gamma: float | Tensor = 1.0,
+    gamma: Tensor | float,
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the Gaussian KL-proximal minimizer in the chosen parametrization.
