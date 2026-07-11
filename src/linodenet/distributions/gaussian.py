@@ -322,11 +322,11 @@ def argmin_proximal_kl(
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the Gaussian KL-proximal minimizer in the chosen parametrization.
 
-    This returns the solution of
+    This returns the exact minimizer of
 
-    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ\kl(p(x∣θ), p(x∣θ⁎))
+    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\kl(𝓝(θ₋)， 𝓝(θ))
 
-    where $θ$ is interpreted according to `parametrization` and $p(x∣θ) = 𝓝(μ, Σ)$.
+    where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
 
     The implementation computes $∇f(θ⁎)$ with `torch.func.grad`
     and evaluates the exact closed-form minimizer in covariance,
@@ -337,6 +337,13 @@ def argmin_proximal_kl(
         theta: Linearization point $θ⁎$ in the selected parametrization.
         gamma: KL regularization strength.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
+
+    See Also:
+        `argmin_reverse_kl`:
+            Exact minimizer of the special reverse-KL objective
+            $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ₋) ∥ 𝓝(θ))$.
+            In contrast, `argmin_proximal_kl` solves the linearized forward-KL
+            proximal problem for a general scalar loss.
     """
     return solve_proximal_kl(
         # ∇_θ ∑ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
@@ -383,6 +390,13 @@ def argmin_reverse_kl(
         theta: Prior Gaussian parameters in the selected parametrization.
         gamma: Reverse-KL regularization strength.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
+
+    See Also:
+        `argmin_proximal_kl`:
+            Generic forward-KL proximal solver for a linearized scalar loss
+            $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ⁎))$.
+            In contrast, `argmin_reverse_kl` solves the exact reverse-KL
+            regularized Gaussian observation objective.
     """
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
