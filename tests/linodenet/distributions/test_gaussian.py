@@ -8,6 +8,7 @@ from torch.distributions.kl import kl_divergence
 
 from linodenet.distributions.gaussian import (
     CovarianceType,
+    argmin_forward_kl,
     argmin_proximal_kl,
     argmin_reverse_kl,
     fisher,
@@ -51,6 +52,46 @@ def _parameter_inner_product(
     return (left_mean * right_mean).sum(dim=-1) + (left_matrix * right_matrix).sum(
         dim=(-2, -1)
     )
+
+
+def _solve_forward_kl_parallel_variance_reference(
+    q: Tensor, gamma: Tensor, /
+) -> Tensor:
+    r"""Solve the forward-KL scalar stationarity equation by bisection."""
+    q, gamma = torch.broadcast_tensors(q, gamma)
+    beta = (gamma - 1) / gamma
+
+    if torch.any(gamma <= 1).item():
+        raise ValueError(
+            "The exact forward-KL Gaussian update requires gamma > 1. "
+            "For gamma <= 1 the objective does not admit a finite minimizer."
+        )
+
+    if not torch.any(q > 0).item():
+        return beta
+
+    def residual(variance: Tensor, /) -> Tensor:
+        return (
+            gamma
+            + (1 - gamma) / variance
+            - gamma.square() * q / (1 + gamma * variance).square()
+        )
+
+    lower = beta
+    upper = beta + torch.ones_like(beta)
+    need_expand = (q > 0) & (residual(upper) < 0)
+
+    while torch.any(need_expand).item():
+        upper = torch.where(need_expand, 2 * upper, upper)
+        need_expand = (q > 0) & (residual(upper) < 0)
+
+    for _ in range(64):
+        midpoint = 0.5 * (lower + upper)
+        go_left = residual(midpoint) >= 0
+        upper = torch.where((q > 0) & go_left, midpoint, upper)
+        lower = torch.where((q > 0) & ~go_left, midpoint, lower)
+
+    return torch.where(q > 0, upper, beta)
 
 
 @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
@@ -877,5 +918,208 @@ class TestArgminReverseKL:
                 z_obs,
                 (mean, covariance),
                 gamma=1.0,
+                parametrization="unknown",
+            )
+
+
+class TestArgminForwardKL:
+    r"""Tests for the exact forward-KL Gaussian update."""
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_matches_covariance_branch(
+        self,
+        seed: int,
+        parametrization: CovarianceType,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Test that all parametrizations agree with the covariance update."""
+        torch.manual_seed(seed)
+        dim = 4
+        gamma = torch.tensor(1.7)
+
+        mean_prior = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance_prior = factor @ factor.mT + torch.eye(dim)
+        z_obs = torch.randn(*batch_shape, dim)
+
+        expected = argmin_forward_kl(
+            z_obs,
+            (mean_prior, covariance_prior),
+            gamma=gamma,
+            parametrization="covariance",
+        )
+        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
+        actual = argmin_forward_kl(
+            z_obs,
+            theta_prior,
+            gamma=gamma,
+            parametrization=parametrization,
+        )
+        actual_covariance = parametrization.to_covariance(actual)
+
+        assert (actual_covariance[0] - expected[0]).abs().amax() < 1e-5
+        assert (actual_covariance[1] - expected[1]).abs().amax() < 1e-5
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_matches_closed_form(
+        self,
+        seed: int,
+        parametrization: CovarianceType,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Test the exact forward-KL update against the whitened closed form."""
+        torch.manual_seed(seed)
+        dim = 4
+        gamma = torch.tensor(1.7)
+
+        mean_prior = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance_prior = factor @ factor.mT + torch.eye(dim)
+        z_obs = torch.randn(*batch_shape, dim)
+        delta = z_obs - mean_prior
+        prior_chol = torch.linalg.cholesky(covariance_prior)
+        whitened_delta = torch.linalg.solve_triangular(
+            prior_chol,
+            delta.unsqueeze(-1),
+            upper=False,
+        ).squeeze(-1)
+        q = (whitened_delta * whitened_delta).sum(dim=-1)
+        q, gamma = torch.broadcast_tensors(q, gamma)
+        beta = (gamma - 1) / gamma
+        s_parallel = _solve_forward_kl_parallel_variance_reference(q, gamma)
+        mean_scale = (1 + gamma * s_parallel).reciprocal()
+        outer = torch.einsum("...i, ...j -> ...ij", delta, delta)
+        coefficient = torch.where(q > 0, (s_parallel - beta) / q, torch.zeros_like(q))
+        expected_mean = mean_prior + mean_scale[..., None] * delta
+        expected_covariance = (
+            beta[..., None, None] * covariance_prior
+            + coefficient[..., None, None] * outer
+        )
+
+        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
+        actual = argmin_forward_kl(
+            z_obs,
+            theta_prior,
+            gamma=gamma,
+            parametrization=parametrization,
+        )
+        actual_mean, actual_covariance = parametrization.to_covariance(actual)
+
+        assert actual[0].shape == (*batch_shape, dim)
+        assert actual[1].shape == (*batch_shape, dim, dim)
+        assert (actual_mean - expected_mean).abs().amax() < 1e-5
+        assert (actual_covariance - expected_covariance).abs().amax() < 1e-5
+
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_stationary_for_exact_objective(
+        self, seed: int, parametrization: CovarianceType
+    ) -> None:
+        r"""Test that the returned point is stationary for the exact objective."""
+        torch.manual_seed(seed)
+        batch_shape = (2, 3)
+        dim = 4
+        gamma = torch.tensor(1.7)
+
+        mean_prior = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance_prior = factor @ factor.mT + torch.eye(dim)
+        z_obs = torch.randn(*batch_shape, dim)
+        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
+        theta_post = argmin_forward_kl(
+            z_obs,
+            theta_prior,
+            gamma=gamma,
+            parametrization=parametrization,
+        )
+        mean_var = theta_post[0].detach().clone().requires_grad_(True)
+        matrix_var = theta_post[1].detach().clone().requires_grad_(True)
+        objective = (
+            -log_prob(z_obs, (mean_var, matrix_var), parametrization=parametrization)
+            + gamma
+            * kl((mean_var, matrix_var), theta_prior, parametrization=parametrization)
+        ).sum()
+        mean_grad, matrix_grad = torch.autograd.grad(objective, (mean_var, matrix_var))
+
+        match parametrization:
+            case CovarianceType.COVARIANCE | CovarianceType.PRECISION:
+                projected_grad = _symmetric(matrix_grad)
+            case CovarianceType.CHOLESKY | CovarianceType.LOG_CHOLESKY:
+                projected_grad = torch.tril(matrix_grad)
+
+        assert mean_grad.abs().amax() < 1e-5
+        assert projected_grad.abs().amax() < 1e-5
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_large_gamma_converges_to_identity(
+        self,
+        seed: int,
+        parametrization: CovarianceType,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Test that large forward-KL weight approaches the identity update."""
+        torch.manual_seed(seed)
+        dim = 4
+        gamma = torch.tensor(1e6)
+
+        mean_prior = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance_prior = factor @ factor.mT + torch.eye(dim)
+        z_obs = torch.randn(*batch_shape, dim)
+        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
+        mean_post, covariance_post = parametrization.to_covariance(
+            argmin_forward_kl(
+                z_obs,
+                theta_prior,
+                gamma=gamma,
+                parametrization=parametrization,
+            ),
+        )
+
+        assert (mean_post - mean_prior).abs().amax() < 1e-5
+        assert (covariance_post - covariance_prior).abs().amax() < 2e-5
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_gamma_at_most_one_rejects(
+        self,
+        seed: int,
+        parametrization: CovarianceType,
+        batch_shape: tuple[int, ...],
+    ) -> None:
+        r"""Test that the exact forward-KL update rejects non-admissible gamma."""
+        torch.manual_seed(seed)
+        dim = 4
+        gamma = torch.tensor(1.0)
+
+        mean_prior = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance_prior = factor @ factor.mT + torch.eye(dim)
+        z_obs = torch.randn(*batch_shape, dim)
+        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
+
+        with pytest.raises(ValueError, match="requires gamma > 1"):
+            argmin_forward_kl(
+                z_obs,
+                theta_prior,
+                gamma=gamma,
+                parametrization=parametrization,
+            )
+
+    def test_rejects_unknown_parametrization(self) -> None:
+        r"""Test that the forward-KL update rejects unknown parametrizations."""
+        dim = 4
+        mean = torch.randn(dim)
+        factor = torch.randn(dim, dim)
+        covariance = factor @ factor.mT + torch.eye(dim)
+        z_obs = torch.randn(dim)
+
+        with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
+            argmin_forward_kl(
+                z_obs,
+                (mean, covariance),
+                gamma=2.0,
                 parametrization="unknown",
             )

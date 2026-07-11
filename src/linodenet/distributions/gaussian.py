@@ -31,6 +31,7 @@ Note:
 """
 
 __all__ = [
+    "argmin_forward_kl",
     "argmin_reverse_kl",
     "argmin_proximal_kl",
     "solve_proximal_kl",
@@ -352,6 +353,188 @@ def argmin_proximal_kl(
         gamma=gamma,
         parametrization=parametrization,
     )
+
+
+def _solve_forward_kl_parallel_variance(q: Tensor, gamma: Tensor, /) -> Tensor:
+    r"""Solve the forward-KL stationarity equation in the observed eigendirection."""
+    q, gamma = torch.broadcast_tensors(q, gamma)
+    beta = (gamma - 1) / gamma
+
+    if torch.any(gamma <= 1).item():
+        raise ValueError(
+            "The exact forward-KL Gaussian update requires gamma > 1. "
+            "For gamma <= 1 the objective does not admit a finite minimizer."
+        )
+
+    if not torch.any(q > 0).item():
+        return beta
+
+    def residual(variance: Tensor, /) -> Tensor:
+        return (
+            gamma
+            + (1 - gamma) / variance
+            - gamma.square() * q / (1 + gamma * variance).square()
+        )
+
+    lower = beta
+    upper = beta + torch.ones_like(beta)
+    need_expand = (q > 0) & (residual(upper) < 0)
+
+    while torch.any(need_expand).item():
+        upper = torch.where(need_expand, 2 * upper, upper)
+        need_expand = (q > 0) & (residual(upper) < 0)
+
+    for _ in range(64):
+        midpoint = 0.5 * (lower + upper)
+        go_left = residual(midpoint) >= 0
+        upper = torch.where((q > 0) & go_left, midpoint, upper)
+        lower = torch.where((q > 0) & ~go_left, midpoint, lower)
+
+    return torch.where(q > 0, upper, beta)
+
+
+def argmin_forward_kl(
+    z: Tensor,  # (..., d)
+    theta: GaussianParams,  # (..., d), (..., d, d)
+    /,
+    *,
+    gamma: Tensor | float,
+    parametrization: str = "covariance",
+) -> GaussianParams:  # (..., d), (..., d, d)
+    r"""Return the exact Gaussian minimizer of NLL plus forward-KL anchoring.
+
+    This returns the exact minimizer of
+
+    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ)， 𝓝(θ₋))
+
+    where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
+
+    Writing $δ = z - μ₋$, $Σ₋ = L₋L₋ᵀ$, $a = L₋⁻¹δ$, $q = aᵀa$ and
+    $β = (γ - 1)/γ$, the exact minimizer has the same prior-whitened
+    eigenspaces as $aaᵀ$:
+
+    - $μ₊ = μ₋ + cδ$, where $c = (1 + γs_∥)⁻¹$
+    - $Σ₊ = βΣ₋ + αδδᵀ$, where $α = (s_∥ - β)/q$
+
+    and $s_∥ > β$ is the unique root of
+
+    .. math:: \frac{1 - γ}{s} + γ - \frac{γ² q}{(1 + γs)²} = 0.
+
+    In precision coordinates, if $Λ₋ = Σ₋⁻¹$ and $v = Λ₋δ$, then
+
+    .. math:: Λ₊ = β⁻¹(Λ₋ - \frac{1 - β/s_∥}{q}vvᵀ).
+
+    In Cholesky coordinates, the same covariance update is
+
+    .. math:: L₊ = √β ⋅ L₋\chol(I + \frac{s_∥ - β}{βq}aaᵀ).
+
+    The exact forward-KL objective only has a finite minimizer for $γ > 1$,
+    so this function rejects $γ \le 1$.
+    """
+    if isinstance(gamma, float):
+        # not testing tensor to ensure torch.compile compatibility.
+        assert gamma > 1, "The exact forward-KL objective requires gamma > 1."
+
+    parametrization = CovarianceType(parametrization)
+    μ, matrix = theta
+    γ = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
+    δ = z - μ
+    dim = matrix.shape[-1]
+
+    match parametrization:
+        case CovarianceType.COVARIANCE:
+            Σ = matrix
+            L = cholesky(Σ)
+            a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
+            q = vecdot(a, a, dim=-1)
+            q, γ = torch.broadcast_tensors(q, γ)
+            β = (γ - 1) / γ
+            s_parallel = _solve_forward_kl_parallel_variance(q, γ)
+            mean_scale = (1 + γ * s_parallel).reciprocal()
+            mean_post = μ + mean_scale[..., None] * δ
+            outer = torch.einsum("...i, ...j -> ...ij", δ, δ)
+            coefficient = torch.where(q > 0, (s_parallel - β) / q, torch.zeros_like(q))
+            cov_post = β[..., None, None] * Σ + coefficient[..., None, None] * outer
+            cov_post = 0.5 * (cov_post + cov_post.mT)
+            return mean_post, cov_post
+
+        case CovarianceType.PRECISION:
+            Λ = matrix
+            projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
+            q = vecdot(δ, projected, dim=-1)
+            q, γ = torch.broadcast_tensors(q, γ)
+            β = (γ - 1) / γ
+            β_inv = γ / (γ - 1)
+            s_parallel = _solve_forward_kl_parallel_variance(q, γ)
+            mean_scale = (1 + γ * s_parallel).reciprocal()
+            mean_post = μ + mean_scale[..., None] * δ
+            outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
+            coefficient = torch.where(
+                q > 0,
+                β_inv * (1 - β / s_parallel) / q,
+                torch.zeros_like(q),
+            )
+            precision_post = (
+                β_inv[..., None, None] * Λ - coefficient[..., None, None] * outer
+            )
+            precision_post = 0.5 * (precision_post + precision_post.mT)
+            return mean_post, precision_post
+
+        case CovarianceType.CHOLESKY:
+            L = matrix
+            a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
+            q = vecdot(a, a, dim=-1)
+            q, γ = torch.broadcast_tensors(q, γ)
+            β = (γ - 1) / γ
+            s_parallel = _solve_forward_kl_parallel_variance(q, γ)
+            mean_scale = (1 + γ * s_parallel).reciprocal()
+            mean_post = μ + mean_scale[..., None] * δ
+            I = torch.eye(dim, dtype=L.dtype, device=L.device)
+            outer = torch.einsum("...i, ...j -> ...ij", a, a)
+            coefficient = torch.where(
+                q > 0,
+                (s_parallel - β) / (β * q),
+                torch.zeros_like(q),
+            )
+            local_cov = I + coefficient[..., None, None] * outer
+            local_chol = cholesky(local_cov)
+            chol_post = β.sqrt()[..., None, None] * (L @ local_chol)
+            return mean_post, torch.tril(chol_post)
+
+        case CovarianceType.LOG_CHOLESKY:
+            log_chol_prior = matrix
+            L = log_chol_prior.tril(diagonal=-1) + torch.diag_embed(
+                log_chol_prior.diagonal(dim1=-2, dim2=-1).exp()
+            )
+            a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
+            q = vecdot(a, a, dim=-1)
+            q, γ = torch.broadcast_tensors(q, γ)
+            β = (γ - 1) / γ
+            s_parallel = _solve_forward_kl_parallel_variance(q, γ)
+            mean_scale = (1 + γ * s_parallel).reciprocal()
+            mean_post = μ + mean_scale[..., None] * δ
+            I = torch.eye(dim, dtype=L.dtype, device=L.device)
+            outer = torch.einsum("...i, ...j -> ...ij", a, a)
+            coefficient = torch.where(
+                q > 0,
+                (s_parallel - β) / (β * q),
+                torch.zeros_like(q),
+            )
+            local_cov = I + coefficient[..., None, None] * outer
+            local_chol = cholesky(local_cov)
+            chol_post = β.sqrt()[..., None, None] * (L @ local_chol)
+            chol_post = torch.tril(chol_post)
+            log_chol_post = chol_post.tril(diagonal=-1) + torch.diag_embed(
+                chol_post.diagonal(dim1=-2, dim2=-1).log()
+            )
+            return mean_post, log_chol_post
+
+        case _:
+            raise ValueError(
+                "Expected parametrization to be one of "
+                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
+                f"got {parametrization!r}."
+            )
 
 
 def argmin_reverse_kl(
