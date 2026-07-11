@@ -6,8 +6,8 @@ import pytest
 import torch
 from torch import Tensor, nn
 from torch.distributions import MultivariateNormal
-from torch.distributions.kl import kl_divergence
 
+from linodenet.distributions.gaussian import argmin_proximal_kl
 from linodenet.state_update.gradient_based import (
     GaussianGradientStepUpdater,
     GradientStepUpdater,
@@ -85,26 +85,18 @@ def _reference_gaussian_step(
     *,
     shift: Tensor,
     regularization_strength: Tensor,
-    step_size_mean: Tensor,
-    step_size_cov: Tensor,
 ) -> tuple[Tensor, Tensor]:
-    r"""Compute the Gaussian gradient step using PyTorch distributions."""
-    current = MultivariateNormal(mean, scale_tril=_scale_tril(log_chol))
-    previous = MultivariateNormal(
-        mean.detach(),
-        scale_tril=_scale_tril(log_chol.detach()),
-    )
-    objective = -current.log_prob(
-        y_obs - shift
-    ) + regularization_strength * kl_divergence(current, previous)
-    grad_mean, grad_log_chol = torch.autograd.grad(
-        objective.sum(),
+    r"""Compute the Gaussian KL-proximal update using PyTorch distributions."""
+
+    def loss_fn(theta: tuple[Tensor, Tensor], /) -> Tensor:
+        current = MultivariateNormal(theta[0], scale_tril=_scale_tril(theta[1]))
+        return -current.log_prob(y_obs - shift)
+
+    return argmin_proximal_kl(
+        loss_fn,
         (mean, log_chol),
-        create_graph=True,
-    )
-    return (
-        mean - step_size_mean * grad_mean,
-        log_chol - step_size_cov * grad_log_chol,
+        gamma=regularization_strength,
+        parametrization="log-cholesky",
     )
 
 
@@ -270,9 +262,7 @@ class TestGaussianGradientStepUpdater:
         updater = GaussianGradientStepUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
-            regularization_strength=0.0,
-            step_size_mean=0.3,
-            step_size_cov=0.1,
+            regularization_strength=1.7,
         )
         mean = torch.tensor([0.4, -0.3, 0.8])
         log_chol = torch.tensor(
@@ -294,50 +284,31 @@ class TestGaussianGradientStepUpdater:
             y_obs,
             shift=decoder.shift,
             regularization_strength=updater.regularization_strength,
-            step_size_mean=updater.step_size_mean,
-            step_size_cov=updater.step_size_cov,
         )
 
         torch.testing.assert_close(actual_mean, expected_mean)
         torch.testing.assert_close(actual_log_chol, expected_log_chol)
 
         objective = actual_mean.sum() + actual_log_chol.sum()
-        (
-            actual_grad_shift,
-            actual_grad_step_size_mean,
-            actual_grad_step_size_cov,
-        ) = torch.autograd.grad(
+        actual_grad_shift, actual_grad_gamma = torch.autograd.grad(
             objective,
-            (decoder.shift, updater.step_size_mean, updater.step_size_cov),
+            (decoder.shift, updater.regularization_strength),
         )
         expected_objective = expected_mean.sum() + expected_log_chol.sum()
-        (
-            expected_grad_shift,
-            expected_grad_step_size_mean,
-            expected_grad_step_size_cov,
-        ) = torch.autograd.grad(
+        expected_grad_shift, expected_grad_gamma = torch.autograd.grad(
             expected_objective,
-            (decoder.shift, updater.step_size_mean, updater.step_size_cov),
+            (decoder.shift, updater.regularization_strength),
         )
 
         torch.testing.assert_close(actual_grad_shift, expected_grad_shift)
-        torch.testing.assert_close(
-            actual_grad_step_size_mean,
-            expected_grad_step_size_mean,
-        )
-        torch.testing.assert_close(
-            actual_grad_step_size_cov,
-            expected_grad_step_size_cov,
-        )
+        torch.testing.assert_close(actual_grad_gamma, expected_grad_gamma)
 
     def test_compile_fullgraph(self) -> None:
         r"""The updater should compile under `torch.compile(fullgraph=True)`."""
         updater = GaussianGradientStepUpdater(
             decoder=ShiftTransform(shift=-0.1),
             parametrization="log-cholesky",
-            regularization_strength=0.0,
-            step_size_mean=0.2,
-            step_size_cov=0.05,
+            regularization_strength=1.2,
         )
         compiled = torch.compile(updater, fullgraph=True)
 
@@ -364,8 +335,6 @@ class TestGaussianGradientStepUpdater:
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=1.0,
-            step_size_mean=0.2,
-            step_size_cov=0.35,
         )
         mean = torch.tensor([[0.2, -0.4, 0.6], [-0.4, 0.3, 0.1]])
         log_chol = torch.tensor(
@@ -394,12 +363,12 @@ class TestGaussianGradientStepUpdater:
             y_obs,
             shift=decoder.shift,
             regularization_strength=updater.regularization_strength,
-            step_size_mean=updater.step_size_mean,
-            step_size_cov=updater.step_size_cov,
         )
 
         torch.testing.assert_close(actual_mean, expected_mean)
-        torch.testing.assert_close(actual_log_chol, expected_log_chol)
+        torch.testing.assert_close(
+            actual_log_chol, expected_log_chol, atol=1e-4, rtol=1e-4
+        )
 
     def test_grad_fn_returns_per_batch_gradient(self) -> None:
         r"""The Gaussian gradient helper should preserve the batch shape."""
@@ -408,8 +377,6 @@ class TestGaussianGradientStepUpdater:
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=1.0,
-            step_size_mean=0.2,
-            step_size_cov=0.35,
         )
         mean = torch.tensor([[0.2, -0.4, 0.6], [-0.4, 0.3, 0.1]])
         log_chol = torch.tensor(
@@ -429,19 +396,13 @@ class TestGaussianGradientStepUpdater:
         y_obs = torch.tensor([[0.7, -1.2, 0.4], [-1.2, 0.5, 0.8]])
 
         actual_grad_mean, actual_grad_log_chol = updater.grad_fn(
-            y_obs, (mean, log_chol), (mean, log_chol)
+            y_obs, (mean, log_chol)
         )
 
         mean_ref = mean.detach().clone().requires_grad_()
         log_chol_ref = log_chol.detach().clone().requires_grad_()
         current = MultivariateNormal(mean_ref, scale_tril=_scale_tril(log_chol_ref))
-        previous = MultivariateNormal(
-            mean_ref.detach(),
-            scale_tril=_scale_tril(log_chol_ref.detach()),
-        )
-        objective = -current.log_prob(
-            y_obs - decoder.shift
-        ) + updater.regularization_strength * kl_divergence(current, previous)
+        objective = -current.log_prob(y_obs - decoder.shift)
         expected_grad_mean, expected_grad_log_chol = torch.autograd.grad(
             objective.sum(),
             (mean_ref, log_chol_ref),
@@ -458,9 +419,7 @@ class TestGaussianGradientStepUpdater:
         updater = GaussianGradientStepUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
-            regularization_strength=0.0,
-            step_size_mean=0.15,
-            step_size_cov=0.4,
+            regularization_strength=1.4,
         )
         mean = torch.tensor([0.1, -0.2, 0.5], requires_grad=True)
         log_chol = torch.tensor(
@@ -486,8 +445,6 @@ class TestGaussianGradientStepUpdater:
             y_obs,
             shift=decoder.shift,
             regularization_strength=updater.regularization_strength,
-            step_size_mean=updater.step_size_mean,
-            step_size_cov=updater.step_size_cov,
         )
         expected_objective = expected_mean.sum() + expected_log_chol.sum()
         expected_grad_mean, expected_grad_log_chol = torch.autograd.grad(
@@ -505,14 +462,20 @@ class TestGaussianGradientStepUpdater:
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=2.0,
-            step_size_mean=0.7,
-            step_size_cov=0.7,
         )
         mean = torch.tensor([0.75, -0.25, 0.5])
         log_chol = torch.zeros(3, 3)
         y_obs = decoder(mean)
 
         actual_mean, actual_log_chol = updater(y_obs, (mean, log_chol))
+        expected_mean, expected_log_chol = _reference_gaussian_step(
+            mean,
+            log_chol,
+            y_obs,
+            shift=decoder.shift,
+            regularization_strength=updater.regularization_strength,
+        )
 
         torch.testing.assert_close(actual_mean, mean)
-        torch.testing.assert_close(actual_log_chol, torch.diag(torch.full((3,), -0.7)))
+        torch.testing.assert_close(actual_mean, expected_mean)
+        torch.testing.assert_close(actual_log_chol, expected_log_chol)

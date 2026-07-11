@@ -43,8 +43,8 @@ from torch import Tensor, nn
 from linodenet.distributions.gaussian import (
     CovarianceType,
     GaussianParams,
-    kl,
     log_prob,
+    solve_proximal_kl,
 )
 from linodenet.mappings import Transform
 
@@ -216,56 +216,35 @@ class GaussianGradientStepUpdater(
         self,
         *,
         decoder: nn.Module,  # & Transform[Tensor, Tensor]
-        parametrization: str,
+        parametrization: str | CovarianceType,
         regularization_strength: float = 1e-3,
-        step_size: float = 1e-2,
-        step_size_mean: float | None = None,
-        step_size_cov: float | None = None,
     ) -> None:
         super().__init__()
-        if parametrization != CovarianceType.LOG_CHOLESKY:
-            raise NotImplementedError(
-                "Only 'log-cholesky' parametrization is currently supported."
-            )
 
         self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore[assignment]
-        self.parametrization = parametrization
+        self.parametrization = CovarianceType(parametrization)
 
         self.regularization_strength = nn.Parameter(
             torch.as_tensor(regularization_strength)
         )
-        self.step_size_mean = nn.Parameter(
-            torch.as_tensor(step_size if step_size_mean is None else step_size_mean)
-        )
-        self.step_size_cov = nn.Parameter(
-            torch.as_tensor(step_size if step_size_cov is None else step_size_cov)
-        )
-
-    def log_prob(self, vals: Tensor, theta: GaussianParams, /) -> Tensor:
-        r"""Compute the log probability of the input values under the current parameters."""
-        z, logabsdet = self.decoder.encode_and_logabsdet(vals)
-        return log_prob(z, theta, parametrization=self.parametrization) + logabsdet
 
     @partial(torch.func.grad, argnums=2)
     def grad_fn(
         self,
-        y_obs: Tensor,
-        theta: GaussianParams,
-        theta_prev: GaussianParams,
+        y_obs: Tensor,  # (..., e)
+        theta: GaussianParams,  # (..., d), (..., d, d)
         /,
     ) -> Tensor:
-        return (
-            -self.log_prob(y_obs, theta)  # -log q(y∣θ)
-            + (  # λ⋅d(θ, θ₋)
-                self.regularization_strength
-                * kl(theta, theta_prev, parametrization=self.parametrization)
-            )
-        ).sum()  # Note: ∇_θ ∑ᵢ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
+        z, logabsdet = self.decoder.encode_and_logabsdet(y_obs)
+        log_probs = logabsdet + log_prob(z, theta, parametrization=self.parametrization)
+        # Note: ∇_θ ∑ᵢ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
+        return -log_probs.sum()
 
     def forward(self, y_obs: Tensor, theta: GaussianParams, /) -> GaussianParams:
         r"""Return the updated Gaussian parameters $(μ', Σ')$."""
-        mean, cov = theta
-        grad_mean, grad_cov = self.grad_fn(y_obs, theta, theta)
-        mean_post = mean - self.step_size_mean * grad_mean
-        cov_post = cov - self.step_size_cov * grad_cov
-        return mean_post, cov_post
+        return solve_proximal_kl(
+            lambda θ: self.grad_fn(y_obs, θ),
+            theta,
+            gamma=self.regularization_strength,
+            parametrization=self.parametrization,
+        )
