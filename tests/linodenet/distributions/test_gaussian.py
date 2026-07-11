@@ -234,70 +234,68 @@ class TestFisher:
         with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
             fisher((mean, covariance), (mean, covariance), parametrization="unknown")
 
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_inverse_fisher(self, parametrization: CovarianceType) -> None:
+        r"""Test that the inverse Fisher operator inverts the Fisher operator."""
+        batch_shape = (2, 3)
+        dim = 4
 
-@pytest.mark.parametrize("parametrization", CovarianceType)
-def test_inverse_fisher_inverts_fisher(parametrization: CovarianceType) -> None:
-    r"""Test that the inverse Fisher operator inverts the Fisher operator."""
-    batch_shape = (2, 3)
-    dim = 4
+        mean = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance = factor @ factor.mT + torch.eye(dim)
 
-    mean = torch.randn(*batch_shape, dim)
-    factor = torch.randn(*batch_shape, dim, dim)
-    covariance = factor @ factor.mT + torch.eye(dim)
+        match parametrization:
+            case CovarianceType.COVARIANCE:
+                theta = (mean, covariance)
+                tangent = (
+                    torch.randn(*batch_shape, dim),
+                    _symmetric(torch.randn(*batch_shape, dim, dim)),
+                )
+            case CovarianceType.PRECISION:
+                theta = (mean, torch.linalg.inv(covariance))
+                tangent = (
+                    torch.randn(*batch_shape, dim),
+                    _symmetric(torch.randn(*batch_shape, dim, dim)),
+                )
+            case CovarianceType.CHOLESKY:
+                theta = (mean, torch.linalg.cholesky(covariance))
+                tangent = (
+                    torch.randn(*batch_shape, dim),
+                    torch.tril(torch.randn(*batch_shape, dim, dim)),
+                )
+            case CovarianceType.LOG_CHOLESKY:
+                chol = torch.linalg.cholesky(covariance)
+                theta = (
+                    mean,
+                    chol.tril(diagonal=-1)
+                    + torch.diag_embed(chol.diagonal(dim1=-2, dim2=-1).log()),
+                )
+                tangent = (
+                    torch.randn(*batch_shape, dim),
+                    torch.tril(torch.randn(*batch_shape, dim, dim)),
+                )
+            case _:
+                raise AssertionError(f"Unexpected parametrization {parametrization!r}.")
 
-    match parametrization:
-        case CovarianceType.COVARIANCE:
-            theta = (mean, covariance)
-            tangent = (
-                torch.randn(*batch_shape, dim),
-                _symmetric(torch.randn(*batch_shape, dim, dim)),
+        transported = fisher(theta, tangent, parametrization=parametrization)
+        recovered = inverse_fisher(theta, transported, parametrization=parametrization)
+
+        assert (recovered[0] - tangent[0]).abs().amax() < 1e-5
+        assert (recovered[1] - tangent[1]).abs().amax() < 1e-5
+
+    def test_inverse_fisher_rejects_unknown_parametrization(self) -> None:
+        r"""Test that the public inverse Fisher dispatch rejects unknown parametrizations."""
+        dim = 4
+        mean = torch.randn(dim)
+        factor = torch.randn(dim, dim)
+        covariance = factor @ factor.mT + torch.eye(dim)
+
+        with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
+            inverse_fisher(
+                (mean, covariance),
+                (mean, covariance),
+                parametrization="unknown",
             )
-        case CovarianceType.PRECISION:
-            theta = (mean, torch.linalg.inv(covariance))
-            tangent = (
-                torch.randn(*batch_shape, dim),
-                _symmetric(torch.randn(*batch_shape, dim, dim)),
-            )
-        case CovarianceType.CHOLESKY:
-            theta = (mean, torch.linalg.cholesky(covariance))
-            tangent = (
-                torch.randn(*batch_shape, dim),
-                torch.tril(torch.randn(*batch_shape, dim, dim)),
-            )
-        case CovarianceType.LOG_CHOLESKY:
-            chol = torch.linalg.cholesky(covariance)
-            theta = (
-                mean,
-                chol.tril(diagonal=-1)
-                + torch.diag_embed(chol.diagonal(dim1=-2, dim2=-1).log()),
-            )
-            tangent = (
-                torch.randn(*batch_shape, dim),
-                torch.tril(torch.randn(*batch_shape, dim, dim)),
-            )
-        case _:
-            raise AssertionError(f"Unexpected parametrization {parametrization!r}.")
-
-    transported = fisher(theta, tangent, parametrization=parametrization)
-    recovered = inverse_fisher(theta, transported, parametrization=parametrization)
-
-    assert (recovered[0] - tangent[0]).abs().amax() < 1e-5
-    assert (recovered[1] - tangent[1]).abs().amax() < 1e-5
-
-
-def test_inverse_fisher_rejects_unknown_parametrization() -> None:
-    r"""Test that the public inverse Fisher dispatch rejects unknown parametrizations."""
-    dim = 4
-    mean = torch.randn(dim)
-    factor = torch.randn(dim, dim)
-    covariance = factor @ factor.mT + torch.eye(dim)
-
-    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
-        inverse_fisher(
-            (mean, covariance),
-            (mean, covariance),
-            parametrization="unknown",
-        )
 
 
 class TestArgminProximal:
