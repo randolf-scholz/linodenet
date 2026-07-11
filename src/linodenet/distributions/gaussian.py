@@ -382,13 +382,13 @@ def argmin_proximal_kl(
 
 
 def _solve_s_closed_form(
-    sq_dist: Tensor,
-    gamma_mean: Tensor,
-    gamma_cov: Tensor,
+    sq_dist: Tensor,  # (...)
+    gamma_mean: Tensor,  # (...)
+    gamma_cov: Tensor,  # (...)
     /,
     *,
     use_fp64: bool = True,
-) -> Tensor:
+) -> Tensor:  # (...)
     r"""Solve the forward-KL scalar stationarity equation for the positive branch.
 
     Returns the unique admissible root $s>0$ of
@@ -509,10 +509,8 @@ def argmin_reverse_kl(
     gamma_mu, gamma_sigma = gamma if isinstance(gamma, tuple) else (gamma, gamma)
     γ_μ = torch.as_tensor(gamma_mu, dtype=matrix.dtype, device=matrix.device)
     γ_Σ = torch.as_tensor(gamma_sigma, dtype=matrix.dtype, device=matrix.device)
-    assert γ_μ.shape == (), "Expected gamma_mu to be a scalar."
-    assert γ_Σ.shape == (), "Expected gamma_sigma to be a scalar."
-    assert γ_μ >= 0.0, "requires gamma_mu >= 0"
-    assert γ_Σ > 1.0, "requires gamma_sigma > 1"
+    assert (γ_μ >= 0.0).all(), "requires gamma_mu >= 0"
+    assert (γ_Σ > 1.0).all(), "requires gamma_sigma > 1"
 
     β = (γ_Σ - 1) / γ_Σ
     β_inv = γ_Σ / (γ_Σ - 1)
@@ -532,7 +530,7 @@ def argmin_reverse_kl(
             coefficient = (
                 γ_μ.square() * s_parallel / (γ_Σ * (1 + γ_μ * s_parallel).square())
             )
-            Σ_new = β * Σ + coefficient[..., None, None] * outer
+            Σ_new = β[..., None, None] * Σ + coefficient[..., None, None] * outer
             Σ_new = 0.5 * (Σ_new + Σ_new.mT)
             return μ_new, Σ_new
 
@@ -545,7 +543,7 @@ def argmin_reverse_kl(
             μ_new = μ + mean_scale[..., None] * δ
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
             coefficient = γ_μ.square() / ((γ_Σ - 1) * (1 + γ_μ * s_parallel).square())
-            Λ_new = β_inv * Λ - coefficient[..., None, None] * outer
+            Λ_new = β_inv[..., None, None] * Λ - coefficient[..., None, None] * outer
             Λ_new = 0.5 * (Λ_new + Λ_new.mT)
             return μ_new, Λ_new
 
@@ -563,7 +561,7 @@ def argmin_reverse_kl(
             ) / β
             local_cov = I + coefficient[..., None, None] * outer
             local_chol = cholesky(local_cov)
-            chol_post = β.sqrt() * (L @ local_chol)
+            chol_post = β[..., None, None].sqrt() * (L @ local_chol)
             return μ_new, torch.tril(chol_post)
 
         case CovarianceType.LOG_CHOLESKY:
@@ -663,10 +661,8 @@ def argmin_forward_kl(
     gamma_mu, gamma_sigma = gamma if isinstance(gamma, tuple) else (gamma, gamma)
     γ_μ = torch.as_tensor(gamma_mu, dtype=matrix.dtype, device=matrix.device)
     γ_Σ = torch.as_tensor(gamma_sigma, dtype=matrix.dtype, device=matrix.device)
-    assert γ_μ.shape == (), "Expected gamma_mu to be a scalar."
-    assert γ_Σ.shape == (), "Expected gamma_sigma to be a scalar."
-    assert γ_μ >= 0.0, "requires gamma_mu >= 0"
-    assert γ_Σ > 0.0, "requires gamma_sigma > 0"
+    assert (γ_μ >= 0.0).all(), "requires gamma_mu >= 0"
+    assert (γ_Σ > 0.0).all(), "requires gamma_sigma > 0"
 
     η_μ = (1 + γ_μ).reciprocal()
     η_Σ = (1 + γ_Σ).reciprocal()

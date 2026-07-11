@@ -754,6 +754,7 @@ class TestArgminProximalKL:
             argmin_proximal_kl(
                 lambda theta: theta[0].sum() + theta[1].sum(),
                 (mean, covariance),
+                gamma=2.0,
                 parametrization="unknown",
             )
 
@@ -1159,24 +1160,6 @@ class TestArgminReverseKL:
                 z_obs,
                 theta_prior,
                 gamma=gamma,
-                parametrization=parametrization,
-            )
-
-    @pytest.mark.parametrize("parametrization", CovarianceType)
-    def test_rejects_non_scalar_gamma(self, parametrization: CovarianceType) -> None:
-        r"""Test that the exact forward-KL update rejects broadcast gamma tensors."""
-        dim = 4
-        mean_prior = torch.randn(dim)
-        factor = torch.randn(dim, dim)
-        covariance_prior = factor @ factor.mT + torch.eye(dim)
-        z_obs = torch.randn(dim)
-        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
-
-        with pytest.raises(AssertionError, match="scalar"):
-            argmin_reverse_kl(
-                z_obs,
-                theta_prior,
-                gamma=torch.tensor([2.0]),
                 parametrization=parametrization,
             )
 
