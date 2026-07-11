@@ -31,7 +31,9 @@ Note:
 """
 
 __all__ = [
+    "argmin_reverse_kl",
     "argmin_proximal_kl",
+    "solve_proximal_kl",
     "fisher",
     "inverse_fisher",
     "kl",
@@ -70,6 +72,52 @@ class CovarianceType(StrEnum):
     # possible further parametrizatrions:
     # - exp(S), S symmetric  (matrix exp)
     # - diag(σ) + UUᵀ  (low rank perturbation)
+
+    def to_covariance(self, theta: GaussianParams, /) -> GaussianParams:
+        r"""Return Gaussian parameters in covariance parametrization."""
+        mean, matrix = theta
+
+        match self:
+            case CovarianceType.COVARIANCE:
+                return mean, matrix
+
+            case CovarianceType.PRECISION:
+                return mean, cholesky_inverse(cholesky(matrix))
+
+            case CovarianceType.CHOLESKY:
+                return mean, matrix @ matrix.mT
+
+            case CovarianceType.LOG_CHOLESKY:
+                chol = matrix.tril(diagonal=-1) + torch.diag_embed(
+                    matrix.diagonal(dim1=-2, dim2=-1).exp()
+                )
+                return mean, chol @ chol.mT
+
+            case other:
+                assert_never(other)
+
+    def from_covariance(self, theta: GaussianParams, /) -> GaussianParams:
+        r"""Return covariance-parametrized Gaussian parameters in this form."""
+        mean, covariance = theta
+
+        match self:
+            case CovarianceType.COVARIANCE:
+                return mean, covariance
+
+            case CovarianceType.PRECISION:
+                return mean, cholesky_inverse(cholesky(covariance))
+
+            case CovarianceType.CHOLESKY:
+                return mean, cholesky(covariance)
+
+            case CovarianceType.LOG_CHOLESKY:
+                chol = cholesky(covariance)
+                return mean, chol.tril(diagonal=-1) + torch.diag_embed(
+                    chol.diagonal(dim1=-2, dim2=-1).log()
+                )
+
+            case other:
+                assert_never(other)
 
 
 def log_prob(
@@ -276,7 +324,7 @@ def argmin_proximal_kl(
 
     This returns the solution of
 
-    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ\kl(p(x∣θ) ∣ p(x∣θ⁎))
+    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ\kl(p(x∣θ), p(x∣θ⁎))
 
     where $θ$ is interpreted according to `parametrization` and $p(x∣θ) = 𝓝(μ, Σ)$.
 
@@ -297,6 +345,45 @@ def argmin_proximal_kl(
         gamma=gamma,
         parametrization=parametrization,
     )
+
+
+def argmin_reverse_kl(
+    z: Tensor,  # (..., d)
+    theta: GaussianParams,  # (..., d), (..., d, d)
+    /,
+    *,
+    gamma: Tensor | float,
+    parametrization: str = "covariance",
+) -> GaussianParams:  # (..., d), (..., d, d)
+    r"""Return the exact Gaussian minimizer of NLL plus reverse-KL anchoring.
+
+    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ\kl(𝓝(θ), 𝓝(θ₋))
+
+    where $θ₋$ is the input `theta`, interpreted according to `parametrization`,
+    that is by default $θ=(μ, Σ)$.
+
+    The closed-form solution is evaluated in covariance coordinates and then
+    mapped back to the requested parametrization. A finite minimizer exists only
+    for $γ > 0$.
+
+    Args:
+        z: Observation already pulled back to latent space.
+        theta: Prior Gaussian parameters in the selected parametrization.
+        gamma: Reverse-KL regularization strength, must be positive.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
+    """
+    parametrization = CovarianceType(parametrization)
+    mean_prior, cov_prior = parametrization.to_covariance(theta)
+    gamma = torch.as_tensor(gamma, dtype=cov_prior.dtype, device=cov_prior.device)
+
+    eta = (1 + gamma).reciprocal()
+    delta = z - mean_prior
+    outer = torch.einsum("...i, ...j -> ...ij", delta, delta)
+
+    mean_post = mean_prior + eta * delta
+    cov_post = (1 - eta) * cov_prior + (eta * (1 - eta)) * outer
+
+    return parametrization.from_covariance((mean_post, cov_post))
 
 
 def fisher(
