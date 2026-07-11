@@ -157,129 +157,150 @@ def test_log_prob_matches_torch_distribution(
     assert torch.allclose(actual, expected)
 
 
-def test_fisher_matches_covariance_kl_curvature() -> None:
-    r"""Test the covariance Fisher metric against the local KL curvature."""
-    batch_shape = (2, 3)
+def test_log_prob_rejects_unknown_parametrization() -> None:
+    r"""Test that the public log-density dispatch rejects unknown parametrizations."""
     dim = 4
-
-    mean = torch.randn(*batch_shape, dim)
-    factor = torch.randn(*batch_shape, dim, dim)
+    mean = torch.randn(dim)
+    factor = torch.randn(dim, dim)
     covariance = factor @ factor.mT + torch.eye(dim)
 
-    delta_mean = torch.randn(*batch_shape, dim)
-    delta_covariance = _symmetric(torch.randn(*batch_shape, dim, dim))
+    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
+        log_prob(mean, (mean, covariance), parametrization="unknown")
 
-    expected = _parameter_inner_product(
-        (delta_mean, delta_covariance),
-        fisher((mean, covariance), (delta_mean, delta_covariance)),
-    ).sum()
 
-    actual = _directional_second_derivative(
-        lambda t: kl(
-            (mean + t * delta_mean, covariance + t * delta_covariance),
-            (mean, covariance),
+class TestFisher:
+    r"""Tests for the Fisher operator."""
+
+    def test_matches_covariance_kl_curvature(self) -> None:
+        r"""Test the covariance Fisher metric against the local KL curvature."""
+        batch_shape = (2, 3)
+        dim = 4
+
+        mean = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance = factor @ factor.mT + torch.eye(dim)
+
+        delta_mean = torch.randn(*batch_shape, dim)
+        delta_covariance = _symmetric(torch.randn(*batch_shape, dim, dim))
+
+        expected = _parameter_inner_product(
+            (delta_mean, delta_covariance),
+            fisher((mean, covariance), (delta_mean, delta_covariance)),
         ).sum()
-    )
 
-    assert torch.allclose(actual, expected)
+        actual = _directional_second_derivative(
+            lambda t: kl(
+                (mean + t * delta_mean, covariance + t * delta_covariance),
+                (mean, covariance),
+            ).sum()
+        )
 
+        assert torch.allclose(actual, expected)
 
-def test_fisher_precision_matches_kl_curvature() -> None:
-    r"""Test the precision Fisher metric against the local KL curvature."""
-    batch_shape = (2, 3)
-    dim = 4
+    def test_precision_matches_kl_curvature(self) -> None:
+        r"""Test the precision Fisher metric against the local KL curvature."""
+        batch_shape = (2, 3)
+        dim = 4
 
-    mean = torch.randn(*batch_shape, dim)
-    factor = torch.randn(*batch_shape, dim, dim)
-    covariance = factor @ factor.mT + torch.eye(dim)
-    precision = torch.linalg.inv(covariance)
+        mean = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance = factor @ factor.mT + torch.eye(dim)
+        precision = torch.linalg.inv(covariance)
 
-    delta_mean = torch.randn(*batch_shape, dim)
-    delta_precision = _symmetric(torch.randn(*batch_shape, dim, dim))
+        delta_mean = torch.randn(*batch_shape, dim)
+        delta_precision = _symmetric(torch.randn(*batch_shape, dim, dim))
 
-    expected = _parameter_inner_product(
-        (delta_mean, delta_precision),
-        fisher(
-            (mean, precision),
+        expected = _parameter_inner_product(
             (delta_mean, delta_precision),
-            parametrization="precision",
-        ),
-    ).sum()
-
-    actual = _directional_second_derivative(
-        lambda t: kl(
-            (mean + t * delta_mean, precision + t * delta_precision),
-            (mean, precision),
-            parametrization="precision",
+            fisher(
+                (mean, precision),
+                (delta_mean, delta_precision),
+                parametrization="precision",
+            ),
         ).sum()
-    )
 
-    assert torch.allclose(actual, expected)
+        actual = _directional_second_derivative(
+            lambda t: kl(
+                (mean + t * delta_mean, precision + t * delta_precision),
+                (mean, precision),
+                parametrization="precision",
+            ).sum()
+        )
 
+        assert torch.allclose(actual, expected)
 
-def test_fisher_cholesky_matches_kl_curvature() -> None:
-    r"""Test the Cholesky Fisher metric against the local KL curvature."""
-    batch_shape = (2, 3)
-    dim = 4
+    def test_cholesky_matches_kl_curvature(self) -> None:
+        r"""Test the Cholesky Fisher metric against the local KL curvature."""
+        batch_shape = (2, 3)
+        dim = 4
 
-    mean = torch.randn(*batch_shape, dim)
-    factor = torch.randn(*batch_shape, dim, dim)
-    covariance = factor @ factor.mT + torch.eye(dim)
-    chol = torch.linalg.cholesky(covariance)
+        mean = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance = factor @ factor.mT + torch.eye(dim)
+        chol = torch.linalg.cholesky(covariance)
 
-    delta_mean = torch.randn(*batch_shape, dim)
-    delta_chol = torch.tril(torch.randn(*batch_shape, dim, dim))
+        delta_mean = torch.randn(*batch_shape, dim)
+        delta_chol = torch.tril(torch.randn(*batch_shape, dim, dim))
 
-    expected = _parameter_inner_product(
-        (delta_mean, delta_chol),
-        fisher((mean, chol), (delta_mean, delta_chol), parametrization="cholesky"),
-    ).sum()
-
-    actual = _directional_second_derivative(
-        lambda t: kl(
-            (mean + t * delta_mean, chol + t * delta_chol),
-            (mean, chol),
-            parametrization="cholesky",
+        expected = _parameter_inner_product(
+            (delta_mean, delta_chol),
+            fisher((mean, chol), (delta_mean, delta_chol), parametrization="cholesky"),
         ).sum()
-    )
 
-    assert torch.allclose(actual, expected)
+        actual = _directional_second_derivative(
+            lambda t: kl(
+                (mean + t * delta_mean, chol + t * delta_chol),
+                (mean, chol),
+                parametrization="cholesky",
+            ).sum()
+        )
 
+        assert torch.allclose(actual, expected)
 
-def test_fisher_log_cholesky_matches_kl_curvature() -> None:
-    r"""Test the log-Cholesky Fisher metric against the local KL curvature."""
-    batch_shape = (2, 3)
-    dim = 4
+    def test_log_cholesky_matches_kl_curvature(self) -> None:
+        r"""Test the log-Cholesky Fisher metric against the local KL curvature."""
+        batch_shape = (2, 3)
+        dim = 4
 
-    mean = torch.randn(*batch_shape, dim)
-    factor = torch.randn(*batch_shape, dim, dim)
-    covariance = factor @ factor.mT + torch.eye(dim)
-    chol = torch.linalg.cholesky(covariance)
-    log_chol = chol.tril(diagonal=-1) + torch.diag_embed(
-        chol.diagonal(dim1=-2, dim2=-1).log()
-    )
+        mean = torch.randn(*batch_shape, dim)
+        factor = torch.randn(*batch_shape, dim, dim)
+        covariance = factor @ factor.mT + torch.eye(dim)
+        chol = torch.linalg.cholesky(covariance)
+        log_chol = chol.tril(diagonal=-1) + torch.diag_embed(
+            chol.diagonal(dim1=-2, dim2=-1).log()
+        )
 
-    delta_mean = torch.randn(*batch_shape, dim)
-    delta_log_chol = torch.tril(torch.randn(*batch_shape, dim, dim))
+        delta_mean = torch.randn(*batch_shape, dim)
+        delta_log_chol = torch.tril(torch.randn(*batch_shape, dim, dim))
 
-    expected = _parameter_inner_product(
-        (delta_mean, delta_log_chol),
-        fisher(
-            (mean, log_chol),
+        expected = _parameter_inner_product(
             (delta_mean, delta_log_chol),
-            parametrization="log-cholesky",
-        ),
-    ).sum()
-
-    actual = _directional_second_derivative(
-        lambda t: kl(
-            (mean + t * delta_mean, log_chol + t * delta_log_chol),
-            (mean, log_chol),
-            parametrization="log-cholesky",
+            fisher(
+                (mean, log_chol),
+                (delta_mean, delta_log_chol),
+                parametrization="log-cholesky",
+            ),
         ).sum()
-    )
 
-    assert torch.allclose(actual, expected)
+        actual = _directional_second_derivative(
+            lambda t: kl(
+                (mean + t * delta_mean, log_chol + t * delta_log_chol),
+                (mean, log_chol),
+                parametrization="log-cholesky",
+            ).sum()
+        )
+
+        assert torch.allclose(actual, expected)
+
+    def test_rejects_unknown_parametrization(self) -> None:
+        r"""Test that the public Fisher dispatch rejects unknown parametrizations."""
+        dim = 4
+        mean = torch.randn(dim)
+        factor = torch.randn(dim, dim)
+        covariance = factor @ factor.mT + torch.eye(dim)
+
+        with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
+            fisher((mean, covariance), (mean, covariance), parametrization="unknown")
 
 
 @pytest.mark.parametrize(
@@ -333,6 +354,21 @@ def test_inverse_fisher_inverts_fisher(parametrization: str) -> None:
 
     assert (recovered[0] - tangent[0]).abs().amax() < 1e-5
     assert (recovered[1] - tangent[1]).abs().amax() < 1e-5
+
+
+def test_inverse_fisher_rejects_unknown_parametrization() -> None:
+    r"""Test that the public inverse Fisher dispatch rejects unknown parametrizations."""
+    dim = 4
+    mean = torch.randn(dim)
+    factor = torch.randn(dim, dim)
+    covariance = factor @ factor.mT + torch.eye(dim)
+
+    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
+        inverse_fisher(
+            (mean, covariance),
+            (mean, covariance),
+            parametrization="unknown",
+        )
 
 
 class TestArgminProximal:
@@ -681,40 +717,3 @@ class TestArgminProximal:
                 (mean, covariance),
                 parametrization="unknown",
             )
-
-
-def test_fisher_rejects_unknown_parametrization() -> None:
-    r"""Test that the public Fisher dispatch rejects unknown parametrizations."""
-    dim = 4
-    mean = torch.randn(dim)
-    factor = torch.randn(dim, dim)
-    covariance = factor @ factor.mT + torch.eye(dim)
-
-    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
-        fisher((mean, covariance), (mean, covariance), parametrization="unknown")
-
-
-def test_inverse_fisher_rejects_unknown_parametrization() -> None:
-    r"""Test that the public inverse Fisher dispatch rejects unknown parametrizations."""
-    dim = 4
-    mean = torch.randn(dim)
-    factor = torch.randn(dim, dim)
-    covariance = factor @ factor.mT + torch.eye(dim)
-
-    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
-        inverse_fisher(
-            (mean, covariance),
-            (mean, covariance),
-            parametrization="unknown",
-        )
-
-
-def test_log_prob_rejects_unknown_parametrization() -> None:
-    r"""Test that the public log-density dispatch rejects unknown parametrizations."""
-    dim = 4
-    mean = torch.randn(dim)
-    factor = torch.randn(dim, dim)
-    covariance = factor @ factor.mT + torch.eye(dim)
-
-    with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
-        log_prob(mean, (mean, covariance), parametrization="unknown")
