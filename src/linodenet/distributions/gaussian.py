@@ -456,7 +456,7 @@ def argmin_forward_kl(
 
     This returns the exact minimizer of
 
-    .. math::
+    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ)，𝓝(θ₋)) \\
         \argmin_θ -\log 𝓝(z; θ)
         + γ_μ ½(μ - μ₋)ᵀΣ₋⁻¹(μ - μ₋)
         + γ_Σ ½(\tr(ΣΣ₋⁻¹) - \log\det(ΣΣ₋⁻¹) - d)
@@ -594,7 +594,7 @@ def argmin_reverse_kl(
 
     This returns the exact minimizer of
 
-    .. math::
+    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋)，𝓝(θ)) \\
         \argmin_θ -\log 𝓝(z; θ)
         + γ_μ ½(μ - μ₋)ᵀΣ⁻¹(μ - μ₋)
         + γ_Σ ½(\tr(Σ₋Σ⁻¹) - \log\det(Σ₋Σ⁻¹) - d)
