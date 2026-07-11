@@ -6,6 +6,7 @@ from torch import Tensor
 from torch.distributions import MultivariateNormal
 from torch.distributions.kl import kl_divergence
 
+import linodenet.distributions.gaussian as gaussian_utils
 from linodenet.distributions.gaussian import (
     CovarianceType,
     argmin_forward_kl,
@@ -94,6 +95,33 @@ def _solve_forward_kl_parallel_variance_reference(
         lower = torch.where((q > 0) & ~go_left, midpoint, lower)
 
     return torch.where(q > 0, upper, beta)
+
+
+class TestForwardKLSolvers:
+    r"""Tests for the scalar forward-KL cubic solvers."""
+
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
+    def test_closed_form_matches_bisection(self, dtype: torch.dtype) -> None:
+        r"""Test that the closed-form cubic solver matches the bisection solver."""
+        gamma_grid = torch.tensor(
+            [1.0001, 1.001, 1.01, 1.1, 1.7, 2.0, 10.0], dtype=dtype
+        )
+        q_grid = torch.tensor(
+            [0.0, 1e-12, 1e-8, 1e-4, 1e-2, 1.0, 10.0, 1e3, 1e6],
+            dtype=dtype,
+        )
+        gamma_random = 1 + torch.rand(64, dtype=dtype) * 1e3
+        q_random = torch.rand(64, dtype=dtype) * 1e6
+        gamma = torch.cat([gamma_grid, gamma_random])
+        q = torch.cat([q_grid, q_random])
+
+        atol = 2e-4 if dtype is torch.float32 else 1e-10
+        rtol = 1e-6 if dtype is torch.float32 else 1e-12
+
+        for gamma_value in gamma:
+            expected = _solve_forward_kl_parallel_variance_reference(q, gamma_value)
+            actual = gaussian_utils._solve_s_closed_form(gamma_value, q)  # noqa: SLF001
+            assert torch.allclose(actual, expected, atol=atol, rtol=rtol)
 
 
 @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
@@ -1093,7 +1121,7 @@ class TestArgminForwardKL:
         r"""Test that the exact forward-KL update rejects non-admissible gamma."""
         torch.manual_seed(seed)
         dim = 4
-        gamma = torch.tensor(1.0)
+        gamma = 1.0
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -1101,7 +1129,7 @@ class TestArgminForwardKL:
         z_obs = torch.randn(*batch_shape, dim)
         theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
 
-        with pytest.raises(ValueError, match="requires gamma > 1"):
+        with pytest.raises(AssertionError, match="requires gamma > 1"):
             argmin_forward_kl(
                 z_obs,
                 theta_prior,
