@@ -16,6 +16,8 @@ from linodenet.distributions.gaussian import (
 )
 from tests.testing import SEEDS_3
 
+BATCH_SHAPES = [(), (6,), (1, 2, 3)]
+
 
 @pytest.fixture(params=SEEDS_3, ids="seed={}".format)
 def seed(request: pytest.FixtureRequest) -> int:
@@ -49,9 +51,13 @@ def _parameter_inner_product(
     )
 
 
-def test_kl_matches_torch_distribution() -> None:
-    r"""Test the closed-form KL divergence against PyTorch."""
-    batch_shape = (2, 3)
+@pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
+@pytest.mark.parametrize("parametrization", CovarianceType)
+def test_kl_matches_torch_distribution(
+    parametrization: CovarianceType,
+    batch_shape: tuple[int, ...],
+) -> None:
+    r"""Test the closed-form KL divergence against PyTorch across batch shapes."""
     dim = 4
 
     mean_p = torch.randn(*batch_shape, dim)
@@ -71,66 +77,32 @@ def test_kl_matches_torch_distribution() -> None:
         chol_q.diagonal(dim1=-2, dim2=-1).log()
     )
 
-    actual = kl((mean_p, cov_p), (mean_q, cov_q))
-    actual_cholesky = kl(
-        (mean_p, chol_p),
-        (mean_q, chol_q),
-        parametrization="cholesky",
-    )
-    actual_log_cholesky = kl(
-        (mean_p, log_chol_p),
-        (mean_q, log_chol_q),
-        parametrization="log-cholesky",
-    )
+    theta_p = {
+        "covariance": (mean_p, cov_p),
+        "precision": (mean_p, torch.linalg.inv(cov_p)),
+        "cholesky": (mean_p, chol_p),
+        "log-cholesky": (mean_p, log_chol_p),
+    }[parametrization]
+    theta_q = {
+        "covariance": (mean_q, cov_q),
+        "precision": (mean_q, torch.linalg.inv(cov_q)),
+        "cholesky": (mean_q, chol_q),
+        "log-cholesky": (mean_q, log_chol_q),
+    }[parametrization]
+    actual = kl(theta_p, theta_q, parametrization=parametrization)
     expected = kl_divergence(
         MultivariateNormal(mean_p, covariance_matrix=cov_p),
         MultivariateNormal(mean_q, covariance_matrix=cov_q),
     )
 
-    assert torch.allclose(actual, expected)
-    assert torch.allclose(actual_cholesky, expected)
-    assert torch.allclose(actual_log_cholesky, expected)
-
-
-def test_kl_precision_matches_torch_distribution() -> None:
-    r"""Test the precision-parameterized closed-form KL divergence against PyTorch."""
-    batch_shape = (2, 3)
-    dim = 4
-
-    mean_p = torch.randn(*batch_shape, dim)
-    mean_q = torch.randn(*batch_shape, dim)
-
-    factor_p = torch.randn(*batch_shape, dim, dim)
-    factor_q = torch.randn(*batch_shape, dim, dim)
-    eye = torch.eye(dim)
-    cov_p = factor_p @ factor_p.mT + eye
-    cov_q = factor_q @ factor_q.mT + eye
-    precision_p = torch.linalg.inv(cov_p)
-    precision_q = torch.linalg.inv(cov_q)
-
-    actual = kl(
-        (mean_p, precision_p),
-        (mean_q, precision_q),
-        parametrization="precision",
-    )
-    expected = kl_divergence(
-        MultivariateNormal(mean_p, covariance_matrix=cov_p),
-        MultivariateNormal(mean_q, covariance_matrix=cov_q),
-    )
-
+    assert actual.shape == batch_shape
     assert torch.allclose(actual, expected)
 
 
 @pytest.mark.parametrize(
-    ("sample_shape", "batch_shape"),
-    [
-        ((), ()),
-        ((5,), ()),
-        ((), (2, 3)),
-        ((5,), (2, 3)),
-        ((4, 2), (3,)),
-    ],
+    "sample_shape", [(), (5,), (4, 2)], ids="sample_shape={}".format
 )
+@pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
 @pytest.mark.parametrize("parametrization", CovarianceType)
 def test_log_prob_matches_torch_distribution(
     parametrization: CovarianceType,
@@ -177,13 +149,16 @@ def test_log_prob_rejects_unknown_parametrization() -> None:
 class TestFisher:
     r"""Tests for the Fisher operator."""
 
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_matches_kl_curvature(
-        self, seed: int, parametrization: CovarianceType
+        self,
+        seed: int,
+        parametrization: CovarianceType,
+        batch_shape: tuple[int, ...],
     ) -> None:
         r"""Test the Fisher metric against the local KL curvature."""
         torch.manual_seed(seed)
-        batch_shape = (2, 3)
         dim = 4
 
         mean = torch.randn(*batch_shape, dim)
@@ -225,6 +200,7 @@ class TestFisher:
             tangent,
             fisher(theta, tangent, parametrization=parametrization),
         ).sum()
+        actual_tangent = fisher(theta, tangent, parametrization=parametrization)
         actual = _directional_second_derivative(
             lambda t: kl(
                 (mean + t * tangent[0], theta[1] + t * tangent[1]),
@@ -233,6 +209,8 @@ class TestFisher:
             ).sum()
         )
 
+        assert actual_tangent[0].shape == (*batch_shape, dim)
+        assert actual_tangent[1].shape == (*batch_shape, dim, dim)
         assert torch.allclose(actual, expected)
 
     def test_rejects_unknown_parametrization(self) -> None:
@@ -245,11 +223,16 @@ class TestFisher:
         with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
             fisher((mean, covariance), (mean, covariance), parametrization="unknown")
 
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
-    def test_inverse_fisher(self, seed: int, parametrization: CovarianceType) -> None:
+    def test_inverse_fisher(
+        self,
+        seed: int,
+        parametrization: CovarianceType,
+        batch_shape: tuple[int, ...],
+    ) -> None:
         r"""Test that the inverse Fisher operator inverts the Fisher operator."""
         torch.manual_seed(seed)
-        batch_shape = (2, 3)
         dim = 4
 
         mean = torch.randn(*batch_shape, dim)
@@ -292,6 +275,10 @@ class TestFisher:
         transported = fisher(theta, tangent, parametrization=parametrization)
         recovered = inverse_fisher(theta, transported, parametrization=parametrization)
 
+        assert transported[0].shape == (*batch_shape, dim)
+        assert transported[1].shape == (*batch_shape, dim, dim)
+        assert recovered[0].shape == (*batch_shape, dim)
+        assert recovered[1].shape == (*batch_shape, dim, dim)
         assert (recovered[0] - tangent[0]).abs().amax() < 1e-5
         assert (recovered[1] - tangent[1]).abs().amax() < 1e-5
 
