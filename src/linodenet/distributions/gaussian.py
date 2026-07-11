@@ -49,7 +49,7 @@ from typing import Final, Optional, Self, assert_never
 
 import torch
 import torch.nn.functional as F
-from torch import Tensor, distributions as dist, nn
+from torch import Tensor, cholesky_inverse, cholesky_solve, distributions as dist, nn
 from torch.linalg import cholesky, solve_triangular, vecdot
 
 from .base import DistributionBase
@@ -198,9 +198,10 @@ def argmin_proximal_kl(
         gamma: KL regularization strength.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
     """
-    mean, matrix = theta
+    mu, matrix = theta
     gamma = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
     scale = gamma.reciprocal()
+    eps = torch.finfo(matrix.dtype).eps
 
     # (g, G) = ∇_θ f(θ⁎) where g is the mean gradient
     # and G is the covariance/precision/Cholesky gradient.
@@ -209,22 +210,16 @@ def argmin_proximal_kl(
     match CovarianceType(parametrization):
         case CovarianceType.COVARIANCE:
             # μ' = μ - γ⁻¹Σg,  Σ'⁻¹ = Σ⁻¹ + 2γ⁻¹ sym(G).
-            covariance = matrix
-            grad_covariance = 0.5 * (G + G.mT)
-            mean_posterior = mean - torch.einsum(
-                "...ij, ...j -> ...i", covariance, g * scale
-            )
+            cov = matrix
+            G = 0.5 * (G + G.mT)  # project gradient
+            mu_new = mu - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
 
-            chol_prior = cholesky(covariance)
-            precision_prior = torch.cholesky_inverse(chol_prior)
-            candidate_precision = 0.5 * (
-                precision_prior
-                + 2 * grad_covariance * scale
-                + (precision_prior + 2 * grad_covariance * scale).mT
-            )
+            L = cholesky(cov)
+            Λ = cholesky_inverse(L)
+            Λ_new = 0.5 * (Λ + 2 * G * scale + (Λ + 2 * G * scale).mT)
 
             try:
-                chol_precision = cholesky(candidate_precision)
+                Λ_chol = cholesky(Λ_new)
             except RuntimeError as error:
                 raise ValueError(
                     "The covariance-parametrized proximal Gaussian update does "
@@ -232,65 +227,55 @@ def argmin_proximal_kl(
                     "regularizing the covariance gradient."
                 ) from error
 
-            covariance_posterior = torch.cholesky_inverse(chol_precision)
-            return mean_posterior, covariance_posterior
+            cov_new = cholesky_inverse(Λ_chol)
+            return mu_new, cov_new
 
         case CovarianceType.PRECISION:
             # μ' = μ - γ⁻¹Σg,  Λ' = L U diag(2/(1 + √(1 + 8b/γ))) UᵀLᵀ
             # where sym(LᵀGL) = U diag(b) Uᵀ and Λ = LLᵀ.
-            precision = matrix
-            grad_precision = 0.5 * (G + G.mT)
-            chol_prior = cholesky(precision)
-            mean_posterior = mean - torch.cholesky_solve(
-                (g * scale).unsqueeze(-1), chol_prior
-            ).squeeze(-1)
+            Λ = matrix
+            G = 0.5 * (G + G.mT)  # project gradient
+            L = cholesky(Λ)
+            mu_new = mu - cholesky_solve((g * scale).unsqueeze(-1), L).squeeze(-1)
 
-            whitened_gradient = chol_prior.mT @ grad_precision @ chol_prior
-            whitened_gradient = 0.5 * (whitened_gradient + whitened_gradient.mT)
-            eigenvalues, V = torch.linalg.eigh(whitened_gradient)
-            tolerance = (
-                16
-                * torch.finfo(eigenvalues.dtype).eps
-                * eigenvalues.abs().amax(dim=-1, keepdim=True).clamp_min(1)
-            )
-            if torch.any(eigenvalues < -tolerance).item():
+            local_grad = L.mT @ G @ L
+            local_grad = 0.5 * (local_grad + local_grad.mT)
+            eigs, V = torch.linalg.eigh(local_grad)
+            tolerance = 16 * eps * eigs.abs().amax(dim=-1, keepdim=True).clamp_min(1)
+
+            if torch.any(eigs < -tolerance).item():
                 raise ValueError(
                     "The precision-parametrized proximal Gaussian update does "
                     "not admit a finite minimizer. Regularize the precision "
                     "gradient or use the Cholesky parametrization."
                 )
 
-            eigenvalues = eigenvalues.clamp_min(0)
-            spectral_scale = 2 / (1 + torch.sqrt(1 + 8 * eigenvalues * scale))
-            whitened_precision = V @ torch.diag_embed(spectral_scale) @ V.mT
-            precision_posterior = chol_prior @ whitened_precision @ chol_prior.mT
-            precision_posterior = 0.5 * (precision_posterior + precision_posterior.mT)
-            return mean_posterior, precision_posterior
+            eigs = eigs.clamp_min(0)
+            eig_scale = 2 / (1 + torch.sqrt(1 + 8 * eigs * scale))
+            local_prec = V @ torch.diag_embed(eig_scale) @ V.mT
+            Λ_new = L @ local_prec @ L.mT
+            Λ_new = 0.5 * (Λ_new + Λ_new.mT)
+            return mu_new, Λ_new
 
         case CovarianceType.CHOLESKY:
             # μ' = μ - γ⁻¹Σg,  L' = LM with
             # M = tril(-LᵀG/γ, -1) + diag((-a + √(a² + 4γ²))/(2γ)),
             # a = diag(LᵀG).
-            chol = matrix
-            grad_cholesky = torch.tril(G)
-            cov = chol @ chol.mT
-            mean_posterior = mean - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
+            L = matrix
+            G = G.tril()  # project gradient
+            cov = L @ L.mT
+            mu_new = mu - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
 
-            whitened_gradient = chol.mT @ grad_cholesky
-            diagonal_gradient = whitened_gradient.diagonal(dim1=-2, dim2=-1)
-            diagonal_update = (
+            local_grad = L.mT @ G
+            diag_grad = local_grad.diagonal(dim1=-2, dim2=-1)
+            diag_step = (
                 0.5
                 * scale
-                * (
-                    -diagonal_gradient
-                    + torch.sqrt(diagonal_gradient.square() + 4 * gamma.square())
-                )
+                * (-diag_grad + torch.sqrt(diag_grad.square() + 4 * gamma.square()))
             )
-            whitened_cholesky = torch.tril(
-                -whitened_gradient * scale, diagonal=-1
-            ) + torch.diag_embed(diagonal_update)
-            cholesky_posterior = torch.tril(chol @ whitened_cholesky)
-            return mean_posterior, cholesky_posterior
+            local_chol = torch.diag_embed(diag_step) - scale * local_grad.tril(-1)
+            chol_new = torch.tril(L @ local_chol)
+            return mu_new, chol_new
 
         case CovarianceType.LOG_CHOLESKY:
             # μ' = μ - γ⁻¹Σg,  X' = logchol(LW) with
@@ -298,54 +283,45 @@ def argmin_proximal_kl(
             # wᵢᵢ = (-aᵢ + √(aᵢ² + 4γ(γ-gᵢ)))/(2γ),
             # a = diag(LᵀGₗ), g = diag(G), Gₗ = tril(G, -1).
             log_chol = matrix
-            chol = log_chol.tril(diagonal=-1) + torch.diag_embed(
+            L = log_chol.tril(diagonal=-1) + torch.diag_embed(
                 log_chol.diagonal(dim1=-2, dim2=-1).exp()
             )
-            cov = chol @ chol.mT
-            mean_posterior = mean - torch.einsum("...ij,...j->...i", cov, g * scale)
+            cov = L @ L.mT
+            mu_new = mu - torch.einsum("...ij,...j->...i", cov, g * scale)
 
-            grad_log_cholesky = torch.tril(G)
-            grad_off_diagonal = torch.tril(grad_log_cholesky, diagonal=-1)
-            diagonal_gradient = grad_log_cholesky.diagonal(dim1=-2, dim2=-1)
-            linear_term = chol.mT @ grad_off_diagonal
-            diagonal_linear = linear_term.diagonal(dim1=-2, dim2=-1)
+            g_log_chol = G.tril()  # project gradient
+            g_off = torch.tril(g_log_chol, diagonal=-1)
+            diag_grad = g_log_chol.diagonal(dim1=-2, dim2=-1)
+            lin = L.mT @ g_off
+            diag_lin = lin.diagonal(dim1=-2, dim2=-1)
 
-            eps = torch.finfo(chol.dtype).eps
             tolerance = (
-                16
-                * eps
-                * (
-                    gamma.abs() + diagonal_gradient.abs() + diagonal_linear.abs()
-                ).clamp_min(1)
+                16 * eps * (gamma.abs() + diag_grad.abs() + diag_lin.abs()).clamp_min(1)
             )
-            if torch.any(diagonal_gradient > gamma + tolerance).item():
+
+            if torch.any(diag_grad > gamma + tolerance).item():
                 raise ValueError(
                     "The log-Cholesky-parametrized proximal Gaussian update does "
                     "not admit a finite minimizer. Try increasing gamma or "
                     "regularizing the diagonal log-Cholesky gradient."
                 )
 
-            radicand = diagonal_linear.square() + 4 * gamma * (
-                gamma - diagonal_gradient
-            )
-            diagonal_update = (
-                0.5 * scale * (-diagonal_linear + torch.sqrt(radicand.clamp_min(0)))
-            )
-            if torch.any(diagonal_update <= tolerance).item():
+            radicand = diag_lin.square() + 4 * gamma * (gamma - diag_grad)
+            diag_step = 0.5 * scale * (-diag_lin + torch.sqrt(radicand.clamp_min(0)))
+
+            if torch.any(diag_step <= tolerance).item():
                 raise ValueError(
                     "The log-Cholesky-parametrized proximal Gaussian update does "
                     "not admit a finite minimizer. Try increasing gamma or "
                     "regularizing the diagonal log-Cholesky gradient."
                 )
 
-            whitened_cholesky = torch.tril(
-                -linear_term * scale, diagonal=-1
-            ) + torch.diag_embed(diagonal_update)
-            cholesky_posterior = torch.tril(chol @ whitened_cholesky)
-            log_cholesky_posterior = cholesky_posterior.tril(
-                diagonal=-1
-            ) + torch.diag_embed(cholesky_posterior.diagonal(dim1=-2, dim2=-1).log())
-            return mean_posterior, log_cholesky_posterior
+            local_chol = torch.diag_embed(diag_step) - scale * lin.tril(-1)
+            chol_new = torch.tril(L @ local_chol)
+            log_chol_new = chol_new.tril(diagonal=-1) + torch.diag_embed(
+                chol_new.diagonal(dim1=-2, dim2=-1).log()
+            )
+            return mu_new, log_chol_new
 
         case _:
             raise ValueError(
@@ -379,67 +355,57 @@ def fisher(
     match CovarianceType(parametrization):
         case CovarianceType.COVARIANCE:
             # F(δμ, δΣ) = (Σ⁻¹δμ, ½Σ⁻¹ sym(δΣ) Σ⁻¹).
-            _, covariance = theta
-            tangent_mean, tangent_covariance = tangent
-            precision = torch.cholesky_inverse(cholesky(covariance))
+            _, cov = theta
+            d_mu, d_cov = tangent
+            prec = cholesky_inverse(cholesky(cov))
             return (
-                torch.einsum("...ij,...j->...i", precision, tangent_mean),
-                0.25
-                * precision
-                @ (tangent_covariance + tangent_covariance.mT)
-                @ precision,
+                torch.einsum("...ij,...j->...i", prec, d_mu),
+                0.25 * prec @ (d_cov + d_cov.mT) @ prec,
             )
 
         case CovarianceType.PRECISION:
             # F(δμ, δΛ) = (Λδμ, ½Σ sym(δΛ) Σ), where Σ = Λ⁻¹.
-            _, precision = theta
-            tangent_mean, tangent_precision = tangent
-            covariance = torch.cholesky_inverse(cholesky(precision))
+            _, prec = theta
+            d_mu, d_prec = tangent
+            cov = cholesky_inverse(cholesky(prec))
             return (
-                torch.einsum("...ij,...j->...i", precision, tangent_mean),
-                0.25
-                * covariance
-                @ (tangent_precision + tangent_precision.mT)
-                @ covariance,
+                torch.einsum("...ij,...j->...i", prec, d_mu),
+                0.25 * cov @ (d_prec + d_prec.mT) @ cov,
             )
 
         case CovarianceType.CHOLESKY:
             # F(δμ, δL) = (Σ⁻¹δμ, L⁻ᵀ(L⁻¹δL + diag(L⁻¹δL))) for lower-triangular δL.
-            _, chol = theta
-            tangent_mean, tangent_cholesky = tangent
-            precision = torch.cholesky_inverse(chol)
-            whitened = solve_triangular(chol, tangent_cholesky, upper=False)
-            diag = torch.diag_embed(whitened.diagonal(dim1=-2, dim2=-1))
+            _, L = theta
+            d_mu, d_chol = tangent
+            prec = cholesky_inverse(L)
+            local_chol = solve_triangular(L, d_chol, upper=False)
+            diag = torch.diag_embed(local_chol.diagonal(dim1=-2, dim2=-1))
             return (
-                torch.einsum("...ij,...j->...i", precision, tangent_mean),
-                torch.cholesky_solve(tangent_cholesky + chol @ diag, chol),
+                torch.einsum("...ij,...j->...i", prec, d_mu),
+                cholesky_solve(d_chol + L @ diag, L),
             )
 
         case CovarianceType.LOG_CHOLESKY:
             # F(δμ, δX) = (Σ⁻¹δμ, JₓᵀF_L(JₓδX)),
             # JₓδX = tril(δX, -1) + diag(Lᵢᵢ δxᵢᵢ).
             mean, log_chol = theta
-            tangent_mean, tangent_log_cholesky = tangent
-            chol = log_chol.tril(diagonal=-1) + torch.diag_embed(
+            d_mu, d_log_chol = tangent
+            L = log_chol.tril(diagonal=-1) + torch.diag_embed(
                 log_chol.diagonal(dim1=-2, dim2=-1).exp()
             )
-            diagonal = chol.diagonal(dim1=-2, dim2=-1)
-            tangent_cholesky = tangent_log_cholesky.tril(
-                diagonal=-1
-            ) + torch.diag_embed(
-                diagonal * tangent_log_cholesky.diagonal(dim1=-2, dim2=-1)
+            diag = L.diagonal(dim1=-2, dim2=-1)
+            d_chol = d_log_chol.tril(diagonal=-1) + torch.diag_embed(
+                diag * d_log_chol.diagonal(dim1=-2, dim2=-1)
             )
-            cotangent_mean, cotangent_cholesky = fisher(
-                (mean, chol),
-                (tangent_mean, tangent_cholesky),
+            g_mu, g_chol = fisher(
+                (mean, L),
+                (d_mu, d_chol),
                 parametrization="cholesky",
             )
             return (
-                cotangent_mean,
-                cotangent_cholesky.tril(diagonal=-1)
-                + torch.diag_embed(
-                    diagonal * cotangent_cholesky.diagonal(dim1=-2, dim2=-1)
-                ),
+                g_mu,
+                g_chol.tril(diagonal=-1)
+                + torch.diag_embed(diag * g_chol.diagonal(dim1=-2, dim2=-1)),
             )
 
         case _:
@@ -474,65 +440,59 @@ def inverse_fisher(
     match CovarianceType(parametrization):
         case CovarianceType.COVARIANCE:
             # F⁻¹(g, G) = (Σg, 2Σ sym(G) Σ).
-            _, covariance = theta
-            cotangent_mean, cotangent_covariance = cotangent
+            _, cov = theta
+            g_mu, g_cov = cotangent
             return (
-                torch.einsum("...ij,...j->...i", covariance, cotangent_mean),
-                covariance
-                @ (cotangent_covariance + cotangent_covariance.mT)
-                @ covariance,
+                torch.einsum("...ij,...j->...i", cov, g_mu),
+                cov @ (g_cov + g_cov.mT) @ cov,
             )
 
         case CovarianceType.PRECISION:
             # F⁻¹(g, G) = (Σg, 2Λ sym(G) Λ), where Σ = Λ⁻¹.
-            _, precision = theta
-            cotangent_mean, cotangent_precision = cotangent
+            _, prec = theta
+            g_mu, g_prec = cotangent
             return (
                 torch.einsum(
                     "...ij,...j->...i",
-                    torch.cholesky_inverse(cholesky(precision)),
-                    cotangent_mean,
+                    cholesky_inverse(cholesky(prec)),
+                    g_mu,
                 ),
-                precision @ (cotangent_precision + cotangent_precision.mT) @ precision,
+                prec @ (g_prec + g_prec.mT) @ prec,
             )
 
         case CovarianceType.CHOLESKY:
             # F⁻¹(g, G) = (Σg, L(tril(LᵀG) - ½diag(LᵀG))).
-            _, chol = theta
-            cotangent_mean, cotangent_cholesky = cotangent
-            mixed = chol.mT @ cotangent_cholesky
-            diag = torch.diag_embed(mixed.diagonal(dim1=-2, dim2=-1))
-            whitened = torch.tril(mixed) - 0.5 * diag
+            _, L = theta
+            g_mu, g_chol = cotangent
+            LtG = L.mT @ g_chol
+            diag = torch.diag_embed(LtG.diagonal(dim1=-2, dim2=-1))
+            local_chol = torch.tril(LtG) - 0.5 * diag
             return (
-                torch.einsum("...ij,...j->...i", chol @ chol.mT, cotangent_mean),
-                chol @ whitened,
+                torch.einsum("...ij,...j->...i", L @ L.mT, g_mu),
+                L @ local_chol,
             )
 
         case CovarianceType.LOG_CHOLESKY:
             # F⁻¹(g, G) = (Σg, Jₓ⁻¹F_L⁻¹(Jₓ^{-ᵀ}G)),
             # Jₓ⁻¹ΔL = tril(ΔL, -1) + diag(ΔLᵢᵢ / Lᵢᵢ).
             mean, log_chol = theta
-            cotangent_mean, cotangent_log_cholesky = cotangent
-            chol = log_chol.tril(diagonal=-1) + torch.diag_embed(
+            g_mu, g_log_chol = cotangent
+            L = log_chol.tril(diagonal=-1) + torch.diag_embed(
                 log_chol.diagonal(dim1=-2, dim2=-1).exp()
             )
-            diagonal = chol.diagonal(dim1=-2, dim2=-1)
-            cotangent_cholesky = cotangent_log_cholesky.tril(
-                diagonal=-1
-            ) + torch.diag_embed(
-                cotangent_log_cholesky.diagonal(dim1=-2, dim2=-1) / diagonal
+            diag = L.diagonal(dim1=-2, dim2=-1)
+            g_chol = g_log_chol.tril(diagonal=-1) + torch.diag_embed(
+                g_log_chol.diagonal(dim1=-2, dim2=-1) / diag
             )
-            tangent_mean, tangent_cholesky = inverse_fisher(
-                (mean, chol),
-                (cotangent_mean, cotangent_cholesky),
+            d_mu, d_chol = inverse_fisher(
+                (mean, L),
+                (g_mu, g_chol),
                 parametrization="cholesky",
             )
             return (
-                tangent_mean,
-                tangent_cholesky.tril(diagonal=-1)
-                + torch.diag_embed(
-                    tangent_cholesky.diagonal(dim1=-2, dim2=-1) / diagonal
-                ),
+                d_mu,
+                d_chol.tril(diagonal=-1)
+                + torch.diag_embed(d_chol.diagonal(dim1=-2, dim2=-1) / diag),
             )
 
         case _:
