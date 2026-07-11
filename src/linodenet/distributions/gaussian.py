@@ -120,40 +120,24 @@ def log_prob(
             assert_never(other)  # pyrefly: ignore[bad-argument-type]
 
 
-def argmin_proximal_kl(
-    fun: Callable[[GaussianParams], Tensor],
-    theta: GaussianParams,
+def solve_proximal_kl(
+    # (..., d), (..., d, d) -> (..., d), (..., d, d)
+    grad_fn: Callable[[GaussianParams], Tensor],
+    theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
     gamma: float | Tensor = 1.0,
     parametrization: str = "covariance",
-) -> GaussianParams:
-    r"""Return the Gaussian KL-proximal minimizer in the chosen parametrization.
+) -> GaussianParams:  # (..., d), (..., d, d)
+    r"""Return the Gaussian KL-proximal solution in the chosen parametrization."""
+    # (g, G) = ∇_θ f(θ⁎) where g is the mean gradient
+    # and G is the covariance/precision/Cholesky gradient.
+    g, G = grad_fn(theta)
 
-    This returns the solution of
-
-    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ\kl(p(x∣θ) ∣ p(x∣θ⁎))
-
-    where $θ$ is interpreted according to `parametrization` and $p(x∣θ) = 𝓝(μ, Σ)$.
-
-    The implementation computes $∇f(θ⁎)$ with `torch.func.grad`
-    and evaluates the exact closed-form minimizer in covariance,
-    precision, Cholesky, or log-Cholesky coordinates.
-
-    Args:
-        fun: Scalar objective function to linearize at `theta`.
-        theta: Linearization point $θ⁎$ in the selected parametrization.
-        gamma: KL regularization strength.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
-    """
     mu, matrix = theta
     gamma = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
     scale = gamma.reciprocal()
     eps = torch.finfo(matrix.dtype).eps
-
-    # (g, G) = ∇_θ f(θ⁎) where g is the mean gradient
-    # and G is the covariance/precision/Cholesky gradient.
-    g, G = torch.func.grad(fun)(theta)
 
     match CovarianceType(parametrization):
         case CovarianceType.COVARIANCE:
@@ -280,13 +264,47 @@ def argmin_proximal_kl(
             )
 
 
-def fisher(
+def argmin_proximal_kl(
+    fun: Callable[[GaussianParams], Tensor],
     theta: GaussianParams,
-    tangent: GaussianParams,
+    /,
+    *,
+    gamma: float | Tensor = 1.0,
+    parametrization: str = "covariance",
+) -> GaussianParams:
+    r"""Return the Gaussian KL-proximal minimizer in the chosen parametrization.
+
+    This returns the solution of
+
+    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ\kl(p(x∣θ) ∣ p(x∣θ⁎))
+
+    where $θ$ is interpreted according to `parametrization` and $p(x∣θ) = 𝓝(μ, Σ)$.
+
+    The implementation computes $∇f(θ⁎)$ with `torch.func.grad`
+    and evaluates the exact closed-form minimizer in covariance,
+    precision, Cholesky, or log-Cholesky coordinates.
+
+    Args:
+        fun: Scalar objective function to linearize at `theta`.
+        theta: Linearization point $θ⁎$ in the selected parametrization.
+        gamma: KL regularization strength.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
+    """
+    return solve_proximal_kl(
+        torch.func.grad(fun),
+        theta,
+        gamma=gamma,
+        parametrization=parametrization,
+    )
+
+
+def fisher(
+    theta: GaussianParams,  # (..., d), (..., d, d)
+    tangent: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
     parametrization: str = "covariance",
-) -> GaussianParams:
+) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Apply the Gaussian Fisher/KL metric in the chosen parametrization.
 
     .. math::
@@ -366,12 +384,12 @@ def fisher(
 
 
 def inverse_fisher(
-    theta: GaussianParams,
-    cotangent: GaussianParams,
+    theta: GaussianParams,  # (..., d), (..., d, d)
+    cotangent: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
     parametrization: str = "covariance",
-) -> GaussianParams:
+) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Apply the inverse Gaussian Fisher/KL metric in the chosen parametrization.
 
     .. math::
@@ -453,12 +471,12 @@ def inverse_fisher(
 
 
 def kl(
-    p: tuple[Tensor, Tensor],
-    q: tuple[Tensor, Tensor],
+    p: GaussianParams,  # (..., d), (..., d, d)
+    q: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
     parametrization: str = "covariance",
-) -> Tensor:
+) -> Tensor:  # (...)
     r"""Return the KL divergence between two Normal Distributions.
 
     Args:
