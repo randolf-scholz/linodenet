@@ -386,37 +386,30 @@ def _solve_s_closed_form(
 ) -> Tensor:
     r"""Solve the forward-KL scalar stationarity equation for the positive branch.
 
-    This returns the admissible root of
+    Returns the unique admissible root $s>0$ of
 
-        (1 − γ_Σ)/s + γ_Σ − γ_μ²q / (1 + γ_μ s)² = 0,
+        (1 − γ_Σ)/s + γ_Σ − γ_μ²·q / (1 + γ_μ·s)² = 0,   γ_μ ≥ 0,  γ_Σ > 1,  q ≥ 0.
 
-    where $γ_μ ≥ 0$, $γ_Σ > 1$, and $q ≥ 0$.
+    For $γ_μ>0$, substituting $u = 1 + γ_μ·s$ gives the monic cubic $u³ + a·u² + b·u − b$,
+    with $β = (γ_Σ − 1)/γ_Σ$, $a = −(1 + γ_μ·β)$, $b = −γ_μ²·q/γ_Σ$. All three roots are
+    real $(f(0) ≥ 0 > f(1))$; the admissible one is the largest, $u > 1$, and
+    $s = (u − 1)/γ_μ$. Depressing with $u = t − a/3$ always yields $p ≤ −1/3 < 0$, so this
+    is the casus irreducibilis and the root is taken from the $k=0$ cosine branch.
 
-    Derivation
-    ----------
-    For $γ_μ > 0$, substituting $u = 1 + γ_μ s$ yields the cubic
+    Note: Small $γ_μ$
+        As $γ_μ → 0$ the mean snaps to the observation and $s → β$. The first-order term of
+        the expansion cancels, leaving $s = β·(1 + γ_μ²·q/γ_Σ) + O(γ_μ⁴)$. This branch is
+        not just a guard for $γ_μ = 0$: since $u → 1$, the exact path computes $(u − 1)/γ_μ$ as
+        a ratio of two vanishing quantities and silently loses $≈ log₁₀(1/γ_μβ)$ digits well
+        before $γ_μ$ underflows. The threshold balances the series truncation error against
+        that cancellation.
 
-        u³ - (1 + γ_μ(γ_Σ - 1)/γ_Σ)u² - (γ_μ²q/γ_Σ)u + γ_μ²q/γ_Σ = 0.
-
-    The admissible root is the largest real root $u > 1$, recovered as
-    $s = (u - 1)/γ_μ$. In the degenerate case $γ_μ = 0$, the mean snaps to the
-    observation and the covariance optimum reduces to the isotropic branch
-    $s = (γ_Σ - 1)/γ_Σ$ directly.
-
-    Depressing the monic cubic $u³ + au² + bu + c = 0$ with $u = t - a/3$ gives
-    $t³ + pt + r = 0$, where
-
-        p = b - a²/3
-        r = 2a³/27 - ab/3 + c.
-
-    In the admissible regime the discriminant is non-positive, so the largest real
-    root is obtained from the trigonometric form of Cardano's solution.
-
-    Notes:
-        The arccos argument is ill-conditioned near ±1, so the interior arithmetic is
-        carried out in float64 regardless of the input dtype and cast back on return;
-        the clamp absorbs the residual float error that can push the argument a few
-        ulp outside [−1, 1].
+    Note:
+        cos θ hits exactly +1 at q = 0 and γ_μ = 0 (two roots coalesce), so the clamp is
+        load-bearing, not defensive — without it rounding past 1 gives NaN. By contrast
+        −p ≥ 1/3 and m³ ≥ 1/27 need no clamping. γ_safe is threaded through a and b, not
+        just the final division, because torch.where backpropagates through both branches
+        and 0 · NaN would poison the gradient.
     """
     q, γ_μ, γ_Σ = torch.broadcast_tensors(mahalanobis, gamma_mean, gamma_cov)
     out_dtype = torch.promote_types(q.dtype, torch.promote_types(γ_μ.dtype, γ_Σ.dtype))
@@ -429,22 +422,26 @@ def _solve_s_closed_form(
     q = q.to(work_dtype)
 
     β = (γ_Σ - 1.0) / γ_Σ
-    γ_μ_safe = torch.where(γ_μ == 0, 1.0, γ_μ)
+
+    # Series branch: exact at γ_μ = 0, second-order accurate nearby.
+    small = γ_μ < torch.finfo(work_dtype).eps ** 0.2  # ≈ 7e-4 (fp64), 4e-2 (fp32)
+    s_series = β * (1.0 + γ_μ.square() * q / γ_Σ)
+
+    γ_μ_safe = torch.where(small, 1.0, γ_μ)
     a = -(1.0 + γ_μ_safe * β)
-    b = -(γ_μ_safe.square() * q) / γ_Σ
+    b = -γ_μ_safe.square() * q / γ_Σ
     c = -b
     p = b - a.square() / 3.0
     r = 2.0 * a.pow(3) / 27.0 - (a * b) / 3.0 + c
 
     # In the admissible regime p < 0, so the largest real root uses the cosine form.
-    m = torch.sqrt((-p).clamp_min(0.0) / 3.0)
-    arg = -r / (2.0 * m.pow(3).clamp_min(torch.finfo(m.dtype).tiny))
-    arg = arg.clamp(-1.0, 1.0)
-    t = 2.0 * m * torch.cos(torch.acos(arg) / 3.0)
+    m = torch.sqrt(-p / 3.0)
+    cos_θ = (-r / (2.0 * m.pow(3))).clamp(-1.0, 1.0)  # hits exactly +1 when q = 0
+    t = 2.0 * m * torch.cos(torch.acos(cos_θ) / 3.0)
     u = t - a / 3.0
-    s = (u - 1.0) / γ_μ_safe
+    s_exact = (u - 1.0) / γ_μ_safe
 
-    return torch.where(γ_μ == 0, β, s).to(dtype=out_dtype)
+    return torch.where(γ_μ == 0, s_series, s_exact).to(dtype=out_dtype)
 
 
 def argmin_forward_kl(
