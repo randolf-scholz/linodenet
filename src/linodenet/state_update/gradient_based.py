@@ -31,6 +31,7 @@ __all__ = [
     "LpLoss",
     "GradientStepUpdater",
     "GaussianKLProximalUpdater",
+    "GaussianReverseKLUpdater",
     "lp_loss",
 ]
 
@@ -43,6 +44,7 @@ from torch import Tensor, nn
 from linodenet.distributions.gaussian import (
     CovarianceType,
     GaussianParams,
+    argmin_reverse_kl,
     log_prob,
     solve_proximal_kl,
 )
@@ -230,15 +232,27 @@ class GaussianKLProximalUpdater(nn.Module, AbstractStateUpdate[GaussianParams, T
         decoder: nn.Module,  # & Transform[Tensor, Tensor]
         parametrization: str | CovarianceType,
         regularization_strength: float = 1e-3,
+        regularization_learnable: bool = True,
     ) -> None:
         super().__init__()
 
         self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore[assignment]
         self.parametrization = CovarianceType(parametrization)
+        strength = torch.as_tensor(regularization_strength)
+        if torch.any(strength <= 0).item():
+            raise ValueError(
+                "Expected regularization_strength to be positive, "
+                f"got {regularization_strength!r}."
+            )
 
-        self.regularization_strength = nn.Parameter(
-            torch.as_tensor(regularization_strength)
+        self.log_regularization_strength = nn.Parameter(
+            strength.log(), requires_grad=regularization_learnable
         )
+
+    @property
+    def regularization_strength(self) -> Tensor:
+        r"""Return the positive KL regularization weight $λ$."""
+        return self.log_regularization_strength.exp()
 
     @partial(torch.func.grad, argnums=2)
     def grad_fn(
@@ -256,6 +270,70 @@ class GaussianKLProximalUpdater(nn.Module, AbstractStateUpdate[GaussianParams, T
         r"""Return the KL-proximal Gaussian update $(μ₊, Σ₊)$."""
         return solve_proximal_kl(
             lambda θ: self.grad_fn(y_obs, θ),
+            theta,
+            gamma=self.regularization_strength,
+            parametrization=self.parametrization,
+        )
+
+
+class GaussianReverseKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
+    r"""Perform an exact Gaussian reverse-KL update of the observation loss.
+
+    Let $θ₋ = (μ₋, Σ₋)$ denote the current latent Gaussian parameters and let
+    $q(y_obs∣θ)$ be the predictive density induced by the decoder. This module
+    solves the exact Gaussian observation update
+
+    .. math::
+        θ₊ = \argmin_θ -\log q(y_obs∣θ) + λ⋅\kl(𝓝(μ₋, Σ₋) ∣ 𝓝(μ, Σ))
+
+    The decoder is used only to pull the observation back into latent space:
+    if $(z, \log | \det Dϕ⁻¹(y_obs) |) = ϕ^{-1}(y_obs)$, then the Jacobian term
+    is constant with respect to $θ$, so the minimizer is exactly
+
+    .. math::
+        θ₊ = \argmin_θ -\log 𝓝(z; θ) + λ⋅\kl(𝓝(μ₋, Σ₋) ∣ 𝓝(μ, Σ))
+
+    which is evaluated in closed form by `argmin_reverse_kl`.
+
+    The parameter ``regularization_strength`` is the reverse-KL weight $λ$:
+
+    - larger $λ$ keeps $θ₊$ closer to $θ₋$
+    - smaller $λ$ lets the observation move the posterior more aggressively
+    """
+
+    def __init__(
+        self,
+        *,
+        decoder: nn.Module,  # & Transform[Tensor, Tensor]
+        parametrization: str | CovarianceType,
+        regularization_strength: float = 1e-3,
+        regularization_learnable: bool = True,
+    ) -> None:
+        super().__init__()
+
+        self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore[assignment]
+        self.parametrization = CovarianceType(parametrization)
+        strength = torch.as_tensor(regularization_strength)
+        if torch.any(strength <= 0).item():
+            raise ValueError(
+                "Expected regularization_strength to be positive, "
+                f"got {regularization_strength!r}."
+            )
+
+        self.log_regularization_strength = nn.Parameter(
+            strength.log(), requires_grad=regularization_learnable
+        )
+
+    @property
+    def regularization_strength(self) -> Tensor:
+        r"""Return the positive reverse-KL regularization weight $λ$."""
+        return self.log_regularization_strength.exp()
+
+    def forward(self, y_obs: Tensor, theta: GaussianParams, /) -> GaussianParams:
+        r"""Return the exact reverse-KL Gaussian update $(μ₊, Σ₊)$."""
+        z, _ = self.decoder.encode_and_logabsdet(y_obs)
+        return argmin_reverse_kl(
+            z,
             theta,
             gamma=self.regularization_strength,
             parametrization=self.parametrization,
