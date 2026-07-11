@@ -951,6 +951,33 @@ class TestArgminReverseKL:
                 parametrization="unknown",
             )
 
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_compile_fullgraph(self, parametrization: CovarianceType) -> None:
+        r"""Test that the exact reverse-KL update compiles with `fullgraph=True`."""
+        dim = 4
+        gamma = torch.tensor(1.7)
+        mean_prior = torch.randn(2, dim)
+        factor = torch.randn(2, dim, dim)
+        covariance_prior = factor @ factor.mT + torch.eye(dim)
+        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
+        z_obs = torch.randn(2, dim)
+
+        def update(z: Tensor, theta: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
+            return argmin_reverse_kl(
+                z,
+                theta,
+                gamma=gamma,
+                parametrization=parametrization,
+            )
+
+        compiled = torch.compile(update, fullgraph=True)
+
+        expected = update(z_obs, theta_prior)
+        actual = compiled(z_obs, theta_prior)
+
+        torch.testing.assert_close(actual[0], expected[0])
+        torch.testing.assert_close(actual[1], expected[1])
+
 
 class TestArgminForwardKL:
     r"""Tests for the exact forward-KL Gaussian update."""
@@ -1170,3 +1197,30 @@ class TestArgminForwardKL:
                 gamma=2.0,
                 parametrization="unknown",
             )
+
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_compile_fullgraph(self, parametrization: CovarianceType) -> None:
+        r"""Test that the exact forward-KL update compiles with `fullgraph=True`."""
+        dim = 4
+        gamma = torch.tensor(1.7)
+        mean_prior = torch.randn(2, dim)
+        factor = torch.randn(2, dim, dim)
+        covariance_prior = factor @ factor.mT + torch.eye(dim)
+        theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
+        z_obs = torch.randn(2, dim)
+
+        def update(z: Tensor, theta: tuple[Tensor, Tensor]) -> tuple[Tensor, Tensor]:
+            return argmin_forward_kl(
+                z,
+                theta,
+                gamma=gamma,
+                parametrization=parametrization,
+            )
+
+        compiled = torch.compile(update, fullgraph=True)
+
+        expected = update(z_obs, theta_prior)
+        actual = compiled(z_obs, theta_prior)
+
+        torch.testing.assert_close(actual[0], expected[0])
+        torch.testing.assert_close(actual[1], expected[1])
