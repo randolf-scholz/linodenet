@@ -581,7 +581,7 @@ def argmin_reverse_kl(
             ) / β
             local_cov = I + coefficient[..., None, None] * outer
             local_chol = cholesky(local_cov)
-            chol_post = β.sqrt() * (L @ local_chol)
+            chol_post = β[..., None, None].sqrt() * (L @ local_chol)
             chol_post = torch.tril(chol_post)
             log_chol_post = chol_post.tril(diagonal=-1) + torch.diag_embed(
                 chol_post.diagonal(dim1=-2, dim2=-1).log()
@@ -667,14 +667,16 @@ def argmin_forward_kl(
     η_μ = (1 + γ_μ).reciprocal()
     η_Σ = (1 + γ_Σ).reciprocal()
     δ = z - μ
-    mean_post = μ + η_μ * δ
+    mean_post = μ + η_μ[..., None] * δ
 
     match parametrization:
         case CovarianceType.COVARIANCE:
             Σ = matrix
-            cov_post = (1 - η_Σ) * Σ + η_Σ * (1 - η_μ) * torch.einsum(
-                "...i, ...j -> ...ij", δ, δ
-            )
+            δδT = torch.einsum("...i, ...j -> ...ij", δ, δ)
+            cov_post = (
+                (1.0 - η_Σ[..., None, None]) * Σ
+                + (η_Σ * (1.0 - η_μ))[..., None, None] * δδT
+            )  # fmt: skip
             return mean_post, cov_post
 
         case CovarianceType.PRECISION:
@@ -682,8 +684,11 @@ def argmin_forward_kl(
             projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
             mahalanobis = vecdot(δ, projected, dim=-1)
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
-            denom = γ_Σ * (1 + γ_μ) + γ_μ * mahalanobis
-            Λ_new = ((1 + γ_Σ) / γ_Σ) * (Λ - γ_μ * outer / denom[..., None, None])
+            denom = γ_Σ * (1.0 + γ_μ) + γ_μ * mahalanobis
+            Λ_new = (
+                ((1.0 + γ_Σ) / γ_Σ)[..., None, None]
+                * (Λ - (γ_μ / denom)[..., None, None] * outer)
+            )  # fmt: skip
             Λ_new = 0.5 * (Λ_new + Λ_new.mT)
             return mean_post, Λ_new
 
@@ -691,10 +696,11 @@ def argmin_forward_kl(
             L = matrix
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
-            coefficient = γ_μ / (γ_Σ * (1 + γ_μ))
-            local_cov = I + coefficient * torch.einsum("...i, ...j -> ...ij", u, u)
+            coef = γ_μ / (γ_Σ * (1.0 + γ_μ))
+            uuT = torch.einsum("...i, ...j -> ...ij", u, u)
+            local_cov = I + coef[..., None, None] * uuT
             local_chol = cholesky(local_cov)
-            chol_post = (1.0 - η_Σ).sqrt() * (L @ local_chol)
+            chol_post = (1.0 - η_Σ[..., None, None]).sqrt() * (L @ local_chol)
             return mean_post, torch.tril(chol_post)
 
         case CovarianceType.LOG_CHOLESKY:
@@ -704,10 +710,11 @@ def argmin_forward_kl(
             )
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
-            coefficient = γ_μ / (γ_Σ * (1 + γ_μ))
-            local_cov = I + coefficient * torch.einsum("...i, ...j -> ...ij", u, u)
+            coef = γ_μ / (γ_Σ * (1.0 + γ_μ))
+            uuT = torch.einsum("...i, ...j -> ...ij", u, u)
+            local_cov = I + coef[..., None, None] * uuT
             local_chol = cholesky(local_cov)
-            chol_post = (1.0 - η_Σ).sqrt() * (L @ local_chol)
+            chol_post = (1.0 - η_Σ[..., None, None]).sqrt() * (L @ local_chol)
             chol_post = torch.tril(chol_post)
             log_chol_post = chol_post.tril(diagonal=-1) + torch.diag_embed(
                 chol_post.diagonal(dim1=-2, dim2=-1).log()

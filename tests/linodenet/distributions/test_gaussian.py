@@ -21,6 +21,7 @@ from linodenet.distributions.gaussian import (
 from tests.testing import SEEDS_3
 
 BATCH_SHAPES = [(), (6,), (1, 2, 3)]
+GAMMA_MODES = ["scalar", "batched", "split-batched"]
 
 
 @pytest.fixture(params=SEEDS_3, ids="seed={}".format)
@@ -53,6 +54,27 @@ def _parameter_inner_product(
     return (left_mean * right_mean).sum(dim=-1) + (left_matrix * right_matrix).sum(
         dim=(-2, -1)
     )
+
+
+def _make_gamma(
+    batch_shape: tuple[int, ...], mode: str, /
+) -> Tensor | tuple[Tensor, Tensor]:
+    r"""Return a shared or split test gamma with optional batch shape."""
+    match mode:
+        case "scalar":
+            return torch.tensor(1.7)
+        case "batched":
+            return torch.full(batch_shape, 1.7) if batch_shape else torch.tensor(1.7)
+        case "split-batched":
+            gamma_mu = (
+                torch.full(batch_shape, 1.3) if batch_shape else torch.tensor(1.3)
+            )
+            gamma_sigma = (
+                torch.full(batch_shape, 2.1) if batch_shape else torch.tensor(2.1)
+            )
+            return gamma_mu, gamma_sigma
+        case other:
+            raise AssertionError(f"Unexpected gamma mode: {other!r}")
 
 
 def _solve_reverse_kl_bisection(q: Tensor, gamma: Tensor, /) -> Tensor:
@@ -763,17 +785,19 @@ class TestArgminForwardKL:
     r"""Tests for the exact forward-KL Gaussian update."""
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
+    @pytest.mark.parametrize("gamma_mode", GAMMA_MODES, ids="gamma={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_matches_covariance_branch(
         self,
         seed: int,
         parametrization: CovarianceType,
         batch_shape: tuple[int, ...],
+        gamma_mode: str,
     ) -> None:
         r"""Test that all parametrizations agree with the covariance update."""
         torch.manual_seed(seed)
         dim = 4
-        gamma = torch.tensor(1.7)
+        gamma = _make_gamma(batch_shape, gamma_mode)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -982,17 +1006,19 @@ class TestArgminReverseKL:
     r"""Tests for the exact reverse-KL Gaussian update."""
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
+    @pytest.mark.parametrize("gamma_mode", GAMMA_MODES, ids="gamma={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_matches_covariance_branch(
         self,
         seed: int,
         parametrization: CovarianceType,
         batch_shape: tuple[int, ...],
+        gamma_mode: str,
     ) -> None:
         r"""Test that all parametrizations agree with the covariance update."""
         torch.manual_seed(seed)
         dim = 4
-        gamma = torch.tensor(1.7)
+        gamma = _make_gamma(batch_shape, gamma_mode)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
