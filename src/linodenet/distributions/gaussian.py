@@ -377,7 +377,7 @@ def argmin_proximal_kl(
 
 
 def _solve_s_closed_form(
-    mahalanobis: Tensor,
+    sq_dist: Tensor,
     gamma_mean: Tensor,
     gamma_cov: Tensor,
     /,
@@ -411,7 +411,7 @@ def _solve_s_closed_form(
         just the final division, because torch.where backpropagates through both branches
         and 0 · NaN would poison the gradient.
     """
-    q, γ_μ, γ_Σ = torch.broadcast_tensors(mahalanobis, gamma_mean, gamma_cov)
+    q, γ_μ, γ_Σ = torch.broadcast_tensors(sq_dist, gamma_mean, gamma_cov)
     out_dtype = torch.promote_types(q.dtype, torch.promote_types(γ_μ.dtype, γ_Σ.dtype))
     work_dtype = (
         torch.float64 if use_fp64 else torch.promote_types(out_dtype, torch.float32)
@@ -424,7 +424,7 @@ def _solve_s_closed_form(
     β = (γ_Σ - 1.0) / γ_Σ
 
     # Series branch: exact at γ_μ = 0, second-order accurate nearby.
-    small = γ_μ < torch.finfo(work_dtype).eps ** 0.2  # ≈ 7e-4 (fp64), 4e-2 (fp32)
+    small = γ_μ < torch.finfo(work_dtype).eps ** 0.25  # ≈ 1e-4 (fp64), 4e-2 (fp32)
     s_series = β * (1.0 + γ_μ.square() * q / γ_Σ)
 
     γ_μ_safe = torch.where(small, 1.0, γ_μ)
@@ -441,7 +441,7 @@ def _solve_s_closed_form(
     u = t - a / 3.0
     s_exact = (u - 1.0) / γ_μ_safe
 
-    return torch.where(γ_μ == 0, s_series, s_exact).to(dtype=out_dtype)
+    return torch.where(small, s_series, s_exact).to(dtype=out_dtype)
 
 
 def argmin_forward_kl(
@@ -513,7 +513,9 @@ def argmin_forward_kl(
             mean_scale = (1 + γ_μ * s_parallel).reciprocal()
             μ_new = μ + mean_scale[..., None] * δ
             outer = torch.einsum("...i, ...j -> ...ij", δ, δ)
-            coefficient = torch.where(q > 0, (s_parallel - β) / q, 0.0)
+            coefficient = (
+                γ_μ.square() * s_parallel / (γ_Σ * (1 + γ_μ * s_parallel).square())
+            )
             Σ_new = β * Σ + coefficient[..., None, None] * outer
             Σ_new = 0.5 * (Σ_new + Σ_new.mT)
             return μ_new, Σ_new
@@ -526,7 +528,7 @@ def argmin_forward_kl(
             mean_scale = (1 + γ_μ * s_parallel).reciprocal()
             μ_new = μ + mean_scale[..., None] * δ
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
-            coefficient = torch.where(q > 0, β_inv * (1 - β / s_parallel) / q, 0.0)
+            coefficient = γ_μ.square() / ((γ_Σ - 1) * (1 + γ_μ * s_parallel).square())
             Λ_new = β_inv * Λ - coefficient[..., None, None] * outer
             Λ_new = 0.5 * (Λ_new + Λ_new.mT)
             return μ_new, Λ_new
@@ -540,7 +542,9 @@ def argmin_forward_kl(
             μ_new = μ + mean_scale[..., None] * δ
             I = torch.eye(dim, dtype=L.dtype, device=L.device)
             outer = torch.einsum("...i, ...j -> ...ij", a, a)
-            coefficient = torch.where(q > 0, (s_parallel - β) / (β * q), 0.0)
+            coefficient = (
+                γ_μ.square() * s_parallel / (γ_Σ * (1 + γ_μ * s_parallel).square())
+            ) / β
             local_cov = I + coefficient[..., None, None] * outer
             local_chol = cholesky(local_cov)
             chol_post = β.sqrt() * (L @ local_chol)
@@ -558,7 +562,9 @@ def argmin_forward_kl(
             μ_new = μ + mean_scale[..., None] * δ
             I = torch.eye(dim, dtype=L.dtype, device=L.device)
             outer = torch.einsum("...i, ...j -> ...ij", a, a)
-            coefficient = torch.where(q > 0, (s_parallel - β) / (β * q), 0.0)
+            coefficient = (
+                γ_μ.square() * s_parallel / (γ_Σ * (1 + γ_μ * s_parallel).square())
+            ) / β
             local_cov = I + coefficient[..., None, None] * outer
             local_chol = cholesky(local_cov)
             chol_post = β.sqrt() * (L @ local_chol)
