@@ -120,8 +120,6 @@ def test_make_linodenet_instantiates_expected_components() -> None:
         state_updater=MappingProxyType(
             {
                 "loss": "l1",
-                "regularizer": "l2",
-                "regularization_strength": 0.25,
                 "step_size": 0.5,
             }
         ),
@@ -140,13 +138,7 @@ def test_make_linodenet_instantiates_expected_components() -> None:
     assert model.state_propagator.bias is not None
     assert model.state_propagator.use_rezero is False
     assert isinstance(model.state_updater.loss, LpLoss)
-    assert isinstance(model.state_updater.regularizer, LpLoss)
     assert model.state_updater.loss.p == 1.0
-    assert model.state_updater.regularizer.p == 2.0
-    torch.testing.assert_close(
-        model.state_updater.regularization_strength.detach(),
-        torch.tensor(0.25),
-    )
     torch.testing.assert_close(
         model.state_updater.step_size.detach(), torch.tensor(0.5)
     )

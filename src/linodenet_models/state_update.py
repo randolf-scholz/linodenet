@@ -172,8 +172,15 @@ class Constant(nn.Module):
 class GradientStepUpdater(nn.Module):
     r"""Single gradient-step updater for latent distribution parameters.
 
-    .. math:: ℒ(z) = ∇₟ℓ(f(z), y) + λ d(z, z₋)
-                z' = z₋ - η∇₟ℒ(z₋)
+    This updater performs a single explicit gradient step on the observation loss:
+
+    .. math:: z₊ = z₋ - η∇₟ℓ(f(z₋), y)
+
+    In this one-step setting, a smooth anchor penalty like $λ⋅d(z, z₋)$ does not
+    influence the step when evaluated at $z = z₋$, because its gradient vanishes at
+    the anchor. The ``regularizer`` and ``regularization_strength`` arguments are
+    therefore kept only for API compatibility and configuration round-tripping; they
+    do not affect the update.
     """
 
     def __init__(
@@ -181,16 +188,11 @@ class GradientStepUpdater(nn.Module):
         *,
         decoder: nn.Module,
         loss: nn.Module | str = "l2",
-        regularizer: nn.Module | str = "l2",
-        regularization_strength: float = 1e-3,
         step_size: float = 1e-2,
     ) -> None:
         super().__init__()
 
         self.decoder = decoder
-        self.regularization_strength = nn.Parameter(
-            torch.as_tensor(regularization_strength)
-        )
         self.step_size = nn.Parameter(torch.as_tensor(step_size))
 
         match loss:
@@ -203,65 +205,41 @@ class GradientStepUpdater(nn.Module):
             case _:
                 raise ValueError(f"Unknown loss: {loss!r}")
 
-        match regularizer:
-            case nn.Module():
-                self.regularizer = regularizer
-            case "l1":
-                self.regularizer = LpLoss(p=1.0)
-            case "l2":
-                self.regularizer = LpLoss(p=2.0)
-            case _:
-                raise ValueError(f"Unknown regularizer: {regularizer!r}")
-
-    @partial(torch.func.vmap, in_dims=(None, 0, 0, 0))
+    @partial(torch.func.vmap, in_dims=(None, 0, 0))
     @partial(torch.func.grad, argnums=2)
     def _grad_fn_no_mask(
         self,
         y: Tensor,  # (B, e)
         x: Tensor,  # (B, d)
-        x_prev: Tensor,  # (B, d)
         /,
     ) -> Tensor:  # (B)
-        return (
-            self.loss(self.decoder(x), y)  # ℓ(f(x), y)
-            + self.regularization_strength * self.regularizer(x, x_prev)  # λ‖x-x₋‖²
-        )
+        return self.loss(self.decoder(x), y)  # ℓ(f(x), y)
 
-    @partial(torch.func.vmap, in_dims=(None, 0, 0, 0, 0))
+    @partial(torch.func.vmap, in_dims=(None, 0, 0, 0))
     @partial(torch.func.grad, argnums=2)
     def _grad_fn_with_mask(
         self,
         y: Tensor,  # (B, e)
         x: Tensor,  # (B, d)
-        x_prev: Tensor,  # (B, d)
         mask: Tensor,  # (B, e)
         /,
     ) -> Tensor:  # (B)
-        return (
-            # ℓ(f(x), y)
-            self.loss(self.decoder(x), y, mask=mask)  # pyright: ignore[reportCallIssue]
-            + self.regularization_strength * self.regularizer(x, x_prev)  # λ⋅‖x-x₋‖²
-        )
+        return self.loss(self.decoder(x), y, mask=mask)  # pyright: ignore[reportCallIssue]
 
-    def grad_fn(
-        self, y: Tensor, x: Tensor, x_prev: Tensor, /, *, mask: Tensor | None = None
-    ) -> Tensor:
+    def grad_fn(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Return the gradient while preserving the input batch shape."""
         y_flat = y.reshape(-1, y.shape[-1])
         x_flat = x.reshape(-1, x.shape[-1])
-        x_prev_flat = x_prev.reshape(-1, x_prev.shape[-1])
 
         grad = (
             self._grad_fn_no_mask(
                 y_flat,
                 x_flat,
-                x_prev_flat,
             )
             if mask is None
             else self._grad_fn_with_mask(
                 y_flat,
                 x_flat,
-                x_prev_flat,
                 mask.reshape(-1, mask.shape[-1]),
             )
         )
@@ -279,7 +257,7 @@ class GradientStepUpdater(nn.Module):
         mask: Tensor | None = None,  # (..., e)
     ) -> Tensor:  # (..., d)
         r"""Compute $x - η∇ₓℒ(x)$ with canonical state-update argument order."""
-        return x - self.step_size * self.grad_fn(y, x, x, mask=mask)
+        return x - self.step_size * self.grad_fn(y, x, mask=mask)
 
 
 class LinearRNNCell(nn.Module):

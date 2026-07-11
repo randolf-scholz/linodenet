@@ -115,8 +115,6 @@ class TestGradientStepUpdater:
         updater = GradientStepUpdater(
             decoder=decoder,
             loss="l2",
-            regularizer="l2",
-            regularization_strength=0.0,
             step_size=0.2,
         )
         z_prev = torch.tensor([1.0, 2.0, -0.5])
@@ -149,14 +147,12 @@ class TestGradientStepUpdater:
         updater = GradientStepUpdater(
             decoder=decoder,
             loss="l2",
-            regularizer="l2",
-            regularization_strength=0.0,
             step_size=0.2,
         )
         z = torch.tensor([[1.0, 2.0, -0.5], [0.5, -1.5, 2.0]])
         y = torch.tensor([[0.5, -1.0, 1.5], [-0.25, 0.75, 1.0]])
 
-        actual = updater.grad_fn(y, z, z)
+        actual = updater.grad_fn(y, z)
 
         d = z.shape[-1]
         weight = decoder.weight.detach()
@@ -170,8 +166,6 @@ class TestGradientStepUpdater:
         updater = GradientStepUpdater(
             decoder=ScaleDecoder(weight=1.3),
             loss="l2",
-            regularizer="l2",
-            regularization_strength=0.0,
             step_size=0.15,
         )
         compiled = torch.compile(updater, fullgraph=True)
@@ -190,8 +184,6 @@ class TestGradientStepUpdater:
         updater = GradientStepUpdater(
             decoder=ScaleDecoder(weight=1.3),
             loss="l2",
-            regularizer="l2",
-            regularization_strength=0.0,
             step_size=0.15,
         )
         compiled = torch.compile(updater, fullgraph=True)
@@ -224,8 +216,6 @@ class TestGradientStepUpdater:
         updater = GradientStepUpdater(
             decoder=decoder,
             loss="l2",
-            regularizer="l2",
-            regularization_strength=0.0,
             step_size=0.3,
         )
         z_prev = torch.tensor([1.0, -2.0, 0.5], requires_grad=True)
@@ -263,8 +253,6 @@ class TestGradientStepUpdater:
         updater = GradientStepUpdater(
             decoder=decoder,
             loss="l2",
-            regularizer="l2",
-            regularization_strength=2.0,
             step_size=0.7,
         )
         z_prev = torch.tensor([0.75, -1.25, 0.5, 2.0])

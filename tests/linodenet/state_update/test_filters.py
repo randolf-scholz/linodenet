@@ -45,8 +45,6 @@ def test_gradient_filter_consistency_with_decoder() -> None:
         input_size=8,
         hidden_size=16,
         loss="l2",
-        regularizer="l2",
-        regularization_strength=2.0,
         step_size=0.7,
     )
 

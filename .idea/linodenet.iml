@@ -12,6 +12,8 @@
       <sourceFolder url="file://$MODULE_DIR$/src/linodenet_special/csrc" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/tests/testing" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/third_party/GraFITi/baseline_experiments/linodenet/latent_linear_odes_with_neural-Supplementary Material/supplementary/linodenet/src" />
+      <sourceFolder url="file://$MODULE_DIR$/third_party/GraFITi/baseline_experiments/linodenet/latent_linear_odes_with_neural-Supplementary Material/supplementary/tsdm/src" />
       <excludeFolder url="file://$MODULE_DIR$/.mypy_cache" />
       <excludeFolder url="file://$MODULE_DIR$/.pytest_cache" />
       <excludeFolder url="file://$MODULE_DIR$/dist" />
@@ -240,6 +242,7 @@
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet_special/reports" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet_special/tests/.benchmarks" />
       <excludeFolder url="file://$MODULE_DIR$/src/linodenet_special/tests/reports" />
+      <excludeFolder url="file://$MODULE_DIR$/third_party" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
     <orderEntry type="jdk" jdkName="uv (linodenet)" jdkType="Python SDK" />
