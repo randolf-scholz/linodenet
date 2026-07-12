@@ -33,8 +33,8 @@ Note:
 __all__ = [
     "argmin_reverse_kl",
     "argmin_forward_kl",
-    "argmin_proximal_kl",
-    "solve_proximal_kl",
+    "argmin_proximal_reverse_kl",
+    "solve_proximal_reverse_kl",
     "fisher",
     "inverse_fisher",
     "kl",
@@ -265,7 +265,7 @@ def log_prob(
             assert_never(other)  # pyrefly: ignore[bad-argument-type]
 
 
-def solve_proximal_kl(
+def solve_proximal_reverse_kl(
     # (..., d), (..., d, d) -> (..., d), (..., d, d)
     grad_fn: Callable[[GaussianParams], GaussianParams],
     theta: GaussianParams,  # (..., d), (..., d, d)
@@ -411,7 +411,7 @@ def solve_proximal_kl(
             )
 
 
-def argmin_proximal_kl(
+def argmin_proximal_reverse_kl(
     loss_fn: Callable[[GaussianParams], Tensor],  # (..., d), (..., d, d) -> (...)
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
@@ -449,7 +449,7 @@ def argmin_proximal_kl(
             In contrast, `argmin_proximal_kl` solves a generic linearized
             forward-KL proximal problem.
     """
-    return solve_proximal_kl(
+    return solve_proximal_reverse_kl(
         # ∇_θ ∑ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
         torch.func.grad(lambda θ: loss_fn(θ).sum()),
         theta,

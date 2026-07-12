@@ -9,13 +9,13 @@ from torch.distributions.kl import kl_divergence
 from linodenet.distributions.gaussian import (
     CovarianceType,
     argmin_forward_kl,
-    argmin_proximal_kl,
+    argmin_proximal_reverse_kl,
     argmin_reverse_kl,
     fisher,
     inverse_fisher,
     kl,
     log_prob,
-    solve_proximal_kl,
+    solve_proximal_reverse_kl,
 )
 from tests.testing import SEEDS_3
 
@@ -708,7 +708,7 @@ class TestArgminProximalKL:
             assert matrix.shape == (*batch_shape, dim, dim)
             return g, grad_mat
 
-        mean_post, matrix_post = solve_proximal_kl(
+        mean_post, matrix_post = solve_proximal_reverse_kl(
             grad_fn,
             theta_prior,
             gamma=gamma,
@@ -883,7 +883,7 @@ class TestArgminProximalKL:
                 mean_tol = 1e-5
                 projected_grad = torch.tril
 
-        mean_post, matrix_post = argmin_proximal_kl(
+        mean_post, matrix_post = argmin_proximal_reverse_kl(
             objective_fn,
             theta_prior,
             gamma=gamma,
@@ -962,7 +962,7 @@ class TestArgminProximalKL:
                     ).sum()
 
         with pytest.raises(ValueError, match="finite minimizer"):
-            argmin_proximal_kl(
+            argmin_proximal_reverse_kl(
                 objective_fn,
                 theta_prior,
                 gamma=gamma,
@@ -977,7 +977,7 @@ class TestArgminProximalKL:
         covariance = factor @ factor.mT + torch.eye(dim)
 
         with pytest.raises(ValueError, match="'unknown' is not a valid CovarianceType"):
-            argmin_proximal_kl(
+            argmin_proximal_reverse_kl(
                 lambda theta: theta[0].sum() + theta[1].sum(),
                 (mean, covariance),
                 gamma=2.0,
