@@ -57,7 +57,7 @@ from torch.linalg import cholesky, solve_triangular, vecdot
 from .base import DistributionBase
 
 type GaussianParams = tuple[Tensor, Tensor]
-type ScalarLike = float | Tensor
+type ScalarLike = Tensor | float
 type GammaArg = ScalarLike | tuple[ScalarLike, ScalarLike]
 type EtaArg = ScalarLike | tuple[ScalarLike, ScalarLike]
 
@@ -92,10 +92,82 @@ class CovarianceType(StrEnum):
                 return mean, matrix @ matrix.mT
 
             case CovarianceType.LOG_CHOLESKY:
-                chol = matrix.tril(diagonal=-1) + torch.diag_embed(
-                    matrix.diagonal(dim1=-2, dim2=-1).exp()
+                chol = (
+                    matrix.tril(diagonal=-1)
+                    + matrix.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
                 )
                 return mean, chol @ chol.mT
+
+            case other:
+                assert_never(other)
+
+    def to_precision(self, theta: GaussianParams, /) -> GaussianParams:
+        r"""Return the precision parametrization."""
+        mean, matrix = theta
+
+        match self:
+            case CovarianceType.COVARIANCE:
+                return mean, cholesky_inverse(cholesky(matrix))
+
+            case CovarianceType.PRECISION:
+                return theta
+
+            case CovarianceType.CHOLESKY:
+                return mean, cholesky_inverse(matrix)
+
+            case CovarianceType.LOG_CHOLESKY:
+                chol = (
+                    matrix.tril(diagonal=-1)
+                    + matrix.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
+                )
+                return mean, cholesky_inverse(chol)
+
+    def to_cholesky(self, theta: GaussianParams, /) -> GaussianParams:
+        r"""Return the Cholesky parametrization."""
+        mean, matrix = theta
+
+        match self:
+            case CovarianceType.COVARIANCE:
+                return mean, cholesky(matrix)
+
+            case CovarianceType.PRECISION:
+                return mean, cholesky_inverse(cholesky(matrix))
+
+            case CovarianceType.CHOLESKY:
+                return theta
+
+            case CovarianceType.LOG_CHOLESKY:
+                return (
+                    mean,
+                    matrix.tril(diagonal=-1)
+                    + matrix.diagonal(dim1=-2, dim2=-1).exp().diag_embed(),
+                )
+
+            case other:
+                assert_never(other)
+
+    def to_log_cholesky(self, theta: GaussianParams, /) -> GaussianParams:
+        r"""Return the log-Cholesky parametrization."""
+        mean, matrix = theta
+
+        match self:
+            case CovarianceType.COVARIANCE:
+                chol = cholesky(matrix)
+                return CovarianceType.CHOLESKY.to_log_cholesky((mean, chol))
+
+            case CovarianceType.PRECISION:
+                chol = cholesky_inverse(cholesky(matrix))
+                return CovarianceType.CHOLESKY.to_log_cholesky((mean, chol))
+
+            case CovarianceType.CHOLESKY:
+                return (
+                    mean,
+                    matrix.diagonal(dim1=-2, dim2=-1).log().diag_embed()
+                    + matrix.tril(diagonal=-1),
+                )
+
+            case CovarianceType.LOG_CHOLESKY:
+                return theta
 
             case other:
                 assert_never(other)
@@ -115,9 +187,10 @@ class CovarianceType(StrEnum):
                 return mean, cholesky(covariance)
 
             case CovarianceType.LOG_CHOLESKY:
-                chol = cholesky(covariance)
-                return mean, chol.tril(diagonal=-1) + torch.diag_embed(
-                    chol.diagonal(dim1=-2, dim2=-1).log()
+                L = cholesky(covariance)
+                return (
+                    mean,
+                    L.tril(-1) + L.diagonal(dim1=-2, dim2=-1).log().diag_embed(),
                 )
 
             case other:
@@ -616,8 +689,9 @@ def argmin_reverse_kl(
             local_chol = cholesky(local_cov)
             chol_post = β[..., None, None].sqrt() * (L @ local_chol)
             chol_post = torch.tril(chol_post)
-            log_chol_post = chol_post.tril(diagonal=-1) + torch.diag_embed(
-                chol_post.diagonal(dim1=-2, dim2=-1).log()
+            log_chol_post = (
+                chol_post.tril(diagonal=-1)
+                + chol_post.diagonal(dim1=-2, dim2=-1).log().diag_embed()
             )
             return μ_new, log_chol_post
 
@@ -634,72 +708,91 @@ def argmin_forward_kl(
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
-    eta: EtaArg,  # scalar or (eta_mu, eta_sigma)
+    eta: ScalarLike | tuple[ScalarLike, ScalarLike],  # eta or (eta_mu, eta_sigma)
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact minimizer of NLL plus separable forward-KL anchoring.
 
     This returns the exact minimizer of
 
-    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋)，𝓝(θ)) \\
-        \argmin_θ -\log 𝓝(z; θ)
+    .. math:: \argmin_θ -\log 𝓝(z; θ)
         + γ_μ ½(μ - μ₋)ᵀΣ⁻¹(μ - μ₋)
         + γ_Σ ½(\tr(Σ₋Σ⁻¹) - \log\det(Σ₋Σ⁻¹) - d)
 
-    where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
-    This function accepts the equivalent interpolation parameters
-    $η_μ = (1 + γ_μ)⁻¹$ and $η_Σ = (1 + γ_Σ)⁻¹$, so for $η > 0$ we have
-    $γ = η⁻¹ - 1 = (1 - η)/η$. Passing a single `eta` ties the weights via
-    $η_μ = η_Σ = η$.
+    the two terms being the exact split of $\kl(𝓝(θ₋) ∥ 𝓝(θ))$ into its location and
+    shape parts (each individually non-negative), so tying $γ_μ = γ_Σ = γ$ recovers
+    $-\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋)，𝓝(θ))$. Here $θ₋$ is the input `theta`, interpreted
+    according to `parametrization`.
 
-    Writing $δ = z - μ₋$, the update in covariance coordinates is
+    Parametrization:
+        Weights are supplied as the interpolation coefficients $η = (1 + γ)⁻¹ ∈ [0, 1]$,
+        equivalently $γ = (1 - η)/η$, because these — not $γ$ — are what the update
+        actually contains, and because the no-op limit sits at the finite point $η = 0$
+        rather than at $γ = ∞$. Passing a single `eta` ties $η_μ = η_Σ = η$.
 
-    - $μ₊ = (1-η_μ)μ₋ + η_μ⋅z$
-    - $Σ₊ = (1 - η_Σ)Σ₋ + η_Σ(1 - η_μ)δδᵀ$
+    Update:
+        Writing $δ = z - μ₋$, the minimizer is an affine interpolation with just two
+        coefficients, $\text{keep} = 1 - η_Σ$ and $\text{gain} = η_Σ(1 - η_μ)$:
 
-    This function uses the structure of the requested parametrization:
+        - $μ₊ = (1 - η_μ)μ₋ + η_μ z$
+        - $Σ₊ = \text{keep}⋅Σ₋ + \text{gain}⋅δδᵀ$
 
-    - `covariance`: update $Σ$ directly via $Σ₊ = (1 - η_Σ)Σ₋ + η_Σ(1 - η_μ)δδᵀ$
-    - `precision`: if $Λ₋ = Σ₋⁻¹$, $v = Λ₋δ$, and $q = δᵀv$, then
-                   $Λ₊ = (1 - η_Σ)⁻¹⋅(Λ₋ - η_Σ(1 - η_μ)vvᵀ / (1 - η_Σ + η_Σ(1 - η_μ)q))$
-    - `cholesky`: if $Σ₋ = LLᵀ$ and $a = L⁻¹δ$, then
-                  $L₊ = √(1 - η_Σ)⋅L\chol(I + η_Σ(1 - η_μ)aaᵀ / (1 - η_Σ))$
-    - `log-cholesky`: compute the Cholesky update above
-                      and then store the diagonal in log form
+        Note $(1 - η_μ)δ = z - μ₊$ is the *posterior* residual: the covariance is driven
+        by the part of the innovation the mean did not absorb. Iterated, this is an EWMA
+        of the sufficient statistics with effective window $1/η$.
+
+        Each parametrization uses its own structure:
+
+        - `covariance`: apply the update directly.
+        - `precision`: with $Λ₋ = Σ₋⁻¹$, $v = Λ₋δ$ and $q = δᵀv$, Sherman-Morrison gives
+          $Λ₊ = \text{keep}⁻¹(Λ₋ - \frac{\text{gain}}{\text{keep} + \text{gain}⋅q}vvᵀ)$.
+          The denominator is bounded below by $\text{keep} > 0$, so no guard is needed.
+        - `cholesky`: with $Σ₋ = L₋L₋ᵀ$ and $a = L₋⁻¹δ$,
+          $L₊ = L₋\chol(\text{keep}⋅I + \text{gain}⋅aaᵀ)$, which is lower-triangular with
+          positive diagonal and hence already the Cholesky factor of $Σ₊$.
+        - `log-cholesky`: as `cholesky`, then store the diagonal in log form.
 
     Args:
-        z: Observation already pulled back to latent space.
-        theta: Prior Gaussian parameters in the selected parametrization.
-        eta: Interpolation strength, either shared or split as $η_μ, η_Σ$.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
+        z: Observation already pulled back to latent space. Any decoder log-Jacobian is
+            constant in $θ$ and therefore does not affect the minimizer.
+        theta: Prior Gaussian parameters $θ₋$ in the selected parametrization.
+        eta: Interpolation strength, shared or split as $(η_μ, η_Σ)$. Broadcast against
+            the batch shape of `theta`, so a per-sample schedule (e.g. $η(Δt)$) is fine.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, `"log-cholesky"`.
 
-    Notes:
-        The mean update admits the full closed interval $η_μ ∈ [0, 1]$, where
-        $η_μ = 0$ is the $γ_μ \to ∞$ identity limit and $η_μ = 1$ is the
-        unregularized mean update. The covariance update requires
-        $η_Σ ∈ [0, 1)$ for a finite positive-definite Gaussian minimizer;
-        $η_Σ = 1$ is only the singular $γ_Σ \to 0$ collapse limit. This
-        function validates those bounds eagerly to preserve
-        `torch.compile(fullgraph=True)` compatibility.
+    Note: Admissible range
+        The mean admits the closed interval $η_μ ∈ [0, 1]$: $η_μ = 0$ is the $γ_μ → ∞$
+        identity and $η_μ = 1$ is the unregularized jump $μ₊ = z$. The covariance requires
+        $η_Σ ∈ [0, 1)$; $η_Σ = 1$ is the $γ_Σ → 0$ limit, where $Σ₊$ degenerates to the
+        rank-one $δδᵀ$ (the single-sample MLE). Both bounds are asserted.
+
+    Note: $η_Σ$ near 1 is ill-conditioned
+        The update needs $\text{keep} = 1 - η_Σ$, so an $η_Σ$ produced as $1 - e^{-rΔt}$
+        loses the retention factor to cancellation for large $rΔt$: in float32,
+        $\text{keep}$ has one significant digit by $rΔt ≈ 16$ and underflows to zero by
+        $rΔt ≈ 18$, making $Σ₊$ numerically singular. Schedules must cap $η_Σ$ (e.g. at
+        $1 - \sqrt{ε}$, a $≈3000{:}1$ forgetting ratio, far beyond any useful setting) or
+        supply the retention $1 - η_Σ$ directly. The $η_μ → 1$ end is benign by contrast:
+        $1 - η_μ$ only ever multiplies into `gain`, which vanishes there anyway.
 
     See Also:
         `argmin_reverse_kl`:
-            Exact minimizer of the Gaussian observation objective
-            $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ₋))$.
-            In contrast, `argmin_forward_kl` uses the opposite KL direction.
+            Same observation term, opposite KL direction,
+            $-\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ) ∥ 𝓝(θ₋))$. That objective has no closed form in
+            $η$ — $γ_μ$ enters through $γ_μ s$ and $γ_Σ$ through $β = (γ_Σ - 1)/γ_Σ$ — so
+            it keeps the $γ$ convention and additionally requires $γ_Σ > 1$. The two
+            signatures are *not* interchangeable.
         `argmin_proximal_kl`:
-            Generic reverse-KL proximal solver for a linearized scalar loss
-            $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ⁎))$.
-            In contrast, `argmin_forward_kl` solves the exact Gaussian
-            observation objective above.
+            Generic reverse-KL proximal solver for a linearized loss,
+            $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\kl(𝓝(θ) ∥ 𝓝(θ⁎))$.
     """
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
     eta_mu, eta_sigma = eta if isinstance(eta, tuple) else (eta, eta)
     η_μ = torch.as_tensor(eta_mu, dtype=matrix.dtype, device=matrix.device)
     η_Σ = torch.as_tensor(eta_sigma, dtype=matrix.dtype, device=matrix.device)
-    assert ((0.0 <= η_μ) & (η_μ <= 1.0)).all(), "requires eta_mu in [0, 1]"  # noqa: SIM300
-    assert ((0.0 <= η_Σ) & (η_Σ < 1.0)).all(), "requires eta_sigma in [0, 1)"  # noqa: SIM300
+    assert ((η_μ >= 0.0) & (η_μ <= 1.0)).all(), "requires eta_mu in [0, 1]"
+    assert ((η_Σ >= 0.0) & (η_Σ < 1.0)).all(), "requires eta_sigma in [0, 1)"
 
     cov_scale = 1.0 - η_Σ
     innovation_scale = η_Σ * (1.0 - η_μ)
@@ -710,11 +803,12 @@ def argmin_forward_kl(
         case CovarianceType.COVARIANCE:
             Σ = matrix
             δδT = torch.einsum("...i, ...j -> ...ij", δ, δ)
-            cov_post = (
+            Σ_new = (
                 cov_scale[..., None, None] * Σ
                 + innovation_scale[..., None, None] * δδT
             )  # fmt: skip
-            return mean_post, cov_post
+            Σ_new = 0.5 * (Σ_new + Σ_new.mT)  # ensure symmetry
+            return mean_post, Σ_new
 
         case CovarianceType.PRECISION:
             Λ = matrix
@@ -723,21 +817,21 @@ def argmin_forward_kl(
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
             denom = cov_scale + innovation_scale * mahalanobis
             Λ_new = (
-                cov_scale.reciprocal()[..., None, None]
+                cov_scale[..., None, None].reciprocal()
                 * (Λ - (innovation_scale / denom)[..., None, None] * outer)
             )  # fmt: skip
-            Λ_new = 0.5 * (Λ_new + Λ_new.mT)
+            Λ_new = 0.5 * (Λ_new + Λ_new.mT)  # ensure symmetry
             return mean_post, Λ_new
 
         case CovarianceType.CHOLESKY:
             L = matrix
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
-            coef = innovation_scale / cov_scale
             uuT = torch.einsum("...i, ...j -> ...ij", u, u)
-            local_cov = I + coef[..., None, None] * uuT
-            local_chol = cholesky(local_cov)
-            chol_post = cov_scale[..., None, None].sqrt() * (L @ local_chol)
+            local_cov = (
+                cov_scale[..., None, None] * I + innovation_scale[..., None, None] * uuT
+            )
+            chol_post = L @ cholesky(local_cov)
             return mean_post, torch.tril(chol_post)
 
         case CovarianceType.LOG_CHOLESKY:
@@ -747,14 +841,14 @@ def argmin_forward_kl(
             )
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
-            coef = innovation_scale / cov_scale
             uuT = torch.einsum("...i, ...j -> ...ij", u, u)
-            local_cov = I + coef[..., None, None] * uuT
-            local_chol = cholesky(local_cov)
-            chol_post = cov_scale[..., None, None].sqrt() * (L @ local_chol)
-            chol_post = torch.tril(chol_post)
-            log_chol_post = chol_post.tril(diagonal=-1) + torch.diag_embed(
-                chol_post.diagonal(dim1=-2, dim2=-1).log()
+            local_cov = (
+                cov_scale[..., None, None] * I + innovation_scale[..., None, None] * uuT
+            )
+            chol_post = L @ cholesky(local_cov)
+            log_chol_post = (
+                chol_post.tril(diagonal=-1)
+                + chol_post.diagonal(dim1=-2, dim2=-1).log().diag_embed()
             )
             return mean_post, log_chol_post
 
