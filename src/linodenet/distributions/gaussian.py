@@ -59,6 +59,7 @@ from .base import DistributionBase
 type GaussianParams = tuple[Tensor, Tensor]
 type ScalarLike = float | Tensor
 type GammaArg = ScalarLike | tuple[ScalarLike, ScalarLike]
+type EtaArg = ScalarLike | tuple[ScalarLike, ScalarLike]
 
 
 _LOG2PI: Final = math.log(2 * math.pi)
@@ -633,7 +634,7 @@ def argmin_forward_kl(
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
-    gamma: GammaArg,  # scalar or (gamma_mu, gamma_sigma)
+    eta: EtaArg,  # scalar or (eta_mu, eta_sigma)
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact minimizer of NLL plus separable forward-KL anchoring.
@@ -646,34 +647,39 @@ def argmin_forward_kl(
         + γ_Σ ½(\tr(Σ₋Σ⁻¹) - \log\det(Σ₋Σ⁻¹) - d)
 
     where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
-    Passing a single `gamma` ties the weights via $γ_μ = γ_Σ = γ$.
+    This function accepts the equivalent interpolation parameters
+    $η_μ = (1 + γ_μ)⁻¹$ and $η_Σ = (1 + γ_Σ)⁻¹$, so for $η > 0$ we have
+    $γ = η⁻¹ - 1 = (1 - η)/η$. Passing a single `eta` ties the weights via
+    $η_μ = η_Σ = η$.
 
-    Writing $δ = z - μ₋$, $η_μ = (1 + γ_μ)⁻¹$, and $η_Σ = (1 + γ_Σ)⁻¹$, the
-    update in covariance coordinates is
+    Writing $δ = z - μ₋$, the update in covariance coordinates is
 
-    - $μ₊ = μ₋ + η_μδ$
+    - $μ₊ = (1-η_μ)μ₋ + η_μ⋅z$
     - $Σ₊ = (1 - η_Σ)Σ₋ + η_Σ(1 - η_μ)δδᵀ$
 
     This function uses the structure of the requested parametrization:
 
     - `covariance`: update $Σ$ directly via $Σ₊ = (1 - η_Σ)Σ₋ + η_Σ(1 - η_μ)δδᵀ$
     - `precision`: if $Λ₋ = Σ₋⁻¹$, $v = Λ₋δ$, and $q = δᵀv$, then
-                   $Λ₊ = ((1 + γ_Σ)/γ_Σ)⋅(Λ₋ - γ_μ vvᵀ / (γ_Σ(1 + γ_μ) + γ_μ q))$
+                   $Λ₊ = (1 - η_Σ)⁻¹⋅(Λ₋ - η_Σ(1 - η_μ)vvᵀ / (1 - η_Σ + η_Σ(1 - η_μ)q))$
     - `cholesky`: if $Σ₋ = LLᵀ$ and $a = L⁻¹δ$, then
-                  $L₊ = √(1 - η_Σ)⋅L\chol(I + γ_μ aaᵀ / (γ_Σ(1 + γ_μ)))$
+                  $L₊ = √(1 - η_Σ)⋅L\chol(I + η_Σ(1 - η_μ)aaᵀ / (1 - η_Σ))$
     - `log-cholesky`: compute the Cholesky update above
                       and then store the diagonal in log form
 
     Args:
         z: Observation already pulled back to latent space.
         theta: Prior Gaussian parameters in the selected parametrization.
-        gamma: Regularization strength, either shared or split as $γ_μ, γ_Σ$.
+        eta: Interpolation strength, either shared or split as $η_μ, η_Σ$.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
 
     Notes:
-        The reverse mean term is finite for $γ_μ ≥ 0$, while the covariance term
-        requires $γ_Σ > 0$. This function eagerly validates float inputs and assumes
-        tensor inputs already satisfy those bounds to preserve
+        The mean update admits the full closed interval $η_μ ∈ [0, 1]$, where
+        $η_μ = 0$ is the $γ_μ \to ∞$ identity limit and $η_μ = 1$ is the
+        unregularized mean update. The covariance update requires
+        $η_Σ ∈ [0, 1)$ for a finite positive-definite Gaussian minimizer;
+        $η_Σ = 1$ is only the singular $γ_Σ \to 0$ collapse limit. This
+        function validates those bounds eagerly to preserve
         `torch.compile(fullgraph=True)` compatibility.
 
     See Also:
@@ -684,19 +690,19 @@ def argmin_forward_kl(
         `argmin_proximal_kl`:
             Generic reverse-KL proximal solver for a linearized scalar loss
             $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ⁎))$.
-            In contrast, `argmin_reverse_kl` solves the exact Gaussian
+            In contrast, `argmin_forward_kl` solves the exact Gaussian
             observation objective above.
     """
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
-    gamma_mu, gamma_sigma = gamma if isinstance(gamma, tuple) else (gamma, gamma)
-    γ_μ = torch.as_tensor(gamma_mu, dtype=matrix.dtype, device=matrix.device)
-    γ_Σ = torch.as_tensor(gamma_sigma, dtype=matrix.dtype, device=matrix.device)
-    assert (γ_μ >= 0.0).all(), "requires gamma_mu >= 0"
-    assert (γ_Σ > 0.0).all(), "requires gamma_sigma > 0"
+    eta_mu, eta_sigma = eta if isinstance(eta, tuple) else (eta, eta)
+    η_μ = torch.as_tensor(eta_mu, dtype=matrix.dtype, device=matrix.device)
+    η_Σ = torch.as_tensor(eta_sigma, dtype=matrix.dtype, device=matrix.device)
+    assert ((0.0 <= η_μ) & (η_μ <= 1.0)).all(), "requires eta_mu in [0, 1]"  # noqa: SIM300
+    assert ((0.0 <= η_Σ) & (η_Σ < 1.0)).all(), "requires eta_sigma in [0, 1)"  # noqa: SIM300
 
-    η_μ = (1 + γ_μ).reciprocal()
-    η_Σ = (1 + γ_Σ).reciprocal()
+    cov_scale = 1.0 - η_Σ
+    innovation_scale = η_Σ * (1.0 - η_μ)
     δ = z - μ
     mean_post = μ + η_μ[..., None] * δ
 
@@ -705,8 +711,8 @@ def argmin_forward_kl(
             Σ = matrix
             δδT = torch.einsum("...i, ...j -> ...ij", δ, δ)
             cov_post = (
-                (1.0 - η_Σ[..., None, None]) * Σ
-                + (η_Σ * (1.0 - η_μ))[..., None, None] * δδT
+                cov_scale[..., None, None] * Σ
+                + innovation_scale[..., None, None] * δδT
             )  # fmt: skip
             return mean_post, cov_post
 
@@ -715,10 +721,10 @@ def argmin_forward_kl(
             projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
             mahalanobis = vecdot(δ, projected, dim=-1)
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
-            denom = γ_Σ * (1.0 + γ_μ) + γ_μ * mahalanobis
+            denom = cov_scale + innovation_scale * mahalanobis
             Λ_new = (
-                ((1.0 + γ_Σ) / γ_Σ)[..., None, None]
-                * (Λ - (γ_μ / denom)[..., None, None] * outer)
+                cov_scale.reciprocal()[..., None, None]
+                * (Λ - (innovation_scale / denom)[..., None, None] * outer)
             )  # fmt: skip
             Λ_new = 0.5 * (Λ_new + Λ_new.mT)
             return mean_post, Λ_new
@@ -727,11 +733,11 @@ def argmin_forward_kl(
             L = matrix
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
-            coef = γ_μ / (γ_Σ * (1.0 + γ_μ))
+            coef = innovation_scale / cov_scale
             uuT = torch.einsum("...i, ...j -> ...ij", u, u)
             local_cov = I + coef[..., None, None] * uuT
             local_chol = cholesky(local_cov)
-            chol_post = (1.0 - η_Σ[..., None, None]).sqrt() * (L @ local_chol)
+            chol_post = cov_scale[..., None, None].sqrt() * (L @ local_chol)
             return mean_post, torch.tril(chol_post)
 
         case CovarianceType.LOG_CHOLESKY:
@@ -741,11 +747,11 @@ def argmin_forward_kl(
             )
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
-            coef = γ_μ / (γ_Σ * (1.0 + γ_μ))
+            coef = innovation_scale / cov_scale
             uuT = torch.einsum("...i, ...j -> ...ij", u, u)
             local_cov = I + coef[..., None, None] * uuT
             local_chol = cholesky(local_cov)
-            chol_post = (1.0 - η_Σ[..., None, None]).sqrt() * (L @ local_chol)
+            chol_post = cov_scale[..., None, None].sqrt() * (L @ local_chol)
             chol_post = torch.tril(chol_post)
             log_chol_post = chol_post.tril(diagonal=-1) + torch.diag_embed(
                 chol_post.diagonal(dim1=-2, dim2=-1).log()
