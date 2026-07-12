@@ -94,6 +94,7 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "TriangularTransform"  : transforms.TriangularTransform,
     # scalar transforms
     "CELU"                 : transforms.scalar.CELU,
+    "Exp"                  : transforms.scalar.Exp,
     "ELU"                  : transforms.scalar.ELU,
     "EntLU"                : transforms.scalar.EntLU,
     "Sigmoid"              : transforms.scalar.Sigmoid,

@@ -2,16 +2,17 @@ r"""Scalar Transforms."""
 
 __all__ = [
     "CELU",
+    "ConjugatedAffineFlow",
     "ELU",
     "EntLU",
+    "Exp",
     "Sigmoid",
+    "Sinh",
     "SmoothSoftsign",
     "Softplus",
     "Softsign",
-    "Sinh",
     "Tanh",
     "Tanhshrink",
-    "ConjugatedAffineFlow",
 ]
 
 
@@ -28,6 +29,36 @@ from linodenet.nn.containers import Constant
 from signatures import signature
 
 _LOG2 = math.log(2.0)
+
+
+class Exp(nn.Module, Transform):
+    r"""Maps tensor elementwise via $x ↦ \exp(x)$.
+
+    The inverse is $y ↦ \log(y)$.
+
+    The derivative is: $\frac{d}{dx}\exp(x) = \exp(x)$.
+
+    The logabsdet is: $\log|\exp(x)| = x$.
+    """
+
+    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = ScalarDomains.POSITIVE_REALS
+
+    @signature("(...) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        return x.exp()
+
+    @signature("(...) -> (...)")
+    def inverse(self, y: Tensor, /) -> Tensor:
+        return y.log()
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        y = self.forward(x)
+        return y, x
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        x = self.inverse(y)
+        return x, -x
 
 
 class Sinh(nn.Module, Transform):
