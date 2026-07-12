@@ -6,7 +6,6 @@ from torch import Tensor
 from torch.distributions import MultivariateNormal
 from torch.distributions.kl import kl_divergence
 
-import linodenet.distributions.gaussian as gaussian_utils
 from linodenet.distributions.gaussian import (
     CovarianceType,
     argmin_forward_kl,
@@ -102,6 +101,39 @@ def _make_rho(
             return rho_mu, rho_sigma
         case other:
             raise AssertionError(f"Unexpected rho mode: {other!r}")
+
+
+def _make_reverse_rho(
+    batch_shape: tuple[int, ...], mode: str, /
+) -> tuple[Tensor, Tensor]:
+    r"""Return reverse-KL retentions with optional batch shape."""
+    match mode:
+        case "scalar":
+            gamma = 1.7
+            return torch.tensor(gamma / (1.0 + gamma)), torch.tensor(
+                (gamma - 1.0) / gamma
+            )
+        case "batched":
+            gamma = 1.7
+            rho_mu = gamma / (1.0 + gamma)
+            rho_sigma = (gamma - 1.0) / gamma
+            if batch_shape:
+                return torch.full(batch_shape, rho_mu), torch.full(
+                    batch_shape, rho_sigma
+                )
+            return torch.tensor(rho_mu), torch.tensor(rho_sigma)
+        case "split-batched":
+            gamma_mu = 1.3
+            gamma_sigma = 2.1
+            rho_mu = gamma_mu / (1.0 + gamma_mu)
+            rho_sigma = (gamma_sigma - 1.0) / gamma_sigma
+            if batch_shape:
+                return torch.full(batch_shape, rho_mu), torch.full(
+                    batch_shape, rho_sigma
+                )
+            return torch.tensor(rho_mu), torch.tensor(rho_sigma)
+        case other:
+            raise AssertionError(f"Unexpected reverse rho mode: {other!r}")
 
 
 def _solve_reverse_kl_bisection(q: Tensor, gamma: Tensor, /) -> Tensor:
@@ -291,7 +323,7 @@ class TestReverseKLSolvers:
         gamma_mean = gamma_mean.clone().requires_grad_()
         gamma_cov = gamma_cov.clone().requires_grad_()
 
-        actual = gaussian_utils._solve_s_closed_form(q, gamma_mean, gamma_cov)  # noqa: SLF001
+        actual = self._solve_s_closed_form(q, gamma_mean, gamma_cov)
         residual = (
             (1.0 - gamma_cov) / actual
             + gamma_cov
@@ -1221,19 +1253,19 @@ class TestArgminReverseKL:
     r"""Tests for the exact reverse-KL Gaussian update."""
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
-    @pytest.mark.parametrize("gamma_mode", GAMMA_MODES, ids="gamma={}".format)
+    @pytest.mark.parametrize("rho_mode", RHO_MODES, ids="rho={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_matches_covariance_branch(
         self,
         seed: int,
         parametrization: CovarianceType,
         batch_shape: tuple[int, ...],
-        gamma_mode: str,
+        rho_mode: str,
     ) -> None:
         r"""Test that all parametrizations agree with the covariance update."""
         torch.manual_seed(seed)
         dim = 4
-        gamma = _make_gamma(batch_shape, gamma_mode)
+        rho = _make_reverse_rho(batch_shape, rho_mode)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -1243,14 +1275,14 @@ class TestArgminReverseKL:
         expected = argmin_reverse_kl(
             z_obs,
             (mean_prior, covariance_prior),
-            gamma=gamma,
+            retention=rho,
             parametrization="covariance",
         )
         theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
         actual = argmin_reverse_kl(
             z_obs,
             theta_prior,
-            gamma=gamma,
+            retention=rho,
             parametrization=parametrization,
         )
         actual_covariance = parametrization.to_covariance(actual)
@@ -1266,10 +1298,11 @@ class TestArgminReverseKL:
         parametrization: CovarianceType,
         batch_shape: tuple[int, ...],
     ) -> None:
-        r"""Test the exact forward-KL update against the whitened closed form."""
+        r"""Test the exact reverse-KL update against the whitened closed form."""
         torch.manual_seed(seed)
         dim = 4
         gamma = torch.tensor(1.7)
+        retention = (gamma / (1.0 + gamma), (gamma - 1.0) / gamma)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -1298,7 +1331,7 @@ class TestArgminReverseKL:
         actual = argmin_reverse_kl(
             z_obs,
             theta_prior,
-            gamma=gamma,
+            retention=retention,
             parametrization=parametrization,
         )
         actual_mean, actual_covariance = parametrization.to_covariance(actual)
@@ -1317,6 +1350,7 @@ class TestArgminReverseKL:
         batch_shape = (2, 3)
         dim = 4
         gamma = torch.tensor(1.7)
+        retention = (gamma / (1.0 + gamma), (gamma - 1.0) / gamma)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -1326,7 +1360,7 @@ class TestArgminReverseKL:
         theta_post = argmin_reverse_kl(
             z_obs,
             theta_prior,
-            gamma=gamma,
+            retention=retention,
             parametrization=parametrization,
         )
         mean_var = theta_post[0].detach().clone().requires_grad_(True)
@@ -1347,16 +1381,19 @@ class TestArgminReverseKL:
         assert mean_grad.abs().amax() < 1e-5
         assert projected_grad.abs().amax() < 1e-5
 
-    @pytest.mark.parametrize("gamma_mu", [0.0, 1e-8, 1e-5, 1e-3, 1.0, 10.0, 1000.0])
-    @pytest.mark.parametrize("gamma_sigma", [1.0 + 1e-6, 1.5, 10.0])
+    @pytest.mark.parametrize(
+        "rho_mu",
+        [0.0, 1e-8, 1e-5, 1e-3, 0.5, 10.0 / 11.0, 1000.0 / 1001.0, 1.0],
+    )
+    @pytest.mark.parametrize("rho_sigma", [1e-8, 1e-6, 1.0 / 3.0, 0.9, 1.0])
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_grad_finite_at_zero_innovation(
         self,
         parametrization: CovarianceType,
-        gamma_mu: float,
-        gamma_sigma: float,
+        rho_mu: float,
+        rho_sigma: float,
     ) -> None:
-        r"""Test that zero-innovation gradients stay finite near $γ_Σ \to 1⁺$."""
+        r"""Test that zero-innovation gradients stay finite across retention endpoints."""
         dim = 3
         z = torch.zeros(1, dim, dtype=torch.float64, requires_grad=True)
         mean_prior = torch.zeros(1, dim, dtype=torch.float64, requires_grad=True)
@@ -1367,17 +1404,15 @@ class TestArgminReverseKL:
             (mean_prior.detach(), covariance_prior)
         )
         matrix_prior = theta_prior[1].detach().clone().requires_grad_(True)
-        gamma_mu_tensor = torch.tensor(
-            gamma_mu, dtype=torch.float64, requires_grad=True
-        )
-        gamma_sigma_tensor = torch.tensor(
-            gamma_sigma, dtype=torch.float64, requires_grad=True
+        rho_mu_tensor = torch.tensor(rho_mu, dtype=torch.float64, requires_grad=True)
+        rho_sigma_tensor = torch.tensor(
+            rho_sigma, dtype=torch.float64, requires_grad=True
         )
 
         mean_post, matrix_post = argmin_reverse_kl(
             z,
             (mean_prior, matrix_prior),
-            gamma=(gamma_mu_tensor, gamma_sigma_tensor),
+            retention=(rho_mu_tensor, rho_sigma_tensor),
             parametrization=parametrization,
         )
         (mean_post.sum() + matrix_post.sum()).backward()
@@ -1386,24 +1421,24 @@ class TestArgminReverseKL:
             z.grad,
             mean_prior.grad,
             matrix_prior.grad,
-            gamma_mu_tensor.grad,
-            gamma_sigma_tensor.grad,
+            rho_mu_tensor.grad,
+            rho_sigma_tensor.grad,
         ):
             assert grad is not None
             assert torch.isfinite(grad).all()
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
-    def test_large_gamma_converges_to_identity(
+    def test_retention_one_converges_to_identity(
         self,
         seed: int,
         parametrization: CovarianceType,
         batch_shape: tuple[int, ...],
     ) -> None:
-        r"""Test that large forward-KL weight approaches the identity update."""
+        r"""Test that retention $(1, 1)$ gives the identity update."""
         torch.manual_seed(seed)
         dim = 4
-        gamma = torch.tensor(1e6)
+        retention = (torch.tensor(1.0), torch.tensor(1.0))
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -1414,7 +1449,7 @@ class TestArgminReverseKL:
             argmin_reverse_kl(
                 z_obs,
                 theta_prior,
-                gamma=gamma,
+                retention=retention,
                 parametrization=parametrization,
             ),
         )
@@ -1424,16 +1459,16 @@ class TestArgminReverseKL:
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
-    def test_gamma_at_most_one_rejects(
+    def test_rho_sigma_at_most_zero_rejects(
         self,
         seed: int,
         parametrization: CovarianceType,
         batch_shape: tuple[int, ...],
     ) -> None:
-        r"""Test that the exact forward-KL update rejects non-admissible gamma."""
+        r"""Test that the exact reverse-KL update rejects non-admissible retention."""
         torch.manual_seed(seed)
         dim = 4
-        gamma = 1.0
+        retention = (0.5, 0.0)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -1441,16 +1476,16 @@ class TestArgminReverseKL:
         z_obs = torch.randn(*batch_shape, dim)
         theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
 
-        with pytest.raises(AssertionError, match="requires gamma_sigma > 1"):
+        with pytest.raises(AssertionError, match="requires rho_sigma in \\(0, 1\\]"):
             argmin_reverse_kl(
                 z_obs,
                 theta_prior,
-                gamma=gamma,
+                retention=retention,
                 parametrization=parametrization,
             )
 
     def test_rejects_unknown_parametrization(self) -> None:
-        r"""Test that the forward-KL update rejects unknown parametrizations."""
+        r"""Test that the reverse-KL update rejects unknown parametrizations."""
         dim = 4
         mean = torch.randn(dim)
         factor = torch.randn(dim, dim)
@@ -1461,15 +1496,16 @@ class TestArgminReverseKL:
             argmin_reverse_kl(
                 z_obs,
                 (mean, covariance),
-                gamma=2.0,
+                retention=(0.5, 0.5),
                 parametrization="unknown",
             )
 
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_compile_fullgraph(self, parametrization: CovarianceType) -> None:
-        r"""Test that the exact forward-KL update compiles with `fullgraph=True`."""
+        r"""Test that the exact reverse-KL update compiles with `fullgraph=True`."""
         dim = 4
         gamma = torch.tensor(1.7)
+        retention = (gamma / (1.0 + gamma), (gamma - 1.0) / gamma)
         mean_prior = torch.randn(2, dim)
         factor = torch.randn(2, dim, dim)
         covariance_prior = factor @ factor.mT + torch.eye(dim)
@@ -1480,7 +1516,7 @@ class TestArgminReverseKL:
             return argmin_reverse_kl(
                 z,
                 theta,
-                gamma=gamma,
+                retention=retention,
                 parametrization=parametrization,
             )
 
