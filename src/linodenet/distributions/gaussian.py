@@ -389,32 +389,51 @@ def _solve_s_closed_form(
     *,
     use_fp64: bool = True,
 ) -> Tensor:  # (...)
-    r"""Solve the forward-KL scalar stationarity equation for the positive branch.
+    r"""Solve the reverse-KL scalar stationarity equation for the positive branch.
 
     Returns the unique admissible root $s>0$ of
 
         (1 − γ_Σ)/s + γ_Σ − γ_μ²·q / (1 + γ_μ·s)² = 0,   γ_μ ≥ 0,  γ_Σ > 1,  q ≥ 0.
 
     For $γ_μ>0$, substituting $u = 1 + γ_μ·s$ gives the monic cubic $u³ + a·u² + b·u − b$,
-    with $β = (γ_Σ − 1)/γ_Σ$, $a = −(1 + γ_μ·β)$, $b = −γ_μ²·q/γ_Σ$. All three roots are
-    real $(f(0) ≥ 0 > f(1))$; the admissible one is the largest, $u > 1$, and
+    with $β = (γ_Σ − 1)/γ_Σ$, $a = −(1 + γ_μ·β)$, $b = −γ_μ²·q/γ_Σ$. Its roots are one
+    negative, one in $(0,1)$ and one $>1$ (the product of the roots is $b ≤ 0$ and
+    $f(0) ≥ 0 > f(1)$); only $u>1$ gives $s>0$, so the admissible root is the largest and
     $s = (u − 1)/γ_μ$. Depressing with $u = t − a/3$ always yields $p ≤ −1/3 < 0$, so this
-    is the casus irreducibilis and the root is taken from the $k=0$ cosine branch.
+    is the casus irreducibilis and the largest root is the $k=0$ cosine branch.
 
-    Note: Small $γ_μ$
-        As $γ_μ → 0$ the mean snaps to the observation and $s → β$. The first-order term of
-        the expansion cancels, leaving $s = β·(1 + γ_μ²·q/γ_Σ) + O(γ_μ⁴)$. This branch is
-        not just a guard for $γ_μ = 0$: since $u → 1$, the exact path computes $(u − 1)/γ_μ$ as
-        a ratio of two vanishing quantities and silently loses $≈ log₁₀(1/γ_μβ)$ digits well
-        before $γ_μ$ underflows. The threshold balances the series truncation error against
-        that cancellation.
+    Note: Degeneracy parameter
+        Both special cases are governed by $B ≔ -b = γ_μ²·q/γ_Σ$. Writing the stationarity
+        condition as the fixed point $s = β + s·B/(1 + γ_μ·s)²$ and expanding once gives
 
-    Note:
-        cos θ hits exactly +1 at q = 0 and γ_μ = 0 (two roots coalesce), so the clamp is
-        load-bearing, not defensive — without it rounding past 1 gives NaN. By contrast
-        −p ≥ 1/3 and m³ ≥ 1/27 need no clamping. γ_safe is threaded through a and b, not
-        just the final division, because torch.where backpropagates through both branches
-        and 0 · NaN would poison the gradient.
+            s = β·(1 + B/(1 + γ_μ·β)²) + O(B²),
+
+        which is exact at $B = 0$ (i.e. at $γ_μ = 0$, where the mean snaps to the
+        observation, *and* at $q = 0$, where the observation is already at the prior mean).
+        The $(1 + γ_μ·β)^{-2}$ factor is what makes this $O(B²)$ rather than $O(B·γ_μ)$;
+        at fixed $q$ that is $O(γ_μ⁴)$.
+
+    Note: Why two thresholds
+        `B < eps**0.5` guards the cosine endpoint (below). `γ_μ < eps**0.25` guards a
+        different failure: as $γ_μ → 0$ we have $u → 1$, so the exact path evaluates
+        $(u − 1)/γ_μ$ as a ratio of two vanishing quantities and silently loses
+        $≈ log₁₀(1/γ_μβ)$ digits well before $γ_μ$ underflows. The two overlap in
+        practice but are not nested: for $γ_μ ≳ 900$ the cosine can reach its endpoint
+        while $B$ is still above the first threshold.
+
+    Note: NaN-safe branching
+        `torch.where` backpropagates through *both* arms, so every discarded arm must be
+        finite in value *and* in local derivative — a $0 · ∞$ in the dead branch poisons
+        the gradient of the live one.
+
+        - `γ_μ_safe` is threaded through `a` and `b`, not just the final division, so the
+          dead cubic never divides by zero.
+        - $\cos θ → 1⁻$ as $B → 0$ (specifically $1 - \cosθ ≈ 9B/2(1+γ_μβ)³$) and rounds
+          to $≥ 1$ there, where $\arccos'(1) = -∞$. Clamping alone fixes the forward value
+          but leaves $0 · (−∞) = \mathrm{NaN}$ in $∂s/∂q$, so those entries are additionally
+          folded into `degenerate` and their cosine argument is neutralized to $0$.
+
+        By contrast $-p ≥ 1/3$ and $m³ ≥ 1/27$ are bounded away from zero and need no guard.
     """
     q, γ_μ, γ_Σ = torch.broadcast_tensors(sq_dist, gamma_mean, gamma_cov)
     out_dtype = torch.promote_types(q.dtype, torch.promote_types(γ_μ.dtype, γ_Σ.dtype))
@@ -425,12 +444,13 @@ def _solve_s_closed_form(
     γ_μ = γ_μ.to(work_dtype)
     γ_Σ = γ_Σ.to(work_dtype)
     q = q.to(work_dtype)
-
+    eps = torch.finfo(work_dtype).eps
     β = (γ_Σ - 1.0) / γ_Σ
 
-    # Series branch: exact at γ_μ = 0, second-order accurate nearby.
-    small = γ_μ < torch.finfo(work_dtype).eps ** 0.25  # ≈ 1e-4 (fp64), 4e-2 (fp32)
-    s_series = β * (1.0 + γ_μ.square() * q / γ_Σ)
+    # Series branch in the degeneracy parameter B = -b; exact at B = 0, error O(B²).
+    B = γ_μ.square() * q / γ_Σ
+    s_series = β * (1.0 + B / (1.0 + γ_μ * β).square())
+    small = (B < eps**0.5) | (γ_μ < eps**0.25)  # noqa: SIM300
 
     γ_μ_safe = torch.where(small, 1.0, γ_μ)
     a = -(1.0 + γ_μ_safe * β)
@@ -441,12 +461,18 @@ def _solve_s_closed_form(
 
     # In the admissible regime p < 0, so the largest real root uses the cosine form.
     m = torch.sqrt(-p / 3.0)
-    cos_θ = (-r / (2.0 * m.pow(3))).clamp(-1.0, 1.0)  # hits exactly +1 when q = 0
+    raw = -r / (2.0 * m.pow(3))
+
+    # acos'(±1) = ∓∞ and `where` backprops through the dead arm, so neutralize the
+    # argument wherever the cosine sits on its endpoint and take the series instead.
+    degenerate = small | (raw >= 1.0)
+    cos_θ = torch.where(degenerate, torch.zeros_like(raw), raw).clamp(-1.0, 1.0)
+
     t = 2.0 * m * torch.cos(torch.acos(cos_θ) / 3.0)
     u = t - a / 3.0
     s_exact = (u - 1.0) / γ_μ_safe
 
-    return torch.where(small, s_series, s_exact).to(dtype=out_dtype)
+    return torch.where(degenerate, s_series, s_exact).to(dtype=out_dtype)
 
 
 def argmin_reverse_kl(
@@ -457,7 +483,7 @@ def argmin_reverse_kl(
     gamma: GammaArg,  # scalar or (gamma_mu, gamma_sigma)
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
-    r"""Return the exact minimizer of NLL plus separable forward-KL anchoring.
+    r"""Return the exact minimizer of NLL plus separable reverse-KL anchoring.
 
     This returns the exact minimizer of
 
@@ -488,10 +514,16 @@ def argmin_reverse_kl(
 
     .. math:: L₊ = √β ⋅ L₋\chol(I + \frac{s_∥ - β}{βq}aaᵀ).
 
-    The forward mean term is finite for $γ_μ ≥ 0$, while the covariance term only
+    The reverse mean term is finite for $γ_μ ≥ 0$, while the covariance term only
     has a finite minimizer for $γ_Σ > 1$. This function eagerly validates float
     inputs and assumes tensor inputs already satisfy those bounds to preserve
     `torch.compile(fullgraph=True)` compatibility.
+
+    Args:
+        z: Observation already pulled back to latent space.
+        theta: Prior Gaussian parameters in the selected parametrization.
+        gamma: Regularization strength, either shared or split as $γ_μ, γ_Σ$.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
 
     See Also:
         `argmin_forward_kl`:
@@ -499,7 +531,7 @@ def argmin_reverse_kl(
             $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ₋) ∥ 𝓝(θ))$.
             In contrast, `argmin_reverse_kl` uses the opposite KL direction.
         `argmin_proximal_kl`:
-            Generic forward-KL proximal solver for a linearized scalar loss
+            Generic reverse-KL proximal solver for a linearized scalar loss
             $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ⁎))$.
             In contrast, `argmin_reverse_kl` solves the exact Gaussian
             observation objective above.
@@ -604,7 +636,7 @@ def argmin_forward_kl(
     gamma: GammaArg,  # scalar or (gamma_mu, gamma_sigma)
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
-    r"""Return the exact minimizer of NLL plus separable reverse-KL anchoring.
+    r"""Return the exact minimizer of NLL plus separable forward-KL anchoring.
 
     This returns the exact minimizer of
 
@@ -635,8 +667,7 @@ def argmin_forward_kl(
     Args:
         z: Observation already pulled back to latent space.
         theta: Prior Gaussian parameters in the selected parametrization.
-        gamma: Reverse-KL regularization strength, either shared or split as
-            `(gamma_mu, gamma_sigma)`.
+        gamma: Regularization strength, either shared or split as $γ_μ, γ_Σ$.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
 
     Notes:
@@ -651,9 +682,9 @@ def argmin_forward_kl(
             $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ₋))$.
             In contrast, `argmin_forward_kl` uses the opposite KL direction.
         `argmin_proximal_kl`:
-            Generic forward-KL proximal solver for a linearized scalar loss
+            Generic reverse-KL proximal solver for a linearized scalar loss
             $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ⁎))$.
-            In contrast, `argmin_forward_kl` solves the exact Gaussian
+            In contrast, `argmin_reverse_kl` solves the exact Gaussian
             observation objective above.
     """
     parametrization = CovarianceType(parametrization)
