@@ -147,6 +147,102 @@ def _solve_reverse_kl_bisection(q: Tensor, gamma: Tensor, /) -> Tensor:
 class TestReverseKLSolvers:
     r"""Tests for the scalar forward-KL cubic solvers."""
 
+    @staticmethod
+    def _solve_s_closed_form(
+        sq_dist: Tensor,  # (...)
+        gamma_mean: Tensor,  # (...)
+        gamma_cov: Tensor,  # (...)
+        /,
+        *,
+        use_fp64: bool = True,
+    ) -> Tensor:  # (...)
+        r"""Solve the reverse-KL scalar stationarity equation for the positive branch.
+
+        Returns the unique admissible root $s>0$ of
+
+            (1 − γ_Σ)/s + γ_Σ − γ_μ²·q / (1 + γ_μ·s)² = 0,   γ_μ ≥ 0,  γ_Σ > 1,  q ≥ 0.
+
+        For $γ_μ>0$, substituting $u = 1 + γ_μ·s$ gives the monic cubic $u³ + a·u² + b·u − b$,
+        with $β = (γ_Σ − 1)/γ_Σ$, $a = −(1 + γ_μ·β)$, $b = −γ_μ²·q/γ_Σ$. Its roots are one
+        negative, one in $(0,1)$ and one $>1$ (the product of the roots is $b ≤ 0$ and
+        $f(0) ≥ 0 > f(1)$); only $u>1$ gives $s>0$, so the admissible root is the largest and
+        $s = (u − 1)/γ_μ$. Depressing with $u = t − a/3$ always yields $p ≤ −1/3 < 0$, so this
+        is the casus irreducibilis and the largest root is the $k=0$ cosine branch.
+
+        Note: Degeneracy parameter
+            Both special cases are governed by $B ≔ -b = γ_μ²·q/γ_Σ$. Writing the stationarity
+            condition as the fixed point $s = β + s·B/(1 + γ_μ·s)²$ and expanding once gives
+
+                s = β·(1 + B/(1 + γ_μ·β)²) + O(B²),
+
+            which is exact at $B = 0$ (i.e. at $γ_μ = 0$, where the mean snaps to the
+            observation, *and* at $q = 0$, where the observation is already at the prior mean).
+            The $(1 + γ_μ·β)^{-2}$ factor is what makes this $O(B²)$ rather than $O(B·γ_μ)$;
+            at fixed $q$ that is $O(γ_μ⁴)$.
+
+        Note: Why two thresholds
+            `B < eps**0.5` guards the cosine endpoint (below). `γ_μ < eps**0.25` guards a
+            different failure: as $γ_μ → 0$ we have $u → 1$, so the exact path evaluates
+            $(u − 1)/γ_μ$ as a ratio of two vanishing quantities and silently loses
+            $≈ log₁₀(1/γ_μβ)$ digits well before $γ_μ$ underflows. The two overlap in
+            practice but are not nested: for $γ_μ ≳ 900$ the cosine can reach its endpoint
+            while $B$ is still above the first threshold.
+
+        Note: NaN-safe branching
+            `torch.where` backpropagates through *both* arms, so every discarded arm must be
+            finite in value *and* in local derivative — a $0 · ∞$ in the dead branch poisons
+            the gradient of the live one.
+
+            - `γ_μ_safe` is threaded through `a` and `b`, not just the final division, so the
+              dead cubic never divides by zero.
+            - $\cos θ → 1⁻$ as $B → 0$ (specifically $1 - \cosθ ≈ 9B/2(1+γ_μβ)³$) and rounds
+              to $≥ 1$ there, where $\arccos'(1) = -∞$. Clamping alone fixes the forward value
+              but leaves $0 · (−∞) = \mathrm{NaN}$ in $∂s/∂q$, so those entries are additionally
+              folded into `degenerate` and their cosine argument is neutralized to $0$.
+
+            By contrast $-p ≥ 1/3$ and $m³ ≥ 1/27$ are bounded away from zero and need no guard.
+        """
+        q, γ_μ, γ_Σ = torch.broadcast_tensors(sq_dist, gamma_mean, gamma_cov)
+        out_dtype = torch.promote_types(
+            q.dtype, torch.promote_types(γ_μ.dtype, γ_Σ.dtype)
+        )
+        work_dtype = (
+            torch.float64 if use_fp64 else torch.promote_types(out_dtype, torch.float32)
+        )
+
+        γ_μ = γ_μ.to(work_dtype)
+        γ_Σ = γ_Σ.to(work_dtype)
+        q = q.to(work_dtype)
+        eps = torch.finfo(work_dtype).eps
+        β = (γ_Σ - 1.0) / γ_Σ
+
+        # Series branch in the degeneracy parameter B = -b; exact at B = 0, error O(B²).
+        B = γ_μ.square() * q / γ_Σ
+        s_series = β * (1.0 + B / (1.0 + γ_μ * β).square())
+        small = (B < eps**0.5) | (γ_μ < eps**0.25)
+
+        γ_μ_safe = torch.where(small, 1.0, γ_μ)
+        a = -(1.0 + γ_μ_safe * β)
+        b = -γ_μ_safe.square() * q / γ_Σ
+        c = -b
+        p = b - a.square() / 3.0
+        r = 2.0 * a.pow(3) / 27.0 - (a * b) / 3.0 + c
+
+        # In the admissible regime p < 0, so the largest real root uses the cosine form.
+        m = torch.sqrt(-p / 3.0)
+        raw = -r / (2.0 * m.pow(3))
+
+        # acos'(±1) = ∓∞ and `where` backprops through the dead arm, so neutralize the
+        # argument wherever the cosine sits on its endpoint and take the series instead.
+        degenerate = small | (raw >= 1.0)
+        cos_θ = torch.where(degenerate, torch.zeros_like(raw), raw).clamp(-1.0, 1.0)
+
+        t = 2.0 * m * torch.cos(torch.acos(cos_θ) / 3.0)
+        u = t - a / 3.0
+        s_exact = (u - 1.0) / γ_μ_safe
+
+        return torch.where(degenerate, s_series, s_exact).to(dtype=out_dtype)
+
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
     def test_closed_form_matches_bisection(self, dtype: torch.dtype) -> None:
         r"""Test that the closed-form cubic solver matches the bisection solver."""
@@ -167,7 +263,7 @@ class TestReverseKLSolvers:
 
         for gamma_value in gamma:
             expected = _solve_reverse_kl_bisection(q, gamma_value)
-            actual = gaussian_utils._solve_s_closed_form(q, gamma_value, gamma_value)  # noqa: SLF001
+            actual = self._solve_s_closed_form(q, gamma_value, gamma_value)
             assert torch.allclose(actual, expected, atol=atol, rtol=rtol)
 
     @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)

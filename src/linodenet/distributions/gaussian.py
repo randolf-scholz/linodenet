@@ -455,98 +455,75 @@ def argmin_proximal_kl(
     )
 
 
-def _solve_s_closed_form(
+def _solve_w_closed_form(
     sq_dist: Tensor,  # (...)
-    gamma_mean: Tensor,  # (...)
-    gamma_cov: Tensor,  # (...)
+    retention_mean: Tensor,  # (...)
+    retention_cov: Tensor,  # (...)
     /,
     *,
     use_fp64: bool = True,
 ) -> Tensor:  # (...)
-    r"""Solve the reverse-KL scalar stationarity equation for the positive branch.
+    r"""Solve the reverse-KL stationarity equation in retention coordinates.
 
-    Returns the unique admissible root $s>0$ of
+    Returns $w = (1 - ρ_μ) + ρ_μ s$, where $s$ is the whitened posterior variance along the
+    innovation, i.e. the admissible root of
 
-        (1 − γ_Σ)/s + γ_Σ − γ_μ²·q / (1 + γ_μ·s)² = 0,   γ_μ ≥ 0,  γ_Σ > 1,  q ≥ 0.
+        (s - ρ_Σ) / ((1 - ρ_Σ)·s) = ρ_μ²·q / ((1 - ρ_μ) + ρ_μ·s)²,   ρ_μ ∈ [0,1], ρ_Σ ∈ (0,1].
 
-    For $γ_μ>0$, substituting $u = 1 + γ_μ·s$ gives the monic cubic $u³ + a·u² + b·u − b$,
-    with $β = (γ_Σ − 1)/γ_Σ$, $a = −(1 + γ_μ·β)$, $b = −γ_μ²·q/γ_Σ$. Its roots are one
-    negative, one in $(0,1)$ and one $>1$ (the product of the roots is $b ≤ 0$ and
-    $f(0) ≥ 0 > f(1)$); only $u>1$ gives $s>0$, so the admissible root is the largest and
-    $s = (u − 1)/γ_μ$. Depressing with $u = t − a/3$ always yields $p ≤ −1/3 < 0$, so this
-    is the casus irreducibilis and the largest root is the $k=0$ cosine branch.
+    Neither $γ_μ$ nor $γ_Σ$ appears: they cancel under $γ_μ = ρ_μ/(1 - ρ_μ)$,
+    $γ_Σ = 1/(1 - ρ_Σ)$, which is what makes the endpoints $ρ_μ = 1$ ($γ_μ = ∞$) and
+    $ρ_Σ = 1$ ($γ_Σ = ∞$) finite and exactly representable.
 
-    Note: Degeneracy parameter
-        Both special cases are governed by $B ≔ -b = γ_μ²·q/γ_Σ$. Writing the stationarity
-        condition as the fixed point $s = β + s·B/(1 + γ_μ·s)²$ and expanding once gives
+    With $A = (1 - ρ_μ) + ρ_μ ρ_Σ ∈ [ρ_Σ, 1]$, $κ = (1 - ρ_Σ)ρ_μ²q/A²$ and
+    $τ = (1 - ρ_μ)/A ∈ [0, 1]$, substituting $w = A·v$ gives the scale-free monic cubic
 
-            s = β·(1 + B/(1 + γ_μ·β)²) + O(B²),
+        v³ - v² - κ·v + κ·τ = 0.
 
-        which is exact at $B = 0$ (i.e. at $γ_μ = 0$, where the mean snaps to the
-        observation, *and* at $q = 0$, where the observation is already at the prior mean).
-        The $(1 + γ_μ·β)^{-2}$ factor is what makes this $O(B²)$ rather than $O(B·γ_μ)$;
-        at fixed $q$ that is $O(γ_μ⁴)$.
+    Its roots are one negative, one in $(0, τ)$ and one $> 1$; only the last gives $s > 0$,
+    so the admissible root is the largest. Depressing with $v = t + ⅓$ gives $p = -κ - ⅓ ≤ -⅓$
+    unconditionally, so this is always the casus irreducibilis and the root is the $k = 0$
+    cosine branch. $A ≥ ρ_Σ > 0$ and $m³ ≥ 1/27$, so neither division needs a guard.
 
-    Note: Why two thresholds
-        `B < eps**0.5` guards the cosine endpoint (below). `γ_μ < eps**0.25` guards a
-        different failure: as $γ_μ → 0$ we have $u → 1$, so the exact path evaluates
-        $(u − 1)/γ_μ$ as a ratio of two vanishing quantities and silently loses
-        $≈ log₁₀(1/γ_μβ)$ digits well before $γ_μ$ underflows. The two overlap in
-        practice but are not nested: for $γ_μ ≳ 900$ the cosine can reach its endpoint
-        while $B$ is still above the first threshold.
-
-    Note: NaN-safe branching
-        `torch.where` backpropagates through *both* arms, so every discarded arm must be
-        finite in value *and* in local derivative — a $0 · ∞$ in the dead branch poisons
-        the gradient of the live one.
-
-        - `γ_μ_safe` is threaded through `a` and `b`, not just the final division, so the
-          dead cubic never divides by zero.
-        - $\cos θ → 1⁻$ as $B → 0$ (specifically $1 - \cosθ ≈ 9B/2(1+γ_μβ)³$) and rounds
-          to $≥ 1$ there, where $\arccos'(1) = -∞$. Clamping alone fixes the forward value
-          but leaves $0 · (−∞) = \mathrm{NaN}$ in $∂s/∂q$, so those entries are additionally
-          folded into `degenerate` and their cosine argument is neutralized to $0$.
-
-        By contrast $-p ≥ 1/3$ and $m³ ≥ 1/27$ are bounded away from zero and need no guard.
+    Note: Degenerate branch
+        $\cos θ → 1⁻$ as $κ → 0$ (reached at $ρ_μ = 0$ or $q = 0$) and rounds to $≥ 1$ there,
+        where $\arccos'(1) = -∞$. Since `torch.where` backpropagates through the discarded
+        arm, a bare clamp would leave $0·(-∞) = \mathrm{NaN}$ in the gradient, so those
+        entries take the series $v = 1 + κ(1 - τ) + O(κ²)$ *and* have their cosine argument
+        neutralized. Unlike the $γ$ formulation there is no second branch: $s$ is never
+        formed, only $ρ_μ s = w - (1 - ρ_μ)$, so nothing divides by $ρ_μ$.
     """
-    q, γ_μ, γ_Σ = torch.broadcast_tensors(sq_dist, gamma_mean, gamma_cov)
-    out_dtype = torch.promote_types(q.dtype, torch.promote_types(γ_μ.dtype, γ_Σ.dtype))
+    q, ρ_μ, ρ_Σ = torch.broadcast_tensors(sq_dist, retention_mean, retention_cov)
+    out_dtype = torch.promote_types(q.dtype, torch.promote_types(ρ_μ.dtype, ρ_Σ.dtype))
     work_dtype = (
         torch.float64 if use_fp64 else torch.promote_types(out_dtype, torch.float32)
     )
 
-    γ_μ = γ_μ.to(work_dtype)
-    γ_Σ = γ_Σ.to(work_dtype)
     q = q.to(work_dtype)
+    ρ_μ = ρ_μ.to(work_dtype)
+    ρ_Σ = ρ_Σ.to(work_dtype)
     eps = torch.finfo(work_dtype).eps
-    β = (γ_Σ - 1.0) / γ_Σ
 
-    # Series branch in the degeneracy parameter B = -b; exact at B = 0, error O(B²).
-    B = γ_μ.square() * q / γ_Σ
-    s_series = β * (1.0 + B / (1.0 + γ_μ * β).square())
-    small = (B < eps**0.5) | (γ_μ < eps**0.25)  # noqa: SIM300
+    A = 1.0 - ρ_μ * (1.0 - ρ_Σ)  # = (1 - ρ_μ) + ρ_μ ρ_Σ  ∈ [ρ_Σ, 1]
+    κ = (1.0 - ρ_Σ) * ρ_μ.square() * q / A.square()
+    τ = (1.0 - ρ_μ) / A  # ∈ [0, 1]
 
-    γ_μ_safe = torch.where(small, 1.0, γ_μ)
-    a = -(1.0 + γ_μ_safe * β)
-    b = -γ_μ_safe.square() * q / γ_Σ
-    c = -b
-    p = b - a.square() / 3.0
-    r = 2.0 * a.pow(3) / 27.0 - (a * b) / 3.0 + c
+    # Series branch: exact at κ = 0, error O(κ²).
+    v_series = 1.0 + κ * (1.0 - τ)
 
-    # In the admissible regime p < 0, so the largest real root uses the cosine form.
-    m = torch.sqrt(-p / 3.0)
+    # Depressed cubic for v³ - v² - κv + κτ via v = t + 1/3.
+    p = -κ - 1.0 / 3.0  # ≤ -1/3
+    r = -2.0 / 27.0 - κ / 3.0 + κ * τ
+    m = torch.sqrt(-p / 3.0)  # ≥ 1/3, so m³ ≥ 1/27
     raw = -r / (2.0 * m.pow(3))
 
-    # acos'(±1) = ∓∞ and `where` backprops through the dead arm, so neutralize the
-    # argument wherever the cosine sits on its endpoint and take the series instead.
-    degenerate = small | (raw >= 1.0)
+    # acos'(±1) = ∓∞ and `where` backprops through the dead arm: neutralize the argument
+    # wherever the cosine sits on its endpoint, and take the series there instead.
+    degenerate = (κ < eps**0.5) | (raw >= 1.0)
     cos_θ = torch.where(degenerate, torch.zeros_like(raw), raw).clamp(-1.0, 1.0)
+    v_exact = 2.0 * m * torch.cos(torch.acos(cos_θ) / 3.0) + 1.0 / 3.0
 
-    t = 2.0 * m * torch.cos(torch.acos(cos_θ) / 3.0)
-    u = t - a / 3.0
-    s_exact = (u - 1.0) / γ_μ_safe
-
-    return torch.where(degenerate, s_series, s_exact).to(dtype=out_dtype)
+    v = torch.where(degenerate, v_series, v_exact)
+    return (A * v).to(dtype=out_dtype)
 
 
 def argmin_reverse_kl(
@@ -554,72 +531,85 @@ def argmin_reverse_kl(
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
-    gamma: GammaArg,  # scalar or (gamma_mu, gamma_sigma)
+    retention: ScalarLike | tuple[ScalarLike, ScalarLike],  # rho or (rho_mu, rho_sigma)
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact minimizer of NLL plus separable reverse-KL anchoring.
 
     This returns the exact minimizer of
 
-    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ)，𝓝(θ₋)) \\
-        \argmin_θ -\log 𝓝(z; θ)
+    .. math:: \argmin_θ -\log 𝓝(z; θ)
         + γ_μ ½(μ - μ₋)ᵀΣ₋⁻¹(μ - μ₋)
         + γ_Σ ½(\tr(ΣΣ₋⁻¹) - \log\det(ΣΣ₋⁻¹) - d)
 
-    where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
-    Passing a single `gamma` ties the weights via $γ_μ = γ_Σ = γ$.
+    the two terms being the exact split of $\kl(𝓝(θ) ∥ 𝓝(θ₋))$ into its location and shape
+    parts. Here $θ₋$ is the input `theta`, interpreted according to `parametrization`.
 
-    Writing $δ = z - μ₋$, $Σ₋ = L₋L₋ᵀ$, $a = L₋⁻¹δ$, $q = aᵀa$ and
-    $β = (γ_Σ - 1)/γ_Σ$, the exact minimizer has the same prior-whitened
-    eigenspaces as $aaᵀ$:
+    Update:
+        Writing $δ = z - μ₋$, $Σ₋ = L₋L₋ᵀ$, $a = L₋⁻¹δ$, $q = aᵀa$, and letting
+        $w = (1 - ρ_μ) + ρ_μ s$ where $s > 0$ solves the stationarity equation
+        (see `_solve_w_closed_form`), the minimizer shares the prior-whitened eigenspaces
+        of $aaᵀ$:
 
-    - $μ₊ = μ₋ + cδ$, where $c = (1 + γ_μ s_∥)⁻¹$
-    - $Σ₊ = βΣ₋ + αδδᵀ$, where $α = (s_∥ - β)/q$
+        - $μ₊ = μ₋ + \frac{1 - ρ_μ}{w}δ$
+        - $Σ₊ = ρ_Σ⋅Σ₋ + \frac{(1 - ρ_Σ)ρ_μ⋅(ρ_μ s)}{w²}δδᵀ$,
+          with $ρ_μ s = w - (1 - ρ_μ)$
 
-    and $s_∥ > β$ is the unique admissible root of
+        In precision coordinates, with $Λ₋ = Σ₋⁻¹$ and $v = Λ₋δ$,
 
-    .. math:: \frac{1 - γ_Σ}{s} + γ_Σ - \frac{γ_μ² q}{(1 + γ_μ s)²} = 0.
+        - $Λ₊ = ρ_Σ⁻¹Λ₋ - \frac{ρ_μ²(1 - ρ_Σ)}{ρ_Σ w²}vvᵀ$
 
-    In precision coordinates, if $Λ₋ = Σ₋⁻¹$ and $v = Λ₋δ$, then
+        In Cholesky coordinates, $L₊ = L₋\chol(ρ_Σ⋅I + \frac{(1-ρ_Σ)ρ_μ(ρ_μ s)}{w²}aaᵀ)$,
+        already lower-triangular with positive diagonal.
 
-    .. math:: Λ₊ = β⁻¹(Λ₋ - \frac{1 - β/s_∥}{q}vvᵀ).
+    Parametrization:
+        Weights are supplied as *retentions* $ρ ∈ [0, 1]$, matching `argmin_forward_kl`:
 
-    In Cholesky coordinates, the same covariance update is
+        - $ρ_Σ = 1 - 1/γ_Σ$ is the exact covariance retention — the coefficient multiplying
+          $Σ₋$ — so the constraint $γ_Σ > 1$ (below which no minimizer exists) becomes simply
+          $ρ_Σ > 0$, isolated where floats are dense, instead of the rounding attractor at
+          $γ_Σ = 1$.
+        - $ρ_μ = γ_μ/(1 + γ_μ)$ is the *nominal* mean retention. The realized retention is
+          $ρ_μ s / w$, satisfying $\mathrm{odds}(\text{realized}) = \mathrm{odds}(ρ_μ)⋅s$:
+          $ρ_μ$ is what the mean would retain if the posterior variance along the innovation
+          equalled the prior's ($s = 1$). Large innovations inflate $s$, so the mean is
+          retained *more* — this is the bounded-influence property of the reverse KL, and it
+          is why $ρ_μ$ cannot be an exact retention the way $ρ_Σ$ is.
 
-    .. math:: L₊ = √β ⋅ L₋\chol(I + \frac{s_∥ - β}{βq}aaᵀ).
-
-    The reverse mean term is finite for $γ_μ ≥ 0$, while the covariance term only
-    has a finite minimizer for $γ_Σ > 1$. This function eagerly validates float
-    inputs and assumes tensor inputs already satisfy those bounds to preserve
-    `torch.compile(fullgraph=True)` compatibility.
+        Passing a single `retention` sets $ρ_μ = ρ_Σ = ρ$. **This is not $γ_μ = γ_Σ$** — the
+        two maps differ, and it corresponds to $γ_μ = γ_Σ - 1$. It does mean both the mean
+        (nominally) and the covariance retain the same fraction, which is the useful reading.
 
     Args:
         z: Observation already pulled back to latent space.
-        theta: Prior Gaussian parameters in the selected parametrization.
-        gamma: Regularization strength, either shared or split as $γ_μ, γ_Σ$.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
+        theta: Prior Gaussian parameters $θ₋$ in the selected parametrization.
+        retention: Retention $ρ$, shared or split as $(ρ_μ, ρ_Σ)$. Broadcast against the
+            batch shape of `theta`, so a per-sample schedule $ρ(Δt)$ is fine.
+        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, `"log-cholesky"`.
+
+    Note: Admissible range
+        $ρ_μ ∈ [0, 1]$ is closed: $0$ is $γ_μ = 0$, the unregularized jump $μ₊ = z$; $1$ is
+        $γ_μ → ∞$, the identity $μ₊ = μ₋$. $ρ_Σ ∈ (0, 1]$: at $1$ the shape is frozen
+        ($γ_Σ → ∞$), and $ρ_Σ → 0$ is $γ_Σ → 1⁺$, where $Σ₊$ degenerates. Both endpoints are
+        exact, unlike in $γ$ coordinates where neither $∞$ is representable.
 
     See Also:
         `argmin_forward_kl`:
-            Exact minimizer of the Gaussian observation objective
-            $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ₋) ∥ 𝓝(θ))$.
-            In contrast, `argmin_reverse_kl` uses the opposite KL direction.
-        `argmin_proximal_kl`:
-            Generic reverse-KL proximal solver for a linearized scalar loss
-            $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ⁎))$.
-            In contrast, `argmin_reverse_kl` solves the exact Gaussian
-            observation objective above.
+            Same observation term, opposite KL direction. Its $ρ_Σ = γ_Σ/(1 + γ_Σ)$ — a
+            *different* map, since it has no $γ_Σ > 1$ constraint — but the same operational
+            meaning (the coefficient multiplying $Σ₋$), so schedules transfer.
     """
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
-    gamma_mu, gamma_sigma = gamma if isinstance(gamma, tuple) else (gamma, gamma)
-    γ_μ = torch.as_tensor(gamma_mu, dtype=matrix.dtype, device=matrix.device)
-    γ_Σ = torch.as_tensor(gamma_sigma, dtype=matrix.dtype, device=matrix.device)
-    assert (γ_μ >= 0.0).all(), "requires gamma_mu >= 0"
-    assert (γ_Σ > 1.0).all(), "requires gamma_sigma > 1"
+    rho_mu, rho_sigma = (
+        retention if isinstance(retention, tuple) else (retention, retention)
+    )
+    ρ_μ = torch.as_tensor(rho_mu, dtype=matrix.dtype, device=matrix.device)
+    ρ_Σ = torch.as_tensor(rho_sigma, dtype=matrix.dtype, device=matrix.device)
+    assert ((ρ_μ >= 0.0) & (ρ_μ <= 1.0)).all(), "requires rho_mu in [0, 1]"
+    assert ((ρ_Σ > 0.0) & (ρ_Σ <= 1.0)).all(), "requires rho_sigma in (0, 1]"
 
-    β = (γ_Σ - 1) / γ_Σ
-    β_inv = γ_Σ / (γ_Σ - 1)
+    forget = 1.0 - ρ_Σ
     δ = z - μ
     dim = matrix.shape[-1]
 
@@ -629,45 +619,42 @@ def argmin_reverse_kl(
             L = cholesky(Σ)
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
-            s_parallel = _solve_s_closed_form(q, γ_μ, γ_Σ)
-            mean_scale = (1 + γ_μ * s_parallel).reciprocal()
-            μ_new = μ + mean_scale[..., None] * δ
+            w = _solve_w_closed_form(q, ρ_μ, ρ_Σ)
+            ρs = w - (1.0 - ρ_μ)  # = ρ_μ · s; no division by ρ_μ
+            μ_new = μ + ((1.0 - ρ_μ) / w)[..., None] * δ
             outer = torch.einsum("...i, ...j -> ...ij", δ, δ)
-            coefficient = (
-                γ_μ.square() * s_parallel / (γ_Σ * (1 + γ_μ * s_parallel).square())
-            )
-            Σ_new = β[..., None, None] * Σ + coefficient[..., None, None] * outer
-            Σ_new = 0.5 * (Σ_new + Σ_new.mT)
+            coefficient = forget * ρ_μ * ρs / w.square()
+            Σ_new = ρ_Σ[..., None, None] * Σ + coefficient[..., None, None] * outer
+            Σ_new = 0.5 * (Σ_new + Σ_new.mT)  # ensure symmetry
             return μ_new, Σ_new
 
         case CovarianceType.PRECISION:
             Λ = matrix
             projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
             q = vecdot(δ, projected, dim=-1)
-            s_parallel = _solve_s_closed_form(q, γ_μ, γ_Σ)
-            mean_scale = (1 + γ_μ * s_parallel).reciprocal()
-            μ_new = μ + mean_scale[..., None] * δ
+            w = _solve_w_closed_form(q, ρ_μ, ρ_Σ)
+            μ_new = μ + ((1.0 - ρ_μ) / w)[..., None] * δ
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
-            coefficient = γ_μ.square() / ((γ_Σ - 1) * (1 + γ_μ * s_parallel).square())
-            Λ_new = β_inv[..., None, None] * Λ - coefficient[..., None, None] * outer
-            Λ_new = 0.5 * (Λ_new + Λ_new.mT)
+            coefficient = ρ_μ.square() * forget / (ρ_Σ * w.square())
+            Λ_new = (
+                ρ_Σ.reciprocal()[..., None, None] * Λ
+                - coefficient[..., None, None] * outer
+            )  # fmt: skip
+            Λ_new = 0.5 * (Λ_new + Λ_new.mT)  # ensure symmetry
             return μ_new, Λ_new
 
         case CovarianceType.CHOLESKY:
             L = matrix
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
-            s_parallel = _solve_s_closed_form(q, γ_μ, γ_Σ)
-            mean_scale = (1 + γ_μ * s_parallel).reciprocal()
-            μ_new = μ + mean_scale[..., None] * δ
+            w = _solve_w_closed_form(q, ρ_μ, ρ_Σ)
+            ρs = w - (1.0 - ρ_μ)
+            μ_new = μ + ((1.0 - ρ_μ) / w)[..., None] * δ
             I = torch.eye(dim, dtype=L.dtype, device=L.device)
             outer = torch.einsum("...i, ...j -> ...ij", a, a)
-            coefficient = (
-                γ_μ.square() * s_parallel / (γ_Σ * (1 + γ_μ * s_parallel).square())
-            ) / β
-            local_cov = I + coefficient[..., None, None] * outer
-            local_chol = cholesky(local_cov)
-            chol_new = β[..., None, None].sqrt() * (L @ local_chol)
+            coefficient = forget * ρ_μ * ρs / w.square()
+            local_cov = ρ_Σ[..., None, None] * I + coefficient[..., None, None] * outer
+            chol_new = L @ cholesky(local_cov)  # already lower-triangular
             return μ_new, torch.tril(chol_new)
 
         case CovarianceType.LOG_CHOLESKY:
@@ -677,18 +664,14 @@ def argmin_reverse_kl(
             )
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
-            s_parallel = _solve_s_closed_form(q, γ_μ, γ_Σ)
-            mean_scale = (1 + γ_μ * s_parallel).reciprocal()
-            μ_new = μ + mean_scale[..., None] * δ
+            w = _solve_w_closed_form(q, ρ_μ, ρ_Σ)
+            ρs = w - (1.0 - ρ_μ)
+            μ_new = μ + ((1.0 - ρ_μ) / w)[..., None] * δ
             I = torch.eye(dim, dtype=L.dtype, device=L.device)
             outer = torch.einsum("...i, ...j -> ...ij", a, a)
-            coefficient = (
-                γ_μ.square() * s_parallel / (γ_Σ * (1 + γ_μ * s_parallel).square())
-            ) / β
-            local_cov = I + coefficient[..., None, None] * outer
-            local_chol = cholesky(local_cov)
-            chol_new = β[..., None, None].sqrt() * (L @ local_chol)
-            chol_new = torch.tril(chol_new)
+            coefficient = forget * ρ_μ * ρs / w.square()
+            local_cov = ρ_Σ[..., None, None] * I + coefficient[..., None, None] * outer
+            chol_new = torch.tril(L @ cholesky(local_cov))
             log_chol_new = (
                 chol_new.tril(diagonal=-1)
                 + chol_new.diagonal(dim1=-2, dim2=-1).log().diag_embed()
