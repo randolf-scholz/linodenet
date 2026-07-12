@@ -667,8 +667,8 @@ def argmin_reverse_kl(
             ) / β
             local_cov = I + coefficient[..., None, None] * outer
             local_chol = cholesky(local_cov)
-            chol_post = β[..., None, None].sqrt() * (L @ local_chol)
-            return μ_new, torch.tril(chol_post)
+            chol_new = β[..., None, None].sqrt() * (L @ local_chol)
+            return μ_new, torch.tril(chol_new)
 
         case CovarianceType.LOG_CHOLESKY:
             log_chol_prior = matrix
@@ -687,13 +687,13 @@ def argmin_reverse_kl(
             ) / β
             local_cov = I + coefficient[..., None, None] * outer
             local_chol = cholesky(local_cov)
-            chol_post = β[..., None, None].sqrt() * (L @ local_chol)
-            chol_post = torch.tril(chol_post)
-            log_chol_post = (
-                chol_post.tril(diagonal=-1)
-                + chol_post.diagonal(dim1=-2, dim2=-1).log().diag_embed()
+            chol_new = β[..., None, None].sqrt() * (L @ local_chol)
+            chol_new = torch.tril(chol_new)
+            log_chol_new = (
+                chol_new.tril(diagonal=-1)
+                + chol_new.diagonal(dim1=-2, dim2=-1).log().diag_embed()
             )
-            return μ_new, log_chol_post
+            return μ_new, log_chol_new
 
         case _:
             raise ValueError(
@@ -708,131 +708,129 @@ def argmin_forward_kl(
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
-    eta: ScalarLike | tuple[ScalarLike, ScalarLike],  # eta or (eta_mu, eta_sigma)
+    retention: ScalarLike | tuple[ScalarLike, ScalarLike],  # rho or (rho_mu, rho_sigma)
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact minimizer of NLL plus separable forward-KL anchoring.
 
     This returns the exact minimizer of
 
-    .. math:: \argmin_θ -\log 𝓝(z; θ)
+    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋)，𝓝(θ)) \\
+        \argmin_θ -\log 𝓝(z; θ)
         + γ_μ ½(μ - μ₋)ᵀΣ⁻¹(μ - μ₋)
         + γ_Σ ½(\tr(Σ₋Σ⁻¹) - \log\det(Σ₋Σ⁻¹) - d)
 
-    the two terms being the exact split of $\kl(𝓝(θ₋) ∥ 𝓝(θ))$ into its location and
-    shape parts (each individually non-negative), so tying $γ_μ = γ_Σ = γ$ recovers
-    $-\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋)，𝓝(θ))$. Here $θ₋$ is the input `theta`, interpreted
-    according to `parametrization`.
-
-    Parametrization:
-        Weights are supplied as the interpolation coefficients $η = (1 + γ)⁻¹ ∈ [0, 1]$,
-        equivalently $γ = (1 - η)/η$, because these — not $γ$ — are what the update
-        actually contains, and because the no-op limit sits at the finite point $η = 0$
-        rather than at $γ = ∞$. Passing a single `eta` ties $η_μ = η_Σ = η$.
+    the two terms being the exact split of $\kl(𝓝(θ₋) ∥ 𝓝(θ))$ into its location and shape
+    parts, so tying $γ_μ = γ_Σ$ recovers the first line. Here $θ₋$ is the input `theta`,
+    interpreted according to `parametrization`.
 
     Update:
-        Writing $δ = z - μ₋$, the minimizer is an affine interpolation with just two
-        coefficients, $\text{keep} = 1 - η_Σ$ and $\text{gain} = η_Σ(1 - η_μ)$:
+        With $δ = z - μ₋$, $\text{keep} = ρ_Σ$ and $\text{gain} = (1 - ρ_Σ)ρ_μ$:
 
-        - $μ₊ = (1 - η_μ)μ₋ + η_μ z$
+        - $μ₊ = ρ_μ μ₋ + (1 - ρ_μ)z$
         - $Σ₊ = \text{keep}⋅Σ₋ + \text{gain}⋅δδᵀ$
 
-        Note $(1 - η_μ)δ = z - μ₊$ is the *posterior* residual: the covariance is driven
-        by the part of the innovation the mean did not absorb. Iterated, this is an EWMA
-        of the sufficient statistics with effective window $1/η$.
+        Note $ρ_μδ = z - μ₊$: the covariance is driven by the *posterior* residual, the part
+        of the innovation the mean did not absorb. Each parametrization uses its structure:
 
-        Each parametrization uses its own structure:
-
-        - `covariance`: apply the update directly.
-        - `precision`: with $Λ₋ = Σ₋⁻¹$, $v = Λ₋δ$ and $q = δᵀv$, Sherman-Morrison gives
+        - `covariance`: apply directly.
+        - `precision`: with $Λ₋ = Σ₋⁻¹$, $v = Λ₋δ$, $q = δᵀv$, Sherman-Morrison gives
           $Λ₊ = \text{keep}⁻¹(Λ₋ - \frac{\text{gain}}{\text{keep} + \text{gain}⋅q}vvᵀ)$.
           The denominator is bounded below by $\text{keep} > 0$, so no guard is needed.
-        - `cholesky`: with $Σ₋ = L₋L₋ᵀ$ and $a = L₋⁻¹δ$,
-          $L₊ = L₋\chol(\text{keep}⋅I + \text{gain}⋅aaᵀ)$, which is lower-triangular with
-          positive diagonal and hence already the Cholesky factor of $Σ₊$.
+        - `cholesky`: with $Σ₋ = L₋L₋ᵀ$, $a = L₋⁻¹δ$, the factor is
+          $L₊ = L₋\chol(\text{keep}⋅I + \text{gain}⋅aaᵀ)$, already lower-triangular.
         - `log-cholesky`: as `cholesky`, then store the diagonal in log form.
+
+    Parametrization:
+        Weights are the *retentions* $ρ = γ/(1 + γ) ∈ [0, 1]$, i.e. $γ = ρ/(1 - ρ)$: the
+        fraction of the prior surviving the update, so the iterate is an EWMA of the
+        sufficient statistics with effective memory $1/(1 - ρ)$ — the forgetting factor of
+        RLS / RiskMetrics. Passing a single `retention` ties $ρ_μ = ρ_Σ = ρ$, i.e. $γ_μ = γ_Σ$.
+
+        $ρ$ rather than $γ$ or $1 - ρ$ because it alone composes across time,
+        $ρ(Δt₁ + Δt₂) = ρ(Δt₁)ρ(Δt₂)$, making the schedule exactly $ρ(Δt) = e^{-rΔt}$ with
+        half-life $\ln 2/r$; because the identity $ρ = 1$ is representable while $γ = ∞$ is
+        not; and because $\text{keep} = ρ_Σ$ is read off without subtraction, leaving the
+        singular point at $ρ_Σ = 0$, where floats are dense, instead of at $1$, which nearby
+        legal values round *onto*.
 
     Args:
         z: Observation already pulled back to latent space. Any decoder log-Jacobian is
-            constant in $θ$ and therefore does not affect the minimizer.
+            constant in $θ$ and does not affect the minimizer.
         theta: Prior Gaussian parameters $θ₋$ in the selected parametrization.
-        eta: Interpolation strength, shared or split as $(η_μ, η_Σ)$. Broadcast against
-            the batch shape of `theta`, so a per-sample schedule (e.g. $η(Δt)$) is fine.
+        retention: Retention $ρ$, shared or split as $(ρ_μ, ρ_Σ)$. Broadcast against the
+            batch shape of `theta`, so a per-sample schedule $ρ(Δt)$ is fine.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, `"log-cholesky"`.
 
     Note: Admissible range
-        The mean admits the closed interval $η_μ ∈ [0, 1]$: $η_μ = 0$ is the $γ_μ → ∞$
-        identity and $η_μ = 1$ is the unregularized jump $μ₊ = z$. The covariance requires
-        $η_Σ ∈ [0, 1)$; $η_Σ = 1$ is the $γ_Σ → 0$ limit, where $Σ₊$ degenerates to the
-        rank-one $δδᵀ$ (the single-sample MLE). Both bounds are asserted.
+        $ρ_μ ∈ [0, 1]$ is closed: $0$ is the jump $μ₊ = z$, $1$ the identity $μ₊ = μ₋$.
+        $ρ_Σ ∈ (0, 1]$: at $1$ the shape is frozen; $ρ_Σ → 0$ is the $γ_Σ → 0$ limit where
+        $Σ₊$ degenerates to the rank-one $ρ_μδδᵀ$. Both are asserted, but $ρ_Σ > 0$ is only
+        the mathematical bound — $\mathrm{cond}(Σ₊) ≈ 1 + \text{gain}⋅q/\text{keep}$ exceeds
+        $1/ε$ near $ρ_Σ ≈ 10⁻⁷$ in fp32, which is already a $10⁷{:}1$ forgetting ratio.
 
-    Note: $η_Σ$ near 1 is ill-conditioned
-        The update needs $\text{keep} = 1 - η_Σ$, so an $η_Σ$ produced as $1 - e^{-rΔt}$
-        loses the retention factor to cancellation for large $rΔt$: in float32,
-        $\text{keep}$ has one significant digit by $rΔt ≈ 16$ and underflows to zero by
-        $rΔt ≈ 18$, making $Σ₊$ numerically singular. Schedules must cap $η_Σ$ (e.g. at
-        $1 - \sqrt{ε}$, a $≈3000{:}1$ forgetting ratio, far beyond any useful setting) or
-        supply the retention $1 - η_Σ$ directly. The $η_μ → 1$ end is benign by contrast:
-        $1 - η_μ$ only ever multiplies into `gain`, which vanishes there anyway.
+    Warning:
+        Do not tie $ρ$ in a $Δt$-dependent schedule. With $ρ_μ = ρ_Σ = e^{-rΔt}$, a long gap
+        sends $Σ₊ → (1 - ρ)ρ⋅δδᵀ → 0$: zero covariance, infinite confidence, infinite NLL.
+        Untie them, letting $ρ_μ$ decay faster than $ρ_Σ$.
 
     See Also:
         `argmin_reverse_kl`:
-            Same observation term, opposite KL direction,
-            $-\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ) ∥ 𝓝(θ₋))$. That objective has no closed form in
-            $η$ — $γ_μ$ enters through $γ_μ s$ and $γ_Σ$ through $β = (γ_Σ - 1)/γ_Σ$ — so
-            it keeps the $γ$ convention and additionally requires $γ_Σ > 1$. The two
-            signatures are *not* interchangeable.
+            Same observation term, opposite KL direction. That update is *not* an affine
+            interpolation — its coefficients are the admissible root of a cubic — so
+            "retention" has no referent and it keeps the $γ$ convention. Its constraint
+            $γ_Σ > 1$ reads as $ρ_Σ > ½$: the reverse KL can never forget more than half the
+            prior covariance. The signatures are *not* interchangeable.
         `argmin_proximal_kl`:
-            Generic reverse-KL proximal solver for a linearized loss,
-            $f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\kl(𝓝(θ) ∥ 𝓝(θ⁎))$.
+            Generic reverse-KL proximal solver for a linearized loss.
     """
     parametrization = CovarianceType(parametrization)
     μ, matrix = theta
-    eta_mu, eta_sigma = eta if isinstance(eta, tuple) else (eta, eta)
-    η_μ = torch.as_tensor(eta_mu, dtype=matrix.dtype, device=matrix.device)
-    η_Σ = torch.as_tensor(eta_sigma, dtype=matrix.dtype, device=matrix.device)
-    assert ((η_μ >= 0.0) & (η_μ <= 1.0)).all(), "requires eta_mu in [0, 1]"
-    assert ((η_Σ >= 0.0) & (η_Σ < 1.0)).all(), "requires eta_sigma in [0, 1)"
+    rho_mu, rho_sigma = (
+        retention if isinstance(retention, tuple) else (retention, retention)
+    )
+    ρ_μ = torch.as_tensor(rho_mu, dtype=matrix.dtype, device=matrix.device)
+    ρ_Σ = torch.as_tensor(rho_sigma, dtype=matrix.dtype, device=matrix.device)
+    assert ((ρ_μ >= 0.0) & (ρ_μ <= 1.0)).all(), "requires rho_mu in [0, 1]"
+    assert ((ρ_Σ > 0.0) & (ρ_Σ <= 1.0)).all(), "requires rho_sigma in (0, 1]"
 
-    cov_scale = 1.0 - η_Σ
-    innovation_scale = η_Σ * (1.0 - η_μ)
+    keep = ρ_Σ
+    gain = (1.0 - ρ_Σ) * ρ_μ
     δ = z - μ
-    mean_post = μ + η_μ[..., None] * δ
+    μ_new = μ + (1.0 - ρ_μ)[..., None] * δ
 
     match parametrization:
         case CovarianceType.COVARIANCE:
             Σ = matrix
             δδT = torch.einsum("...i, ...j -> ...ij", δ, δ)
             Σ_new = (
-                cov_scale[..., None, None] * Σ
-                + innovation_scale[..., None, None] * δδT
+                keep[..., None, None] * Σ
+                + gain[..., None, None] * δδT
             )  # fmt: skip
             Σ_new = 0.5 * (Σ_new + Σ_new.mT)  # ensure symmetry
-            return mean_post, Σ_new
+            return μ_new, Σ_new
 
         case CovarianceType.PRECISION:
             Λ = matrix
             projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
             mahalanobis = vecdot(δ, projected, dim=-1)
             outer = torch.einsum("...i, ...j -> ...ij", projected, projected)
-            denom = cov_scale + innovation_scale * mahalanobis
+            denom = keep + gain * mahalanobis
             Λ_new = (
-                cov_scale[..., None, None].reciprocal()
-                * (Λ - (innovation_scale / denom)[..., None, None] * outer)
+                keep[..., None, None].reciprocal()
+                * (Λ - (gain / denom)[..., None, None] * outer)
             )  # fmt: skip
             Λ_new = 0.5 * (Λ_new + Λ_new.mT)  # ensure symmetry
-            return mean_post, Λ_new
+            return μ_new, Λ_new
 
         case CovarianceType.CHOLESKY:
             L = matrix
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
             uuT = torch.einsum("...i, ...j -> ...ij", u, u)
-            local_cov = (
-                cov_scale[..., None, None] * I + innovation_scale[..., None, None] * uuT
-            )
-            chol_post = L @ cholesky(local_cov)
-            return mean_post, torch.tril(chol_post)
+            local_cov = keep[..., None, None] * I + gain[..., None, None] * uuT
+            chol_new = L @ cholesky(local_cov)
+            return μ_new, torch.tril(chol_new)
 
         case CovarianceType.LOG_CHOLESKY:
             log_chol_prior = matrix
@@ -842,15 +840,13 @@ def argmin_forward_kl(
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
             uuT = torch.einsum("...i, ...j -> ...ij", u, u)
-            local_cov = (
-                cov_scale[..., None, None] * I + innovation_scale[..., None, None] * uuT
+            local_cov = keep[..., None, None] * I + gain[..., None, None] * uuT
+            chol_new = L @ cholesky(local_cov)
+            log_chol_new = (
+                chol_new.tril(diagonal=-1)
+                + chol_new.diagonal(dim1=-2, dim2=-1).log().diag_embed()
             )
-            chol_post = L @ cholesky(local_cov)
-            log_chol_post = (
-                chol_post.tril(diagonal=-1)
-                + chol_post.diagonal(dim1=-2, dim2=-1).log().diag_embed()
-            )
-            return mean_post, log_chol_post
+            return μ_new, log_chol_new
 
         case _:
             raise ValueError(

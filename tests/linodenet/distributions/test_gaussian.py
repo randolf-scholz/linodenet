@@ -22,7 +22,7 @@ from tests.testing import SEEDS_3
 
 BATCH_SHAPES = [(), (6,), (1, 2, 3)]
 GAMMA_MODES = ["scalar", "batched", "split-batched"]
-ETA_MODES = ["scalar", "batched", "split-batched"]
+RHO_MODES = ["scalar", "batched", "split-batched"]
 
 
 @pytest.fixture(params=SEEDS_3, ids="seed={}".format)
@@ -78,30 +78,30 @@ def _make_gamma(
             raise AssertionError(f"Unexpected gamma mode: {other!r}")
 
 
-def _make_eta(
+def _make_rho(
     batch_shape: tuple[int, ...], mode: str, /
 ) -> Tensor | tuple[Tensor, Tensor]:
-    r"""Return a shared or split test eta with optional batch shape."""
+    r"""Return a shared or split test rho with optional batch shape."""
     match mode:
         case "scalar":
-            return torch.tensor(1.0 / 2.7)
+            return torch.tensor(1.7 / 2.7)
         case "batched":
-            eta = 1.0 / 2.7
-            return torch.full(batch_shape, eta) if batch_shape else torch.tensor(eta)
+            rho = 1.7 / 2.7
+            return torch.full(batch_shape, rho) if batch_shape else torch.tensor(rho)
         case "split-batched":
-            eta_mu = (
-                torch.full(batch_shape, 1.0 / 2.3)
+            rho_mu = (
+                torch.full(batch_shape, 1.3 / 2.3)
                 if batch_shape
-                else torch.tensor(1.0 / 2.3)
+                else torch.tensor(1.3 / 2.3)
             )
-            eta_sigma = (
-                torch.full(batch_shape, 1.0 / 3.1)
+            rho_sigma = (
+                torch.full(batch_shape, 2.1 / 3.1)
                 if batch_shape
-                else torch.tensor(1.0 / 3.1)
+                else torch.tensor(2.1 / 3.1)
             )
-            return eta_mu, eta_sigma
+            return rho_mu, rho_sigma
         case other:
-            raise AssertionError(f"Unexpected eta mode: {other!r}")
+            raise AssertionError(f"Unexpected rho mode: {other!r}")
 
 
 def _solve_reverse_kl_bisection(q: Tensor, gamma: Tensor, /) -> Tensor:
@@ -861,19 +861,19 @@ class TestArgminForwardKL:
     r"""Tests for the exact forward-KL Gaussian update."""
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
-    @pytest.mark.parametrize("eta_mode", ETA_MODES, ids="eta={}".format)
+    @pytest.mark.parametrize("rho_mode", RHO_MODES, ids="rho={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_matches_covariance_branch(
         self,
         seed: int,
         parametrization: CovarianceType,
         batch_shape: tuple[int, ...],
-        eta_mode: str,
+        rho_mode: str,
     ) -> None:
         r"""Test that all parametrizations agree with the covariance update."""
         torch.manual_seed(seed)
         dim = 4
-        eta = _make_eta(batch_shape, eta_mode)
+        rho = _make_rho(batch_shape, rho_mode)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -883,14 +883,14 @@ class TestArgminForwardKL:
         expected = argmin_forward_kl(
             z_obs,
             (mean_prior, covariance_prior),
-            eta=eta,
+            retention=rho,
             parametrization="covariance",
         )
         theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
         actual = argmin_forward_kl(
             z_obs,
             theta_prior,
-            eta=eta,
+            retention=rho,
             parametrization=parametrization,
         )
         actual_covariance = parametrization.to_covariance(actual)
@@ -909,7 +909,7 @@ class TestArgminForwardKL:
         r"""Test the exact forward-KL update across batch shapes."""
         torch.manual_seed(seed)
         dim = 4
-        eta = torch.tensor(1.0 / 2.7)
+        rho = torch.tensor(1.7 / 2.7)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -917,14 +917,14 @@ class TestArgminForwardKL:
         z_obs = torch.randn(*batch_shape, dim)
         delta = z_obs - mean_prior
         outer = torch.einsum("...i, ...j -> ...ij", delta, delta)
-        expected_mean = mean_prior + eta * delta
-        expected_covariance = (1 - eta) * covariance_prior + eta * (1 - eta) * outer
+        expected_mean = mean_prior + (1 - rho) * delta
+        expected_covariance = rho * covariance_prior + (1 - rho) * rho * outer
 
         theta_prior = parametrization.from_covariance((mean_prior, covariance_prior))
         actual = argmin_forward_kl(
             z_obs,
             theta_prior,
-            eta=eta,
+            retention=rho,
             parametrization=parametrization,
         )
         actual_mean, actual_covariance = parametrization.to_covariance(actual)
@@ -942,8 +942,8 @@ class TestArgminForwardKL:
         torch.manual_seed(seed)
         batch_shape = (2, 3)
         dim = 4
-        eta = torch.tensor(1.0 / 2.7)
-        gamma = (1 - eta) / eta
+        rho = torch.tensor(1.7 / 2.7)
+        gamma = rho / (1 - rho)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -953,7 +953,7 @@ class TestArgminForwardKL:
         theta_post = argmin_forward_kl(
             z_obs,
             theta_prior,
-            eta=eta,
+            retention=rho,
             parametrization=parametrization,
         )
         mean_var = theta_post[0].detach().clone().requires_grad_(True)
@@ -974,16 +974,16 @@ class TestArgminForwardKL:
         assert mean_grad.abs().amax() < 1e-5
         assert projected_grad.abs().amax() < 1e-5
 
-    @pytest.mark.parametrize("eta_mu", [0.0, 1e-3, 0.5, 1.0 - 1e-8, 1.0])
-    @pytest.mark.parametrize("eta_sigma", [0.0, 0.5, 0.999, 1.0 - 1e-8])
+    @pytest.mark.parametrize("rho_mu", [0.0, 1e-8, 1e-3, 0.5, 1.0])
+    @pytest.mark.parametrize("rho_sigma", [1e-8, 1e-3, 0.5, 1.0 - 1e-8, 1.0])
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_grad_finite_at_zero_innovation(
         self,
         parametrization: CovarianceType,
-        eta_mu: float,
-        eta_sigma: float,
+        rho_mu: float,
+        rho_sigma: float,
     ) -> None:
-        r"""Test that zero-innovation gradients stay finite up to $η_Σ \to 1⁻$."""
+        r"""Test that zero-innovation gradients stay finite down to $ρ_Σ \to 0⁺$."""
         dim = 3
         z = torch.zeros(1, dim, dtype=torch.float64, requires_grad=True)
         mean_prior = torch.zeros(1, dim, dtype=torch.float64, requires_grad=True)
@@ -994,15 +994,15 @@ class TestArgminForwardKL:
             (mean_prior.detach(), covariance_prior)
         )
         matrix_prior = theta_prior[1].detach().clone().requires_grad_(True)
-        eta_mu_tensor = torch.tensor(eta_mu, dtype=torch.float64, requires_grad=True)
-        eta_sigma_tensor = torch.tensor(
-            eta_sigma, dtype=torch.float64, requires_grad=True
+        rho_mu_tensor = torch.tensor(rho_mu, dtype=torch.float64, requires_grad=True)
+        rho_sigma_tensor = torch.tensor(
+            rho_sigma, dtype=torch.float64, requires_grad=True
         )
 
         mean_post, matrix_post = argmin_forward_kl(
             z,
             (mean_prior, matrix_prior),
-            eta=(eta_mu_tensor, eta_sigma_tensor),
+            retention=(rho_mu_tensor, rho_sigma_tensor),
             parametrization=parametrization,
         )
         (mean_post.sum() + matrix_post.sum()).backward()
@@ -1011,24 +1011,24 @@ class TestArgminForwardKL:
             z.grad,
             mean_prior.grad,
             matrix_prior.grad,
-            eta_mu_tensor.grad,
-            eta_sigma_tensor.grad,
+            rho_mu_tensor.grad,
+            rho_sigma_tensor.grad,
         ):
             assert grad is not None
             assert torch.isfinite(grad).all()
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
-    def test_zero_eta_converges_to_identity(
+    def test_rho_one_converges_to_identity(
         self,
         seed: int,
         parametrization: CovarianceType,
         batch_shape: tuple[int, ...],
     ) -> None:
-        r"""Test that $η = 0$ gives the identity update."""
+        r"""Test that $ρ = 1$ gives the identity update."""
         torch.manual_seed(seed)
         dim = 4
-        eta = torch.tensor(0.0)
+        rho = torch.tensor(1.0)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -1039,7 +1039,7 @@ class TestArgminForwardKL:
             argmin_forward_kl(
                 z_obs,
                 theta_prior,
-                eta=eta,
+                retention=rho,
                 parametrization=parametrization,
             ),
         )
@@ -1049,16 +1049,16 @@ class TestArgminForwardKL:
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
-    def test_eta_near_one_converges_to_observation(
+    def test_rho_near_zero_converges_to_observation(
         self,
         seed: int,
         parametrization: CovarianceType,
         batch_shape: tuple[int, ...],
     ) -> None:
-        r"""Test that $η \to 1$ nearly collapses onto the observation."""
+        r"""Test that $ρ \to 0$ nearly collapses onto the observation."""
         torch.manual_seed(seed)
         dim = 4
-        eta = torch.tensor(1.0 - 1e-6)
+        rho = torch.tensor(1e-6)
 
         mean_prior = torch.randn(*batch_shape, dim)
         factor = torch.randn(*batch_shape, dim, dim)
@@ -1069,7 +1069,7 @@ class TestArgminForwardKL:
             argmin_forward_kl(
                 z_obs,
                 theta_prior,
-                eta=eta,
+                retention=rho,
                 parametrization=parametrization,
             ),
         )
@@ -1089,7 +1089,7 @@ class TestArgminForwardKL:
             argmin_forward_kl(
                 z_obs,
                 (mean, covariance),
-                eta=0.5,
+                retention=0.5,
                 parametrization="unknown",
             )
 
@@ -1097,7 +1097,7 @@ class TestArgminForwardKL:
     def test_compile_fullgraph(self, parametrization: CovarianceType) -> None:
         r"""Test that the exact forward-KL update compiles with `fullgraph=True`."""
         dim = 4
-        eta = torch.tensor(1.0 / 2.7)
+        rho = torch.tensor(1.7 / 2.7)
         mean_prior = torch.randn(2, dim)
         factor = torch.randn(2, dim, dim)
         covariance_prior = factor @ factor.mT + torch.eye(dim)
@@ -1108,7 +1108,7 @@ class TestArgminForwardKL:
             return argmin_forward_kl(
                 z,
                 theta,
-                eta=eta,
+                retention=rho,
                 parametrization=parametrization,
             )
 
