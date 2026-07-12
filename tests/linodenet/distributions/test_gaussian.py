@@ -143,6 +143,55 @@ class TestReverseKLSolvers:
             actual = gaussian_utils._solve_s_closed_form(q, gamma_value, gamma_value)  # noqa: SLF001
             assert torch.allclose(actual, expected, atol=atol, rtol=rtol)
 
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
+    def test_closed_form_solves_stationarity_equation_with_finite_gradients(
+        self, dtype: torch.dtype
+    ) -> None:
+        r"""Test that the closed-form solver satisfies its stationarity equation."""
+        gamma_mean_values = torch.tensor(
+            [0.0, 1e-8, 1e-5, 1e-3, 0.1, 1.0, 10.0, 1e3],
+            dtype=dtype,
+        )
+        gamma_cov_values = torch.tensor(
+            [1.0 + 1e-4, 1.001, 1.1, 2.0, 10.0],
+            dtype=dtype,
+        )
+        q_values = torch.tensor(
+            [0.0, 1e-12, 1e-8, 1e-4, 1e-2, 1.0, 10.0, 1e3, 1e6],
+            dtype=dtype,
+        )
+
+        q, gamma_mean, gamma_cov = torch.meshgrid(
+            q_values, gamma_mean_values, gamma_cov_values, indexing="ij"
+        )
+        q = q.clone().requires_grad_()
+        gamma_mean = gamma_mean.clone().requires_grad_()
+        gamma_cov = gamma_cov.clone().requires_grad_()
+
+        actual = gaussian_utils._solve_s_closed_form(q, gamma_mean, gamma_cov)  # noqa: SLF001
+        residual = (
+            (1.0 - gamma_cov) / actual
+            + gamma_cov
+            - gamma_mean.square() * q / (1.0 + gamma_mean * actual).square()
+        )
+        scale = (
+            ((1.0 - gamma_cov) / actual).abs()
+            + gamma_cov.abs()
+            + (gamma_mean.square() * q / (1.0 + gamma_mean * actual).square()).abs()
+        )
+
+        atol = 2e-4 if dtype is torch.float32 else 2e-8
+        rtol = 2e-5 if dtype is torch.float32 else 1e-8
+
+        assert actual.shape == q.shape
+        assert torch.all(actual > 0)
+        assert torch.all(residual.abs() <= atol + rtol * scale)
+
+        grads = torch.autograd.grad(actual.sum(), (q, gamma_mean, gamma_cov))
+        for grad in grads:
+            assert grad is not None
+            assert torch.isfinite(grad).all()
+
 
 @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
 @pytest.mark.parametrize("parametrization", CovarianceType)
@@ -898,6 +947,51 @@ class TestArgminForwardKL:
         assert mean_grad.abs().amax() < 1e-5
         assert projected_grad.abs().amax() < 1e-5
 
+    @pytest.mark.parametrize("gamma_mu", [0.0, 1e-8, 1e-5, 1e-3, 1.0, 10.0, 1000.0])
+    @pytest.mark.parametrize("gamma_sigma", [1e-8, 1e-6, 1e-3, 1.0])
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_grad_finite_at_zero_innovation(
+        self,
+        parametrization: CovarianceType,
+        gamma_mu: float,
+        gamma_sigma: float,
+    ) -> None:
+        r"""Test that zero-innovation gradients stay finite near $γ_Σ \to 0⁺$."""
+        dim = 3
+        z = torch.zeros(1, dim, dtype=torch.float64, requires_grad=True)
+        mean_prior = torch.zeros(1, dim, dtype=torch.float64, requires_grad=True)
+        covariance_prior = (
+            torch.eye(dim, dtype=torch.float64).expand(1, dim, dim).clone()
+        )
+        theta_prior = parametrization.from_covariance(
+            (mean_prior.detach(), covariance_prior)
+        )
+        matrix_prior = theta_prior[1].detach().clone().requires_grad_(True)
+        gamma_mu_tensor = torch.tensor(
+            gamma_mu, dtype=torch.float64, requires_grad=True
+        )
+        gamma_sigma_tensor = torch.tensor(
+            gamma_sigma, dtype=torch.float64, requires_grad=True
+        )
+
+        mean_post, matrix_post = argmin_forward_kl(
+            z,
+            (mean_prior, matrix_prior),
+            gamma=(gamma_mu_tensor, gamma_sigma_tensor),
+            parametrization=parametrization,
+        )
+        (mean_post.sum() + matrix_post.sum()).backward()
+
+        for grad in (
+            z.grad,
+            mean_prior.grad,
+            matrix_prior.grad,
+            gamma_mu_tensor.grad,
+            gamma_sigma_tensor.grad,
+        ):
+            assert grad is not None
+            assert torch.isfinite(grad).all()
+
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_large_gamma_converges_to_identity(
@@ -1131,6 +1225,51 @@ class TestArgminReverseKL:
 
         assert mean_grad.abs().amax() < 1e-5
         assert projected_grad.abs().amax() < 1e-5
+
+    @pytest.mark.parametrize("gamma_mu", [0.0, 1e-8, 1e-5, 1e-3, 1.0, 10.0, 1000.0])
+    @pytest.mark.parametrize("gamma_sigma", [1.0 + 1e-6, 1.5, 10.0])
+    @pytest.mark.parametrize("parametrization", CovarianceType)
+    def test_grad_finite_at_zero_innovation(
+        self,
+        parametrization: CovarianceType,
+        gamma_mu: float,
+        gamma_sigma: float,
+    ) -> None:
+        r"""Test that zero-innovation gradients stay finite near $γ_Σ \to 1⁺$."""
+        dim = 3
+        z = torch.zeros(1, dim, dtype=torch.float64, requires_grad=True)
+        mean_prior = torch.zeros(1, dim, dtype=torch.float64, requires_grad=True)
+        covariance_prior = (
+            torch.eye(dim, dtype=torch.float64).expand(1, dim, dim).clone()
+        )
+        theta_prior = parametrization.from_covariance(
+            (mean_prior.detach(), covariance_prior)
+        )
+        matrix_prior = theta_prior[1].detach().clone().requires_grad_(True)
+        gamma_mu_tensor = torch.tensor(
+            gamma_mu, dtype=torch.float64, requires_grad=True
+        )
+        gamma_sigma_tensor = torch.tensor(
+            gamma_sigma, dtype=torch.float64, requires_grad=True
+        )
+
+        mean_post, matrix_post = argmin_reverse_kl(
+            z,
+            (mean_prior, matrix_prior),
+            gamma=(gamma_mu_tensor, gamma_sigma_tensor),
+            parametrization=parametrization,
+        )
+        (mean_post.sum() + matrix_post.sum()).backward()
+
+        for grad in (
+            z.grad,
+            mean_prior.grad,
+            matrix_prior.grad,
+            gamma_mu_tensor.grad,
+            gamma_sigma_tensor.grad,
+        ):
+            assert grad is not None
+            assert torch.isfinite(grad).all()
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES, ids="batch_shape={}".format)
     @pytest.mark.parametrize("parametrization", CovarianceType)
