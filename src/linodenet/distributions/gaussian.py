@@ -252,8 +252,9 @@ def log_prob(
 
         case CovarianceType.LOG_CHOLESKY:
             log_chol = matrix
-            L = log_chol.tril(diagonal=-1) + torch.diag_embed(
-                log_chol.diagonal(dim1=-2, dim2=-1).exp()
+            L = (
+                log_chol.tril(diagonal=-1)
+                + log_chol.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
             )
             z = solve_triangular(L, residual.unsqueeze(-1), upper=False).squeeze(-1)
             logdet = 2 * log_chol.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
@@ -360,8 +361,9 @@ def solve_proximal_kl(
             # wᵢᵢ = (-aᵢ + √(aᵢ² + 4γ(γ-gᵢ)))/(2γ),
             # a = diag(LᵀGₗ), g = diag(G), Gₗ = tril(G, -1).
             log_chol = matrix
-            L = log_chol.tril(diagonal=-1) + torch.diag_embed(
-                log_chol.diagonal(dim1=-2, dim2=-1).exp()
+            L = (
+                log_chol.tril(diagonal=-1)
+                + log_chol.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
             )
             cov = L @ L.mT
             mu_new = μ - torch.einsum("...ij,...j->...i", cov, g * scale)
@@ -395,8 +397,9 @@ def solve_proximal_kl(
 
             local_chol = torch.diag_embed(diag_step) - scale * lin.tril(-1)
             chol_new = torch.tril(L @ local_chol)
-            log_chol_new = chol_new.tril(diagonal=-1) + torch.diag_embed(
-                chol_new.diagonal(dim1=-2, dim2=-1).log()
+            log_chol_new = (
+                chol_new.tril(diagonal=-1)
+                + chol_new.diagonal(dim1=-2, dim2=-1).log().diag_embed()
             )
             return mu_new, log_chol_new
 
@@ -659,8 +662,9 @@ def argmin_reverse_kl(
 
         case CovarianceType.LOG_CHOLESKY:
             log_chol_prior = matrix
-            L = log_chol_prior.tril(diagonal=-1) + torch.diag_embed(
-                log_chol_prior.diagonal(dim1=-2, dim2=-1).exp()
+            L = (
+                log_chol_prior.tril(diagonal=-1)
+                + log_chol_prior.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
             )
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
@@ -817,8 +821,9 @@ def argmin_forward_kl(
 
         case CovarianceType.LOG_CHOLESKY:
             log_chol_prior = matrix
-            L = log_chol_prior.tril(diagonal=-1) + torch.diag_embed(
-                log_chol_prior.diagonal(dim1=-2, dim2=-1).exp()
+            L = (
+                log_chol_prior.tril(diagonal=-1)
+                + log_chol_prior.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
             )
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
@@ -898,8 +903,9 @@ def fisher(
             # JₓδX = tril(δX, -1) + diag(Lᵢᵢ δxᵢᵢ).
             mean, log_chol = theta
             d_mu, d_log_chol = tangent
-            L = log_chol.tril(diagonal=-1) + torch.diag_embed(
-                log_chol.diagonal(dim1=-2, dim2=-1).exp()
+            L = (
+                log_chol.tril(diagonal=-1)
+                + log_chol.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
             )
             diag = L.diagonal(dim1=-2, dim2=-1)
             d_chol = d_log_chol.tril(diagonal=-1) + torch.diag_embed(
@@ -985,8 +991,9 @@ def inverse_fisher(
             # Jₓ⁻¹ΔL = tril(ΔL, -1) + diag(ΔLᵢᵢ / Lᵢᵢ).
             mean, log_chol = theta
             g_mu, g_log_chol = cotangent
-            L = log_chol.tril(diagonal=-1) + torch.diag_embed(
-                log_chol.diagonal(dim1=-2, dim2=-1).exp()
+            L = (
+                log_chol.tril(diagonal=-1)
+                + log_chol.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
             )
             diag = L.diagonal(dim1=-2, dim2=-1)
             g_chol = g_log_chol.tril(diagonal=-1) + torch.diag_embed(
@@ -1100,11 +1107,13 @@ def kl(
             # L(X) = tril(X, -1) + diag(exp(diag(X))).
             mean_p, log_chol_p = p
             mean_q, log_chol_q = q
-            chol_p = log_chol_p.tril(diagonal=-1) + torch.diag_embed(
-                log_chol_p.diagonal(dim1=-2, dim2=-1).exp()
+            chol_p = (
+                log_chol_p.tril(diagonal=-1)
+                + log_chol_p.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
             )
-            chol_q = log_chol_q.tril(diagonal=-1) + torch.diag_embed(
-                log_chol_q.diagonal(dim1=-2, dim2=-1).exp()
+            chol_q = (
+                log_chol_q.tril(diagonal=-1)
+                + log_chol_q.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
             )
             delta = mean_q - mean_p
             # (μᵥ - μᵤ)ᵀΣᵥ⁻¹(μᵥ - μᵤ) = ‖Lᵥ⁻¹(μᵥ - μᵤ)‖².
