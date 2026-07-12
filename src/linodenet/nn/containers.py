@@ -15,7 +15,7 @@ from collections.abc import (
     Sequence,
     ValuesView,
 )
-from typing import TYPE_CHECKING, Never, overload
+from typing import TYPE_CHECKING, Any, Never, overload
 
 import torch
 from torch import Tensor, nn
@@ -44,9 +44,9 @@ class Constant(Module):
             case Tensor() as tensor:
                 self.value = nn.Parameter(tensor, requires_grad=learnable)
             case _:
-                raise TypeError(f"Expected shape or tensor, got {type(value)!r}")
+                raise TypeError(f"Expected float, int, or tensor, got {type(value)!r}")
 
-    def forward(self, _: Tensor) -> Tensor:
+    def forward(self, _: Any, /) -> Tensor:
         return self.value
 
 
