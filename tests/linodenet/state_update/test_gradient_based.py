@@ -9,8 +9,8 @@ from torch.distributions import MultivariateNormal
 
 from linodenet.distributions.gaussian import argmin_forward_kl, argmin_proximal_kl
 from linodenet.state_update.gradient_based import (
+    GaussianForwardKLUpdater,
     GaussianKLProximalUpdater,
-    GaussianReverseKLUpdater,
     GradientStepUpdater,
     LpLoss,
 )
@@ -522,11 +522,11 @@ class TestGaussianGradientStepUpdater:
         torch.testing.assert_close(actual_log_chol, expected_log_chol)
 
 
-class TestGaussianReverseKLUpdater:
+class TestGaussianForwardKLUpdater:
     def test_regularization_strength_must_be_positive(self) -> None:
         r"""The reverse-KL regularization strength should be positive."""
         with pytest.raises(ValueError, match="regularization_strength"):
-            GaussianReverseKLUpdater(
+            GaussianForwardKLUpdater(
                 decoder=ShiftTransform(shift=0.0),
                 parametrization="log-cholesky",
                 regularization_strength=0.0,
@@ -534,7 +534,7 @@ class TestGaussianReverseKLUpdater:
 
     def test_regularization_learnable_can_be_disabled(self) -> None:
         r"""The log-regularization parameter should support frozen initialization."""
-        updater = GaussianReverseKLUpdater(
+        updater = GaussianForwardKLUpdater(
             decoder=ShiftTransform(shift=0.0),
             parametrization="log-cholesky",
             regularization_strength=1.7,
@@ -547,7 +547,7 @@ class TestGaussianReverseKLUpdater:
     def test_forward_and_backward(self) -> None:
         r"""Forward output and parameter gradients should match the exact update."""
         decoder = ShiftTransform(shift=0.2)
-        updater = GaussianReverseKLUpdater(
+        updater = GaussianForwardKLUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=1.7,
@@ -590,7 +590,7 @@ class TestGaussianReverseKLUpdater:
 
     def test_compile_fullgraph(self) -> None:
         r"""The updater should compile under `torch.compile(fullgraph=True)`."""
-        updater = GaussianReverseKLUpdater(
+        updater = GaussianForwardKLUpdater(
             decoder=ShiftTransform(shift=-0.1),
             parametrization="log-cholesky",
             regularization_strength=1.2,
@@ -616,7 +616,7 @@ class TestGaussianReverseKLUpdater:
     def test_batched_forward(self) -> None:
         r"""Batched parameters should use a per-sample exact reverse-KL update."""
         decoder = ShiftTransform(shift=0.1)
-        updater = GaussianReverseKLUpdater(
+        updater = GaussianForwardKLUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=1.0,
@@ -653,7 +653,7 @@ class TestGaussianReverseKLUpdater:
     def test_gradients_wrt_theta(self) -> None:
         r"""The update should remain differentiable with respect to the prior."""
         decoder = ShiftTransform(shift=0.25)
-        updater = GaussianReverseKLUpdater(
+        updater = GaussianForwardKLUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=1.4,
@@ -695,7 +695,7 @@ class TestGaussianReverseKLUpdater:
     def test_is_consistent_for_exact_decoder_mean(self) -> None:
         r"""For $y_obs = decoder(μ₋)$, the posterior mean should remain unchanged."""
         decoder = ShiftTransform(shift=-0.4)
-        updater = GaussianReverseKLUpdater(
+        updater = GaussianForwardKLUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
             regularization_strength=2.0,

@@ -31,7 +31,7 @@ __all__ = [
     "LpLoss",
     "GradientStepUpdater",
     "GaussianKLProximalUpdater",
-    "GaussianReverseKLUpdater",
+    "GaussianForwardKLUpdater",
     "lp_loss",
 ]
 
@@ -276,26 +276,24 @@ class GaussianKLProximalUpdater(nn.Module, AbstractStateUpdate[GaussianParams, T
         )
 
 
-class GaussianReverseKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
-    r"""Perform an exact Gaussian reverse-KL update of the observation loss.
+class GaussianForwardKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
+    r"""Perform an exact Gaussian forward-KL update of the observation loss.
 
     Let $θ₋ = (μ₋, Σ₋)$ denote the current latent Gaussian parameters and let
     $q(y_obs∣θ)$ be the predictive density induced by the decoder. This module
     solves the exact Gaussian observation update
 
-    .. math::
-        θ₊ = \argmin_θ -\log q(y_obs∣θ) + λ⋅\kl(𝓝(μ₋, Σ₋) ∣ 𝓝(μ, Σ))
+    .. math:: θ₊ = \argmin_θ -\log q(y_obs∣θ) + λ⋅\kl(𝓝(μ₋, Σ₋)，𝓝(μ, Σ))
 
     The decoder is used only to pull the observation back into latent space:
-    if $(z, \log | \det Dϕ⁻¹(y_obs) |) = ϕ^{-1}(y_obs)$, then the Jacobian term
+    if $(z, \log|\det 𝐃ϕ⁻¹(y_obs)|) = ϕ⁻¹(y_obs)$, then the Jacobian term
     is constant with respect to $θ$, so the minimizer is exactly
 
-    .. math::
-        θ₊ = \argmin_θ -\log 𝓝(z; θ) + λ⋅\kl(𝓝(μ₋, Σ₋) ∣ 𝓝(μ, Σ))
+    .. math:: θ₊ = \argmin_θ -\log 𝓝(z; θ) + λ⋅\kl(𝓝(μ₋, Σ₋)，𝓝(μ, Σ))
 
-    which is evaluated in closed form by `argmin_reverse_kl`.
+    which is evaluated in closed form by `argmin_forward_kl`.
 
-    The parameter ``regularization_strength`` is the reverse-KL weight $λ$:
+    The parameter ``regularization_strength`` is the forward-KL weight $λ$:
 
     - larger $λ$ keeps $θ₊$ closer to $θ₋$
     - smaller $λ$ lets the observation move the posterior more aggressively
