@@ -91,11 +91,8 @@ class InnovationCell(nn.Module, SparseVectorStateUpdate):
     - ``None``: alias for ``"identity"``.
     - ``nn.Module``: use a custom user-provided gate.
 
-    The observation map can be:
-
-    - ``"linear"``: use a learned linear observation map.
-    - ``"identity"``: use $h(x)=x$, which requires ``input_size == hidden_size``.
-    - ``nn.Module``: use a custom user-provided observation map.
+    The observation map must be an `nn.Module`. If it is omitted, this cell uses
+    $h(x)=x$, which requires ``input_size == hidden_size``.
     """
 
     # PARAMETERS
@@ -151,7 +148,7 @@ class InnovationCell(nn.Module, SparseVectorStateUpdate):
             size,
             gain="constant",
             gate=gate_module,
-            observation_map="identity",
+            observation_map=nn.Identity(),
         )
         with torch.no_grad():
             assert isinstance(cell.gain, ConstantGain)
@@ -170,7 +167,7 @@ class InnovationCell(nn.Module, SparseVectorStateUpdate):
         *,
         gain: str | nn.Module = "constant",
         gate: str | nn.Module | None = "rezero",
-        observation_map: str | nn.Module = "linear",
+        observation_map: nn.Module | None = None,
     ) -> None:
         super().__init__()
         SparseVectorStateUpdate.__init__(
@@ -198,18 +195,16 @@ class InnovationCell(nn.Module, SparseVectorStateUpdate):
         match observation_map:
             case nn.Module():
                 self.observation_map = observation_map
-            case "linear":
-                self.observation_map = nn.Linear(hidden_size, input_size, bias=False)
-            case "identity":
-                if input_size != hidden_size:
-                    raise ValueError(
-                        "observation_map='identity' requires input_size == hidden_size!"
-                    )
+            case None if input_size == hidden_size:
                 self.observation_map = nn.Identity()
-            case _:
+            case None:
                 raise ValueError(
-                    f"Unknown observation_map: {observation_map!r}. "
-                    "Expected 'linear', 'identity', or an nn.Module."
+                    "observation_map is required unless input_size == hidden_size."
+                )
+            case _:
+                raise TypeError(
+                    "observation_map must be an nn.Module; omit it only when "
+                    "input_size == hidden_size to use nn.Identity()."
                 )
 
     def forward(self, y: Tensor, x: Tensor, /, mask: Tensor | None = None) -> Tensor:
@@ -407,7 +402,7 @@ class KalmanCell(nn.Module, SparseVectorStateUpdate):
         noise: str = "scalar",
         covariance_factor: str | nn.Module = "constant",
         gate: str | nn.Module | None = "rezero",
-        observation_map: str | nn.Module = "linear",
+        observation_map: nn.Module | None = None,
     ) -> None:
         super().__init__()
         SparseVectorStateUpdate.__init__(
@@ -443,21 +438,16 @@ class KalmanCell(nn.Module, SparseVectorStateUpdate):
         match observation_map:
             case nn.Module():
                 self.observation_map = observation_map
-
-            case "linear":
-                self.observation_map = nn.Linear(hidden_size, input_size, bias=False)
-
-            case "identity":
-                if input_size != hidden_size:
-                    raise ValueError(
-                        "observation_map='identity' requires input_size == hidden_size!"
-                    )
+            case None if input_size == hidden_size:
                 self.observation_map = nn.Identity()
-
-            case _:
+            case None:
                 raise ValueError(
-                    f"Unknown observation_map: {observation_map!r}. "
-                    "Expected 'linear', 'identity', or an nn.Module."
+                    "observation_map is required unless input_size == hidden_size."
+                )
+            case _:
+                raise TypeError(
+                    "observation_map must be an nn.Module; omit it only when "
+                    "input_size == hidden_size to use nn.Identity()."
                 )
 
         match noise:

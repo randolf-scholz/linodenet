@@ -20,7 +20,9 @@ class TestInnovationCell:
     @pytest.mark.parametrize("gain_name", ["constant", "attention"])
     def test_identity_gate_matches_plain_update(self, gain_name: str) -> None:
         r"""The identity gate should preserve the plain innovation update."""
-        cell = InnovationCell(3, 5, gain=gain_name, gate="identity")
+        cell = InnovationCell(
+            3, 5, gain=gain_name, gate="identity", observation_map=nn.Linear(5, 3)
+        )
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
@@ -33,7 +35,7 @@ class TestInnovationCell:
 
     def test_rezero_starts_as_identity(self) -> None:
         r"""ReZero mode should initialize the innovation path at zero."""
-        cell = InnovationCell(3, 5)
+        cell = InnovationCell(3, 5, observation_map=nn.Linear(5, 3))
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
@@ -43,8 +45,8 @@ class TestInnovationCell:
 
     def test_rezero_scalar_controls_correction(self) -> None:
         r"""Setting the ReZero scalar to one should recover the plain innovation update."""
-        plain = InnovationCell(3, 5, gate="identity")
-        rezero = InnovationCell(3, 5)
+        plain = InnovationCell(3, 5, gate="identity", observation_map=nn.Linear(5, 3))
+        rezero = InnovationCell(3, 5, observation_map=nn.Linear(5, 3))
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
@@ -55,14 +57,17 @@ class TestInnovationCell:
             assert isinstance(plain.observation_map, nn.Linear)
             assert isinstance(rezero.observation_map, nn.Linear)
             rezero.observation_map.weight.copy_(plain.observation_map.weight)
+            assert plain.observation_map.bias is not None
+            assert rezero.observation_map.bias is not None
+            rezero.observation_map.bias.copy_(plain.observation_map.bias)
             assert isinstance(rezero.gate, ReZero)
             rezero.gate.scalar.copy_(torch.tensor(1.0))
 
         torch.testing.assert_close(rezero(y, x), plain(y, x))
 
-    def test_identity_observation_map_uses_x_directly(self) -> None:
-        r"""Identity observation maps should use the hidden state directly."""
-        cell = InnovationCell(4, 4, observation_map="identity", gate="identity")
+    def test_default_square_observation_map_uses_x_directly(self) -> None:
+        r"""Square cells should default to direct observation."""
+        cell = InnovationCell(4, 4, gate="identity")
         y = torch.randn(7, 4)
         x = torch.randn(7, 4)
 
@@ -164,13 +169,15 @@ class TestInnovationCell:
         self, gain_name: str, gain_cls: type[nn.Module]
     ) -> None:
         r"""Built-in gain strings should instantiate the expected module."""
-        cell = InnovationCell(3, 5, gain=gain_name, gate="identity")
+        cell = InnovationCell(
+            3, 5, gain=gain_name, gate="identity", observation_map=nn.Linear(5, 3)
+        )
 
         assert isinstance(cell.gain, gain_cls)
 
     def test_accepts_custom_observation_map(self) -> None:
         r"""Custom observation maps should be used verbatim."""
-        observation_map = nn.Linear(5, 3, bias=False)
+        observation_map = nn.Linear(5, 3)
         cell = InnovationCell(3, 5, observation_map=observation_map)
 
         assert cell.observation_map is observation_map
@@ -178,15 +185,19 @@ class TestInnovationCell:
     def test_accepts_custom_gate(self) -> None:
         r"""Custom gates should be used verbatim."""
         gate = nn.Tanh()
-        cell = InnovationCell(3, 5, gate=gate)
+        cell = InnovationCell(3, 5, gate=gate, observation_map=nn.Linear(5, 3))
 
         assert cell.gate is gate
 
     @pytest.mark.parametrize("gain_name", ["constant", "attention"])
     def test_none_gate_maps_to_identity(self, gain_name: str) -> None:
         r"""A None gate should behave like the identity gate."""
-        none_gate = InnovationCell(3, 5, gain=gain_name, gate=None)
-        identity_gate = InnovationCell(3, 5, gain=gain_name, gate="identity")
+        none_gate = InnovationCell(
+            3, 5, gain=gain_name, gate=None, observation_map=nn.Linear(5, 3)
+        )
+        identity_gate = InnovationCell(
+            3, 5, gain=gain_name, gate="identity", observation_map=nn.Linear(5, 3)
+        )
         y = torch.randn(7, 3)
         x = torch.randn(7, 5)
 
@@ -202,6 +213,9 @@ class TestInnovationCell:
             assert isinstance(none_gate.observation_map, nn.Linear)
             assert isinstance(identity_gate.observation_map, nn.Linear)
             none_gate.observation_map.weight.copy_(identity_gate.observation_map.weight)
+            assert none_gate.observation_map.bias is not None
+            assert identity_gate.observation_map.bias is not None
+            none_gate.observation_map.bias.copy_(identity_gate.observation_map.bias)
 
         assert isinstance(none_gate.gate, nn.Identity)
         torch.testing.assert_close(none_gate(y, x), identity_gate(y, x))
@@ -211,7 +225,9 @@ class TestInnovationCell:
         r"""Masked observations should not destabilize outputs or gradients."""
         torch.manual_seed(0)
 
-        cell = InnovationCell(5, 7, gain=gain_name, gate="identity")
+        cell = InnovationCell(
+            5, 7, gain=gain_name, gate="identity", observation_map=nn.Linear(7, 5)
+        )
         x = torch.randn(8, 7, requires_grad=True)
         y = torch.randn(8, 5)
         mask = torch.rand(8, 5) < 0.5
@@ -228,13 +244,13 @@ class TestInnovationCell:
             assert parameter.grad is not None
             assert torch.isfinite(parameter.grad).all()
 
-    def test_rejects_identity_for_nonsquare_shapes(self) -> None:
-        r"""Identity observation maps require matching input and hidden sizes."""
+    def test_rejects_missing_observation_map_for_nonsquare_shapes(self) -> None:
+        r"""Non-square cells require an explicit observation map."""
         with pytest.raises(
             ValueError,
-            match=r"observation_map='identity' requires input_size == hidden_size!",
+            match=r"observation_map is required unless input_size == hidden_size.",
         ):
-            InnovationCell(3, 5, observation_map="identity")
+            InnovationCell(3, 5)
 
     def test_rejects_unknown_gain(self) -> None:
         r"""Unknown gain strings should fail explicitly."""
@@ -325,7 +341,9 @@ def test_builtin_gain_backward_has_finite_gradients(gain_name: str) -> None:
     r"""Built-in gains should support stable forward and backward passes."""
     torch.manual_seed(0)
 
-    cell = InnovationCell(4, 6, gain=gain_name, gate="identity")
+    cell = InnovationCell(
+        4, 6, gain=gain_name, gate="identity", observation_map=nn.Linear(6, 4)
+    )
     x = torch.randn(8, 6, requires_grad=True)
     y = torch.randn(8, 4)
     mask = torch.rand(8, 4) < 0.6
