@@ -68,7 +68,7 @@ class Sinh(nn.Module, Transform):
 
     The derivative is: $\frac{d}{dx}\sinh(x) = \cosh(x)$.
 
-    The logabsdet is: $\log\cosh(x) = ...$
+    The logabsdet is: $\log|\cosh(x)| = \log\cosh(x)$.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
@@ -90,11 +90,11 @@ class Sinh(nn.Module, Transform):
 
 
 class Sigmoid(nn.Module, Transform):
-    r"""Map tensor entries elementwise via $x ↦ \sigma(x) = 1/(1 + \exp(-x))$.
+    r"""Map tensor entries elementwise via $x ↦ σ(x) = 1/(1 + \exp(-x))$.
 
     The inverse is $y ↦ \log(y/(1-y))$.
 
-    The derivative is: $\sigma'(x) = \sigma(x) (1-\sigma(x))$.
+    The derivative is: $σ'(x) = σ(x) (1-σ(x))$.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
@@ -106,7 +106,7 @@ class Sigmoid(nn.Module, Transform):
 
     @signature("(...) -> (...)")
     def inverse(self, y: Tensor, /) -> Tensor:
-        return torch.log(y / (1 - y))
+        return torch.special.logit(y)
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         y = self.forward(x)
@@ -122,7 +122,7 @@ class Sigmoid(nn.Module, Transform):
 class Tanh(nn.Module, Transform):
     r"""Maps tensor elementwise via via $x ↦ \tanh(x)$.
 
-    The inverse is $y ↦ \atanh(y) = ½ \log((1+y)/(1-y))$.
+    The inverse is $y ↦ \atanh(y) = ½\log((1+y)/(1-y))$.
 
     The derivative is: $\frac{d}{dx}\tanh(x) = 1-\tanh²(x)$.
     """
@@ -187,8 +187,7 @@ class SmoothSoftsign(nn.Module, Transform):
 
     The inverse is $y ↦ y/(1 - y²)$.
 
-    The derivative is: $\frac{d}{dx}\frac{2x}{1 + √(1 + 4x²)}
-    = \frac{2}{√(1+4x²)(1 + √(1 + 4x²))}$.
+    The derivative is: $\frac{2}{√(1+4x²)(1 + √(1 + 4x²))}$.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
@@ -218,7 +217,7 @@ class Softplus(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ \log(1 + \exp(x))$.
 
     The inverse is $y ↦ \log(\exp(y) - 1)$.
-    The derivative is: $\frac{d}{dx}\log(1+\exp(x)) = \sigma(x)$.
+    The derivative is: $\frac{d}{dx}\log(1+\exp(x)) = σ(x)$.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
@@ -244,11 +243,11 @@ class Softplus(nn.Module, Transform):
 
 
 class ELU(nn.Module, Transform):
-    r"""Maps tensor elementwise via $x ↦ ⟦x > 0 ? x : α(\exp(x) -1)⟧$.
+    r"""Maps tensor elementwise via $x ↦ ⟦x > 0 ? x : α(eˣ -1)⟧$.
 
     The inverse is y ↦ ⟦y > 0 ? y : \log(1 + y/α)⟧.
 
-    The derivative is: ⟦x > 0 ? 1 : α\exp(x)⟧.
+    The derivative is: ⟦x > 0 ? 1 : αeˣ⟧.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
