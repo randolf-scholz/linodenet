@@ -11,13 +11,13 @@
     - [Parameter-space decoder](#parameter-space-decoder)
     - [Data-space decoder](#data-space-decoder)
 - [Kalman Filter as an Instance of the Interface](#kalman-filter-as-an-instance-of-the-interface)
-  - [1. Propagation](#1-propagation)
-  - [2. Decoder](#2-decoder)
-  - [3. Update](#3-update)
+  - [1. Propagation (Kalman)](#1-propagation-kalman)
+  - [2. Decoder (Kalman)](#2-decoder-kalman)
+  - [3. Update (Kalman)](#3-update-kalman)
 - [Extended Kalman Filter as an Instance of the Interface](#extended-kalman-filter-as-an-instance-of-the-interface)
-  - [1. Propagation](#1-propagation-1)
-  - [2. Decoder](#2-decoder-1)
-  - [3. Update](#3-update-1)
+  - [1. Propagation (EKF)](#1-propagation-ekf)
+  - [2. Decoder (EKF)](#2-decoder-ekf)
+  - [3. Update (EKF)](#3-update-ekf)
 - [A General Tractable Gaussian Variant](#a-general-tractable-gaussian-variant)
   - [Latent Family](#latent-family)
   - [1. Propagation from a Linear ODE/SDE](#1-propagation-from-a-linear-odesde)
@@ -195,7 +195,7 @@ The latent family is Gaussian:
 θ = (μ, Σ),     p(· ∣ θ) = 𝓝(·; μ, Σ).
 ```
 
-### 1. Propagation
+### 1. Propagation (Kalman)
 
 Signature:
 
@@ -214,7 +214,7 @@ Discrete-time Kalman choice:
 
 So the propagator is an exact Gaussian moment update.
 
-### 2. Decoder
+### 2. Decoder (Kalman)
 
 Signature:
 
@@ -244,7 +244,7 @@ Hence
 
 This is a parameter-space decoder with `g(μ, Σ) = (H_k μ + c_k, H_k Σ H_kᵀ + R_k)`.
 
-### 3. Update
+### 3. Update (Kalman)
 
 Signature:
 
@@ -294,7 +294,7 @@ Again use the Gaussian latent family
 θ = (μ, Σ),     p(· ∣ θ) = 𝓝(·; μ, Σ).
 ```
 
-### 1. Propagation
+### 1. Propagation (EKF)
 
 Signature:
 
@@ -314,7 +314,7 @@ F_k &= \left.\frac{∂f_k}{∂x}\right|_{x=μ}, \\
 
 This is a locally Gaussian closure of the nonlinear propagation.
 
-### 2. Decoder
+### 2. Decoder (EKF)
 
 Signature:
 
@@ -336,7 +336,7 @@ q(·) &= 𝓝(·; m, S).
 So the EKF decoder is still a belief-to-observation map, but only after local
 linearization of the nonlinear measurement model.
 
-### 3. Update
+### 3. Update (EKF)
 
 Signature:
 

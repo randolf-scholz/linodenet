@@ -12,7 +12,7 @@ class LinearSystem(nn.Module):
 
     def forward(
         self,
-        t: Tensor,
+        _: Tensor,
         y: Tensor,
         /,
     ) -> Tensor:

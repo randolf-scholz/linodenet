@@ -1,6 +1,6 @@
 # LinODEnet — 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁work
 
-[INSTALLATION](#installation) | [DOCUMENTATION](#documentation) | [CONTRIBUTING](CONTRIBUTING.md) | [CHANGELOG](CHANGELOG.md) | [LICENSE](LICENSE)
+[INSTALLATION](#installation) | [DOCUMENTATION](docs/index.rst) | [CONTRIBUTING](CONTRIBUTING.md) | [CHANGELOG](CHANGELOG.md) | [LICENSE](LICENSE)
 
 ![model-sketch](lssm.png)
 
