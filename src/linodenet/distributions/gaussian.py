@@ -33,8 +33,6 @@ Note:
 __all__ = [
     "argmin_reverse_kl",
     "argmin_forward_kl",
-    "argmin_proximal_reverse_kl",
-    "solve_proximal_reverse_kl",
     "fisher",
     "inverse_fisher",
     "kl",
@@ -45,7 +43,6 @@ __all__ = [
 ]
 
 import math
-from collections.abc import Callable
 from enum import StrEnum
 from typing import Final, Optional, Self, assert_never
 
@@ -58,8 +55,6 @@ from .base import DistributionBase
 
 type GaussianParams = tuple[Tensor, Tensor]
 type ScalarLike = Tensor | float
-type GammaArg = ScalarLike | tuple[ScalarLike, ScalarLike]
-type EtaArg = ScalarLike | tuple[ScalarLike, ScalarLike]
 
 
 _LOG2PI: Final = math.log(2 * math.pi)
@@ -197,25 +192,6 @@ class CovarianceType(StrEnum):
                 assert_never(other)
 
 
-def _split_gamma(gamma: GammaArg, /) -> tuple[ScalarLike, ScalarLike]:
-    r"""Return the mean and covariance regularization weights."""
-    return gamma if isinstance(gamma, tuple) else (gamma, gamma)
-
-
-def _as_scalar_gamma(
-    gamma: ScalarLike,
-    /,
-    *,
-    dtype: torch.dtype,
-    device: torch.device,
-    name: str,
-) -> Tensor:
-    r"""Return `gamma` as a scalar tensor on the target dtype and device."""
-    gamma_tensor = torch.as_tensor(gamma, dtype=dtype, device=device)
-    assert gamma_tensor.shape == (), f"Expected {name} to be a scalar tensor."
-    return gamma_tensor
-
-
 def log_prob(
     x: Tensor,  # (*S, ..., D)
     theta: GaussianParams,  # (..., D), (..., D, D)
@@ -263,199 +239,6 @@ def log_prob(
 
         case other:
             assert_never(other)  # pyrefly: ignore[bad-argument-type]
-
-
-def solve_proximal_reverse_kl(
-    # (..., d), (..., d, d) -> (..., d), (..., d, d)
-    grad_fn: Callable[[GaussianParams], GaussianParams],
-    theta: GaussianParams,  # (..., d), (..., d, d)
-    /,
-    *,
-    gamma: float | Tensor = 1.0,
-    parametrization: str = "covariance",
-) -> GaussianParams:  # (..., d), (..., d, d)
-    r"""Return the Gaussian KL-proximal solution in the chosen parametrization."""
-    # (g, G) = ∇_θ f(θ⁎) where g is the mean gradient
-    # and G is the covariance/precision/Cholesky gradient.
-    g, G = grad_fn(theta)
-
-    μ, matrix = theta
-    γ = torch.as_tensor(gamma, dtype=matrix.dtype, device=matrix.device)
-    scale = γ.reciprocal()
-    eps = torch.finfo(matrix.dtype).eps
-
-    match CovarianceType(parametrization):
-        case CovarianceType.COVARIANCE:
-            # μ' = μ - γ⁻¹Σg,  Σ'⁻¹ = Σ⁻¹ + 2γ⁻¹ sym(G).
-            cov = matrix
-            G = 0.5 * (G + G.mT)  # project gradient
-            mu_new = μ - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
-
-            L = cholesky(cov)
-            Λ = cholesky_inverse(L)
-            Λ_new = Λ + 2 * G * scale
-            Λ_new = 0.5 * (Λ_new + Λ_new.mT)
-
-            try:
-                Λ_chol = cholesky(Λ_new)
-            except RuntimeError as error:
-                raise ValueError(
-                    "The covariance-parametrized proximal Gaussian update does "
-                    "not admit a finite minimizer. Try increasing gamma or "
-                    "regularizing the covariance gradient."
-                ) from error
-
-            cov_new = cholesky_inverse(Λ_chol)
-            return mu_new, cov_new
-
-        case CovarianceType.PRECISION:
-            # μ' = μ - γ⁻¹Σg,  Λ' = L U diag(2/(1 + √(1 + 8b/γ))) UᵀLᵀ
-            # where sym(LᵀGL) = U diag(b) Uᵀ and Λ = LLᵀ.
-            Λ = matrix
-            G = 0.5 * (G + G.mT)  # project gradient
-            L = cholesky(Λ)
-            mu_new = μ - cholesky_solve((g * scale).unsqueeze(-1), L).squeeze(-1)
-
-            local_grad = L.mT @ G @ L
-            local_grad = 0.5 * (local_grad + local_grad.mT)
-            eigs, V = torch.linalg.eigh(local_grad)
-            tolerance = 16 * eps * eigs.abs().amax(dim=-1, keepdim=True).clamp_min(1)
-
-            if torch.any(eigs < -tolerance).item():
-                raise ValueError(
-                    "The precision-parametrized proximal Gaussian update does "
-                    "not admit a finite minimizer. Regularize the precision "
-                    "gradient or use the Cholesky parametrization."
-                )
-
-            eigs = eigs.clamp_min(0)
-            eig_scale = 2 / (1 + torch.sqrt(1 + 8 * eigs * scale))
-            local_prec = V @ torch.diag_embed(eig_scale) @ V.mT
-            Λ_new = L @ local_prec @ L.mT
-            Λ_new = 0.5 * (Λ_new + Λ_new.mT)
-            return mu_new, Λ_new
-
-        case CovarianceType.CHOLESKY:
-            # μ' = μ - γ⁻¹Σg,  L' = LM with
-            # M = tril(-LᵀG/γ, -1) + diag((-a + √(a² + 4γ²))/(2γ)),
-            # a = diag(LᵀG).
-            L = matrix
-            G = G.tril()  # project gradient
-            cov = L @ L.mT
-            mu_new = μ - torch.einsum("...ij, ...j -> ...i", cov, g * scale)
-
-            local_grad = L.mT @ G
-            diag_grad = local_grad.diagonal(dim1=-2, dim2=-1)
-            diag_step = (
-                0.5
-                * scale
-                * (-diag_grad + torch.sqrt(diag_grad.square() + 4 * γ.square()))
-            )
-            local_chol = torch.diag_embed(diag_step) - scale * local_grad.tril(-1)
-            chol_new = torch.tril(L @ local_chol)
-            return mu_new, chol_new
-
-        case CovarianceType.LOG_CHOLESKY:
-            # μ' = μ - γ⁻¹Σg,  X' = logchol(LW) with
-            # Wᵢⱼ = -(LᵀGₗ)ᵢⱼ/γ for i>j and
-            # wᵢᵢ = (-aᵢ + √(aᵢ² + 4γ(γ-gᵢ)))/(2γ),
-            # a = diag(LᵀGₗ), g = diag(G), Gₗ = tril(G, -1).
-            log_chol = matrix
-            L = (
-                log_chol.tril(diagonal=-1)
-                + log_chol.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-            )
-            cov = L @ L.mT
-            mu_new = μ - torch.einsum("...ij,...j->...i", cov, g * scale)
-
-            g_log_chol = G.tril()  # project gradient
-            g_off = torch.tril(g_log_chol, diagonal=-1)
-            diag_grad = g_log_chol.diagonal(dim1=-2, dim2=-1)
-            lin = L.mT @ g_off
-            diag_lin = lin.diagonal(dim1=-2, dim2=-1)
-
-            tolerance = (
-                16 * eps * (γ.abs() + diag_grad.abs() + diag_lin.abs()).clamp_min(1)
-            )
-
-            if torch.any(diag_grad > γ + tolerance).item():
-                raise ValueError(
-                    "The log-Cholesky-parametrized proximal Gaussian update does "
-                    "not admit a finite minimizer. Try increasing gamma or "
-                    "regularizing the diagonal log-Cholesky gradient."
-                )
-
-            radicand = diag_lin.square() + 4 * γ * (γ - diag_grad)
-            diag_step = 0.5 * scale * (-diag_lin + torch.sqrt(radicand.clamp_min(0)))
-
-            if torch.any(diag_step <= tolerance).item():
-                raise ValueError(
-                    "The log-Cholesky-parametrized proximal Gaussian update does "
-                    "not admit a finite minimizer. Try increasing gamma or "
-                    "regularizing the diagonal log-Cholesky gradient."
-                )
-
-            local_chol = torch.diag_embed(diag_step) - scale * lin.tril(-1)
-            chol_new = torch.tril(L @ local_chol)
-            log_chol_new = (
-                chol_new.tril(diagonal=-1)
-                + chol_new.diagonal(dim1=-2, dim2=-1).log().diag_embed()
-            )
-            return mu_new, log_chol_new
-
-        case _:
-            raise ValueError(
-                "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky', 'log_cholesky'}, "
-                f"got {parametrization!r}."
-            )
-
-
-def argmin_proximal_reverse_kl(
-    loss_fn: Callable[[GaussianParams], Tensor],  # (..., d), (..., d, d) -> (...)
-    theta: GaussianParams,  # (..., d), (..., d, d)
-    /,
-    *,
-    gamma: Tensor | float,
-    parametrization: str = "covariance",
-) -> GaussianParams:  # (..., d), (..., d, d)
-    r"""Return the Gaussian KL-proximal minimizer in the chosen parametrization.
-
-    This returns the exact minimizer of
-
-    .. math:: \argmin_θ f(θ⁎) + ⟨∇f(θ⁎), θ - θ⁎⟩ + γ⋅\kl(𝓝(θ)，𝓝(θ₋))
-
-    where $θ₋$ is the input `theta`, interpreted according to `parametrization`.
-
-    The implementation computes $∇f(θ⁎)$ with `torch.func.grad`
-    and evaluates the exact closed-form minimizer in covariance,
-    precision, Cholesky, or log-Cholesky coordinates.
-
-    Args:
-        loss_fn: Scalar objective function to linearize at `theta`.
-        theta: Linearization point $θ⁎$ in the selected parametrization.
-        gamma: KL regularization strength.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
-
-    See Also:
-        `argmin_forward_kl`:
-            Exact minimizer of the Gaussian observation objective
-            $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ₋) ∥ 𝓝(θ))$.
-            In contrast, `argmin_proximal_kl` solves a generic linearized
-            forward-KL proximal problem.
-        `argmin_reverse_kl`:
-            Exact minimizer of the Gaussian observation objective
-            $-\log 𝓝(z; θ) + γ⋅\mathrm{KL}(𝓝(θ) ∥ 𝓝(θ₋))$.
-            In contrast, `argmin_proximal_kl` solves a generic linearized
-            forward-KL proximal problem.
-    """
-    return solve_proximal_reverse_kl(
-        # ∇_θ ∑ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
-        torch.func.grad(lambda θ: loss_fn(θ).sum()),
-        theta,
-        gamma=gamma,
-        parametrization=parametrization,
-    )
 
 
 def _solve_w_closed_form(
