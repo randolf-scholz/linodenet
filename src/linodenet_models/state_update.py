@@ -403,7 +403,7 @@ class ConstantGain(nn.Module):
         super().__init__()
         self.input_size = input_size
         self.output_size = output_size
-        self.weight = nn.Parameter(torch.randn(input_size, output_size))
+        self.weight = nn.Parameter(torch.randn(output_size, input_size))
         nn.init.xavier_uniform_(self.weight)
 
     def forward(self, v: Tensor, _: Tensor, /) -> Tensor:

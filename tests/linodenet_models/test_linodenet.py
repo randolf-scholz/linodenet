@@ -9,7 +9,12 @@ from torch import nan, nn
 from torch.nn import functional as F
 
 from linodenet_models.linodenet import LinearFlow, LinODEnet, make_linodenet
-from linodenet_models.state_update import GradientStepUpdater, LpLoss
+from linodenet_models.state_update import (
+    GradientStepUpdater,
+    InnovationCell,
+    KalmanCell,
+    LpLoss,
+)
 from linodenet_models.utils import SplitTimeData
 
 from .base import TestForecastingModel, make_forecasting_request
@@ -20,6 +25,8 @@ class LinODEnetTestConfig(NamedTuple):
 
     input_size: int
     latent_size: int
+    updater: str = "gradient"
+    updater_config: str | None = None
 
 
 class TestLinODEnet(TestForecastingModel[LinODEnet]):
@@ -31,8 +38,27 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
     OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
     STANDARD_CONFIG: ClassVar[LinODEnetTestConfig] = LinODEnetTestConfig(
         input_size=CONTEXT_SHAPE[0],
-        latent_size=4,
+        latent_size=8,
     )
+    MODEL_CONFIGS: ClassVar[dict[str, LinODEnetTestConfig]] = {
+        "gradient": STANDARD_CONFIG,
+        "innovation_constant": STANDARD_CONFIG._replace(
+            updater="innovation",
+            updater_config="constant",
+        ),
+        "innovation_attention": STANDARD_CONFIG._replace(
+            updater="innovation",
+            updater_config="attention",
+        ),
+        "kalman_constant": STANDARD_CONFIG._replace(
+            updater="kalman",
+            updater_config="constant",
+        ),
+        "kalman_attention": STANDARD_CONFIG._replace(
+            updater="kalman",
+            updater_config="attention",
+        ),
+    }
 
     @pytest.fixture
     def model_config(self) -> LinODEnetTestConfig:
@@ -48,22 +74,43 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
         r"""Instantiate a LinODEnet model from :attr:`STANDARD_CONFIG`."""
         if not isinstance(model_config, LinODEnetTestConfig):
             raise TypeError("model_config must be a LinODEnetTestConfig.")
-        return make_linodenet(
-            linodenet={
-                "input_size": model_config.input_size,
-                "latent_size": model_config.latent_size,
-            },
-            decoder={
-                "in_features": model_config.latent_size,
-                "out_features": model_config.input_size,
-            },
-            state_propagator={
-                "input_size": model_config.latent_size,
-                "kernel_initialization": "zero",
-                "kernel_parametrization": "identity",
-                "use_rezero": False,
-            },
-            state_updater={},
+        decoder = nn.Sequential(
+            nn.Linear(model_config.latent_size, 2 * model_config.latent_size),
+            nn.GELU(),
+            nn.Linear(2 * model_config.latent_size, model_config.input_size),
+        )
+        propagator = LinearFlow(
+            model_config.latent_size,
+            kernel_initialization="zero",
+            kernel_parametrization="identity",
+            use_rezero=False,
+        )
+        match model_config.updater:
+            case "gradient":
+                updater = GradientStepUpdater(decoder=decoder)
+            case "innovation":
+                updater = InnovationCell(
+                    model_config.input_size,
+                    model_config.latent_size,
+                    gain=model_config.updater_config or "constant",
+                    observation_map=decoder,
+                )
+            case "kalman":
+                updater = KalmanCell(
+                    model_config.input_size,
+                    model_config.latent_size,
+                    covariance_factor=model_config.updater_config or "constant",
+                    observation_map=decoder,
+                )
+            case _:
+                raise ValueError(f"Unknown updater: {model_config.updater!r}.")
+
+        return LinODEnet(
+            input_size=model_config.input_size,
+            latent_size=model_config.latent_size,
+            decoder=decoder,
+            state_propagator=propagator,
+            state_updater=updater,
         )
 
     def forecast(
@@ -147,14 +194,16 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
             rtol=1e-5,
         )
 
-    def test_self_consistency_at_init(self) -> None:
+    @pytest.mark.parametrize("config_key", MODEL_CONFIGS)
+    def test_self_consistency_at_init(self, config_key: str) -> None:
         r"""Check that linodenet is self-consistent at initialization.
 
         .. math:: ŷ(t∣H) = ŷ(t ∣ H⊕(τ, ŷ(τ∣H)))
         """
         # 1. initialize model
         torch.manual_seed(0)
-        model = self.make_model(self.STANDARD_CONFIG)
+        model_config = self.MODEL_CONFIGS[config_key]
+        model = self.make_model(model_config)
 
         # 2. check self-consistency on random data
         # 2.a make predictions on random data
@@ -162,14 +211,16 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
         # 2.c predict using updated context, compare to 2.a
         self.assert_self_consistent(model, seed=1)
 
-    def test_self_consistency_trained(self) -> None:
+    @pytest.mark.parametrize("config_key", MODEL_CONFIGS)
+    def test_self_consistency_trained(self, config_key: str) -> None:
         r"""Check that linodenet is self-consistent after training.
 
         .. math:: ŷ(t∣H) = ŷ(t ∣ H⊕(τ, ŷ(τ∣H)))
         """
         # 1. initialize model
         torch.manual_seed(0)
-        model = self.make_model(self.STANDARD_CONFIG)
+        model_config = self.MODEL_CONFIGS[config_key]
+        model = self.make_model(model_config)
 
         # 2. train model on random data for 3 iterations
         train_data = make_forecasting_request(
@@ -190,9 +241,6 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
             optimizer.step()
 
         # 3. check self-consistency on random data
-        # 3.a make predictions on random data
-        # 3.b append first prediction to context
-        # 3.c predict using updated context, compare to 3.a
         self.assert_self_consistent(model, seed=3)
 
 
