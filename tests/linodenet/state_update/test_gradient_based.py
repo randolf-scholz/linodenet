@@ -78,20 +78,20 @@ def _scale_tril(log_chol: Tensor, /) -> Tensor:
     )
 
 
-def _reference_gaussian_reverse_kl_step(
+def _reference_gaussian_forward_kl_step(
     mean: Tensor,
     log_chol: Tensor,
     y_obs: Tensor,
     /,
     *,
     shift: Tensor,
-    regularization_strength: Tensor,
+    retention: Tensor | tuple[Tensor, Tensor],
 ) -> tuple[Tensor, Tensor]:
-    r"""Compute the exact Gaussian reverse-KL update in latent coordinates."""
+    r"""Compute the exact Gaussian forward-KL update in latent coordinates."""
     return argmin_forward_kl(
         y_obs - shift,
         (mean, log_chol),
-        gamma=regularization_strength,
+        retention=retention,
         parametrization="log-cholesky",
     )
 
@@ -252,34 +252,42 @@ class TestGradientStepUpdater:
 
 
 class TestGaussianForwardKLUpdater:
-    def test_regularization_strength_must_be_positive(self) -> None:
-        r"""The reverse-KL regularization strength should be positive."""
-        with pytest.raises(ValueError, match="regularization_strength"):
+    def test_retention_must_lie_in_unit_interval(self) -> None:
+        r"""Shared retention should be constrained to the unit interval."""
+        with pytest.raises(ValueError, match=r"ρ must be in \[0, 1\]"):
             GaussianForwardUpdater(
                 decoder=ShiftTransform(shift=0.0),
                 parametrization="log-cholesky",
-                regularization_strength=0.0,
+                retention=1.1,
             )
 
-    def test_regularization_learnable_can_be_disabled(self) -> None:
-        r"""The log-regularization parameter should support frozen initialization."""
+    def test_retention_learnable_can_be_disabled(self) -> None:
+        r"""The shared retention parameter should support frozen initialization."""
+        retention = torch.tensor(1.7 / 2.7)
         updater = GaussianForwardUpdater(
             decoder=ShiftTransform(shift=0.0),
             parametrization="log-cholesky",
-            regularization_strength=1.7,
-            regularization_learnable=False,
+            retention=retention,
+            retention_learnable=False,
         )
 
-        assert not updater.log_regularization_strength.requires_grad
-        torch.testing.assert_close(updater.regularization_strength, torch.tensor(1.7))
+        assert all(
+            not param.requires_grad for param in updater.retention_mu.parameters()
+        )
+        assert all(
+            not param.requires_grad for param in updater.retention_sigma.parameters()
+        )
+        torch.testing.assert_close(updater.retention_mu(None), retention)
+        torch.testing.assert_close(updater.retention_sigma(None), retention)
 
     def test_forward_and_backward(self) -> None:
         r"""Forward output and parameter gradients should match the exact update."""
         decoder = ShiftTransform(shift=0.2)
+        retention = torch.tensor(1.7 / 2.7)
         updater = GaussianForwardUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
-            regularization_strength=1.7,
+            retention=retention,
         )
         mean = torch.tensor([0.4, -0.3, 0.8])
         log_chol = torch.tensor(
@@ -290,39 +298,40 @@ class TestGaussianForwardKLUpdater:
             ]
         )
         y_obs = torch.tensor([1.1, -0.7, 0.5])
+        retention_param = next(updater.retention_mu.parameters())
 
         actual_mean, actual_log_chol = updater(y_obs, (mean, log_chol))
-        expected_mean, expected_log_chol = _reference_gaussian_reverse_kl_step(
+        expected_mean, expected_log_chol = _reference_gaussian_forward_kl_step(
             mean,
             log_chol,
             y_obs,
             shift=decoder.shift,
-            regularization_strength=updater.regularization_strength,
+            retention=torch.sigmoid(retention_param),
         )
 
         torch.testing.assert_close(actual_mean, expected_mean)
         torch.testing.assert_close(actual_log_chol, expected_log_chol)
 
         objective = actual_mean.sum() + actual_log_chol.sum()
-        actual_grad_shift, actual_grad_log_gamma = torch.autograd.grad(
+        actual_grad_shift, actual_grad_retention = torch.autograd.grad(
             objective,
-            (decoder.shift, updater.log_regularization_strength),
+            (decoder.shift, retention_param),
         )
         expected_objective = expected_mean.sum() + expected_log_chol.sum()
-        expected_grad_shift, expected_grad_log_gamma = torch.autograd.grad(
+        expected_grad_shift, expected_grad_retention = torch.autograd.grad(
             expected_objective,
-            (decoder.shift, updater.log_regularization_strength),
+            (decoder.shift, retention_param),
         )
 
         torch.testing.assert_close(actual_grad_shift, expected_grad_shift)
-        torch.testing.assert_close(actual_grad_log_gamma, expected_grad_log_gamma)
+        torch.testing.assert_close(actual_grad_retention, expected_grad_retention)
 
     def test_compile_fullgraph(self) -> None:
         r"""The updater should compile under `torch.compile(fullgraph=True)`."""
         updater = GaussianForwardUpdater(
             decoder=ShiftTransform(shift=-0.1),
             parametrization="log-cholesky",
-            regularization_strength=1.2,
+            retention=1.2 / 2.2,
         )
         compiled = torch.compile(updater, fullgraph=True)
 
@@ -343,12 +352,13 @@ class TestGaussianForwardKLUpdater:
         torch.testing.assert_close(actual[1], expected[1])
 
     def test_batched_forward(self) -> None:
-        r"""Batched parameters should use a per-sample exact reverse-KL update."""
+        r"""Batched parameters should use a per-sample exact forward-KL update."""
         decoder = ShiftTransform(shift=0.1)
+        retention = torch.tensor(0.5)
         updater = GaussianForwardUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
-            regularization_strength=1.0,
+            retention=retention,
         )
         mean = torch.tensor([[0.2, -0.4, 0.6], [-0.4, 0.3, 0.1]])
         log_chol = torch.tensor(
@@ -368,12 +378,12 @@ class TestGaussianForwardKLUpdater:
         y_obs = torch.tensor([[0.7, -1.2, 0.4], [-1.2, 0.5, 0.8]])
 
         actual_mean, actual_log_chol = updater(y_obs, (mean, log_chol))
-        expected_mean, expected_log_chol = _reference_gaussian_reverse_kl_step(
+        expected_mean, expected_log_chol = _reference_gaussian_forward_kl_step(
             mean,
             log_chol,
             y_obs,
             shift=decoder.shift,
-            regularization_strength=updater.regularization_strength,
+            retention=retention,
         )
 
         torch.testing.assert_close(actual_mean, expected_mean)
@@ -382,10 +392,11 @@ class TestGaussianForwardKLUpdater:
     def test_gradients_wrt_theta(self) -> None:
         r"""The update should remain differentiable with respect to the prior."""
         decoder = ShiftTransform(shift=0.25)
+        retention = torch.tensor(1.4 / 2.4)
         updater = GaussianForwardUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
-            regularization_strength=1.4,
+            retention=retention,
         )
         mean = torch.tensor([0.1, -0.2, 0.5], requires_grad=True)
         log_chol = torch.tensor(
@@ -405,12 +416,12 @@ class TestGaussianForwardKLUpdater:
             (mean, log_chol),
         )
 
-        expected_mean, expected_log_chol = _reference_gaussian_reverse_kl_step(
+        expected_mean, expected_log_chol = _reference_gaussian_forward_kl_step(
             mean,
             log_chol,
             y_obs,
             shift=decoder.shift,
-            regularization_strength=updater.regularization_strength,
+            retention=retention,
         )
         expected_objective = expected_mean.sum() + expected_log_chol.sum()
         expected_grad_mean, expected_grad_log_chol = torch.autograd.grad(
@@ -424,22 +435,23 @@ class TestGaussianForwardKLUpdater:
     def test_is_consistent_for_exact_decoder_mean(self) -> None:
         r"""For $y_obs = decoder(μ₋)$, the posterior mean should remain unchanged."""
         decoder = ShiftTransform(shift=-0.4)
+        retention = torch.tensor(2.0 / 3.0)
         updater = GaussianForwardUpdater(
             decoder=decoder,
             parametrization="log-cholesky",
-            regularization_strength=2.0,
+            retention=retention,
         )
         mean = torch.tensor([0.75, -0.25, 0.5])
         log_chol = torch.zeros(3, 3)
         y_obs = decoder(mean)
 
         actual_mean, actual_log_chol = updater(y_obs, (mean, log_chol))
-        expected_mean, expected_log_chol = _reference_gaussian_reverse_kl_step(
+        expected_mean, expected_log_chol = _reference_gaussian_forward_kl_step(
             mean,
             log_chol,
             y_obs,
             shift=decoder.shift,
-            regularization_strength=updater.regularization_strength,
+            retention=retention,
         )
 
         torch.testing.assert_close(actual_mean, mean)

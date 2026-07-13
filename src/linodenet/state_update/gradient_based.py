@@ -258,11 +258,11 @@ class GaussianForwardUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tens
                 )
 
                 self.retention_mu = nn.Sequential(
-                    Constant(param_mu),
+                    Constant(param_mu, learnable=retention_learnable),
                     nn.Sigmoid(),
                 )
                 self.retention_sigma = nn.Sequential(
-                    Constant(param_sigma),
+                    Constant(param_sigma, learnable=retention_learnable),
                     nn.Sigmoid(),
                 )
 
@@ -273,14 +273,12 @@ class GaussianForwardUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tens
                 param = nn.Parameter(
                     torch.logit(strength), requires_grad=retention_learnable
                 )
-                self.retention_mu = nn.Sequential(
-                    Constant(param),
+                shared_retention = nn.Sequential(
+                    Constant(param, learnable=retention_learnable),
                     nn.Sigmoid(),
                 )
-                self.retention_sigma = nn.Sequential(
-                    Constant(param),
-                    nn.Sigmoid(),
-                )
+                self.retention_mu = shared_retention
+                self.retention_sigma = shared_retention
 
         if not retention_learnable:
             # freeze the module (mark parameters as frozen)
@@ -297,14 +295,10 @@ class GaussianForwardUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tens
         self, y_obs: Tensor, theta: GaussianParams, /, *, context: Any | None = None
     ) -> GaussianParams:
         r"""Return the exact reverse-KL Gaussian update $θ₊$."""
-        z = self.decoder(y_obs)
+        z = self.decoder.inverse(y_obs)
 
-        if context is None:
-            self.rho_mu = self.retention_mu()
-            self.rho_sigma = self.retention_sigma()
-        else:
-            self.rho_mu = self.retention_mu(context)
-            self.rho_sigma = self.retention_sigma(context)
+        self.rho_mu = self.retention_mu(context)
+        self.rho_sigma = self.retention_sigma(context)
 
         return argmin_forward_kl(
             z,
