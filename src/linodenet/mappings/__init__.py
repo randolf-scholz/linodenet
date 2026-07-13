@@ -93,6 +93,7 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "TransformSequence"    : base.TransformSequence,
     "TriangularTransform"  : transforms.TriangularTransform,
     # scalar transforms
+    "ConjugateAffineFlow"  : transforms.scalar.ConjugatedAffineFlow,
     "CELU"                 : transforms.scalar.CELU,
     "Exp"                  : transforms.scalar.Exp,
     "ELU"                  : transforms.scalar.ELU,
