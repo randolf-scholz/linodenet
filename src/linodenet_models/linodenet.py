@@ -349,7 +349,7 @@ class LinODEnet_v0(nn.Module):
 
         # store buffers
         stack_dim = -2 if self.batch_first else 0
-        self.prior_latent_states = torch.stack(prior_state, dim=stack_dim)
+        self.prior_latent_states = torch.stack(prior_states, dim=stack_dim)
         self.posterior_latent_states = torch.stack(post_states, dim=stack_dim)
         self.prior_predictions = torch.stack(prior_preds, dim=stack_dim)
         self.posterior_predictions = torch.stack(post_preds, dim=stack_dim)
