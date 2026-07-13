@@ -45,9 +45,8 @@ from linodenet.distributions.gaussian import (
     CovarianceType,
     GaussianParams,
     argmin_forward_kl,
-    log_prob,
 )
-from linodenet.mappings import Exp, Transform
+from linodenet.mappings import Transform
 from linodenet.nn.containers import Constant
 
 from .base import AbstractStateUpdate, SparseVectorStateUpdate
@@ -203,37 +202,40 @@ class GradientStepUpdater(nn.Module, SparseVectorStateUpdate):
 class GaussianForwardKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
     r"""Perform an exact Gaussian forward-KL update of the observation loss.
 
-    Let $θ₋ = (μ₋, Σ₋)$ denote the current latent Gaussian parameters and let
-    $q(y_obs∣θ)$ be the predictive density induced by the decoder. This module
-    solves the exact Gaussian observation update
+    .. math:: θ₊ = \argmin_θ -\log q(y_obs∣θ) + γ⋅\kl(𝓝(θ₋)，𝓝(θ))
 
-    .. math:: θ₊ = \argmin_θ -\log q(y_obs∣θ) + λ⋅\kl(𝓝(μ₋, Σ₋)，𝓝(μ, Σ))
-
+    Let $θ₋$ denote the current latent Gaussian parameters and $q(y_obs∣θ)$
+    be the predictive density induced by the decoder.
     The decoder is used only to pull the observation back into latent space:
     if $(z, \log|\det 𝐃ϕ⁻¹(y_obs)|) = ϕ⁻¹(y_obs)$, then the Jacobian term
     is constant with respect to $θ$, so the minimizer is exactly
 
-    .. math:: θ₊ = \argmin_θ -\log 𝓝(z; θ) + λ⋅\kl(𝓝(μ₋, Σ₋)，𝓝(μ, Σ))
+    .. math:: θ₊ = \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋, Σ₋)，𝓝(θ))
 
     which is evaluated in closed form by `argmin_forward_kl`.
 
-    The parameter ``retention`` is the forward-KL weight $λ$:
+    The parameter ``retention`` is the forward-KL weight $ρ∈[0,1]$:
 
-    - larger $λ$ keeps $θ₊$ closer to $θ₋$
-    - smaller $λ$ lets the observation move the posterior more aggressively
+    - larger $ρ$ keeps $θ₊$ closer to $θ₋$
+    - smaller $ρ$ lets the observation move the posterior more aggressively
     """
 
+    retention_mu: nn.Module
+    r"""MODULE: the forward-KL weight for the mean."""
+    retention_sigma: nn.Module
+    r"""MODULE: the forward-KL weight for the covariance."""
+
     rho_mu: Tensor
-    r"""BUFFER: the most recent computed eta_mu."""
+    r"""BUFFER: the most recent computed ρ_mu."""
     rho_sigma: Tensor
-    r"""BUFFER: the most recent computed eta_sigma."""
+    r"""BUFFER: the most recent computed ρ_sigma."""
 
     def __init__(
         self,
         *,
         decoder: nn.Module,  # & Transform[Tensor, Tensor]
         parametrization: str | CovarianceType,
-        retention: nn.Module | ScalarLike | tuple[ScalarLike, ScalarLike] = 0.5,
+        retention: ScalarLike | tuple[ScalarLike, ScalarLike] = 0.5,
         retention_learnable: bool = True,
     ) -> None:
         super().__init__()
@@ -242,9 +244,6 @@ class GaussianForwardKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Te
         self.parametrization = CovarianceType(parametrization)
 
         match retention:
-            case nn.Module():
-                self.retention = retention
-
             case [rho_mu, rho_sigma]:
                 strength_mu = torch.as_tensor(rho_mu)
                 strength_sigma = torch.as_tensor(rho_sigma)
@@ -252,9 +251,19 @@ class GaussianForwardKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Te
                     raise ValueError(f"ρ_mu must be in [0, 1], got {rho_mu!r}")
                 if not torch.all((strength_sigma > 0.0) & (strength_sigma <= 1.0)):
                     raise ValueError(f"ρ_sigma must be in (0, 1], got {rho_sigma!r}")
+
                 param_mu = nn.Parameter(torch.logit(strength_mu), requires_grad=True)
                 param_sigma = nn.Parameter(
                     torch.logit(strength_sigma), requires_grad=True
+                )
+
+                self.retention_mu = nn.Sequential(
+                    Constant(param_mu),
+                    nn.Sigmoid(),
+                )
+                self.retention_sigma = nn.Sequential(
+                    Constant(param_sigma),
+                    nn.Sigmoid(),
                 )
 
             case rho:
@@ -264,10 +273,20 @@ class GaussianForwardKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Te
                 param = nn.Parameter(
                     torch.logit(strength), requires_grad=retention_learnable
                 )
+                self.retention_mu = nn.Sequential(
+                    Constant(param),
+                    nn.Sigmoid(),
+                )
+                self.retention_sigma = nn.Sequential(
+                    Constant(param),
+                    nn.Sigmoid(),
+                )
 
         if not retention_learnable:
             # freeze the module (mark parameters as frozen)
-            for param in self.retention.parameters():
+            for param in self.retention_mu.parameters():
+                param.requires_grad = False
+            for param in self.retention_sigma.parameters():
                 param.requires_grad = False
 
         # buffers for rho_mu, rho_sigma
@@ -275,13 +294,17 @@ class GaussianForwardKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Te
         self.register_buffer("rho_sigma", None, persistent=False)
 
     def forward(
-        self, y_obs: Tensor, theta: GaussianParams, /, *, context: Any = None
+        self, y_obs: Tensor, theta: GaussianParams, /, *, context: Any | None = None
     ) -> GaussianParams:
-        r"""Return the exact reverse-KL Gaussian update $(μ₊, Σ₊)$."""
-        z, _ = self.decoder.encode_and_logabsdet(y_obs)
+        r"""Return the exact reverse-KL Gaussian update $θ₊$."""
+        z = self.decoder(y_obs)
 
-        rho = self.retention(context)
-        self.rho_mu, self.rho_sigma = rho if isinstance(rho, tuple) else (rho, rho)
+        if context is None:
+            self.rho_mu = self.retention_mu()
+            self.rho_sigma = self.retention_sigma()
+        else:
+            self.rho_mu = self.retention_mu(context)
+            self.rho_sigma = self.retention_sigma(context)
 
         return argmin_forward_kl(
             z,
