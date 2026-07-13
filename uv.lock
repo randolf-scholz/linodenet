@@ -1277,21 +1277,18 @@ dev = [
     { name = "tqdm" },
     { name = "ty" },
     { name = "types-colorama" },
-    { name = "types-decorator" },
-    { name = "types-docutils" },
+    { name = "types-defusedxml" },
     { name = "types-jsonschema" },
-    { name = "types-pillow" },
+    { name = "types-networkx" },
+    { name = "types-pexpect" },
     { name = "types-protobuf" },
     { name = "types-psutil" },
     { name = "types-pygments" },
-    { name = "types-pytz" },
+    { name = "types-pywin32" },
     { name = "types-pyyaml" },
-    { name = "types-requests" },
     { name = "types-setuptools" },
-    { name = "types-six" },
     { name = "types-tabulate" },
     { name = "types-tqdm" },
-    { name = "types-urllib3" },
     { name = "typing-extensions" },
 ]
 devtools = [
@@ -1345,21 +1342,18 @@ typing = [
     { name = "scipy-stubs" },
     { name = "ty" },
     { name = "types-colorama" },
-    { name = "types-decorator" },
-    { name = "types-docutils" },
+    { name = "types-defusedxml" },
     { name = "types-jsonschema" },
-    { name = "types-pillow" },
+    { name = "types-networkx" },
+    { name = "types-pexpect" },
     { name = "types-protobuf" },
     { name = "types-psutil" },
     { name = "types-pygments" },
-    { name = "types-pytz" },
+    { name = "types-pywin32" },
     { name = "types-pyyaml" },
-    { name = "types-requests" },
     { name = "types-setuptools" },
-    { name = "types-six" },
     { name = "types-tabulate" },
     { name = "types-tqdm" },
-    { name = "types-urllib3" },
     { name = "typing-extensions" },
 ]
 
@@ -1426,21 +1420,18 @@ dev = [
     { name = "tqdm", specifier = ">=4.68.4" },
     { name = "ty", specifier = ">=0.0.59" },
     { name = "types-colorama", specifier = ">=0.4.15.20260508" },
-    { name = "types-decorator", specifier = ">=5.2.0.20260712" },
-    { name = "types-docutils", specifier = ">=0.22.3.20260712" },
+    { name = "types-defusedxml", specifier = ">=0.7.0.20260504" },
     { name = "types-jsonschema", specifier = ">=4.26.0.20260518" },
-    { name = "types-pillow", specifier = ">=10.2.0.20240822" },
+    { name = "types-networkx", specifier = ">=3.6.1.20260624" },
+    { name = "types-pexpect", specifier = ">=4.9.0.20260518" },
     { name = "types-protobuf", specifier = ">=7.34.1.20260518" },
     { name = "types-psutil", specifier = ">=7.2.2.20260518" },
     { name = "types-pygments", specifier = ">=2.20.0.20260518" },
-    { name = "types-pytz", specifier = ">=2026.2.0.20260518" },
+    { name = "types-pywin32", specifier = ">=312.0.0.20260609" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260518" },
-    { name = "types-requests", specifier = ">=2.33.0.20260712" },
     { name = "types-setuptools", specifier = ">=83.0.0.20260706" },
-    { name = "types-six", specifier = ">=1.17.0.20260518" },
     { name = "types-tabulate", specifier = ">=0.10.0.20260508" },
     { name = "types-tqdm", specifier = ">=4.68.0.20260608" },
-    { name = "types-urllib3", specifier = ">=1.26.25.14" },
     { name = "typing-extensions", specifier = ">=4.16.0" },
 ]
 devtools = [
@@ -1494,21 +1485,18 @@ typing = [
     { name = "scipy-stubs", specifier = ">=1.18.0.1" },
     { name = "ty", specifier = ">=0.0.59" },
     { name = "types-colorama", specifier = ">=0.4.15.20260508" },
-    { name = "types-decorator", specifier = ">=5.2.0.20260712" },
-    { name = "types-docutils", specifier = ">=0.22.3.20260712" },
+    { name = "types-defusedxml", specifier = ">=0.7.0.20260504" },
     { name = "types-jsonschema", specifier = ">=4.26.0.20260518" },
-    { name = "types-pillow", specifier = ">=10.2.0.20240822" },
+    { name = "types-networkx", specifier = ">=3.6.1.20260624" },
+    { name = "types-pexpect", specifier = ">=4.9.0.20260518" },
     { name = "types-protobuf", specifier = ">=7.34.1.20260518" },
     { name = "types-psutil", specifier = ">=7.2.2.20260518" },
     { name = "types-pygments", specifier = ">=2.20.0.20260518" },
-    { name = "types-pytz", specifier = ">=2026.2.0.20260518" },
+    { name = "types-pywin32", specifier = ">=312.0.0.20260609" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260518" },
-    { name = "types-requests", specifier = ">=2.33.0.20260712" },
     { name = "types-setuptools", specifier = ">=83.0.0.20260706" },
-    { name = "types-six", specifier = ">=1.17.0.20260518" },
     { name = "types-tabulate", specifier = ">=0.10.0.20260508" },
     { name = "types-tqdm", specifier = ">=4.68.0.20260608" },
-    { name = "types-urllib3", specifier = ">=1.26.25.14" },
     { name = "typing-extensions", specifier = ">=4.16.0" },
 ]
 
@@ -3258,12 +3246,12 @@ wheels = [
 ]
 
 [[package]]
-name = "types-decorator"
-version = "5.2.0.20260712"
+name = "types-defusedxml"
+version = "0.7.0.20260504"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/49/68/88a93a27141b50285e10dfe5fecebc1b1a6aec87dea66d9204435f84a76b/types_decorator-5.2.0.20260712.tar.gz", hash = "sha256:2890f05fe3c65546baf5000fd5f1eed4d1c95bae5516e23e1735b7b5a4dd98c6", size = 9374, upload-time = "2026-07-12T05:14:02.186Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/d2/4553c8fa9cdebfe1e84b950cf790a4d2376a97fa016e43f7c65323fa6c7d/types_defusedxml-0.7.0.20260504.tar.gz", hash = "sha256:2ab2828a3f97111ba1c16cee273ad4124a831fc9198c41bf8368ff6ea48ad300", size = 10729, upload-time = "2026-05-04T05:22:50.192Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/53/78/e66eac8df9960f60e3fd36802b472e47109450b5db540b998af32fc29553/types_decorator-5.2.0.20260712-py3-none-any.whl", hash = "sha256:5b572bb7acf6935cf888c6b058458df970ae80fb74ab4a8ada8c786491b3dead", size = 8186, upload-time = "2026-07-12T05:14:01.271Z" },
+    { url = "https://files.pythonhosted.org/packages/bf/2d/8a4b5ba1d732b8bc691f0efbb1c6f77cb5f6f473b2afe181d83d910773c5/types_defusedxml-0.7.0.20260504-py3-none-any.whl", hash = "sha256:a959e3a0a43b93e464bd625d91ec9193a2703ddc10443bdd627792485fae0b10", size = 13467, upload-time = "2026-05-04T05:22:49.319Z" },
 ]
 
 [[package]]
@@ -3288,12 +3276,24 @@ wheels = [
 ]
 
 [[package]]
-name = "types-pillow"
-version = "10.2.0.20240822"
+name = "types-networkx"
+version = "3.6.1.20260624"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/18/4a/4495264dddaa600d65d68bcedb64dcccf9d9da61adff51f7d2ffd8e4c9ce/types-Pillow-10.2.0.20240822.tar.gz", hash = "sha256:559fb52a2ef991c326e4a0d20accb3bb63a7ba8d40eb493e0ecb0310ba52f0d3", size = 35389, upload-time = "2024-08-22T02:32:48.15Z" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/44/f9/975c2bb35407c241fb788e9c75b2e2642af43a6c9cf81056a119dd98e59c/types_networkx-3.6.1.20260624.tar.gz", hash = "sha256:f031a9ee0bd27de4ab6d3e35a10f3492a4befc7b8c348607892b0ccb1b415d4d", size = 74060, upload-time = "2026-06-24T05:56:25.279Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/66/23/e81a5354859831fcf54d488d33b80ba6133ea84f874a9c0ec40a4881e133/types_Pillow-10.2.0.20240822-py3-none-any.whl", hash = "sha256:d9dab025aba07aeb12fd50a6799d4eac52a9603488eca09d7662543983f16c5d", size = 54354, upload-time = "2024-08-22T02:32:46.664Z" },
+    { url = "https://files.pythonhosted.org/packages/14/d4/67136d3323dd8a8ecc8124531f737dee97819811026da20a2a72949f462a/types_networkx-3.6.1.20260624-py3-none-any.whl", hash = "sha256:071734f88733afaaa06cbb62eb8c603626f4f9aa18424771acbdd3a638828d9a", size = 162457, upload-time = "2026-06-24T05:56:24.063Z" },
+]
+
+[[package]]
+name = "types-pexpect"
+version = "4.9.0.20260518"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/84/c52c4841aeaf1d56551f14335ca99a40e7e04b4f8358b402115910828e8e/types_pexpect-4.9.0.20260518.tar.gz", hash = "sha256:38c373798209428dd90988b6fd4b8839c68c7e3ed79215f1ab11fa42d7ff9427", size = 13568, upload-time = "2026-05-18T06:03:35.378Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/01/11/17b1da645d5f2a12e4db83ae38dbb732fbac96fb3bd7416635c844f7d24e/types_pexpect-4.9.0.20260518-py3-none-any.whl", hash = "sha256:bf2422e825e4efe29cc4a1b7bdc3c375ae97d9c3046ce6b2018c100fb049c262", size = 17087, upload-time = "2026-05-18T06:03:34.14Z" },
 ]
 
 [[package]]
@@ -3327,12 +3327,12 @@ wheels = [
 ]
 
 [[package]]
-name = "types-pytz"
-version = "2026.2.0.20260518"
+name = "types-pywin32"
+version = "312.0.0.20260609"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/9f/d9/9fa4019d2235bd374293e1fd4153879b28b6ae1d2bae98addd352c9713f2/types_pytz-2026.2.0.20260518.tar.gz", hash = "sha256:e5d254329e9c4e91f0781b22c43a4bb2d10bb044d97b24c4b05d45567b0eae16", size = 10871, upload-time = "2026-05-18T06:02:45.789Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b9/e1/a42af4d29cf9a8d9d579bedd022b9f314093bfd9ffe1034ca729acebb30b/types_pywin32-312.0.0.20260609.tar.gz", hash = "sha256:3b6ec4ebf8607ef97563e907e381d8dc40260c3c54ff8819dcea696bd67ca13f", size = 334927, upload-time = "2026-06-09T05:58:27.667Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/62/89/41e80670779a223d8bc8bc83019a619988cfa5c432cedac5cec23884fbc4/types_pytz-2026.2.0.20260518-py3-none-any.whl", hash = "sha256:3a12eaa38f476bd650902a9c9bb442f03f3c7dee2be5c5848bce61bd708d205a", size = 10125, upload-time = "2026-05-18T06:02:44.968Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/eb/008771f4e2c7307b06623ee8bdde12bf9261305f35443e1b943a45a2d5ae/types_pywin32-312.0.0.20260609-py3-none-any.whl", hash = "sha256:713096e5de8202e6a46392e7731653aa99e458f76cebfea0b15d80901f3bb5e1", size = 397302, upload-time = "2026-06-09T05:58:26.339Z" },
 ]
 
 [[package]]
@@ -3366,15 +3366,6 @@ wheels = [
 ]
 
 [[package]]
-name = "types-six"
-version = "1.17.0.20260518"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/14/ec/31f3a70f3b4f7dbbf28025a5b2ed0b3a3eb237c01bc3357e45547c04defd/types_six-1.17.0.20260518.tar.gz", hash = "sha256:b0196d5188bd589bc5ab92901edc1a4ff3c5fd4b0dc19d074a5f1f8213e5213a", size = 15787, upload-time = "2026-05-18T06:04:07.387Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/54/2e/0e64ff848fa3d3ee1563ee3e6b3f9f226c25e5ce17020fb0be1f832a7e32/types_six-1.17.0.20260518-py3-none-any.whl", hash = "sha256:2ed782cafcef9614e51292ae39bae93e42ff7b20c1c0a00c6be35e1c0e493a70", size = 19940, upload-time = "2026-05-18T06:04:06.565Z" },
-]
-
-[[package]]
 name = "types-tabulate"
 version = "0.10.0.20260508"
 source = { registry = "https://pypi.org/simple" }
@@ -3393,15 +3384,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/dc/e0/3facccb1ff69970c73fca7a8028286c233d4c1312c475a65fb3d896f56d9/types_tqdm-4.68.0.20260608.tar.gz", hash = "sha256:e1dfddf8770fbc30ecaf95ae57c286397831235064308f7dfc2b1d6684a76107", size = 18470, upload-time = "2026-06-08T06:26:06.661Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/53/e8/61d95bfd49d1609fb8e8c5e06f4a094183411988a6f448873f5de6602499/types_tqdm-4.68.0.20260608-py3-none-any.whl", hash = "sha256:450a6e7e9e9b604928968927c414b32970e40091213c4180e1ed470905b13eff", size = 24858, upload-time = "2026-06-08T06:26:05.741Z" },
-]
-
-[[package]]
-name = "types-urllib3"
-version = "1.26.25.14"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/73/de/b9d7a68ad39092368fb21dd6194b362b98a1daeea5dcfef5e1adb5031c7e/types-urllib3-1.26.25.14.tar.gz", hash = "sha256:229b7f577c951b8c1b92c1bc2b2fdb0b49847bd2af6d1cc2a2e3dd340f3bda8f", size = 11239, upload-time = "2023-07-20T15:19:31.307Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/11/7b/3fc711b2efea5e85a7a0bbfe269ea944aa767bbba5ec52f9ee45d362ccf3/types_urllib3-1.26.25.14-py3-none-any.whl", hash = "sha256:9683bbb7fb72e32bfe9d2be6e04875fbe1b3eeec3cbb4ea231435aa7fd6b4f0e", size = 15377, upload-time = "2023-07-20T15:19:30.379Z" },
 ]
 
 [[package]]
