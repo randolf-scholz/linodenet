@@ -20,8 +20,7 @@ __all__ = [
 
 from collections.abc import Callable
 from functools import partial
-from math import sqrt
-from typing import Optional, cast
+from typing import cast
 
 import torch
 from torch import Tensor, nn
@@ -249,20 +248,7 @@ class GradientStepUpdater(nn.Module):
 
 
 class LinearRNNCell(nn.Module):
-    r"""Linear state update.
-
-    .. math:: F(y，x) =  Ux + Vy + b
-
-    where $U$ and $V$ are learnable matrices, and $b$ is a learnable bias vector.
-    """
-
-    # PARAMETERS
-    U: Tensor
-    r"""PARAM: the hidden state matrix."""
-    V: Tensor
-    r"""PARAM: the observable matrix."""
-    bias: Optional[Tensor]
-    r"""PARAM: the bias vector."""
+    r"""Minimal linear RNN update used as a non-consistent counterexample."""
 
     def __init__(
         self,
@@ -275,19 +261,26 @@ class LinearRNNCell(nn.Module):
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        m = self.hidden_size
-        n = self.input_size
-        self.U = nn.Parameter(torch.normal(0, 1 / sqrt(m), size=(m, m)))
-        self.V = nn.Parameter(torch.normal(0, 1 / sqrt(n), size=(m, n)))
-        self.bias = nn.Parameter(torch.zeros(m)) if bool(bias) else None
+        self.U = nn.Parameter(torch.randn(hidden_size, hidden_size))
+        self.V = nn.Parameter(torch.randn(hidden_size, input_size))
+        self.bias = nn.Parameter(torch.zeros(hidden_size)) if bias else None
 
-    # @signature("[(..., n), (..., m)] -> (..., m)")
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
-        r"""Forward pass of the state update.
+    def forward(
+        self,
+        y: Tensor,
+        x: Tensor,
+        /,
+        *,
+        mask: Tensor | None = None,
+    ) -> Tensor:
+        r"""Apply $Ux + Vy + b$ to observed events and keep query-only states."""
+        if mask is None:
+            return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
 
-        .. math:: F(y，x) =  Ux + Vy + b
-        """
-        return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
+        observed = mask.any(dim=-1, keepdim=True)
+        y = torch.where(mask, y, 0.0)
+        updated = F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
+        return torch.where(observed, updated, x)
 
 
 class InnovationCell(nn.Module):

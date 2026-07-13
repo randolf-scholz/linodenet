@@ -13,6 +13,7 @@ from linodenet_models.state_update import (
     GradientStepUpdater,
     InnovationCell,
     KalmanCell,
+    LinearRNNCell,
     LpLoss,
 )
 from linodenet_models.utils import SplitTimeData
@@ -101,6 +102,11 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
                     model_config.latent_size,
                     covariance_factor=model_config.updater_config or "constant",
                     observation_map=decoder,
+                )
+            case "linear_rnn":
+                updater = LinearRNNCell(
+                    model_config.input_size,
+                    model_config.latent_size,
                 )
             case _:
                 raise ValueError(f"Unknown updater: {model_config.updater!r}.")
@@ -244,6 +250,14 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
 
         # 3. check self-consistency on random data
         self.assert_self_consistent(model, seed=3)
+
+    def test_self_consistency_rejects_linear_rnn_cell(self) -> None:
+        r"""Check that the self-consistency test rejects a non-consistent update."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG._replace(updater="linear_rnn"))
+
+        with pytest.raises(AssertionError):
+            self.assert_self_consistent(model, seed=4)
 
 
 def test_make_linodenet_instantiates_expected_components() -> None:
