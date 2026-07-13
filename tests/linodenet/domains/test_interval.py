@@ -24,7 +24,7 @@ class TestInterval:
         assert Interval(Interval.EMPTY) is Interval.EMPTY
 
         with pytest.raises(TypeError):
-            Interval("[0, 1)", 1.0)  # type: ignore[call]
+            Interval("[0, 1)", 1.0)  # type: ignore[call-overload]
 
     def test_init_logs_debug_on_invalid_string(
         self, caplog: pytest.LogCaptureFixture

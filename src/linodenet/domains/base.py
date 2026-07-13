@@ -500,11 +500,11 @@ class PosetEnum(Enum, metaclass=_PosetType):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
     # TODO: return type should be Collection[Self | Meet[Self] & Self], requiring Intersection
-    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[intersection]
+    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[type-var]
     r"""Dependencies"""
-    KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[intersection]
+    KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[type-var]
     r"""Reverse dependencies."""
-    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]  # type: ignore[intersection]
+    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]  # type: ignore[type-var]
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
     # TODO: use typing.ReadOnly for covariance.
     ANY: ClassVar[Self | Any | None]
@@ -826,9 +826,9 @@ class PosetEnum(Enum, metaclass=_PosetType):
         return self._closure_from(frozenset({self}))
 
     @property
-    def factorizations(self) -> frozenset[Meet[Self]]:  # type: ignore[intersection]
+    def factorizations(self) -> frozenset[Meet[Self]]:  # type: ignore[type-var]
         return frozenset(
-            Meet(factors)  # type: ignore[intersection]
+            Meet(factors)  # type: ignore[arg-type]
             for node, factors in self._parse_known_meets()
             if node is self
         )

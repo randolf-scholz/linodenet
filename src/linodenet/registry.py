@@ -198,7 +198,7 @@ class Registry(Mapping[str, RegistryEntry]):
     def __len__(self) -> int:
         return len(self._entries)
 
-    def get[T = None](self, key: str, default: T = None) -> RegistryEntry | T:  # type: ignore[default]
+    def get[T = None](self, key: str, default: T = None) -> RegistryEntry | T:  # type: ignore[assignment]
         r"""Return the entry for `key` if present."""
         return self._entries.get(normalize_name(key), default)
 

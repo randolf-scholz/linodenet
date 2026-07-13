@@ -97,7 +97,7 @@ tests = [
     "tqdm>=4.68.4",
 ]
 typing = [
-    "mypy>=2.2.0",
+    "mypy>=2.3.0",
     "pyrefly>=1.1.1",
     "pyright>=1.1.411",
     "scipy-stubs>=1.18.0.1",
@@ -387,6 +387,7 @@ module = [
     "pandas.*",
     "pytest_benchmark.*",
     "torchdiffeq.*",
+    "torchode.*",
 ]
 ignore_missing_imports = true
 # endregion mypy configuration ---------------------------------------------------------

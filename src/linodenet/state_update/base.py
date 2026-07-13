@@ -120,7 +120,7 @@ def is_vector_state_updater(arg: object, /) -> TypeIs[VectorStateUpdate]:
 
 
 # TODO: use Intersection type
-class CellSequence[C: VectorStateUpdate](ModuleSequence[C], VectorStateUpdate):  # type: ignore[bad-specialization]
+class CellSequence[C: VectorStateUpdate](ModuleSequence[C], VectorStateUpdate):  # type: ignore[type-var]
     r"""Apply multiple state updaters sequentially.
 
     .. math:: xₖ₊₁ = Fₖ(y, xₖ)

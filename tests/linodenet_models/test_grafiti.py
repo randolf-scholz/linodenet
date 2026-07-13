@@ -188,7 +188,7 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
         context_mask=combined.context_mask,
         query_mask=combined.query_mask,
     )
-    actual = model.forward_triplet(  # type: ignore[callable]
+    actual = model.forward_triplet(  # type: ignore[operator]
         args.context_times,
         args.context_channels,
         args.context_values,
@@ -249,7 +249,7 @@ def test_grafiti_triplet_matches_combined_embeddings_with_duplicate_times() -> N
         context_mask=combined.context_mask,
         query_mask=combined.query_mask,
     )
-    actual = model.forward_triplet(  # type: ignore[callable]
+    actual = model.forward_triplet(  # type: ignore[operator]
         args.context_times,
         args.context_channels,
         args.context_values,

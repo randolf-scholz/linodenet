@@ -61,7 +61,7 @@ class ModuleSequence[M: Module](ModuleList, Sequence[M]):
     if TYPE_CHECKING:
         # We add these at type-checking time to help mypy and pyright
         # Since they are skipped at runtime, they won't interfere with JIT compilation
-        _modules: Mapping[str, M]  # type: ignore[override]
+        _modules: Mapping[str, M]  # type: ignore[assignment]
 
         def __init__(self, modules: Iterable[M] = (), /) -> None: ...
         def __iter__(self) -> Iterator[M]: ...
