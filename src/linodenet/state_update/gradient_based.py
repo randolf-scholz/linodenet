@@ -30,13 +30,13 @@ Example: Gradient update with probabilistic forecasting.
 __all__ = [
     "LpLoss",
     "GradientStepUpdater",
-    "GaussianKLProximalUpdater",
     "GaussianForwardKLUpdater",
     "lp_loss",
 ]
 
 from collections.abc import Callable
 from functools import partial
+from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -46,11 +46,13 @@ from linodenet.distributions.gaussian import (
     GaussianParams,
     argmin_forward_kl,
     log_prob,
-    solve_proximal_kl,
 )
-from linodenet.mappings import Transform
+from linodenet.mappings import Exp, Transform
+from linodenet.nn.containers import Constant
 
 from .base import AbstractStateUpdate, SparseVectorStateUpdate
+
+type ScalarLike = Tensor | float
 
 
 def lp_loss(
@@ -198,84 +200,6 @@ class GradientStepUpdater(nn.Module, SparseVectorStateUpdate):
         return x - self.step_size * self.grad_fn(y, x, mask=mask)
 
 
-class GaussianKLProximalUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
-    r"""Perform a Gaussian KL-proximal update of the observation loss.
-
-    Let $θ₋ = (μ₋, Σ₋)$ denote the current latent Gaussian parameters and let
-    $q(y_obs∣θ)$ be the predictive density induced by the decoder. This module
-    does not take an explicit Euclidean gradient step in parameter space.
-    Instead, it solves the closed-form KL-proximal problem for the first-order
-    linearization of the negative log-likelihood at $θ₋$:
-
-    .. math::
-        θ₊ = \argmin_θ -\log q(y_obs∣θ₋)
-            + ⟨ ∇_θ[-\log q(y_obs∣θ)]|_{θ=θ₋}, θ - θ₋ ⟩
-            + λ⋅\kl(𝓝(μ, Σ) ∣ 𝓝(μ₋, Σ₋))
-
-    Equivalently, the observation term contributes only through its gradient at
-    the current parameters, while the KL term supplies the update geometry and
-    keeps the result inside the Gaussian family.
-
-    The parameter ``regularization_strength`` is the proximal weight $λ$.
-    It acts both as the strength of the KL anchor and as an inverse step-size:
-
-    - larger $λ$ keeps $θ₊$ closer to $θ₋$ and yields a smaller update
-    - smaller $λ$ produces a more aggressive update
-
-    So unlike the Euclidean `GradientStepUpdater`, this module has no separate
-    step-size parameter. The update magnitude is controlled by $λ$ itself.
-    """
-
-    def __init__(
-        self,
-        *,
-        decoder: nn.Module,  # & Transform[Tensor, Tensor]
-        parametrization: str | CovarianceType,
-        regularization_strength: float = 1e-3,
-        regularization_learnable: bool = True,
-    ) -> None:
-        super().__init__()
-
-        self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore[assignment]
-        self.parametrization = CovarianceType(parametrization)
-        strength = torch.as_tensor(regularization_strength)
-        if torch.any(strength <= 0).item():
-            raise ValueError(
-                "Expected regularization_strength to be positive, "
-                f"got {regularization_strength!r}."
-            )
-
-        self.log_regularization_strength = nn.Parameter(
-            strength.log(), requires_grad=regularization_learnable
-        )
-
-    @property
-    def regularization_strength(self) -> Tensor:
-        r"""Return the positive KL regularization weight $λ$."""
-        return self.log_regularization_strength.exp()
-
-    @partial(torch.func.grad, argnums=2)
-    def grad_fn(
-        self,
-        y_obs: Tensor,  # (..., e)
-        theta: GaussianParams,  # (..., d), (..., d, d)
-        /,
-    ) -> Tensor:
-        z, logabsdet = self.decoder.encode_and_logabsdet(y_obs)
-        log_probs = logabsdet + log_prob(z, theta, parametrization=self.parametrization)
-        # Note: ∇_θ ∑ᵢ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
-        return -log_probs.sum()
-
-    def forward(self, y_obs: Tensor, theta: GaussianParams, /) -> GaussianParams:
-        r"""Return the KL-proximal Gaussian update $(μ₊, Σ₊)$."""
-        return solve_proximal_kl(
-            lambda θ: self.grad_fn(y_obs, θ),
-            theta,
-            gamma=self.regularization_strength,
-            parametrization=self.parametrization,
-        )
-
-
 class GaussianForwardKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
     r"""Perform an exact Gaussian forward-KL update of the observation loss.
 
@@ -293,46 +217,75 @@ class GaussianForwardKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Te
 
     which is evaluated in closed form by `argmin_forward_kl`.
 
-    The parameter ``regularization_strength`` is the forward-KL weight $λ$:
+    The parameter ``retention`` is the forward-KL weight $λ$:
 
     - larger $λ$ keeps $θ₊$ closer to $θ₋$
     - smaller $λ$ lets the observation move the posterior more aggressively
     """
+
+    rho_mu: Tensor
+    r"""BUFFER: the most recent computed eta_mu."""
+    rho_sigma: Tensor
+    r"""BUFFER: the most recent computed eta_sigma."""
 
     def __init__(
         self,
         *,
         decoder: nn.Module,  # & Transform[Tensor, Tensor]
         parametrization: str | CovarianceType,
-        regularization_strength: float = 1e-3,
-        regularization_learnable: bool = True,
+        retention: nn.Module | ScalarLike | tuple[ScalarLike, ScalarLike] = 0.5,
+        retention_learnable: bool = True,
     ) -> None:
         super().__init__()
 
         self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore[assignment]
         self.parametrization = CovarianceType(parametrization)
-        strength = torch.as_tensor(regularization_strength)
-        if torch.any(strength <= 0).item():
-            raise ValueError(
-                "Expected regularization_strength to be positive, "
-                f"got {regularization_strength!r}."
-            )
 
-        self.log_regularization_strength = nn.Parameter(
-            strength.log(), requires_grad=regularization_learnable
-        )
+        match retention:
+            case nn.Module():
+                self.retention = retention
 
-    @property
-    def regularization_strength(self) -> Tensor:
-        r"""Return the positive reverse-KL regularization weight $λ$."""
-        return self.log_regularization_strength.exp()
+            case [rho_mu, rho_sigma]:
+                strength_mu = torch.as_tensor(rho_mu)
+                strength_sigma = torch.as_tensor(rho_sigma)
+                if not torch.all((strength_mu >= 0.0) & (strength_mu <= 1.0)):
+                    raise ValueError(f"ρ_mu must be in [0, 1], got {rho_mu!r}")
+                if not torch.all((strength_sigma > 0.0) & (strength_sigma <= 1.0)):
+                    raise ValueError(f"ρ_sigma must be in (0, 1], got {rho_sigma!r}")
+                param_mu = nn.Parameter(torch.logit(strength_mu), requires_grad=True)
+                param_sigma = nn.Parameter(
+                    torch.logit(strength_sigma), requires_grad=True
+                )
 
-    def forward(self, y_obs: Tensor, theta: GaussianParams, /) -> GaussianParams:
+            case rho:
+                strength = torch.as_tensor(rho)
+                if not torch.all((strength >= 0.0) & (strength <= 1.0)):
+                    raise ValueError(f"ρ must be in [0, 1], got {rho!r}")
+                param = nn.Parameter(
+                    torch.logit(strength), requires_grad=retention_learnable
+                )
+
+        if not retention_learnable:
+            # freeze the module (mark parameters as frozen)
+            for param in self.retention.parameters():
+                param.requires_grad = False
+
+        # buffers for rho_mu, rho_sigma
+        self.register_buffer("rho_mu", None, persistent=False)
+        self.register_buffer("rho_sigma", None, persistent=False)
+
+    def forward(
+        self, y_obs: Tensor, theta: GaussianParams, /, *, context: Any = None
+    ) -> GaussianParams:
         r"""Return the exact reverse-KL Gaussian update $(μ₊, Σ₊)$."""
         z, _ = self.decoder.encode_and_logabsdet(y_obs)
+
+        rho = self.retention(context)
+        self.rho_mu, self.rho_sigma = rho if isinstance(rho, tuple) else (rho, rho)
+
         return argmin_forward_kl(
             z,
             theta,
-            gamma=self.regularization_strength,
+            retention=(self.rho_mu, self.rho_sigma),
             parametrization=self.parametrization,
         )
