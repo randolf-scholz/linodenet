@@ -46,7 +46,7 @@ class Constant(Module):
             case _:
                 raise TypeError(f"Expected float, int, or tensor, got {type(value)!r}")
 
-    def forward(self, _: Any, /) -> Tensor:
+    def forward(self, _: Any = None, /) -> Tensor:
         return self.value
 
 
