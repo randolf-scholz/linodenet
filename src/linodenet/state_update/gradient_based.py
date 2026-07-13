@@ -30,7 +30,7 @@ Example: Gradient update with probabilistic forecasting.
 __all__ = [
     "LpLoss",
     "GradientStepUpdater",
-    "GaussianForwardKLUpdater",
+    "GaussianForwardUpdater",
     "lp_loss",
 ]
 
@@ -199,7 +199,7 @@ class GradientStepUpdater(nn.Module, SparseVectorStateUpdate):
         return x - self.step_size * self.grad_fn(y, x, mask=mask)
 
 
-class GaussianForwardKLUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
+class GaussianForwardUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
     r"""Perform an exact Gaussian forward-KL update of the observation loss.
 
     .. math:: θ₊ = \argmin_θ -\log q(y_obs∣θ) + γ⋅\kl(𝓝(θ₋)，𝓝(θ))
