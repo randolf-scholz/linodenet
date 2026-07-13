@@ -100,6 +100,101 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
         mask = targets.isfinite()
         return F.mse_loss(forecast[mask], targets[mask])
 
+    def assert_self_consistent(self, model: LinODEnet, /, *, seed: int) -> None:
+        r"""Check that treating a prediction as an observation is a no-op."""
+        data = make_forecasting_request(
+            seed=seed,
+            batch_shape=(4,),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+        prediction = model.predict(
+            context_times=data.context_times,
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+            query_times=data.query_times,
+            query_mask=data.query_mask,
+        )
+
+        context_axis = -1 - len(self.CONTEXT_SHAPE)
+        updated_context_times = torch.cat(
+            [data.context_times, data.query_times[..., :1]],
+            dim=-1,
+        )
+        updated_context_values = torch.cat(
+            [data.context_values, prediction[..., :1, :].detach()],
+            dim=context_axis,
+        )
+        updated_context_mask = torch.cat(
+            [data.context_mask, data.query_mask[..., :1, :]],
+            dim=context_axis,
+        )
+
+        updated_prediction = model.predict(
+            context_times=updated_context_times,
+            context_values=updated_context_values,
+            context_mask=updated_context_mask,
+            query_times=data.query_times[..., 1:],
+            query_mask=data.query_mask[..., 1:, :],
+        )
+        torch.testing.assert_close(
+            updated_prediction,
+            prediction[..., 1:, :],
+            atol=1e-5,
+            rtol=1e-5,
+        )
+
+    def test_self_consistency_at_init(self) -> None:
+        r"""Check that linodenet is self-consistent at initialization.
+
+        .. math:: ŷ(t∣H) = ŷ(t ∣ H⊕(τ, ŷ(τ∣H)))
+        """
+        # 1. initialize model
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        # 2. check self-consistency on random data
+        # 2.a make predictions on random data
+        # 2.b append first prediction to context
+        # 2.c predict using updated context, compare to 2.a
+        self.assert_self_consistent(model, seed=1)
+
+    def test_self_consistency_trained(self) -> None:
+        r"""Check that linodenet is self-consistent after training.
+
+        .. math:: ŷ(t∣H) = ŷ(t ∣ H⊕(τ, ŷ(τ∣H)))
+        """
+        # 1. initialize model
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        # 2. train model on random data for 3 iterations
+        train_data = make_forecasting_request(
+            seed=2,
+            batch_shape=(4,),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+        )
+        assert train_data.target_values is not None
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        for _ in range(3):
+            optimizer.zero_grad()
+            predictions = self.forecast(model, train_data)
+            loss = self.loss(model, predictions, train_data.target_values)
+            loss.backward()
+            optimizer.step()
+
+        # 3. check self-consistency on random data
+        # 3.a make predictions on random data
+        # 3.b append first prediction to context
+        # 3.c predict using updated context, compare to 3.a
+        self.assert_self_consistent(model, seed=3)
+
 
 def test_make_linodenet_instantiates_expected_components() -> None:
     r"""The helper should assemble the default LinearFlow/Linear/update stack."""
