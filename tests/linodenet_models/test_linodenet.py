@@ -158,6 +158,7 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
             output_shape=self.OUTPUT_SHAPE,
             input_missingness=True,
         )
+        # 1 make predictions on random data
         prediction = model.predict(
             context_times=data.context_times,
             context_values=data.context_values,
@@ -166,6 +167,7 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
             query_mask=data.query_mask,
         )
 
+        # 2 append first prediction to context
         context_axis = -1 - len(self.CONTEXT_SHAPE)
         updated_context_times = torch.cat(
             [data.context_times, data.query_times[..., :1]],
@@ -180,6 +182,7 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
             dim=context_axis,
         )
 
+        # 3 predict using updated context
         updated_prediction = model.predict(
             context_times=updated_context_times,
             context_values=updated_context_values,
@@ -187,6 +190,8 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
             query_times=data.query_times[..., 1:],
             query_mask=data.query_mask[..., 1:, :],
         )
+
+        # 4. compare updated predictions to original predictions
         torch.testing.assert_close(
             updated_prediction,
             prediction[..., 1:, :],
@@ -206,9 +211,6 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
         model = self.make_model(model_config)
 
         # 2. check self-consistency on random data
-        # 2.a make predictions on random data
-        # 2.b append first prediction to context
-        # 2.c predict using updated context, compare to 2.a
         self.assert_self_consistent(model, seed=1)
 
     @pytest.mark.parametrize("config_key", MODEL_CONFIGS)
