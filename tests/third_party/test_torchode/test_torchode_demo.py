@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import cast
 
 import torch
 import torchode as to
@@ -30,11 +31,11 @@ def apply_batched[R: Tensor | tuple[Tensor, ...]](
 
     ys_flat = fn(*args_flat)
     if isinstance(ys_flat, Tensor):
-        return ys_flat.reshape(*batch_shape, *ys_flat.shape[1:])
-    return tuple(y.reshape(*batch_shape, *y.shape[1:]) for y in ys_flat)
+        return cast("R", ys_flat.reshape(*batch_shape, *ys_flat.shape[1:]))
+    return cast("R", tuple(y.reshape(*batch_shape, *y.shape[1:]) for y in ys_flat))
 
 
-def test_batched_single():
+def test_batched_single() -> None:
     batch_shape = (16,)
     dim = 8
     steps = 10
@@ -54,7 +55,7 @@ def test_batched_single():
     print(sol.stats)
 
 
-def test_batched_multiple():
+def test_batched_multiple() -> None:
     batch_shape = (1, 2, 3)
     dim = 8
     steps = 10

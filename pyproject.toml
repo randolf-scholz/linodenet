@@ -315,6 +315,7 @@ output-format = "min-text"
 search-path = ["src/", "."]
 replace-imports-with-any = [
     "torchdiffeq",
+    "torchode",
 ]
 
 [tool.pyrefly.errors]
