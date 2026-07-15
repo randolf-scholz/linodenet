@@ -1,11 +1,12 @@
 r"""Minimal, unoptimized reimplementation of LinODEnet."""
 
 __all__ = [
-    "LinODEnet_v0",
+    "LinODEnet_EncoderDecoder",
     "LinODEnet",
     "LinearFlow",
     "make_linodenet",
     "linear_flow",
+    "update_masked",
 ]
 import warnings
 from collections.abc import Callable, Mapping
@@ -194,7 +195,7 @@ class LinearFlow(nn.Module):
         return self(timestamps - t0, x0)
 
 
-class LinODEnet_v0(nn.Module):
+class LinODEnet_EncoderDecoder(nn.Module):
     r"""Encoder-Decoder Latent Linear ODE Network."""
 
     initial_state: Tensor
@@ -411,22 +412,16 @@ class LinODEnet(nn.Module):
             # zₜ' = F(zₜ, xₜ)
             posterior_state = self.state_updater(x_obs, prior_state, mask=obs_mask)
 
-            # x̂ₜ = ϕ(zₜ)
-            prior_pred = self.decoder(prior_state)
-
-            # x̂ₜ' = ϕ(zₜ')
-            post_pred = self.decoder(posterior_state)
-
             prior_states.append(prior_state)
             post_states.append(posterior_state)
-            prior_preds.append(prior_pred)
-            post_preds.append(post_pred)
 
         stack_dim = -2 if self.batch_first else 0
         self.prior_latent_states = torch.stack(prior_states, dim=stack_dim)
         self.posterior_latent_states = torch.stack(post_states, dim=stack_dim)
-        self.prior_predictions = torch.stack(prior_preds, dim=seq_dim)
-        self.posterior_predictions = torch.stack(post_preds, dim=seq_dim)
+
+        # efficiently compute prior and posterior predictions with one batched call
+        self.prior_predictions = self.decoder(self.prior_latent_states)
+        self.posterior_predictions = self.decoder(self.posterior_latent_states)
 
         return self.posterior_predictions
 
