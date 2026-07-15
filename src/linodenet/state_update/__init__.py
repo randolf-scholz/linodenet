@@ -60,8 +60,6 @@ from .base import (
     is_vector_state_updater,
 )
 from .gradient_based import (
-    GaussianForwardUpdater,
-    GaussianReverseUpdater,
     GradientStepUpdater,
 )
 from .kalman import NonLinearKalmanUpdate, NonLinearUpdate
@@ -72,6 +70,7 @@ from .linear import (
     KalmanCell,
     LinearRNNCell,
 )
+from .probabilistic import GaussianForwardUpdater, GaussianReverseUpdater
 
 STATE_UPDATERS: dict[str, type[VectorStateUpdate]] = {
     # PyTorch recurrent state updaters
