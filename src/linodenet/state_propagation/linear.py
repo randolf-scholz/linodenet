@@ -1,4 +1,9 @@
-r"""Linear ODE module, to be used analogously to `scipy.integrate.odeint`."""
+r"""Closed-form state propagation for linear continuous-time dynamics.
+
+The module provides functional and `nn.Module` interfaces for deterministic
+linear ODE flows and linear-Gaussian SDE flows. All propagators evaluate the
+state at one or more time deltas relative to the supplied initial state.
+"""
 
 __all__ = [
     "LinearFlow",
@@ -30,13 +35,28 @@ def linear_flow(
     bias: Optional[Tensor] = None,
     /,
 ) -> Tensor:  # (..., $n, d)
-    r"""Linear ODE.
+    r"""Propagate an affine linear ODE by a matrix exponential.
+
+    Solves the time-homogeneous system
 
     .. math:: dxₜ/dt = Axₜ + b
 
-    Given x₀, then $xₜ = eᴬᵗx₀ + φ₁(At)bt$. Here, $φₖ(z) = ∑ₙ₌₀^∞ zⁿ/(n+k)!$ are the phi-functions,
-    which can be computed from the matrix exponential of an augmented block matrix.
-    In particular, φ₀(A) = eᴬ and φ₁(A) = (eᴬ - I)/A.
+    for each requested time delta $t$. If `bias` is omitted, the solution is
+    $xₜ = eᴬᵗx₀$. Otherwise, the affine term is computed through the
+    augmented matrix exponential
+
+    .. math:: \exp\left(\bmat{ A & b \\ 0 & 0 }t\right) = \bmat{ eᴬᵗ & φ₁(At)bt \\ 0 & 1 }
+
+    where $φ₁(Z) = ∑ₖ₌₀^∞ Zᵏ/(k+1)!$.
+
+    Args:
+        timedeltas: Evaluation time deltas, with shape `(..., n)`.
+        x0: Initial state, with shape `(..., d)`.
+        kernel: Linear drift matrix $A$, with shape `(d, d)`.
+        bias: Optional affine drift vector $b$, with shape `(d,)`.
+
+    Returns:
+        Propagated states at each requested time delta, with shape `(..., n, d)`.
     """
     if bias is None:
         Adt = torch.einsum("..., kl -> ...kl", timedeltas, kernel)
@@ -60,42 +80,46 @@ def linear_flow(
 
 
 class LinearFlow(nn.Module, ContinuousFlow):
-    r"""Linear Flow, solves $ẋ = Ax$, i.e. $x_{t+∆t} = e^{A{∆t}}xₜ$.
+    r"""Learnable affine linear flow with optional kernel constraints.
 
-    This is augmented by 2 techniques:
+    The module solves
 
-    1. parametrization of the kernel, e.g. restricting it to some subset of matrices,
-       such as skew-symmetric matrices, which leads to stable dynamics.
-    2. an optional ReZero gate applied to the kernel, which can be used to improve
-       the learning dynamics.
+    .. math:: x_{t+∆t} = e^{A∆t}xₜ
 
-    .. math:: e^{ρ(π(A))∆t}x
+    or, when `use_bias=True`,
+
+    .. math:: x_{t+∆t} = e^{A∆t}xₜ + ∫₀^{∆t} e^{A(∆t-s)} b \dd{s}.
+
+    The drift matrix may be constrained by a matrix parametrization $π$, for
+    example to enforce skew-symmetric or otherwise structured dynamics. When
+    enabled, the ReZero gate $ρ$ scales the parametrized drift, so the effective
+    system matrix is $ρ(π(A))$.
     """
 
     # Constants
     input_size: Final[int]
-    r"""CONST: The dimensionality of inputs."""
+    r"""CONST: State dimensionality `d`."""
     output_size: Final[int]
-    r"""CONST: The dimensionality of the outputs."""
+    r"""CONST: Output state dimensionality, equal to `input_size`."""
     use_rezero: Final[bool]
-    r"""CONST: Whether the kernel is wrapped in ``ReZero``."""
+    r"""CONST: Whether to apply a `ReZero` gate to the effective kernel."""
     use_bias: Final[bool]
-    r"""CONST: Whether the flow has a learnable affine bias."""
+    r"""CONST: Whether to include a learnable affine drift vector."""
 
     # Parameters
     weight: Tensor
-    r"""PARAM: The learnable weight-matrix of the linear ODE component."""
+    r"""PARAM: Cached drift matrix after parametrization and before ReZero gating."""
     bias: Tensor | None
-    r"""PARAM: Optional learnable bias of the linear ODE component."""
+    r"""PARAM: Optional learnable affine drift vector."""
     rezero: nn.Module
-    r"""MODULE: Optional ReZero gate applied to the kernel."""
+    r"""MODULE: ReZero gate or identity map applied to the effective kernel."""
     # Buffers
     kernel: Tensor
-    r"""BUFFER: The system matrix of the linear ODE component."""
+    r"""BUFFER: Cached effective drift matrix used by the latest forward pass."""
     kernel_initialization: nn.Module
-    r"""MODULE: Optional Initialization of the kernel."""
+    r"""MODULE: Sampler used to initialize the raw drift matrix."""
     kernel_parametrization: nn.Module | None
-    r"""MODULE: Optional parametrization of the kernel."""
+    r"""MODULE: Optional parametrization applied to the raw drift matrix."""
 
     @property
     def config(self) -> dict:
@@ -116,7 +140,17 @@ class LinearFlow(nn.Module, ContinuousFlow):
         use_rezero: bool = True,
         use_bias: bool = False,
     ) -> None:
-        r"""Initialize the Linear ODE Cell."""
+        r"""Initialize the linear flow.
+
+        Args:
+            input_size: State dimensionality `d`.
+            kernel_initialization: Initialization specification for the drift matrix.
+                Strings and tensors are resolved by `resolve_kernel_initialization`.
+            kernel_parametrization: Optional matrix parametrization specification
+                applied to the raw drift matrix.
+            use_rezero: Whether to gate the effective drift matrix with `ReZero`.
+            use_bias: Whether to add a learnable affine drift vector.
+        """
         super().__init__()
         ContinuousFlow.__init__(self, input_shape=(input_size,))
 
@@ -148,17 +182,30 @@ class LinearFlow(nn.Module, ContinuousFlow):
 
     @signature("[(...), (..., d)] -> (..., d)")
     def step(self, timedeltas: Tensor, x0: Tensor) -> Tensor:
-        r"""Propagate the linear ODE for a single time-delta.
+        r"""Propagate the flow for one scalar time delta per batch item.
 
-        .. math:: step(∆t, x) = e^{ρ(π(A))∆t}x
+        Args:
+            timedeltas: Scalar time delta or batched scalar deltas, with shape `(...)`.
+            x0: Initial state, with shape `(..., d)`.
+
+        Returns:
+            Propagated state after the requested delta, with shape `(..., d)`.
         """
         return self.forward(timedeltas.unsqueeze(-1), x0).squeeze(-2)
 
     @signature("[(..., $n), (..., d)] -> (..., $n, d)")
     def forward(self, timedeltas: Tensor, x0: Tensor) -> Tensor:
-        r"""Propagate the linear ODE for a sequence of time-deltas.
+        r"""Evaluate the flow at one or more time deltas.
 
-        .. math:: step(∆tₙ, x) = e^{ρ(π(A))∆tₙ}x
+        The cached effective kernel is refreshed from the parametrized weight and
+        ReZero gate before evaluating the closed-form solution.
+
+        Args:
+            timedeltas: Evaluation time deltas, with shape `(..., n)`.
+            x0: Initial state, with shape `(..., d)`.
+
+        Returns:
+            Propagated states at each requested delta, with shape `(..., n, d)`.
         """
         # update buffer
         self.kernel = self.rezero(self.weight)
@@ -172,11 +219,18 @@ class LinearFlow(nn.Module, ContinuousFlow):
         *,
         t0: Tensor | float,
     ) -> Tensor:
-        r"""Propagate the linear ODE for a sequence of timestamps.
+        r"""Evaluate the flow at absolute timestamps relative to an origin.
 
-        .. math::
-            ∆tₙ &= tₙ - t₀ \\
-            step(∆tₙ, x) &= e^{ρ(π(A))∆tₙ}x
+        Converts timestamps to time deltas via `timestamps - t0` and delegates to
+        `forward`.
+
+        Args:
+            timestamps: Evaluation timestamps, with shape `(..., n)`.
+            x0: Initial state at `t0`, with shape `(..., d)`.
+            t0: Reference timestamp of `x0`.
+
+        Returns:
+            Propagated states at each timestamp, with shape `(..., n, d)`.
         """
         return self(timestamps - t0, x0)
 
@@ -189,23 +243,36 @@ def linear_gaussian_flow(
     b: Optional[Tensor] = None,  # (d,) | None
     /,
 ) -> tuple[Tensor, Tensor]:  # (...., $n, d), (..., $n, d, d)
-    r"""Propagate a linear-gaussian system.
+    r"""Propagate a Gaussian state through a linear-Gaussian SDE.
 
-    .. math:: dZₜ = AZₜdt + bdt + C dWₜ
+    The dynamics are
 
-    Given Z₀∼𝓝(μ₀, Σ₀), then Zₜ∼𝓝(μₜ, Σₜ) for all $t$, with
+    .. math:: \dd{Zₜ} = (AZₜ + b)\dd{t} + L\dd{Wₜ}
+
+    with diffusion covariance $Q = LLᵀ$. If $Z₀ ∼ 𝓝(μ₀, Σ₀)$, then
+    $Zₜ ∼ 𝓝(μₜ, Σₜ)$ for all time deltas $t$, where
 
     .. math::
-        μₜ &= eᴬᵗμ₀ + φ₁(At)bt \\
-        Σₜ &= eᴬᵗΣ₀eᴬᵀᵗ + ??
+        μₜ &= eᴬᵗμ₀ + ∫₀ᵗ e^{(t-s)A}b \dd{s} \\
+        Σₜ &= eᴬᵗΣ₀e^{tAᵀ} + ∫₀ᵗ e^{(t-s)A}Qe^{(t-s)Aᵀ} \dd{s}
+
+    The covariance integral is evaluated with Van Loan's block-matrix
+    exponential. For `b is None`, the implementation computes
+
+    .. math:: \exp(\bmat{ A & Q \\ 0 & -Aᵀ }t) = \bmat{ F & C \\ 0 & F⁻ᵀ }
+
+    and returns $Σₜ = FΣ₀Fᵀ + CFᵀ$.
 
     Args:
-        delta_t: The time-delta(s) to propagate for, of shape (..., $n).
-        z0: initial state given as a pair of mean and covariance matrix,
-            of shapes (..., d) and (..., d, d) respectively.
-        A: The system matrix of the linear ODE component, of shape (d, d).
-        Q: The diffusion matrix of the linear SDE component, of shape (d, d). Must be symmetric positive definite.
-        b: Optional affine bias of the linear ODE component, of shape (d,). If None, then no bias is applied.
+        delta_t: Evaluation time deltas, with shape `(..., n)`.
+        z0: Initial Gaussian state `(μ₀, Σ₀)`, with shapes `(..., d)` and `(..., d, d)`.
+        A: Linear drift matrix, with shape `(d, d)`.
+        Q: Diffusion covariance matrix $LLᵀ$, with shape `(d, d)`.
+        b: Optional affine drift vector, with shape `(d,)`.
+
+    Returns:
+        Pair `(μₜ, Σₜ)` containing propagated means and covariances, with
+        shapes `(..., n, d)` and `(..., n, d, d)`.
     """
     mu_0, sigma_0 = z0
     n = A.shape[-1]
@@ -248,19 +315,22 @@ def linear_gaussian_flow(
 
 
 class LinearGaussianFlow(nn.Module, ContinuousFlow):
-    r"""Implements the propagation of a Normal distribution under linear ODE/SDE.
+    r"""Learnable linear-Gaussian flow for Gaussian states.
 
-    That is, $z₀∼𝓝(μ₀, Σ₀)$ is propagated under the linear ODE/SDE
+    The module parameterizes the drift matrix $A$, diffusion covariance $Q$, and
+    affine drift vector $b$ in the linear SDE
 
-    .. math:: dZₜ = AZₜdt + bdt + C dWₜ
+    .. math:: dZₜ = (AZₜ + b)\,dt + L\,dWₜ, \quad Q = LLᵀ.
 
-    Then, at time $t$ the solution is $zₜ∼𝓝(μₜ, Σₜ)$, where
+    A Gaussian initial state remains Gaussian. For $Z₀ ∼ 𝓝(μ₀, Σ₀)$,
+    the propagated state satisfies $Zₜ ∼ 𝓝(μₜ, Σₜ)$ with
 
     .. math::
-        μₜ &= eᴬᵗμ₀ + φ₁(At)bt  \\
+        μₜ &= eᴬᵗμ₀ + ∫₀ᵗ e^{(t-s)A}b\,ds \\
         Σₜ &= eᴬᵗΣ₀e^{Aᵀt} + ∫₀ᵗ eᴬ⁽ᵗ⁻ˢ⁾ Q e^{Aᵀ(t-s)} ds
 
-    The last integral can be computed in closed form using a block matrix exponential.
+    The covariance integral is computed exactly with Van Loan's block-matrix
+    exponential, as implemented by `linear_gaussian_flow`.
 
     References:
         - | Computing integrals involving the matrix exponential
@@ -269,12 +339,15 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
     """
 
     A: Tensor
+    r"""PARAM: Drift matrix of the linear SDE."""
     b: Tensor | None
+    r"""PARAM: Affine drift vector of the linear SDE."""
     Q: Tensor  # C = √Q
+    r"""PARAM: Positive-definite diffusion covariance matrix."""
     kernel_initialization: nn.Module
-    r"""MODULE: Optional Initialization of the drift kernel."""
+    r"""MODULE: Sampler used to initialize the drift matrix."""
     kernel_parametrization: nn.Module | None
-    r"""MODULE: Optional parametrization of the drift kernel."""
+    r"""MODULE: Optional parametrization applied to the drift matrix."""
 
     @property
     def config(self) -> dict:
@@ -291,6 +364,15 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
         kernel_initialization: str | Tensor | nn.Module = "skew-symmetric",
         kernel_parametrization: Optional[str | nn.Module] = None,
     ) -> None:
+        r"""Initialize the linear-Gaussian flow.
+
+        Args:
+            input_size: State dimensionality `d`.
+            kernel_initialization: Initialization specification for the drift
+                matrix. Strings and tensors are resolved by `resolve_kernel_initialization`.
+            kernel_parametrization: Optional matrix parametrization specification
+                applied to the drift matrix.
+        """
         super().__init__()
         ContinuousFlow.__init__(self, input_shape=(input_size,))
 
@@ -311,5 +393,15 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
     def forward(
         self, delta_t: Tensor, z_0: tuple[Tensor, Tensor]
     ) -> tuple[Tensor, Tensor]:
-        r"""Propagate the linear-Gaussian system for one or more time-deltas."""
+        r"""Evaluate the Gaussian flow at one or more time deltas.
+
+        Args:
+            delta_t: Evaluation time deltas, with shape `(..., n)`.
+            z_0: Initial Gaussian state `(μ₀, Σ₀)`,
+                with shapes `(..., d)` and `(..., d, d)`.
+
+        Returns:
+            Pair `(μₜ, Σₜ)` containing propagated means and covariances,
+            with shapes `(..., n, d)` and `(..., n, d, d)`.
+        """
         return linear_gaussian_flow(delta_t, z_0, self.A, self.Q, self.b)
