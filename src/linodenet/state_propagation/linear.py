@@ -59,72 +59,6 @@ def linear_flow(
     return torch.einsum("...nkl, ...l -> ...nk", expAdt, x0) + phi1bt
 
 
-def linear_gaussian_flow(
-    delta_t: Tensor,  # (..., $n)
-    z0: tuple[Tensor, Tensor],  # (..., d), (..., d, d)
-    A: Tensor,  # (d, d)
-    Q: Tensor,  # (d, d)
-    b: Optional[Tensor] = None,  # (d,) | None
-    /,
-) -> tuple[Tensor, Tensor]:  # (...., $n, d), (..., $n, d, d)
-    r"""Propagate a linear-gaussian system.
-
-    .. math:: dZₜ = AZₜdt + bdt + C dWₜ
-
-    Given Z₀∼𝓝(μ₀, Σ₀), then Zₜ∼𝓝(μₜ, Σₜ) for all $t$, with
-
-    .. math::
-        μₜ &= eᴬᵗμ₀ + φ₁(At)bt \\
-        Σₜ &= eᴬᵗΣ₀eᴬᵀᵗ + ??
-
-    Args:
-        delta_t: The time-delta(s) to propagate for, of shape (..., $n).
-        z0: initial state given as a pair of mean and covariance matrix,
-            of shapes (..., d) and (..., d, d) respectively.
-        A: The system matrix of the linear ODE component, of shape (d, d).
-        Q: The diffusion matrix of the linear SDE component, of shape (d, d). Must be symmetric positive definite.
-        b: Optional affine bias of the linear ODE component, of shape (d,). If None, then no bias is applied.
-    """
-    mu_0, sigma_0 = z0
-    n = A.shape[-1]
-
-    if b is None:
-        # [[A, Q], [0, -Aᵀ]]
-        # -> [[F, C], [0, F⁻ᵀ]]
-        M = torch.cat(
-            [
-                torch.cat([A, Q], dim=-1),
-                torch.cat([torch.zeros_like(A), -A.mT], dim=-1),
-            ],
-            dim=0,
-        )
-
-    else:
-        # use augmented block matrix
-        # [[A, Q, b], [0, -Aᵀ, 0], [0, 0, 0]]
-        # -> [[F, C, r], [0, F⁻ᵀ, 0], [0, 0, 1]]
-        b = b.unsqueeze(-1)
-        M = torch.cat(
-            [
-                torch.cat([A, Q, b], dim=-1),
-                torch.cat([torch.zeros_like(A), -A.mT, torch.zeros_like(b)], dim=-1),
-                torch.zeros((1, 2 * n + 1), dtype=A.dtype, device=A.device),
-            ],
-            dim=0,
-        )
-
-    # exp(M∆t) is a block matrix
-    Mdt = torch.einsum("..., kl -> ...kl", delta_t, M)
-    P = torch.linalg.matrix_exp(Mdt)
-    F = P[..., :n, :n]  # top left block
-    C = P[..., :n, n : 2 * n]  # top center block
-    r = P[..., :n, -1] if b is not None else 0.0  # top right block
-    mu_t = torch.einsum("...nkl, ...l -> ...nk", F, mu_0) + r  # eᴬᵗμ₀ + φ₁(At)bt
-    sigma_t = F @ sigma_0.unsqueeze(-3) @ F.mT + C @ F.mT  # eᴬᵗΣ₀eᴬᵀᵗ + CFᵀ
-
-    return mu_t, sigma_t
-
-
 class LinearFlow(nn.Module, ContinuousFlow):
     r"""Linear Flow, solves $ẋ = Ax$, i.e. $x_{t+∆t} = e^{A{∆t}}xₜ$.
 
@@ -245,6 +179,72 @@ class LinearFlow(nn.Module, ContinuousFlow):
             step(∆tₙ, x) &= e^{ρ(π(A))∆tₙ}x
         """
         return self(timestamps - t0, x0)
+
+
+def linear_gaussian_flow(
+    delta_t: Tensor,  # (..., $n)
+    z0: tuple[Tensor, Tensor],  # (..., d), (..., d, d)
+    A: Tensor,  # (d, d)
+    Q: Tensor,  # (d, d)
+    b: Optional[Tensor] = None,  # (d,) | None
+    /,
+) -> tuple[Tensor, Tensor]:  # (...., $n, d), (..., $n, d, d)
+    r"""Propagate a linear-gaussian system.
+
+    .. math:: dZₜ = AZₜdt + bdt + C dWₜ
+
+    Given Z₀∼𝓝(μ₀, Σ₀), then Zₜ∼𝓝(μₜ, Σₜ) for all $t$, with
+
+    .. math::
+        μₜ &= eᴬᵗμ₀ + φ₁(At)bt \\
+        Σₜ &= eᴬᵗΣ₀eᴬᵀᵗ + ??
+
+    Args:
+        delta_t: The time-delta(s) to propagate for, of shape (..., $n).
+        z0: initial state given as a pair of mean and covariance matrix,
+            of shapes (..., d) and (..., d, d) respectively.
+        A: The system matrix of the linear ODE component, of shape (d, d).
+        Q: The diffusion matrix of the linear SDE component, of shape (d, d). Must be symmetric positive definite.
+        b: Optional affine bias of the linear ODE component, of shape (d,). If None, then no bias is applied.
+    """
+    mu_0, sigma_0 = z0
+    n = A.shape[-1]
+
+    if b is None:
+        # [[A, Q], [0, -Aᵀ]]
+        # -> [[F, C], [0, F⁻ᵀ]]
+        M = torch.cat(
+            [
+                torch.cat([A, Q], dim=-1),
+                torch.cat([torch.zeros_like(A), -A.mT], dim=-1),
+            ],
+            dim=0,
+        )
+
+    else:
+        # use augmented block matrix
+        # [[A, Q, b], [0, -Aᵀ, 0], [0, 0, 0]]
+        # -> [[F, C, r], [0, F⁻ᵀ, 0], [0, 0, 1]]
+        b = b.unsqueeze(-1)
+        M = torch.cat(
+            [
+                torch.cat([A, Q, b], dim=-1),
+                torch.cat([torch.zeros_like(A), -A.mT, torch.zeros_like(b)], dim=-1),
+                torch.zeros((1, 2 * n + 1), dtype=A.dtype, device=A.device),
+            ],
+            dim=0,
+        )
+
+    # exp(M∆t) is a block matrix
+    Mdt = torch.einsum("..., kl -> ...kl", delta_t, M)
+    P = torch.linalg.matrix_exp(Mdt)
+    F = P[..., :n, :n]  # top left block
+    C = P[..., :n, n : 2 * n]  # top center block
+    r = P[..., :n, -1] if b is not None else 0.0  # top right block
+    mu_t = torch.einsum("...nkl, ...l -> ...nk", F, mu_0) + r  # eᴬᵗμ₀ + φ₁(At)bt
+    sigma_t = F @ sigma_0.unsqueeze(-3) @ F.mT + C @ F.mT  # eᴬᵗΣ₀eᴬᵀᵗ + CFᵀ
+
+    return mu_t, sigma_t
 
 
 class LinearGaussianFlow(nn.Module, ContinuousFlow):

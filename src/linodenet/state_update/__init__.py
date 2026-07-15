@@ -34,6 +34,10 @@ __all__ = [
     "KalmanCell",
     "NonLinearUpdate",
     "NonLinearKalmanUpdate",
+    "GradientStepUpdater",
+    # probabilistic
+    "GaussianForwardUpdater",
+    "GaussianReverseUpdater",
     # Imported
     "RNNCell",
     "GRUCell",
@@ -54,6 +58,11 @@ from .base import (
     VectorStateUpdate,
     is_consistent_update,
     is_vector_state_updater,
+)
+from .gradient_based import (
+    GaussianForwardUpdater,
+    GaussianReverseUpdater,
+    GradientStepUpdater,
 )
 from .kalman import NonLinearKalmanUpdate, NonLinearUpdate
 from .linear import (

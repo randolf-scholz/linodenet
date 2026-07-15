@@ -4,69 +4,19 @@ __all__ = [
     "LinODEnet_v0",
     "LinODEnet",
     "LinearFlow",
-    "ReZero",
     "make_linodenet",
     "linear_flow",
 ]
-
+import warnings
 from collections.abc import Callable, Mapping
-from typing import Any, Final, Optional, cast
+from typing import Any, Final, Optional
 
 import torch
 from torch import Tensor, nn
 
-from .state_update import GradientStepUpdater, InnovationCell
+from .parametrizations import ReZero, SkewSymmetric, Symmetric
+from .state_update import GradientStepUpdater
 from .utils import EventBatch
-
-
-class ReZero[
-    M: nn.Module = nn.Module,
-    S: nn.Module = nn.Module,
-](nn.Module):
-    r"""ReZero module, learnable scalar with optional transformation.
-
-    .. math:: x ⟼ φ(ε) ⋅ f(x)
-    """
-
-    scalar: Tensor
-    r"""PARAM: The scalar to multiply the inputs by."""
-    scalar_map: S
-    r"""MODULE: Map applied to the scalar before scaling the input."""
-    module: M
-    r"""MODULE: Map applied to the inputs before scaling them."""
-
-    @property
-    def config(self) -> dict:
-        return {
-            "module": self.module,
-            "scalar": self.scalar,
-            "scalar_map": self.scalar_map,
-        }
-
-    def __init__[U: nn.Module = nn.Identity, V: nn.Module = nn.Identity](
-        self: ReZero[U, V],
-        module: U | None = None,
-        *,
-        scalar_map: V | None = None,
-        initial_value: Tensor | float = 0.0,
-        learnable: bool = True,
-    ) -> None:
-        super().__init__()
-        self.scalar = nn.Parameter(
-            torch.as_tensor(initial_value), requires_grad=learnable
-        )
-        self.module = cast("U", nn.Identity() if module is None else module)
-        self.scalar_map = cast("V", nn.Identity() if scalar_map is None else scalar_map)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.scalar_map(self.scalar) * self.module(x)
-
-    def right_inverse(self, y: Tensor) -> Tensor | None:
-        if (right_inverse := getattr(self.module, "right_inverse", None)) is None:
-            return None
-
-        assert callable(right_inverse)
-        return right_inverse(y / self.scalar_map(self.scalar))
 
 
 def linear_flow(
@@ -105,20 +55,6 @@ def linear_flow(
     return torch.einsum("...nkl, ...l -> ...nk", expAdt, x0) + phi1bt
 
 
-class Symmetric(nn.Module):
-    r"""Symmetric parametrization of the kernel."""
-
-    def forward(self, x: Tensor) -> Tensor:
-        return (x + x.mT) / 2
-
-
-class SkewSymmetric(nn.Module):
-    r"""Skew-symmetric parametrization of the kernel."""
-
-    def forward(self, x: Tensor) -> Tensor:
-        return (x - x.mT) / 2
-
-
 class LinearFlow(nn.Module):
     r"""Linear Flow, solves $ẋ = Ax$, i.e. $x_{t+∆t} = e^{A{∆t}}xₜ$.
 
@@ -135,8 +71,6 @@ class LinearFlow(nn.Module):
     # Constants
     input_size: Final[int]
     r"""CONST: The dimensionality of inputs."""
-    output_size: Final[int]
-    r"""CONST: The dimensionality of the outputs."""
     use_rezero: Final[bool]
     r"""CONST: Whether the kernel is wrapped in ``ReZero``."""
     use_bias: Final[bool]
@@ -168,36 +102,42 @@ class LinearFlow(nn.Module):
     ) -> None:
         r"""Initialize the Linear ODE Cell."""
         super().__init__()
+        warnings.warn(
+            "Using inefficient research implementation without parametrization caching.",
+            stacklevel=2,
+        )
 
         # initialize constants
         self.input_size = input_size
-        self.output_size = input_size
         self.use_rezero = use_rezero
         self.use_bias = use_bias
 
-        # initialize parameters
-        match kernel_initialization:
-            case None:
-                kernel = torch.randn(input_size, input_size)
-            case "zero":
-                kernel = torch.zeros(input_size, input_size)
-            case "skew-symmetric":
-                kernel = torch.randn(input_size, input_size)
-                kernel = (kernel - kernel.mT) / 2
-            case "symmetric":
-                kernel = torch.randn(input_size, input_size)
-                kernel = (kernel + kernel.mT) / 2
-            case _:
-                raise ValueError
+        self.weight = nn.Parameter(self._init_kernel(kernel_initialization))
+        self.kernel_parametrization = self._get_parametrization(kernel_parametrization)
+        self.register_buffer("kernel", self.kernel_parametrization(self.weight))
 
-        self.weight = nn.Parameter(kernel)
         self.register_parameter(
             "bias",
             nn.Parameter(torch.zeros(input_size)) if self.use_bias else None,
         )
 
-        # apply parametrization if given
-        match kernel_parametrization:
+    def _init_kernel(self, init: str | Tensor | nn.Module, /) -> Tensor:
+        match init:
+            case None:
+                return torch.randn(self.input_size, self.input_size)
+            case "zero":
+                return torch.zeros(self.input_size, self.input_size)
+            case "skew-symmetric":
+                kernel = torch.randn(self.input_size, self.input_size)
+                return (kernel - kernel.mT) / 2
+            case "symmetric":
+                kernel = torch.randn(self.input_size, self.input_size)
+                return (kernel + kernel.mT) / 2
+            case _:
+                raise ValueError
+
+    def _get_parametrization(self, param: str | nn.Module | None, /) -> nn.Module:
+        match param:
             case None | "identity":
                 parametrization = nn.Identity()
             case "symmetric":
@@ -207,13 +147,10 @@ class LinearFlow(nn.Module):
             case _:
                 raise NotImplementedError
 
-        self.kernel_parametrization = nn.Sequential(
+        return nn.Sequential(
             parametrization,
             ReZero() if self.use_rezero else nn.Identity(),
         )
-
-        # initialize buffers
-        self.register_buffer("kernel", self.kernel_parametrization(self.weight))
 
     def forward(
         self,
@@ -289,13 +226,13 @@ class LinODEnet_v0(nn.Module):
         super().__init__()
         self.input_size = input_size
         self.latent_size = latent_size
+        self.batch_first = batch_first
 
         self.decoder = decoder
         self.encoder = encoder
         self.state_updater = state_updater
         self.state_propagator = state_propagator
 
-        self.batch_first = batch_first
         self.initial_state = nn.Parameter(torch.zeros(latent_size))
         self.register_buffer("prior_latent_states", None, persistent=False)
         self.register_buffer("posterior_latent_states", None, persistent=False)
@@ -418,12 +355,12 @@ class LinODEnet(nn.Module):
         super().__init__()
         self.input_size = input_size
         self.latent_size = latent_size
+        self.batch_first = batch_first
 
         self.decoder = decoder
         self.state_updater = state_updater
         self.state_propagator = state_propagator
 
-        self.batch_first = batch_first
         self.initial_state = nn.Parameter(torch.zeros(latent_size))
         self.register_buffer("prior_latent_states", None, persistent=False)
         self.register_buffer("posterior_latent_states", None, persistent=False)

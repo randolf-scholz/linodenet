@@ -8,24 +8,25 @@ __all__ = [
     "KalmanCell",
     "LinearRNNCell",
     "GradientStepUpdater",
-    "PositiveScalarMatrix",
     "LpLoss",
     "Constant",
     "lp_loss",
-    "ReZero",
-    "PositiveDiagonalMatrix",
-    "CholeskyFactor",
 ]
 
 
 from collections.abc import Callable
 from functools import partial
-from typing import cast
 
 import torch
 from torch import Tensor, nn
 from torch.linalg import solve, solve_triangular
 from torch.nn import functional as F
+
+from .parametrizations import (
+    PositiveDiagonalMatrix,
+    PositiveScalarMatrix,
+    ReZero,
+)
 
 
 def lp_loss(
@@ -87,57 +88,6 @@ class LpLoss(nn.Module):
             dim=self.dim,
             aggregation=self.aggregation,
         )
-
-
-class ReZero[
-    M: nn.Module = nn.Module,
-    S: nn.Module = nn.Module,
-](nn.Module):
-    r"""ReZero module.
-
-    Simply multiplies the inputs by a scalar initialized to zero.
-    """
-
-    scalar: Tensor
-    r"""PARAM: The scalar to multiply the inputs by."""
-    scalar_map: S
-    r"""MODULE: Map applied to the scalar before scaling the input."""
-    module: M
-    r"""MODULE: Map applied to the inputs before scaling them."""
-
-    @property
-    def config(self) -> dict:
-        return {
-            "module": self.module,
-            "scalar": self.scalar,
-            "scalar_map": self.scalar_map,
-        }
-
-    def __init__[U: nn.Module = nn.Identity, V: nn.Module = nn.Identity](
-        self: ReZero[U, V],
-        module: U | None = None,
-        *,
-        scalar_map: V | None = None,
-        initial_value: Tensor | float = 0.0,
-        learnable: bool = True,
-    ) -> None:
-        super().__init__()
-        self.scalar = nn.Parameter(
-            torch.as_tensor(initial_value), requires_grad=learnable
-        )
-        self.module = cast("U", nn.Identity() if module is None else module)
-        self.scalar_map = cast("V", nn.Identity() if scalar_map is None else scalar_map)
-
-    # @signature("(..., *xs) -> (..., *xs)")
-    def forward(self, x: Tensor) -> Tensor:
-        return self.scalar_map(self.scalar) * self.module(x)
-
-    # @signature("(..., *xs) -> (..., *xs)")
-    def right_inverse(self, y: Tensor) -> Tensor | None:
-        if getattr(self.module, "right_inverse", None) is None:
-            return None
-
-        return self.module.right_inverse(y / self.scalar_map(self.scalar))  # type: ignore[operator]
 
 
 class Constant(nn.Module):
@@ -431,23 +381,6 @@ class AttentionGain(nn.Module):
     hidden_size: int
     r"""CONST: Backward-compatible alias for the per-head query/key dimension."""
 
-    @property
-    def query(self) -> nn.Linear:
-        return self.query_proj
-
-    @property
-    def key(self) -> nn.Linear:
-        return self.key_proj
-
-    @property
-    def config(self) -> dict:
-        return {
-            "input_size": self.input_size,
-            "output_size": self.output_size,
-            "context_size": self.context_size,
-            "hidden_size": self.hidden_size,
-        }
-
     def __init__(
         self,
         /,
@@ -510,47 +443,6 @@ class AttentionGain(nn.Module):
         return attended.squeeze(-3).squeeze(-1)  # (..., output_size)
 
 
-class PositiveScalarMatrix(nn.Module):
-    r"""Parametrization of a positive scalar matrix $eᶜ𝕀$."""
-
-    eye: Tensor
-
-    def __init__(self, size: int, log_scale: Tensor | float = 0.0) -> None:
-        super().__init__()
-        self.log_scale = nn.Parameter(torch.as_tensor(log_scale))
-        self.register_buffer("eye", torch.eye(size))
-
-    def forward(self) -> Tensor:
-        return self.eye * torch.exp(self.log_scale)
-
-
-class PositiveDiagonalMatrix(nn.Module):
-    r"""Parametrization of a positive diagonal matrix as $\diag(eᵛ)$."""
-
-    def __init__(self, size: int, log_scales: Tensor | float = 0.0) -> None:
-        super().__init__()
-        self.register_buffer("eye", torch.eye(size))
-        # store diagonal (v_1, v_2, ..., v_n)
-        self.log_scales = nn.Parameter(torch.as_tensor(log_scales).expand(size))
-
-    def forward(self) -> Tensor:
-        return self.log_scales.diag_embed()
-
-
-class CholeskyFactor(nn.Module):
-    r"""Parametrize Cholesky factors via a lower-triangular matrix with log-diagonal."""
-
-    def __init__(self, size: int) -> None:
-        super().__init__()
-        self.weight = nn.Parameter(torch.randn(size, size))
-        nn.init.xavier_uniform_(self.weight)
-
-    def forward(self, _, /) -> Tensor:
-        return self.weight.tril(diagonal=-1) + torch.diag_embed(
-            torch.exp(self.weight.diagonal(dim1=-2, dim2=-1))
-        )
-
-
 class KalmanCell(nn.Module):
     r"""Kalman-style hidden-state update with masked observations.
 
@@ -594,15 +486,6 @@ class KalmanCell(nn.Module):
     r"""MODULE: Optional gate for the Kalman correction."""
     eye: Tensor
     r"""BUFFER: Identity matrix used to keep the covariance solve well-posed."""
-
-    @property
-    def config(self) -> dict:
-        return {
-            "input_size": self.input_size,
-            "hidden_size": self.hidden_size,
-            "noise": self.noise,
-            "gate": self.gate,
-        }
 
     def __init__(
         self,
@@ -720,6 +603,21 @@ class KalmanCell(nn.Module):
         return x - self.gate(d)
 
 
+class CholeskyFactor(nn.Module):
+    r"""Parametrize Cholesky factors via a lower-triangular matrix with log-diagonal."""
+
+    def __init__(self, size: int) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(size, size))
+        nn.init.xavier_uniform_(self.weight)
+
+    def forward(self, _, /) -> Tensor:
+        return (
+            self.weight.tril(diagonal=-1)
+            + self.weight.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
+        )
+
+
 class AttentionCovarianceFactor(nn.Module):
     r"""Predict a Cholesky factor with attention-style pairwise interactions.
 
@@ -747,13 +645,6 @@ class AttentionCovarianceFactor(nn.Module):
     r"""CONST: Shared attention feature dimension."""
     scale: float
     r"""CONST: Scale factor for the bilinear scores."""
-
-    @property
-    def config(self) -> dict:
-        return {
-            "hidden_size": self.hidden_size,
-            "attention_size": self.attention_size,
-        }
 
     def __init__(
         self,
