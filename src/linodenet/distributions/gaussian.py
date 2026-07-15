@@ -256,9 +256,9 @@ def _solve_w_closed_form(
 
         (s - ρ_Σ) / ((1 - ρ_Σ)·s) = ρ_μ²·q / ((1 - ρ_μ) + ρ_μ·s)²,   ρ_μ ∈ [0,1], ρ_Σ ∈ (0,1].
 
-    Neither $γ_μ$ nor $γ_Σ$ appears: they cancel under $γ_μ = ρ_μ/(1 - ρ_μ)$,
-    $γ_Σ = 1/(1 - ρ_Σ)$, which is what makes the endpoints $ρ_μ = 1$ ($γ_μ = ∞$) and
-    $ρ_Σ = 1$ ($γ_Σ = ∞$) finite and exactly representable.
+    Neither $λ_μ$ nor $λ_Σ$ appears: they cancel under $λ_μ = ρ_μ/(1 - ρ_μ)$,
+    $λ_Σ = 1/(1 - ρ_Σ)$, which is what makes the endpoints $ρ_μ = 1$ ($λ_μ = ∞$) and
+    $ρ_Σ = 1$ ($λ_Σ = ∞$) finite and exactly representable.
 
     With $A = (1 - ρ_μ) + ρ_μ ρ_Σ ∈ [ρ_Σ, 1]$, $κ = (1 - ρ_Σ)ρ_μ²q/A²$ and
     $τ = (1 - ρ_μ)/A ∈ [0, 1]$, substituting $w = A·v$ gives the scale-free monic cubic
@@ -275,7 +275,7 @@ def _solve_w_closed_form(
         where $\arccos'(1) = -∞$. Since `torch.where` backpropagates through the discarded
         arm, a bare clamp would leave $0·(-∞) = \mathrm{NaN}$ in the gradient, so those
         entries take the series $v = 1 + κ(1 - τ) + O(κ²)$ *and* have their cosine argument
-        neutralized. Unlike the $γ$ formulation there is no second branch: $s$ is never
+        neutralized. Unlike the $λ$ formulation there is no second branch: $s$ is never
         formed, only $ρ_μ s = w - (1 - ρ_μ)$, so nothing divides by $ρ_μ$.
     """
     q, ρ_μ, ρ_Σ = torch.broadcast_tensors(sq_dist, retention_mean, retention_cov)
@@ -320,16 +320,17 @@ def argmin_reverse_kl(
     retention: ScalarLike | tuple[ScalarLike, ScalarLike],  # rho or (rho_mu, rho_sigma)
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
-    r"""Return the exact minimizer of NLL plus separable reverse-KL anchoring.
+    r"""Return the exact minimizer of NLL plus reverse-KL regularization term.
 
     This returns the exact minimizer of
 
-    .. math:: \argmin_θ -\log 𝓝(z; θ)
-        + γ_μ ½(μ - μ₋)ᵀΣ₋⁻¹(μ - μ₋)
-        + γ_Σ ½(\tr(ΣΣ₋⁻¹) - \log\det(ΣΣ₋⁻¹) - d)
+    .. math:: θ₊ = \argmin_θ -\log 𝓝(z; θ) + λ⋅\kl(𝓝(θ) ∥ 𝓝(θ₋)) \\
+                &= \argmin_θ -\log 𝓝(z; θ)
+                    + λ_μ ½(μ - μ₋)ᵀΣ₋⁻¹(μ - μ₋)
+                    + λ_Σ ½(\tr(ΣΣ₋⁻¹) - \log\det(ΣΣ₋⁻¹) - d)
+                    \qquad (λ_μ = λ_Σ = λ)
 
-    the two terms being the exact split of $\kl(𝓝(θ) ∥ 𝓝(θ₋))$ into its location and shape
-    parts. Here $θ₋$ is the input `theta`, interpreted according to `parametrization`.
+    Here $θ₋$ is the input `theta`, interpreted according to `parametrization`.
 
     Update:
         Writing $δ = z - μ₋$, $Σ₋ = L₋L₋ᵀ$, $a = L₋⁻¹δ$, $q = aᵀa$, and letting
@@ -351,19 +352,19 @@ def argmin_reverse_kl(
     Parametrization:
         Weights are supplied as *retentions* $ρ ∈ [0, 1]$, matching `argmin_forward_kl`:
 
-        - $ρ_Σ = 1 - 1/γ_Σ$ is the exact covariance retention — the coefficient multiplying
-          $Σ₋$ — so the constraint $γ_Σ > 1$ (below which no minimizer exists) becomes simply
+        - $ρ_Σ = 1 - 1/λ_Σ$ is the exact covariance retention — the coefficient multiplying
+          $Σ₋$ — so the constraint $λ_Σ > 1$ (below which no minimizer exists) becomes simply
           $ρ_Σ > 0$, isolated where floats are dense, instead of the rounding attractor at
-          $γ_Σ = 1$.
-        - $ρ_μ = γ_μ/(1 + γ_μ)$ is the *nominal* mean retention. The realized retention is
+          $λ_Σ = 1$.
+        - $ρ_μ = λ_μ/(1 + λ_μ)$ is the *nominal* mean retention. The realized retention is
           $ρ_μ s / w$, satisfying $\mathrm{odds}(\text{realized}) = \mathrm{odds}(ρ_μ)⋅s$:
           $ρ_μ$ is what the mean would retain if the posterior variance along the innovation
           equalled the prior's ($s = 1$). Large innovations inflate $s$, so the mean is
           retained *more* — this is the bounded-influence property of the reverse KL, and it
           is why $ρ_μ$ cannot be an exact retention the way $ρ_Σ$ is.
 
-        Passing a single `retention` sets $ρ_μ = ρ_Σ = ρ$. **This is not $γ_μ = γ_Σ$** — the
-        two maps differ, and it corresponds to $γ_μ = γ_Σ - 1$. It does mean both the mean
+        Passing a single `retention` sets $ρ_μ = ρ_Σ = ρ$. **This is not $λ_μ = λ_Σ$** — the
+        two maps differ, and it corresponds to $λ_μ = λ_Σ - 1$. It does mean both the mean
         (nominally) and the covariance retain the same fraction, which is the useful reading.
 
     Args:
@@ -374,15 +375,15 @@ def argmin_reverse_kl(
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, `"log-cholesky"`.
 
     Note: Admissible range
-        $ρ_μ ∈ [0, 1]$ is closed: $0$ is $γ_μ = 0$, the unregularized jump $μ₊ = z$; $1$ is
-        $γ_μ → ∞$, the identity $μ₊ = μ₋$. $ρ_Σ ∈ (0, 1]$: at $1$ the shape is frozen
-        ($γ_Σ → ∞$), and $ρ_Σ → 0$ is $γ_Σ → 1⁺$, where $Σ₊$ degenerates. Both endpoints are
-        exact, unlike in $γ$ coordinates where neither $∞$ is representable.
+        $ρ_μ ∈ [0, 1]$ is closed: $0$ is $λ_μ = 0$, the unregularized jump $μ₊ = z$; $1$ is
+        $λ_μ → ∞$, the identity $μ₊ = μ₋$. $ρ_Σ ∈ (0, 1]$: at $1$ the shape is frozen
+        ($λ_Σ → ∞$), and $ρ_Σ → 0$ is $λ_Σ → 1⁺$, where $Σ₊$ degenerates. Both endpoints are
+        exact, unlike in $λ$ coordinates where neither $∞$ is representable.
 
     See Also:
         `argmin_forward_kl`:
-            Same observation term, opposite KL direction. Its $ρ_Σ = γ_Σ/(1 + γ_Σ)$ — a
-            *different* map, since it has no $γ_Σ > 1$ constraint — but the same operational
+            Same observation term, opposite KL direction. Its $ρ_Σ = λ_Σ/(1 + λ_Σ)$ — a
+            *different* map, since it has no $λ_Σ > 1$ constraint — but the same operational
             meaning (the coefficient multiplying $Σ₋$), so schedules transfer.
     """
     parametrization = CovarianceType(parametrization)
@@ -485,14 +486,13 @@ def argmin_forward_kl(
 
     This returns the exact minimizer of
 
-    .. math:: \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋)，𝓝(θ)) \\
-        \argmin_θ -\log 𝓝(z; θ)
-        + γ_μ ½(μ - μ₋)ᵀΣ⁻¹(μ - μ₋)
-        + γ_Σ ½(\tr(Σ₋Σ⁻¹) - \log\det(Σ₋Σ⁻¹) - d)
+    .. math:: θ₊ = \argmin_θ -\log 𝓝(z; θ) + λ⋅\kl(𝓝(θ₋)，𝓝(θ)) \\
+                &= \argmin_θ -\log 𝓝(z; θ)
+                    + λ_μ ½(μ - μ₋)ᵀΣ⁻¹(μ - μ₋)
+                    + λ_Σ ½(\tr(Σ₋Σ⁻¹) - \log\det(Σ₋Σ⁻¹) - d)
+                    \qquad (λ_μ = λ_Σ = λ)
 
-    the two terms being the exact split of $\kl(𝓝(θ₋) ∥ 𝓝(θ))$ into its location and shape
-    parts, so tying $γ_μ = γ_Σ$ recovers the first line. Here $θ₋$ is the input `theta`,
-    interpreted according to `parametrization`.
+    Here $θ₋$ is the input `theta`, interpreted according to `parametrization`.
 
     Update:
         With $δ = z - μ₋$, $\text{keep} = ρ_Σ$ and $\text{gain} = (1 - ρ_Σ)ρ_μ$:
@@ -512,14 +512,14 @@ def argmin_forward_kl(
         - `log-cholesky`: as `cholesky`, then store the diagonal in log form.
 
     Parametrization:
-        Weights are the *retentions* $ρ = γ/(1 + γ) ∈ [0, 1]$, i.e. $γ = ρ/(1 - ρ)$: the
+        Weights are the *retentions* $ρ = λ/(1 + λ) ∈ [0, 1]$, i.e. $λ = ρ/(1 - ρ)$: the
         fraction of the prior surviving the update, so the iterate is an EWMA of the
         sufficient statistics with effective memory $1/(1 - ρ)$ — the forgetting factor of
-        RLS / RiskMetrics. Passing a single `retention` ties $ρ_μ = ρ_Σ = ρ$, i.e. $γ_μ = γ_Σ$.
+        RLS / RiskMetrics. Passing a single `retention` ties $ρ_μ = ρ_Σ = ρ$, i.e. $λ_μ = λ_Σ$.
 
-        $ρ$ rather than $γ$ or $1 - ρ$ because it alone composes across time,
+        $ρ$ rather than $λ$ or $1 - ρ$ because it alone composes across time,
         $ρ(Δt₁ + Δt₂) = ρ(Δt₁)ρ(Δt₂)$, making the schedule exactly $ρ(Δt) = e^{-rΔt}$ with
-        half-life $\ln 2/r$; because the identity $ρ = 1$ is representable while $γ = ∞$ is
+        half-life $\ln 2/r$; because the identity $ρ = 1$ is representable while $λ = ∞$ is
         not; and because $\text{keep} = ρ_Σ$ is read off without subtraction, leaving the
         singular point at $ρ_Σ = 0$, where floats are dense, instead of at $1$, which nearby
         legal values round *onto*.
@@ -534,7 +534,7 @@ def argmin_forward_kl(
 
     Note: Admissible range
         $ρ_μ ∈ [0, 1]$ is closed: $0$ is the jump $μ₊ = z$, $1$ the identity $μ₊ = μ₋$.
-        $ρ_Σ ∈ (0, 1]$: at $1$ the shape is frozen; $ρ_Σ → 0$ is the $γ_Σ → 0$ limit where
+        $ρ_Σ ∈ (0, 1]$: at $1$ the shape is frozen; $ρ_Σ → 0$ is the $λ_Σ → 0$ limit where
         $Σ₊$ degenerates to the rank-one $ρ_μδδᵀ$. Both are asserted, but $ρ_Σ > 0$ is only
         the mathematical bound — $\mathrm{cond}(Σ₊) ≈ 1 + \text{gain}⋅q/\text{keep}$ exceeds
         $1/ε$ near $ρ_Σ ≈ 10⁻⁷$ in fp32, which is already a $10⁷{:}1$ forgetting ratio.
@@ -548,8 +548,8 @@ def argmin_forward_kl(
         `argmin_reverse_kl`:
             Same observation term, opposite KL direction. That update is *not* an affine
             interpolation — its coefficients are the admissible root of a cubic — so
-            "retention" has no referent and it keeps the $γ$ convention. Its constraint
-            $γ_Σ > 1$ reads as $ρ_Σ > ½$: the reverse KL can never forget more than half the
+            "retention" has no referent and it keeps the $λ$ convention. Its constraint
+            $λ_Σ > 1$ reads as $ρ_Σ > ½$: the reverse KL can never forget more than half the
             prior covariance. The signatures are *not* interchangeable.
         `argmin_proximal_kl`:
             Generic reverse-KL proximal solver for a linearized loss.
