@@ -1,6 +1,7 @@
 r"""State update modules."""
 
 __all__ = [
+    "SparseStateUpdate",
     "AttentionCovarianceFactor",
     "AttentionGain",
     "ConstantGain",
@@ -11,11 +12,13 @@ __all__ = [
     "LpLoss",
     "Constant",
     "lp_loss",
+    "CholeskyFactor",
 ]
 
 
 from collections.abc import Callable
 from functools import partial
+from typing import Protocol
 
 import torch
 from torch import Tensor, nn
@@ -116,6 +119,16 @@ class Constant(nn.Module):
 
     def forward(self, _: Tensor) -> Tensor:
         return self.value
+
+
+class SparseStateUpdate(Protocol):
+    r"""Sparse state-update module that updates a sparse latent distribution."""
+
+    def __call__(
+        self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None
+    ) -> Tensor:
+        r"""Update the latent distribution $x$ with observed events $y$."""
+        ...
 
 
 class GradientStepUpdater(nn.Module):
