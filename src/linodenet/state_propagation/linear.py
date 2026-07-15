@@ -41,13 +41,12 @@ def linear_flow(
 
     .. math:: dxₜ/dt = Axₜ + b
 
-    for each requested time delta $t$. If `bias` is omitted, the solution is
-    $xₜ = eᴬᵗx₀$. Otherwise, the affine term is computed through the
-    augmented matrix exponential
+    for each requested time delta $t$. With $φ₀(Z)=e^Z$ and
+    $φₖ(Z)=Zφₖ₊₁(Z)+1/k!$, the solution is
 
-    .. math:: \exp\left(\bmat{ A & b \\ 0 & 0 }t\right) = \bmat{ eᴬᵗ & φ₁(At)bt \\ 0 & 1 }
+    .. math:: xₜ = φ₀(tA)x₀ + φ₁(tA)bt.
 
-    where $φ₁(Z) = ∑ₖ₌₀^∞ Zᵏ/(k+1)!$.
+    If `bias` is omitted, this reduces to $xₜ = φ₀(tA)x₀$.
 
     Args:
         timedeltas: Evaluation time deltas, with shape `(..., n)`.
@@ -84,11 +83,11 @@ class LinearFlow(nn.Module, ContinuousFlow):
 
     The module solves
 
-    .. math:: x_{t+∆t} = e^{A∆t}xₜ
+    .. math:: x_{t+∆t} = φ₀(A∆t)xₜ
 
     or, when `use_bias=True`,
 
-    .. math:: x_{t+∆t} = e^{A∆t}xₜ + ∫₀^{∆t} e^{A(∆t-s)} b \dd{s}.
+    .. math:: x_{t+∆t} = φ₀(A∆t)xₜ + ∆tφ₁(A∆t)b.
 
     The drift matrix may be constrained by a matrix parametrization $π$, for
     example to enforce skew-symmetric or otherwise structured dynamics. When
@@ -113,6 +112,7 @@ class LinearFlow(nn.Module, ContinuousFlow):
     r"""PARAM: Optional learnable affine drift vector."""
     rezero: nn.Module
     r"""MODULE: ReZero gate or identity map applied to the effective kernel."""
+
     # Buffers
     kernel: Tensor
     r"""BUFFER: Cached effective drift matrix used by the latest forward pass."""
@@ -249,14 +249,15 @@ def linear_gaussian_flow(
 
     .. math:: \dd{Zₜ} = (AZₜ + b)\dd{t} + L\dd{Wₜ}
 
-    with diffusion covariance $Q = LLᵀ$. If $Z₀ ∼ 𝓝(μ₀, Σ₀)$, then
+    with diffusion covariance $Q = LLᵀ$. Let $ℒ_A(X)=AX+XAᵀ$ and
+    $φₖ(Z)=Zφₖ₊₁(Z)+1/k!$ with $φ₀(Z)=e^Z$. If $Z₀ ∼ 𝓝(μ₀, Σ₀)$, then
     $Zₜ ∼ 𝓝(μₜ, Σₜ)$ for all time deltas $t$, where
 
     .. math::
-        μₜ &= eᴬᵗμ₀ + ∫₀ᵗ e^{(t-s)A}b \dd{s} \\
-        Σₜ &= eᴬᵗΣ₀e^{tAᵀ} + ∫₀ᵗ e^{(t-s)A}Qe^{(t-s)Aᵀ} \dd{s}
+        μₜ &= φ₀(tA)μ₀ + φ₁(At)bt   \\
+        Σₜ &= φ₀(tℒ_A)(Σ₀) + φ₁(tℒ_A)(Qt)
 
-    The covariance integral is evaluated with Van Loan's block-matrix
+    The $φ₁(tℒ_A)(Q)$ term is evaluated with Van Loan's block-matrix
     exponential. For `b is None`, the implementation computes
 
     .. math:: \exp(\bmat{ A & Q \\ 0 & -Aᵀ }t) = \bmat{ F & C \\ 0 & F⁻ᵀ }
@@ -308,8 +309,8 @@ def linear_gaussian_flow(
     F = P[..., :n, :n]  # top left block
     C = P[..., :n, n : 2 * n]  # top center block
     r = P[..., :n, -1] if b is not None else 0.0  # top right block
-    mu_t = torch.einsum("...nkl, ...l -> ...nk", F, mu_0) + r  # eᴬᵗμ₀ + φ₁(At)bt
-    sigma_t = F @ sigma_0.unsqueeze(-3) @ F.mT + C @ F.mT  # eᴬᵗΣ₀eᴬᵀᵗ + CFᵀ
+    mu_t = torch.einsum("...nkl, ...l -> ...nk", F, mu_0) + r  # φ₀(tA)μ₀ + tφ₁(tA)b
+    sigma_t = F @ sigma_0.unsqueeze(-3) @ F.mT + C @ F.mT  # φ₀(tℒ_A)(Σ₀) + tφ₁(tℒ_A)(Q)
 
     return mu_t, sigma_t
 
@@ -320,16 +321,17 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
     The module parameterizes the drift matrix $A$, diffusion covariance $Q$, and
     affine drift vector $b$ in the linear SDE
 
-    .. math:: dZₜ = (AZₜ + b)\,dt + L\,dWₜ, \quad Q = LLᵀ.
+    .. math:: \dd{Zₜ} = (AZₜ + b)\dd{t} + L\dd{Wₜ}, \quad Q = LLᵀ.
 
-    A Gaussian initial state remains Gaussian. For $Z₀ ∼ 𝓝(μ₀, Σ₀)$,
+    A Gaussian initial state remains Gaussian. Let $ℒ_A(X)=AX+XAᵀ$ and
+    $φₖ(z)=zφₖ₊₁(z)+1/k!$ with $φ₀(z)=eᶻ$. For $Z₀ ∼ 𝓝(μ₀, Σ₀)$,
     the propagated state satisfies $Zₜ ∼ 𝓝(μₜ, Σₜ)$ with
 
     .. math::
-        μₜ &= eᴬᵗμ₀ + ∫₀ᵗ e^{(t-s)A}b\,ds \\
-        Σₜ &= eᴬᵗΣ₀e^{Aᵀt} + ∫₀ᵗ eᴬ⁽ᵗ⁻ˢ⁾ Q e^{Aᵀ(t-s)} ds
+        μₜ &= φ₀(tA)μ₀ + φ₁(At)bt \\
+        Σₜ &= φ₀(tℒ_A)(Σ₀) + φ₁(tℒ_A)(Qt)
 
-    The covariance integral is computed exactly with Van Loan's block-matrix
+    The covariance φ-term is computed exactly with Van Loan's block-matrix
     exponential, as implemented by `linear_gaussian_flow`.
 
     References:
@@ -397,8 +399,7 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
 
         Args:
             delta_t: Evaluation time deltas, with shape `(..., n)`.
-            z_0: Initial Gaussian state `(μ₀, Σ₀)`,
-                with shapes `(..., d)` and `(..., d, d)`.
+            z_0: Initial Gaussian state `(μ₀, Σ₀)` with shapes `(..., d)` and `(..., d, d)`.
 
         Returns:
             Pair `(μₜ, Σₜ)` containing propagated means and covariances,
