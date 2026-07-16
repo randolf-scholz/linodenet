@@ -155,9 +155,9 @@ class PseudoKalmanUpdate(nn.Module, VectorStateUpdate):
         return torch.einsum("ji, ...j -> ...i", H, x)
 
     @signature("[(..., m), (..., n)] -> (..., n)")
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+    def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Return $x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)$."""
-        mask = ~torch.isnan(y)  # → [..., m]
+        mask = ~torch.isnan(y) if mask is None else mask
         z = self.h(x)
         z = torch.where(mask, z - y, self.ZERO)  # → [..., m]
         z = z + self.epsilonA * torch.einsum("ij, ...j -> ...i", self.A, z)
@@ -257,9 +257,9 @@ class NonLinearKalmanUpdate(nn.Module, VectorStateUpdate):
         nn.init.kaiming_normal_(self.H, nonlinearity="linear")
 
     @signature("[(..., m), (..., n)] -> (..., n)")
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+    def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Return $BΠAΠ(x - y)$."""
-        mask = ~torch.isnan(y)  # → [..., m]
+        mask = ~torch.isnan(y) if mask is None else mask
         yhat = torch.einsum("ij, ...j -> ...i", self.H, x)
         r = torch.where(mask, yhat - y, self.ZERO)  # → [..., m]
         z = torch.where(mask, torch.einsum("ij, ...j -> ...i", self.A, r), self.ZERO)
@@ -320,20 +320,21 @@ class NonLinearUpdate(nn.Module, VectorStateUpdate):
         self.register_buffer("ZERO", torch.zeros(1))
 
     @signature("[(..., m), (..., n)] -> (..., n)")
-    def forward(self, y: Tensor, x: Tensor) -> Tensor:
+    def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Return the updated state tensor.
 
         Args:
             y: The observation Tensor. May contain NaNs for missing values.
             x: The state tensor
+            mask: An optional mask tensor indicating valid observations.
 
         Returns:
             The updated state tensor $x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)$.
         """
-        mask = ~torch.isnan(y)  # (..., m)
-        z = torch.einsum("ij, ...j -> ...i", self.H, x)  # (..., m)
-        z = torch.where(mask, z - y, self.ZERO)  # (..., m)
-        z = torch.einsum("ij, ...j -> ...i", self.A, z)
+        mask = ~torch.isnan(y) if mask is None else mask
+        yhat = torch.einsum("ij, ...j -> ...i", self.H, x)  # (..., m)
+        r = torch.where(mask, yhat - y, self.ZERO)  # (..., m)
+        z = torch.einsum("ij, ...j -> ...i", self.A, r)
         z = torch.where(mask, z, self.ZERO)  # (..., m)
         z = torch.einsum("ji, ...j -> ...i", self.H, z)  # (..., n)
         z = torch.einsum("ij, ...j -> ...i", self.B, z)
