@@ -222,13 +222,20 @@ class LinearGaussianFlow(nn.Module):
             ReZero() if self.use_rezero else nn.Identity(),
         )
 
-    def forward(
+    def propagate(
         self, delta_t: Tensor, z_0: tuple[Tensor, Tensor]
     ) -> tuple[Tensor, Tensor]:
         r"""Propagate the linear-Gaussian system for one or more time-deltas."""
         self.kernel = self.kernel_parametrization(self.kernel_weight)
         self.noise = self.noise_parametrization(self.noise_weight)
         return linear_gaussian_flow(delta_t, z_0, self.kernel, self.noise, self.bias)
+
+    def forward(
+        self, delta_t: Tensor, z_0: tuple[Tensor, Tensor], /
+    ) -> tuple[Tensor, Tensor]:
+        r"""Propagate for a single step."""
+        next_mean, next_cov = self.propagate(delta_t.unsqueeze(-1), z_0)
+        return next_mean.squeeze(-2), next_cov.squeeze(-3)
 
 
 class LinodenetProbabilistic(nn.Module):
@@ -346,12 +353,17 @@ class LinodenetProbabilistic(nn.Module):
         for delta_t, x_obs, obs_mask, active in zip(DT, X, M, valid_steps, strict=True):
             prior_state = update_masked(
                 posterior_state,
-                self.propagate_state,
+                lambda dt, mean, cov: self.state_propagator(dt, (mean, cov)),
                 args=(delta_t, *posterior_state),
                 batch_mask=active,
             )
 
-            posterior_state = self.update_state(x_obs, prior_state, mask=obs_mask)
+            posterior_state = update_masked(
+                prior_state,
+                lambda y, mean, cov: self.state_updater(y, (mean, cov)),
+                args=(x_obs, *prior_state),
+                batch_mask=obs_mask.any(dim=-1),
+            )
 
             prior_means.append(prior_state[0])
             prior_covs.append(prior_state[1])
@@ -366,42 +378,6 @@ class LinodenetProbabilistic(nn.Module):
         self.posterior_covs = torch.stack(posterior_covs, dim=stack_dim_cov)
 
         return self.posterior_means, self.posterior_covs
-
-    def propagate_state(
-        self,
-        delta_t: Tensor,
-        mean: Tensor,
-        cov: Tensor,
-        /,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Propagate one Gaussian state per batch item."""
-        next_mean, next_cov = self.state_propagator(delta_t.unsqueeze(-1), (mean, cov))
-        return next_mean.squeeze(-2), next_cov.squeeze(-3)
-
-    def update_state(
-        self,
-        observation: Tensor,
-        state: tuple[Tensor, Tensor],
-        /,
-        *,
-        mask: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Update latent parameters at fully observed context steps."""
-        has_observation = mask.any(dim=-1)
-        assert torch.equal(has_observation, mask.all(dim=-1)), (
-            "LinodenetProbabilistic requires all context features present or none."
-        )
-        mean, cov = state
-        updated_mean, updated_cov = self.state_updater(
-            observation[has_observation],
-            (mean[has_observation], cov[has_observation]),
-        )
-        return (
-            mean.masked_scatter(has_observation.unsqueeze(-1), updated_mean),
-            cov.masked_scatter(
-                has_observation.unsqueeze(-1).unsqueeze(-1), updated_cov
-            ),
-        )
 
     def predict(
         self,
