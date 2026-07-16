@@ -5,27 +5,27 @@ __all__ = [
     "linear_gaussian_flow",
     "LinodenetProbabilistic",
     "LinearGaussianFlow",
+    "make_linodenet_prob",
     "make_linodenet",
 ]
 
 import warnings
-from collections.abc import Callable
-from typing import Final, Optional, Protocol
+from collections.abc import Callable, Mapping
+from typing import Any, Final, Optional
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor, nan, nn
 
 from linodenet.state_update import GaussianForwardUpdater, GaussianReverseUpdater
 
+from .continuous_kalman_filter import (
+    marginal_gaussian_log_prob,
+    marginal_gaussian_sample,
+)
+from .decoders import LowRankTransform, TransformSequence
 from .parametrizations import PositiveDefinite, ReZero, SkewSymmetric, Symmetric
+from .profiti import Shiesh
 from .utils import EventBatch
-
-
-class Transform(Protocol):
-    r"""Protocol for invertible transforms."""
-
-    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]: ...
-    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]: ...
 
 
 def update_masked[R: Tensor | tuple[Tensor, ...]](
@@ -178,7 +178,7 @@ class LinearGaussianFlow(nn.Module):
 
         self.kernel_weight = nn.Parameter(self._init_kernel(kernel_initialization))
         self.kernel_parametrization = self._get_parametrization(kernel_parametrization)
-        self.register_buffer("kernel", self.kernel_parametrization(self.weight))
+        self.register_buffer("kernel", self.kernel_parametrization(self.kernel_weight))
 
         self.register_parameter(
             "bias",
@@ -234,10 +234,14 @@ class LinearGaussianFlow(nn.Module):
 class LinodenetProbabilistic(nn.Module):
     r"""Latent Gaussian-linear ODE Network.
 
+    - latent linear gaussian system
+    - Normalizing flow decoder
+    - special update rule for the latent parameters.
+
     This version does not support missing values.
     """
 
-    decoder: Transform  # normalizing flow
+    decoder: TransformSequence  # normalizing flow
 
     input_size: Final[int]
     latent_size: Final[int]
@@ -264,7 +268,7 @@ class LinodenetProbabilistic(nn.Module):
         self.latent_size = input_size  # hard modelling constraint
         self.batch_first = batch_first
 
-        self.decoder = decoder
+        self.decoder = decoder  # type: ignore[assignment]
         self.state_updater = state_updater
         self.state_propagator = state_propagator
 
@@ -305,12 +309,18 @@ class LinodenetProbabilistic(nn.Module):
         Returns:
             A tuple of the predicted latent states and their covariances,
         """
+        # does not support missing values.
+        assert torch.equal(context_mask.any(dim=-1), context_mask.all(dim=-1))
         seq_dim = -2 if self.batch_first else -1
         T = timestamps[..., None].movedim(seq_dim, 0).squeeze(-1)  # ($N, ...)
         X = context_values.movedim(seq_dim, 0)  # ($N, ..., D)
         Q = query_mask.movedim(seq_dim, 0)
         M = context_mask.movedim(seq_dim, 0)
-        T0 = T[[0]] if initial_time is None else initial_time
+        T0 = (
+            T[[0]]
+            if initial_time is None
+            else initial_time.expand_as(T[0]).unsqueeze(0)
+        )
         DT = T.diff(dim=0, prepend=T0)
         valid_steps = (M | Q).any(dim=-1)
         _, *batch_shape = T.shape
@@ -325,9 +335,15 @@ class LinodenetProbabilistic(nn.Module):
             if initial_state is not None
             else (
                 self.initial_mean.expand(*batch_shape, self.latent_size),
-                self.initial_cov.expand(
-                    *batch_shape, self.latent_size, self.latent_size
-                ),
+                (
+                    self.initial_cov @ self.initial_cov.mT
+                    + torch.finfo(self.initial_cov.dtype).eps
+                    * torch.eye(
+                        self.latent_size,
+                        dtype=self.initial_cov.dtype,
+                        device=self.initial_cov.device,
+                    )
+                ).expand(*batch_shape, self.latent_size, self.latent_size),
             )
         )
 
@@ -335,7 +351,7 @@ class LinodenetProbabilistic(nn.Module):
             prior_state = update_masked(
                 posterior_state,
                 self.propagate_state,
-                args=(delta_t, posterior_state),
+                args=(delta_t, *posterior_state),
                 batch_mask=active,
             )
 
@@ -346,13 +362,50 @@ class LinodenetProbabilistic(nn.Module):
             posterior_means.append(posterior_state[0])
             posterior_covs.append(posterior_state[1])
 
-        stack_dim = -2 if self.batch_first else 0
-        self.prior_means = torch.stack(prior_means, dim=stack_dim)
-        self.prior_covs = torch.stack(prior_covs, dim=stack_dim)
-        self.posterior_means = torch.stack(posterior_means, dim=stack_dim)
-        self.posterior_covs = torch.stack(posterior_covs, dim=stack_dim)
+        stack_dim_mean = -2 if self.batch_first else 0
+        stack_dim_cov = -3 if self.batch_first else 0
+        self.prior_means = torch.stack(prior_means, dim=stack_dim_mean)
+        self.prior_covs = torch.stack(prior_covs, dim=stack_dim_cov)
+        self.posterior_means = torch.stack(posterior_means, dim=stack_dim_mean)
+        self.posterior_covs = torch.stack(posterior_covs, dim=stack_dim_cov)
 
         return self.posterior_means, self.posterior_covs
+
+    def propagate_state(
+        self,
+        delta_t: Tensor,
+        mean: Tensor,
+        cov: Tensor,
+        /,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Propagate one Gaussian state per batch item."""
+        next_mean, next_cov = self.state_propagator(delta_t.unsqueeze(-1), (mean, cov))
+        return next_mean.squeeze(-2), next_cov.squeeze(-3)
+
+    def update_state(
+        self,
+        observation: Tensor,
+        state: tuple[Tensor, Tensor],
+        /,
+        *,
+        mask: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Update latent parameters at fully observed context steps."""
+        has_observation = mask.any(dim=-1)
+        assert torch.equal(has_observation, mask.all(dim=-1)), (
+            "LinodenetProbabilistic requires all context features present or none."
+        )
+        mean, cov = state
+        updated_mean, updated_cov = self.state_updater(
+            observation[has_observation],
+            (mean[has_observation], cov[has_observation]),
+        )
+        return (
+            mean.masked_scatter(has_observation.unsqueeze(-1), updated_mean),
+            cov.masked_scatter(
+                has_observation.unsqueeze(-1).unsqueeze(-1), updated_cov
+            ),
+        )
 
     def predict(
         self,
@@ -364,7 +417,7 @@ class LinodenetProbabilistic(nn.Module):
         context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
         initial_state: tuple[Tensor, Tensor] | None = None,  # (..., 2d), (..., d, 3)
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D, D)
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -381,6 +434,9 @@ class LinodenetProbabilistic(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
+        post_means = post_means[combined.query_indices]
+        post_covs = post_covs[combined.query_indices]
+        return post_means, post_covs
 
     def log_prob(
         self,
@@ -408,14 +464,147 @@ class LinodenetProbabilistic(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
+        mask = query_mask.expand(*values.shape)
+        assert torch.equal(mask.any(dim=-1), mask.all(dim=-1)), (
+            "LinodenetProbabilistic requires all query features present or none."
+        )
+        safe_values = torch.where(mask, values, torch.zeros_like(values))
+        z, ldj = self.decoder.encode_and_logabsdet(safe_values)
+        base_log_prob = marginal_gaussian_log_prob(
+            z,
+            mean=mean.expand(*values.shape),
+            cov=cov.expand(*values.shape[:-1], *cov.shape[-2:]),
+            mask=mask,
+        )
+        return torch.where(mask.any(dim=-1), base_log_prob + ldj, 0.0)
 
-    def sample(self, size: int | tuple[int, ...]) -> Tensor:
-        r"""Sample from the model."""
-        raise NotImplementedError
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),
+        *,
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> Tensor:
+        r"""Sample from the time-marginal predictive distribution."""
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, cov = self.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        assert torch.equal(query_mask.any(dim=-1), query_mask.all(dim=-1)), (
+            "LinodenetProbabilistic requires all query features present or none."
+        )
+        z = marginal_gaussian_sample(sample_shape, mean=mean, cov=cov, mask=query_mask)
+        y, _ = self.decoder.decode_and_logabsdet(z.nan_to_num(0.0))
+        return y.masked_fill(~query_mask.expand(*sample_shape, *query_mask.shape), nan)
 
-    def sample_and_log_prob(self, size: int | tuple[int, ...]) -> tuple[Tensor, Tensor]:
-        r"""Sample from the model and compute the log-probability of the samples."""
-        raise NotImplementedError
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),
+        *,
+        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
+        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Sample from the model and compute sample log-probabilities."""
+        samples = self.sample(
+            size,
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return samples, self.log_prob(
+            samples,
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+
+
+def make_linodenet_prob(
+    *,
+    input_size: int,
+    state_update: str = "forward",
+    retention: Tensor | float | tuple[Tensor | float, Tensor | float] = 0.5,
+    retention_learnable: bool = True,
+    decoder: str | TransformSequence = "shiesh",
+    low_rank: int | None = None,
+    batch_first: bool = True,
+    state_propagator: Mapping[str, Any] | None = None,
+) -> LinodenetProbabilistic:
+    r"""Instantiate the probabilistic Linodenet demo model."""
+    if isinstance(decoder, TransformSequence):
+        decoder_module = decoder
+    else:
+        match decoder:
+            case "shiesh":
+                decoder_module = TransformSequence([Shiesh(t=1.0, a=1.0)])
+            case "shiesh-lowrank-shiesh":
+                rank = 1 if low_rank is None else low_rank
+                decoder_module = TransformSequence(
+                    [
+                        Shiesh(t=1.0, a=1.0),
+                        LowRankTransform(input_size, rank=rank),
+                        Shiesh(t=1.0, a=1.0),
+                    ]
+                )
+            case _:
+                raise ValueError(f"Unknown decoder: {decoder!r}.")
+
+    updater_kwargs = {
+        "decoder": decoder_module,
+        "parametrization": "covariance",
+        "retention": retention,
+        "retention_learnable": retention_learnable,
+    }
+    match state_update:
+        case "forward":
+            updater = GaussianForwardUpdater(**updater_kwargs)
+        case "reverse":
+            updater = GaussianReverseUpdater(**updater_kwargs)
+        case _:
+            raise ValueError(f"Unknown state update method: {state_update!r}.")
+
+    propagator_kwargs = {
+        "input_size": input_size,
+        "kernel_initialization": "zero",
+        "kernel_parametrization": "identity",
+        "use_rezero": False,
+        "use_bias": False,
+    }
+    if state_propagator is not None:
+        propagator_kwargs.update(state_propagator)
+    propagator = LinearGaussianFlow(**propagator_kwargs)
+
+    return LinodenetProbabilistic(
+        input_size=input_size,
+        decoder=decoder_module,
+        state_updater=updater,
+        state_propagator=propagator,
+        batch_first=batch_first,
+    )
 
 
 class MarODE(nn.Module):
@@ -436,14 +625,25 @@ class MarODE(nn.Module):
         raise NotImplementedError
 
 
-def make_linodenet(state_updater) -> LinodenetProbabilistic:
-
-    match state_updater:
-        case "forward":
-            updater = GaussianForwardUpdater()
-
-        case "reverse":
-            updater = GaussianReverseUpdater()
-
-        case _:
-            raise ValueError(f"Unknown state updater: {state_updater}")
+def make_linodenet(
+    *,
+    input_size: int,
+    state_updater: str = "forward",
+    retention: Tensor | float | tuple[Tensor | float, Tensor | float] = 0.5,
+    retention_learnable: bool = True,
+    decoder: str | TransformSequence = "shiesh",
+    low_rank: int | None = None,
+    batch_first: bool = True,
+    state_propagator: Mapping[str, Any] | None = None,
+) -> LinodenetProbabilistic:
+    r"""Backward-compatible alias for :func:`make_linodenet_prob`."""
+    return make_linodenet_prob(
+        input_size=input_size,
+        state_update=state_updater,
+        retention=retention,
+        retention_learnable=retention_learnable,
+        decoder=decoder,
+        low_rank=low_rank,
+        batch_first=batch_first,
+        state_propagator=state_propagator,
+    )

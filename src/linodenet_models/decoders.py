@@ -1,7 +1,13 @@
-__all__ = ["LowRankTransform"]
+__all__ = ["LowRankTransform", "Transform", "TransformSequence"]
 
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from math import sqrt
-from typing import Final
+from typing import (
+    TYPE_CHECKING,
+    Final,
+    Protocol,
+    overload,
+)
 
 import torch
 from torch import Tensor, nn
@@ -142,3 +148,59 @@ class LowRankTransform(nn.Module):
         z = torch.linalg.solve(A, sv[..., None]).squeeze(-1)  # z = (𝕀ₖ + SVᵀU)⁻¹SVᵀy
         u = torch.einsum("nk, ...k -> ...n", self.U, z)  # u = U(𝕀ₖ + SVᵀU)⁻¹SVᵀy
         return y - u, -logabsdet.expand(y.shape[:-1])
+
+
+class Transform(Protocol):
+    r"""Protocol for invertible transforms."""
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]: ...
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]: ...
+
+
+class TransformSequence(nn.ModuleList, Sequence[nn.Module]):
+    r"""Composable sequence of invertible transforms."""
+
+    if TYPE_CHECKING:
+        _modules: Mapping[str, nn.Module]  # type: ignore[assignment]
+
+        def __init__(self, _: Iterable[nn.Module] = (), /) -> None: ...
+        def __iter__(self) -> Iterator[nn.Module]: ...
+
+    @overload
+    def __getitem__(self, index: int, /) -> nn.Module: ...  # pyrefly: ignore[bad-override]
+    @overload
+    def __getitem__(self, index: slice, /) -> TransformSequence: ...
+    def __getitem__(self, index: int | slice, /) -> nn.Module | TransformSequence:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if isinstance(index, slice):
+            modules = list(self._modules.values())
+            return TransformSequence(modules[index])
+        return self._modules[self._get_abs_string_index(index)]
+
+    def inverse(self, y: Tensor, /) -> Tensor:
+        r"""Map observations back to latent coordinates."""
+        z, _ = self.encode_and_logabsdet(y)
+        return z
+
+    def forward(self, z: Tensor, /) -> Tensor:
+        r"""Map latent coordinates to observations."""
+        y, _ = self.decode_and_logabsdet(z)
+        return y
+
+    @staticmethod
+    def _event_logabsdet(logabsdet: Tensor, event: Tensor, /) -> Tensor:
+        r"""Convert coordinate-wise log-Jacobians to event log-Jacobians."""
+        return logabsdet.sum(dim=-1) if logabsdet.shape == event.shape else logabsdet
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
+        logabsdet = torch.zeros_like(x[..., 0])
+        for layer in self:
+            x, ldj = layer.encode_and_logabsdet(x)  # type: ignore[attr-defined]
+            logabsdet = logabsdet + self._event_logabsdet(ldj, x)
+        return x, logabsdet
+
+    def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
+        logabsdet = torch.zeros_like(y[..., 0])
+        for layer in reversed(self):
+            y, ldj = layer.decode_and_logabsdet(y)  # type: ignore[attr-defined]
+            logabsdet = logabsdet + self._event_logabsdet(ldj, y)
+        return y, logabsdet
