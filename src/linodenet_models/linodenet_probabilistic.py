@@ -248,6 +248,7 @@ class LinodenetProbabilistic(nn.Module):
 
     initial_mean: Tensor
     initial_cov: Tensor
+    initial_cov_parametrization: nn.Module
 
     prior_means: Tensor
     prior_covs: Tensor
@@ -273,7 +274,8 @@ class LinodenetProbabilistic(nn.Module):
         self.state_propagator = state_propagator
 
         self.initial_mean = nn.Parameter(torch.zeros(self.latent_size))
-        self.initial_cov = nn.Parameter(torch.eye(self.latent_size))
+        self.initial_cov = nn.Parameter(torch.zeros(self.latent_size, self.latent_size))
+        self.initial_cov_parametrization = PositiveDefinite()
 
         self.register_buffer("prior_means", None, persistent=False)
         self.register_buffer("prior_covs", None, persistent=False)
@@ -335,15 +337,9 @@ class LinodenetProbabilistic(nn.Module):
             if initial_state is not None
             else (
                 self.initial_mean.expand(*batch_shape, self.latent_size),
-                (
-                    self.initial_cov @ self.initial_cov.mT
-                    + torch.finfo(self.initial_cov.dtype).eps
-                    * torch.eye(
-                        self.latent_size,
-                        dtype=self.initial_cov.dtype,
-                        device=self.initial_cov.device,
-                    )
-                ).expand(*batch_shape, self.latent_size, self.latent_size),
+                self.initial_cov_parametrization(self.initial_cov).expand(
+                    *batch_shape, self.latent_size, self.latent_size
+                ),
             )
         )
 
