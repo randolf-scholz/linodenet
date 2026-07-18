@@ -1,5 +1,6 @@
 r"""Tests for continuous Kalman filtering."""
 
+import math
 from typing import ClassVar, NamedTuple
 
 import pytest
@@ -16,7 +17,7 @@ from linodenet_models.continuous_kalman_filter import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel
+from .base import TestForecastingModel, make_forecasting_request
 
 
 def test_marginal_gaussian_log_prob_matches_explicit_subvectors() -> None:
@@ -485,3 +486,109 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
         )
 
         assert_close(log_prob_direct, log_prob_via_sample)
+
+    def test_probabilistic_self_consistency_at_init(self) -> None:
+        r"""Check that marginalizing over a sampled future observation is a no-op.
+
+        The identity is over predictive densities:
+        $p(yₜ∣H) = E_{y⁎∼p(yₜ⁎∣H)}[p(yₜ∣H⊕(t⁎, y⁎))]$.
+        In log-space this is estimated with ``logmeanexp`` over conditional
+        log-densities, not with an arithmetic mean of log-densities.
+        """
+        num_futures = 8192
+        num_probe = 8
+
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        data = make_forecasting_request(
+            seed=5,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        with torch.no_grad():
+            # 1. Predict at t⁎ and t from the original history H.
+            query_times = data.query_times[:2]
+            query_mask = data.query_mask[:2]
+            base_mean, base_cov = model.predict(
+                query_times=query_times,
+                query_mask=query_mask,
+                context_times=data.context_times,
+                context_values=data.context_values,
+                context_mask=data.context_mask,
+            )
+
+            # 2. Sample y⁎ at t⁎ and probe locations yₜ at the later time t.
+            torch.manual_seed(1)
+            futures = marginal_gaussian_sample(
+                num_futures,
+                mean=base_mean[:1],
+                cov=base_cov[:1],
+                mask=query_mask[:1],
+            )[:, 0]
+            y_probe = marginal_gaussian_sample(
+                num_probe,
+                mean=base_mean[1:2],
+                cov=base_cov[1:2],
+                mask=query_mask[1:2],
+            )[:, 0]
+
+            # 3. Score probes under the original predictive law p(yₜ∣H).
+            target_mask = query_mask[1]
+            base_log_prob = marginal_gaussian_log_prob(
+                y_probe,
+                mean=base_mean[1].expand(num_probe, -1),
+                cov=base_cov[1].expand(num_probe, -1, -1),
+                mask=target_mask.expand(num_probe, -1),
+            )
+
+            # 4. Append each sampled y⁎ to H as a hypothetical observation.
+            updated_context_times = torch.cat(
+                [
+                    data.context_times.expand(num_futures, -1),
+                    query_times[:1].expand(num_futures, 1),
+                ],
+                dim=-1,
+            )
+            updated_context_values = torch.cat(
+                [
+                    data.context_values.expand(num_futures, -1, -1),
+                    futures[:, None, :],
+                ],
+                dim=-2,
+            )
+            updated_context_mask = torch.cat(
+                [
+                    data.context_mask.expand(num_futures, -1, -1),
+                    query_mask[:1].expand(num_futures, 1, -1),
+                ],
+                dim=-2,
+            )
+            # 5. Predict p(yₜ∣H⊕(t⁎, y⁎)) for every sampled y⁎.
+            conditional_mean, conditional_cov = model.predict(
+                query_times=query_times[1:].expand(num_futures, 1),
+                query_mask=query_mask[1:].expand(num_futures, 1, -1),
+                context_times=updated_context_times,
+                context_values=updated_context_values,
+                context_mask=updated_context_mask,
+            )
+
+            probe_values = y_probe[:, None, :].expand(num_probe, num_futures, -1)
+            conditional_log_prob = marginal_gaussian_log_prob(
+                probe_values,
+                mean=conditional_mean[:, 0, :].expand(num_probe, num_futures, -1),
+                cov=conditional_cov[:, 0].expand(num_probe, num_futures, -1, -1),
+                mask=target_mask.expand(num_probe, num_futures, -1),
+            )
+            # 6. Average densities in log-space over y⁎ samples.
+            mixture_log_prob = torch.logsumexp(conditional_log_prob, dim=-1) - math.log(
+                num_futures
+            )
+
+        single_future_error = (conditional_log_prob - base_log_prob[:, None]).abs()
+        assert single_future_error.max() > 1.0
+        assert_close(mixture_log_prob, base_log_prob, atol=3e-2, rtol=1e-2)
