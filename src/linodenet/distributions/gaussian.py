@@ -312,12 +312,33 @@ def _solve_w_closed_form(
     return (A * v).to(dtype=out_dtype)
 
 
+def _lift_masked_marginal_update(
+    mean: Tensor,  # (..., d)
+    covariance: Tensor,  # (..., d, d)
+    /,
+    marginal_covariance: Tensor,  # (..., d, d)
+    delta_marginal_mean: Tensor,  # (..., d)
+    delta_marginal_covariance: Tensor,  # (..., d, d)
+    mask: Tensor,  # (..., d)
+) -> GaussianParams:
+    r"""Lift an observed-marginal update while preserving the prior conditional."""
+    rhs = torch.where(mask[..., None, :], covariance, covariance.new_zeros(()))
+    L = cholesky(marginal_covariance)
+    gain = cholesky_solve(rhs.mT, L).mT
+
+    mean_new = mean + torch.einsum("...ij, ...j -> ...i", gain, delta_marginal_mean)
+    Σ_new = covariance + gain @ delta_marginal_covariance @ gain.mT
+    Σ_new = 0.5 * (Σ_new + Σ_new.mT)
+    return mean_new, Σ_new
+
+
 def argmin_reverse_kl(
     z: Tensor,  # (..., d)
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
     *,
     retention: ScalarLike | tuple[ScalarLike, ScalarLike],  # rho or (rho_mu, rho_sigma)
+    mask: Tensor | None = None,  # (..., d), True where observed
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact minimizer of NLL plus reverse-KL regularization term.
@@ -372,6 +393,9 @@ def argmin_reverse_kl(
         theta: Prior Gaussian parameters $θ₋$ in the selected parametrization.
         retention: Retention $ρ$, shared or split as $(ρ_μ, ρ_Σ)$. Broadcast against the
             batch shape of `theta`, so a per-sample schedule $ρ(Δt)$ is fine.
+        mask: Optional mask indicating observed coordinates of `z`. Currently supported
+            only for covariance-parametrized inputs. Missing coordinates are handled by
+            optimizing the observed marginal likelihood and preserving the prior conditional.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, `"log-cholesky"`.
 
     Note: Admissible range
@@ -403,6 +427,34 @@ def argmin_reverse_kl(
     match parametrization:
         case CovarianceType.COVARIANCE:
             Σ = matrix
+            if mask is not None:
+                observed_mask = torch.as_tensor(mask, dtype=torch.bool, device=Σ.device)
+                δ = torch.where(observed_mask, δ, δ.new_zeros(()))
+                eye = torch.eye(dim, dtype=Σ.dtype, device=Σ.device)
+                observed = observed_mask[..., :, None] & observed_mask[..., None, :]
+                observed_covariance = torch.where(observed, Σ, Σ.new_zeros(()))
+                marginal_covariance = torch.where(observed, Σ, eye)
+                L = cholesky(marginal_covariance)
+                solved = cholesky_solve(δ.unsqueeze(-1), L).squeeze(-1)
+                q = vecdot(δ, solved, dim=-1)
+                w = _solve_w_closed_form(q, ρ_μ, ρ_Σ)
+                ρs = w - (1.0 - ρ_μ)
+                delta_mean = ((1.0 - ρ_μ) / w)[..., None] * δ
+                outer = torch.einsum("...i, ...j -> ...ij", δ, δ)
+                coefficient = forget * ρ_μ * ρs / w.square()
+                delta_covariance = (
+                    -forget[..., None, None] * observed_covariance
+                    + coefficient[..., None, None] * outer
+                )
+                return _lift_masked_marginal_update(
+                    μ,
+                    Σ,
+                    marginal_covariance,
+                    delta_mean,
+                    delta_covariance,
+                    observed_mask,
+                )
+
             L = cholesky(Σ)
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
@@ -416,6 +468,8 @@ def argmin_reverse_kl(
             return μ_new, Σ_new
 
         case CovarianceType.PRECISION:
+            if mask is not None:
+                raise NotImplementedError
             Λ = matrix
             projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
             q = vecdot(δ, projected, dim=-1)
@@ -431,6 +485,8 @@ def argmin_reverse_kl(
             return μ_new, Λ_new
 
         case CovarianceType.CHOLESKY:
+            if mask is not None:
+                raise NotImplementedError
             L = matrix
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
@@ -445,6 +501,8 @@ def argmin_reverse_kl(
             return μ_new, torch.tril(chol_new)
 
         case CovarianceType.LOG_CHOLESKY:
+            if mask is not None:
+                raise NotImplementedError
             log_chol_prior = matrix
             L = (
                 log_chol_prior.tril(diagonal=-1)
@@ -480,6 +538,7 @@ def argmin_forward_kl(
     /,
     *,
     retention: ScalarLike | tuple[ScalarLike, ScalarLike],  # rho or (rho_mu, rho_sigma)
+    mask: Tensor | None = None,  # (..., d), True where observed
     parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact minimizer of NLL plus separable forward-KL anchoring.
@@ -530,6 +589,9 @@ def argmin_forward_kl(
         theta: Prior Gaussian parameters $θ₋$ in the selected parametrization.
         retention: Retention $ρ$, shared or split as $(ρ_μ, ρ_Σ)$. Broadcast against the
             batch shape of `theta`, so a per-sample schedule $ρ(Δt)$ is fine.
+        mask: Optional mask indicating observed coordinates of `z`. Currently supported
+            only for covariance-parametrized inputs. Missing coordinates are handled by
+            optimizing the observed marginal likelihood and preserving the prior conditional.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, `"log-cholesky"`.
 
     Note: Admissible range
@@ -565,6 +627,7 @@ def argmin_forward_kl(
     assert ((ρ_Σ > 0.0) & (ρ_Σ <= 1.0)).all(), "requires rho_sigma in (0, 1]"
 
     keep = ρ_Σ
+    forget = 1.0 - ρ_Σ
     gain = (1.0 - ρ_Σ) * ρ_μ
     δ = z - μ
     μ_new = μ + (1.0 - ρ_μ)[..., None] * δ
@@ -572,6 +635,28 @@ def argmin_forward_kl(
     match parametrization:
         case CovarianceType.COVARIANCE:
             Σ = matrix
+            if mask is not None:
+                observed_mask = torch.as_tensor(mask, dtype=torch.bool, device=Σ.device)
+                δ = torch.where(observed_mask, δ, δ.new_zeros(()))
+                eye = torch.eye(Σ.shape[-1], dtype=Σ.dtype, device=Σ.device)
+                observed = observed_mask[..., :, None] & observed_mask[..., None, :]
+                observed_covariance = torch.where(observed, Σ, Σ.new_zeros(()))
+                marginal_covariance = torch.where(observed, Σ, eye)
+                delta_mean = (1.0 - ρ_μ)[..., None] * δ
+                δδT = torch.einsum("...i, ...j -> ...ij", δ, δ)
+                delta_covariance = (
+                    -forget[..., None, None] * observed_covariance
+                    + gain[..., None, None] * δδT
+                )
+                return _lift_masked_marginal_update(
+                    μ,
+                    Σ,
+                    marginal_covariance,
+                    delta_mean,
+                    delta_covariance,
+                    observed_mask,
+                )
+
             δδT = torch.einsum("...i, ...j -> ...ij", δ, δ)
             Σ_new = (
                 keep[..., None, None] * Σ
@@ -581,6 +666,8 @@ def argmin_forward_kl(
             return μ_new, Σ_new
 
         case CovarianceType.PRECISION:
+            if mask is not None:
+                raise NotImplementedError
             Λ = matrix
             projected = torch.einsum("...ij, ...j -> ...i", Λ, δ)
             mahalanobis = vecdot(δ, projected, dim=-1)
@@ -594,6 +681,8 @@ def argmin_forward_kl(
             return μ_new, Λ_new
 
         case CovarianceType.CHOLESKY:
+            if mask is not None:
+                raise NotImplementedError
             L = matrix
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
@@ -603,6 +692,8 @@ def argmin_forward_kl(
             return μ_new, torch.tril(chol_new)
 
         case CovarianceType.LOG_CHOLESKY:
+            if mask is not None:
+                raise NotImplementedError
             log_chol_prior = matrix
             L = (
                 log_chol_prior.tril(diagonal=-1)
