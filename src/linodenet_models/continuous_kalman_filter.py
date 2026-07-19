@@ -451,6 +451,7 @@ class ContinuousKalmanFilter(nn.Module):
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
+        r"""Compute the predictive mean and variance over split time representation."""
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -459,7 +460,7 @@ class ContinuousKalmanFilter(nn.Module):
             query_mask=query_mask,
             batch_first=self.batch_first,
         )
-        post_means, post_logvars = self.forward(
+        post_means, post_covs = self.forward(
             timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
             context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
             context_mask=combined.context_mask,  # Bool[..., $T, D], padded False
@@ -468,8 +469,21 @@ class ContinuousKalmanFilter(nn.Module):
             initial_time=initial_time,
         )
 
-        self.pred_means = post_means[combined.query_indices]
-        self.pred_covs = post_logvars[combined.query_indices]
+        # initialize mask over valid time steps:
+        # those with finite time and at least one observation or query coordinate.
+        valid_steps = (combined.context_mask | combined.query_mask).any(dim=-1)
+        mean_mask = valid_steps.unsqueeze(dim=-1)
+        cov_mask = mean_mask.unsqueeze(dim=-1)
+
+        pred_means, pred_covs = self.decode_state(
+            post_means.masked_fill(~mean_mask, 0.0),
+            post_covs.masked_fill(~cov_mask, 0.0),
+        )
+        pred_means = pred_means.masked_fill(~mean_mask, nan)
+        pred_covs = pred_covs.masked_fill(~cov_mask, nan)
+
+        self.pred_means = pred_means[combined.query_indices]
+        self.pred_covs = pred_covs[combined.query_indices]
         return self.pred_means, self.pred_covs
 
     def forward(
@@ -483,12 +497,11 @@ class ContinuousKalmanFilter(nn.Module):
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # (..., $T, D), (..., $T, D, D)
-        r"""Filter and forecast over combined context/query time points.
+        r"""Compute the posterior latent states over joint time representation.
 
         Args:
             timestamps: combined time points at which to filter.
             query_mask: Boolean mask selecting requested forecast entries.
-            context_times: time points at which to filter.
             context_mask: Boolean mask selecting observed entries in ``values``.
             context_values: Sparse observations at context time points.
             initial_state: Optional initial latent state $(μ₀, Σ₀)$.
@@ -505,7 +518,7 @@ class ContinuousKalmanFilter(nn.Module):
 
         # initialize mask over valid time steps:
         # those with finite time and at least one observation or query coordinate.
-        valid_steps = timestamps.isfinite() & (context_mask | query_mask).any(dim=-1)
+        valid_steps = (context_mask | query_mask).any(dim=-1)
         mean_mask = valid_steps.unsqueeze(dim=-1)
         cov_mask = mean_mask.unsqueeze(dim=-1)
 
@@ -544,12 +557,8 @@ class ContinuousKalmanFilter(nn.Module):
         # initialize the buffers
         prior_latent_means: list[Tensor] = []
         prior_latent_covs: list[Tensor] = []
-        prior_predicted_means: list[Tensor] = []
-        prior_predicted_covs: list[Tensor] = []
         post_latent_means: list[Tensor] = []
         post_latent_covs: list[Tensor] = []
-        post_predicted_means: list[Tensor] = []
-        post_predicted_covs: list[Tensor] = []
 
         for t_obs, y_obs, mask, active in zip(
             timestamps,
@@ -563,53 +572,33 @@ class ContinuousKalmanFilter(nn.Module):
             t = torch.where(active, t_obs, t)
 
             # propagate forward in time
-            x_pre, P_pre = self.propagate_state(x_post, P_post, delta)
+            x_pre, P_pre = self.propagate_state(delta, (x_post, P_post))
             prior_latent_means.append(x_pre)
             prior_latent_covs.append(P_pre)
 
-            # make the prior prediction
-            y_pre, S_pre = self.decode_state(x_pre, P_pre)
-            prior_predicted_means.append(y_pre)
-            prior_predicted_covs.append(S_pre)
-
             # Update step
-            x_update, P_update = self.update_state(x_pre, P_pre, y_obs, y_pre, mask)
+            x_update, P_update = self.update_state(y_obs, (x_pre, P_pre), mask=mask)
             x_post = torch.where(active[..., None], x_update, x_post)
             P_post = torch.where(active[..., None, None], P_update, P_post)
             post_latent_means.append(x_post)
             post_latent_covs.append(P_post)
 
-            # make the posterior prediction
-            y_post, S_post = self.decode_state(x_post, P_post)
-            post_predicted_means.append(y_post)
-            post_predicted_covs.append(S_post)
-
         # TODO: consider optional backward pass with RTS smoother
-
         stack_dim_mean = -2 if self.batch_first else 0
         stack_dim_cov = -3 if self.batch_first else 0
 
         self.prior_latent_means = stack(prior_latent_means, dim=stack_dim_mean)
         self.prior_latent_covs = stack(prior_latent_covs, dim=stack_dim_cov)
-        self.prior_target_means = stack(prior_predicted_means, dim=stack_dim_mean)
-        self.prior_target_covs = stack(prior_predicted_covs, dim=stack_dim_cov)
         self.post_latent_means = stack(post_latent_means, dim=stack_dim_mean)
         self.post_latent_covs = stack(post_latent_covs, dim=stack_dim_cov)
-        self.post_target_means = stack(post_predicted_means, dim=stack_dim_mean)
-        self.post_target_covs = stack(post_predicted_covs, dim=stack_dim_cov)
 
         self.prior_latent_means = self.prior_latent_means.masked_fill(~mean_mask, nan)
         self.prior_latent_covs = self.prior_latent_covs.masked_fill(~cov_mask, nan)
-        self.prior_target_means = self.prior_target_means.masked_fill(~mean_mask, nan)
-        self.prior_target_covs = self.prior_target_covs.masked_fill(~cov_mask, nan)
         self.post_latent_means = self.post_latent_means.masked_fill(~mean_mask, nan)
         self.post_latent_covs = self.post_latent_covs.masked_fill(~cov_mask, nan)
-        self.post_target_means = self.post_target_means.masked_fill(~mean_mask, nan)
-        self.post_target_covs = self.post_target_covs.masked_fill(~cov_mask, nan)
+        # self.validate_buffers()
 
-        self.validate_buffers()
-
-        return self.post_target_means, self.post_target_covs
+        return self.post_latent_means, self.post_latent_covs
 
     def log_prob(
         self,
@@ -731,11 +720,12 @@ class ContinuousKalmanFilter(nn.Module):
 
     def propagate_state(
         self,
-        x: Tensor,
-        P: Tensor,
         delta: Tensor,
+        state: tuple[Tensor, Tensor],
+        /,
     ) -> tuple[Tensor, Tensor]:
         r"""Propagate latent mean and covariance through continuous dynamics."""
+        x, P = state
         n = self.hidden_size
 
         # Concise implementation with a single matrix exponential.
@@ -759,13 +749,15 @@ class ContinuousKalmanFilter(nn.Module):
 
     def update_state(
         self,
-        x: Tensor,
-        P: Tensor,
-        y: Tensor,
-        y_pred: Tensor,
+        y_obs: Tensor,
+        state: tuple[Tensor, Tensor],
+        *,
         mask: Tensor,
     ) -> tuple[Tensor, Tensor]:
         r"""Update latent mean and covariance with a sparse observation."""
+        x, P = state
+        y_pred, _ = self.decode_state(x, P)
+
         H = self.observation_matrix
         R = self.measurement_cov
         M = mask.to(P.dtype)
@@ -774,7 +766,7 @@ class ContinuousKalmanFilter(nn.Module):
         R_masked = M.unsqueeze(-1) * M.unsqueeze(-2) * R + missing.diag_embed()
 
         # Innovation residual: ignore unobserved coordinates.
-        r = torch.where(mask, y - y_pred, torch.zeros_like(y_pred))
+        r = torch.where(mask, y_obs - y_pred, torch.zeros_like(y_pred))
 
         # Kalman gain computation.
         K = self._compute_kalman_gain(P, H_masked, R_masked)  # (*B, n, m)
