@@ -482,7 +482,7 @@ class ContinuousKalmanFilter(nn.Module):
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
-    ) -> tuple[Tensor, Tensor]:  # (..., $N + $K, D), (..., $N + $K, D, D)
+    ) -> tuple[Tensor, Tensor]:  # (..., $T, D), (..., $T, D, D)
         r"""Filter and forecast over combined context/query time points.
 
         Args:

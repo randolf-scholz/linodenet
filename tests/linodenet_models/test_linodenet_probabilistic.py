@@ -1,3 +1,4 @@
+import math
 from typing import ClassVar, NamedTuple
 
 import pytest
@@ -88,6 +89,146 @@ class TestLinodenetProbabilistic(TestForecastingModel[LinodenetProbabilistic]):
         del model
         (log_prob,) = predictions
         return -log_prob[targets.isfinite().any(dim=-1)].mean()
+
+    def assert_probabilistic_self_consistent(
+        self,
+        model: LinodenetProbabilistic,
+        /,
+        *,
+        seed: int,
+        num_futures: int = 8192,
+        num_probe: int = 8,
+    ) -> None:
+        r"""Check self-consistency by Monte Carlo marginalization over y⁎."""
+        data = make_forecasting_request(
+            seed=seed,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+        )
+
+        with torch.no_grad():
+            # 1. Fix t⁎ and t, then sample y⁎∼p(yₜ⁎∣H) and probes yₜ.
+            query_times = data.query_times[:2]
+            query_mask = data.query_mask[:2]
+            torch.manual_seed(1)
+            futures = model.sample(
+                num_futures,
+                query_times=query_times[:1],
+                query_mask=query_mask[:1],
+                context_times=data.context_times,
+                context_values=data.context_values,
+                context_mask=data.context_mask,
+            )[:, 0]
+            y_probe = model.sample(
+                num_probe,
+                query_times=query_times[1:2],
+                query_mask=query_mask[1:2],
+                context_times=data.context_times,
+                context_values=data.context_values,
+                context_mask=data.context_mask,
+            )
+            # futures: (S, D), y_probe: (P, 1, D), S=num_futures, P=num_probe
+
+            # 2. Score probes under the original predictive law p(yₜ∣H).
+            base_log_prob = model.log_prob(
+                y_probe,
+                query_times=query_times[1:2],
+                query_mask=query_mask[1:2],
+                context_times=data.context_times,
+                context_values=data.context_values,
+                context_mask=data.context_mask,
+            )[:, 0]
+            # base_log_prob: (P,)
+
+            # 3. Append each sampled y⁎ to H as a hypothetical observation.
+            updated_context_times = torch.cat(
+                [
+                    data.context_times.expand(num_futures, -1),
+                    query_times[:1].expand(num_futures, 1),
+                ],
+                dim=-1,
+            )
+            updated_context_values = torch.cat(
+                [
+                    data.context_values.expand(num_futures, -1, -1),
+                    futures[:, None, :],
+                ],
+                dim=-2,
+            )
+            updated_context_mask = torch.cat(
+                [
+                    data.context_mask.expand(num_futures, -1, -1),
+                    query_mask[:1].expand(num_futures, 1, -1),
+                ],
+                dim=-2,
+            )
+            # updated_context_times: (S, N+1)
+            # updated_context_values, updated_context_mask: (S, N+1, D)
+
+            # 4. Score p(yₜ∣H⊕(t⁎, y⁎)) for every probe and sampled y⁎.
+            conditional_log_prob = model.log_prob(
+                y_probe[:, None].expand(num_probe, num_futures, 1, -1),
+                query_times=query_times[1:].expand(num_futures, 1),
+                query_mask=query_mask[1:].expand(num_futures, 1, -1),
+                context_times=updated_context_times,
+                context_values=updated_context_values,
+                context_mask=updated_context_mask,
+            )[:, :, 0]
+            # conditional_log_prob: (P, S)
+
+            # 5. Average densities in log-space over y⁎ samples.
+            mixture_log_prob = torch.logsumexp(conditional_log_prob, dim=-1) - math.log(
+                num_futures
+            )
+            # mixture_log_prob: (P,)
+
+        single_future_error = (conditional_log_prob - base_log_prob[:, None]).abs()
+        assert single_future_error.max() > 1.0
+        torch.testing.assert_close(
+            mixture_log_prob,
+            base_log_prob,
+            atol=3e-2,
+            rtol=1e-2,
+        )
+
+    def test_probabilistic_self_consistency_at_init(self) -> None:
+        r"""Check self-consistency at initialization.
+
+        p(yₜ∣H) = E_{y⁎∼p(yₜ⁎∣H)}[p(yₜ∣H⊕(t⁎, y⁎))]
+        """
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        self.assert_probabilistic_self_consistent(model, seed=5)
+
+    def test_probabilistic_self_consistency_trained(self) -> None:
+        r"""Check self-consistency after a few training steps.
+
+        p(yₜ∣H) = E_{y⁎∼p(yₜ⁎∣H)}[p(yₜ∣H⊕(t⁎, y⁎))]
+        """
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        train_data = make_forecasting_request(
+            seed=2,
+            batch_shape=(4,),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+        )
+        assert train_data.target_values is not None
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        for _ in range(self.NUM_STEPS):
+            optimizer.zero_grad()
+            predictions = self.forecast(model, train_data)
+            loss = self.loss(model, predictions, train_data.target_values)
+            loss.backward()
+            optimizer.step()
+
+        self.assert_probabilistic_self_consistent(model, seed=3)
 
 
 def test_make_linodenet_prob_instantiates_expected_components() -> None:
