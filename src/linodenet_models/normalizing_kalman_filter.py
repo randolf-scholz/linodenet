@@ -23,13 +23,13 @@ class NormalizingKalmanFilter(nn.Module):
     def forward(
         self,
         *,
-        timestamps: Tensor,  # (..., $T), float, padded NaN
+        steps: Tensor,  # Long[..., $T], padded arbitrary, non-decreasing
         query_mask: Tensor,  # (..., $T, D), bool, padded False
-        context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
+        context_values: Tensor,  # (..., $T, D), float, padded NaN, sparse
         context_mask: Tensor,  # (..., $T, D), bool, padded False
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_time: Tensor | None = None,  # t₀, ()
+        initial_step: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:  # (..., $T, D), (..., $T, D, D)
         r"""Compute the posterior latent states, given combined context/query time points."""
         raise NotImplementedError
@@ -44,7 +44,7 @@ class NormalizingKalmanFilter(nn.Module):
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_time: Tensor | None = None,  # t₀, ()
+        initial_step: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
         r"""Compute the posterior latent states, given split context/query time points."""
         raise NotImplementedError
@@ -53,13 +53,13 @@ class NormalizingKalmanFilter(nn.Module):
         self,
         values: Tensor,  # (..., $K, D)
         *,
-        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_times: Tensor,  # Float[..., N), padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., N, D], padded False
+        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, D], padded False
+        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_time: Tensor | None = None,  # t₀, ()
+        initial_step: Tensor | None = None,
     ) -> Tensor:  # (..., $K)
         raise NotImplementedError
 
@@ -67,13 +67,13 @@ class NormalizingKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., N, D], padded False
+        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, D], padded False
+        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_time: Tensor | None = None,  # t₀, ()
+        initial_step: Tensor | None = None,
     ) -> Tensor:  # (*S, ..., $K, D)
         raise NotImplementedError
 
@@ -81,12 +81,12 @@ class NormalizingKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., N, D], padded False
+        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, D], padded False
+        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_time: Tensor | None = None,  # t₀, ()
+        initial_step: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
         raise NotImplementedError
