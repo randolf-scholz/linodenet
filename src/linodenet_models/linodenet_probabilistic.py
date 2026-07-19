@@ -18,11 +18,11 @@ from torch import Tensor, nan, nn
 
 from linodenet.state_update import GaussianForwardUpdater, GaussianReverseUpdater
 
-from .continuous_kalman_filter import (
+from .decoders import LowRankTransform, TransformSequence
+from .kalman_filter import (
     marginal_gaussian_log_prob,
     marginal_gaussian_sample,
 )
-from .decoders import LowRankTransform, TransformSequence
 from .parametrizations import PositiveDefinite, ReZero, SkewSymmetric, Symmetric
 from .profiti import Shiesh
 from .utils import EventBatch

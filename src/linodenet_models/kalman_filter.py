@@ -476,8 +476,10 @@ class ContinuousKalmanFilter(nn.Module):
         cov_mask = mean_mask.unsqueeze(dim=-1)
 
         pred_means, pred_covs = self.decode_state(
-            post_means.masked_fill(~mean_mask, 0.0),
-            post_covs.masked_fill(~cov_mask, 0.0),
+            (
+                post_means.masked_fill(~mean_mask, 0.0),
+                post_covs.masked_fill(~cov_mask, 0.0),
+            )
         )
         pred_means = pred_means.masked_fill(~mean_mask, nan)
         pred_covs = pred_covs.masked_fill(~cov_mask, nan)
@@ -739,8 +741,9 @@ class ContinuousKalmanFilter(nn.Module):
         P_new = Phi + einsum("...ik, ...kl, ...jl -> ...ij", G, P, G)  # (*B, n, n)
         return x_new, P_new
 
-    def decode_state(self, x: Tensor, P: Tensor) -> tuple[Tensor, Tensor]:
+    def decode_state(self, state: tuple[Tensor, Tensor], /) -> tuple[Tensor, Tensor]:
         r"""Decode latent mean and covariance to observation space."""
+        x, P = state
         H = self.observation_matrix
         R = self.measurement_cov
         y = einsum("ij, ...j -> ...i", H, x)  # (*B, m)
@@ -751,31 +754,32 @@ class ContinuousKalmanFilter(nn.Module):
         self,
         y_obs: Tensor,
         state: tuple[Tensor, Tensor],
+        /,
         *,
         mask: Tensor,
     ) -> tuple[Tensor, Tensor]:
         r"""Update latent mean and covariance with a sparse observation."""
+        y_pred, _ = self.decode_state(state)
         x, P = state
-        y_pred, _ = self.decode_state(x, P)
-
         H = self.observation_matrix
         R = self.measurement_cov
-        M = mask.to(P.dtype)
-        missing = (~mask).to(P.dtype)
-        H_masked = M.unsqueeze(-1) * H
-        R_masked = M.unsqueeze(-1) * M.unsqueeze(-2) * R + missing.diag_embed()
+        H = torch.where(mask[..., None], H, 0.0)
+        R = (
+            torch.where(mask.unsqueeze(-1) & mask.unsqueeze(-2), R, 0.0)
+            + (~mask).to(R.dtype).diag_embed()
+        )
 
         # Innovation residual: ignore unobserved coordinates.
         r = torch.where(mask, y_obs - y_pred, torch.zeros_like(y_pred))
 
         # Kalman gain computation.
-        K = self._compute_kalman_gain(P, H_masked, R_masked)  # (*B, n, m)
+        K = self._compute_kalman_gain(P, H, R)  # (*B, n, m)
 
         # Mean update.
         x_new = x + einsum("...ij, ...j -> ...i", K, r)  # (*B, n)
 
         # Joseph covariance update.
-        P_new = self._joseph_update(P, K, H_masked, R_masked)
+        P_new = self._joseph_update(P, K, H, R)
         return x_new, P_new
 
     def _compute_kalman_gain(
