@@ -1040,15 +1040,15 @@ class DiscreteKalmanFilter(nn.Module):
     def predict(
         self,
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
-        query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
-        context_mask: Tensor,  # Bool[..., N, D], padded False
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, D], padded False
+        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         # μ₀=(..., d) Σ₀=(..., d, d)
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D, D)
+    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D, D)
         r"""Compute posterior predictive means and covariances at query steps."""
         combined = DiscreteTimeEventBatch.from_request(
             context_steps=context_steps,
@@ -1087,14 +1087,14 @@ class DiscreteKalmanFilter(nn.Module):
     def forward(
         self,
         *,
-        steps: Tensor,  # Long[..., T], padded arbitrary, non-decreasing
-        query_mask: Tensor,  # (..., T, D), bool, padded False
-        context_values: Tensor,  # (..., T, D), float, padded NaN, sparse
-        context_mask: Tensor,  # (..., T, D), bool, padded False
-        # μ₀=(..., d) Σ₀=(..., d, d)
+        steps: Tensor,  # Long[..., $T], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # (..., $T, D), bool, padded False
+        context_values: Tensor,  # (..., $T, D), float, padded NaN, sparse
+        context_mask: Tensor,  # (..., $T, D), bool, padded False
+        # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (..., T, d), (..., T, d, d)
+    ) -> tuple[Tensor, Tensor]:  # (..., $T, D), (..., $T, D, D)
         r"""Compute posterior latent states over joint discrete event steps.
 
         Integer step gaps propagate by that many transition steps.
@@ -1242,16 +1242,16 @@ class DiscreteKalmanFilter(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (..., K, D)
+        values: Tensor,  # (..., $K, D)
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
-        query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., N, D], padded False
+        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, D], padded False
+        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
-    ) -> Tensor:  # (..., K)
+    ) -> Tensor:  # (..., $K)
         r"""Compute the time-marginal log-likelihood of the model."""
         mean, cov = self.predict(
             query_steps=query_steps,
@@ -1273,14 +1273,14 @@ class DiscreteKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
-        query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., N, D], padded False
+        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, D], padded False
+        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
-    ) -> Tensor:  # (*S, ..., K, D)
+    ) -> Tensor:  # (*S, ..., $K, D)
         r"""Sample from the time-marginal predictive distribution."""
         sample_shape = (size,) if isinstance(size, int) else size
         mean, cov = self.predict(
@@ -1303,14 +1303,14 @@ class DiscreteKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
-        query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., N, D], padded False
+        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, D], padded False
+        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., K, D), (*S, ..., K)
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
         r"""Sample and score from the time-marginal predictive distribution."""
         sample_shape = (size,) if isinstance(size, int) else size
         mean, cov = self.predict(
