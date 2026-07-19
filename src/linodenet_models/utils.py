@@ -5,6 +5,7 @@ __all__ = [
     "SplitTimeData",
     "TripletTimeData",
     "EventBatch",
+    "DiscreteTimeEventBatch",
     # functions
     "is_prefix_mask",
     "unique_count",
@@ -299,6 +300,120 @@ class EventBatch(NamedTuple):
         ):
             assert times[context].diff(dim=-1).ge(0.0).all()
             assert times[query].diff(dim=-1).gt(0.0).all()
+
+
+class DiscreteTimeEventBatch(NamedTuple):
+    r"""Lightweight integer-step event batch for discrete-time models.
+
+    Padded step entries are canonicalized to zero in the returned joint step
+    tensor. Validity is represented by the context/query masks, not by sentinel
+    step values.
+    """
+
+    steps: Tensor  # Long[..., $T], padded 0, non-decreasing over valid entries
+
+    context_mask: Tensor  # Bool[..., $T, D], padded False
+    context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
+    context_indices: tuple[Tensor, ...]
+    r"""Advanced index tuple recovering ``(..., K, D)`` from ``context_mask``."""
+
+    query_mask: Tensor  # Bool[..., $T, F], padded False
+    query_indices: tuple[Tensor, ...]
+    r"""Advanced index tuple recovering ``(..., K, F)`` from ``query_mask``."""
+
+    target_values: Tensor | None = None  # Float[..., $T, F], padded NaN, sparse
+    r"""Only available during training, otherwise None."""
+
+    static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
+
+    @staticmethod
+    def from_request(
+        *,
+        query_steps: Tensor,  # Long[(..., $K)], padded 0, non-decreasing
+        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
+        context_steps: Tensor,  # Long[(..., $N)], padded 0, non-decreasing
+        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
+        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        target_values: Tensor | None = None,  # Float[(..., $K, F)] padded NaN, sparse
+        static_covariates: Tensor | None = None,  # Float[(..., M)] padded NaN, sparse
+        batch_first: bool = True,
+    ) -> DiscreteTimeEventBatch:
+        seq_dim = -2 if batch_first else 0
+        if query_steps.dtype != torch.long or context_steps.dtype != torch.long:
+            raise TypeError("Discrete step indices must be Long tensors.")
+
+        T = context_steps.unsqueeze(-1).movedim(seq_dim, 0)
+        C = context_mask.movedim(seq_dim, 0)
+        X = context_values.movedim(seq_dim, 0)
+        Q = query_steps.unsqueeze(-1).movedim(seq_dim, 0)
+        M = query_mask.movedim(seq_dim, 0)
+        Y = target_values.movedim(seq_dim, 0) if target_values is not None else None
+
+        ctx_size, *batch_shape, ctx_dim = X.shape
+        q_size, *_, q_dim = M.shape
+        ctx_pad_shape = (q_size, *batch_shape, ctx_dim)
+        qry_pad_shape = (ctx_size, *batch_shape, q_dim)
+
+        valid = torch.cat(
+            [
+                context_mask.any(dim=-1).unsqueeze(-1).movedim(seq_dim, 0),
+                query_mask.any(dim=-1).unsqueeze(-1).movedim(seq_dim, 0),
+            ],
+            dim=0,
+        )
+        steps = torch.cat([T, Q], dim=0)
+        sort_keys = steps.masked_fill(~valid, torch.iinfo(steps.dtype).max)
+        permutation = torch.argsort(sort_keys, dim=0, stable=True)
+        inv_perm = torch.argsort(permutation, dim=0, stable=True)
+        ctx_idx = inv_perm[:ctx_size].movedim(0, seq_dim).squeeze(-1)
+        qry_idx = inv_perm[ctx_size:].movedim(0, seq_dim).squeeze(-1)
+
+        batch_idx = tuple(
+            torch.arange(size, device=steps.device)
+            .reshape(
+                *(size if j == i else 1 for j in range(len(batch_shape))),
+            )
+            .unsqueeze(-1 if batch_first else 0)
+            for i, size in enumerate(batch_shape)
+        )
+
+        return DiscreteTimeEventBatch(
+            steps=(
+                steps.take_along_dim(permutation, dim=0)
+                .masked_fill(~valid.take_along_dim(permutation, dim=0), 0)
+                .movedim(0, seq_dim)
+                .squeeze(-1)
+            ),
+            context_values=(
+                torch.cat([X, X.new_full(ctx_pad_shape, nan)], dim=0)
+                .take_along_dim(permutation, dim=0)
+                .movedim(0, seq_dim)
+            ),
+            context_mask=(
+                torch.cat([C, C.new_zeros(ctx_pad_shape)], dim=0)
+                .take_along_dim(permutation, dim=0)
+                .movedim(0, seq_dim)
+            ),
+            query_mask=(
+                torch.cat([M.new_zeros(qry_pad_shape), M], dim=0)
+                .take_along_dim(permutation, dim=0)
+                .movedim(0, seq_dim)
+            ),
+            target_values=(
+                torch.cat([Y.new_full(qry_pad_shape, nan), Y], dim=0)
+                .take_along_dim(permutation, dim=0)
+                .movedim(0, seq_dim)
+                if Y is not None
+                else None
+            ),
+            static_covariates=static_covariates,
+            context_indices=(
+                (*batch_idx, ctx_idx) if batch_first else (ctx_idx, *batch_idx)
+            ),
+            query_indices=(
+                (*batch_idx, qry_idx) if batch_first else (qry_idx, *batch_idx)
+            ),
+        )
 
 
 @dataclass(frozen=True)

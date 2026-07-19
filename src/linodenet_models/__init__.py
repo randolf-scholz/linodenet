@@ -28,12 +28,12 @@ from .base import (
     PointForecastingModel,
     ProbabilisticForecastingModel,
 )
-from .continuous_kalman_filter import ContinuousKalmanFilter
 from .cru import CRU
 from .discrete_kalman_filter import DiscreteKalmanFilter
 from .grafiti import Grafiti
 from .gru_d import GRU_D
 from .gru_ode_bayes import GRU_ODE_Bayes
+from .kalman_filter import ContinuousKalmanFilter
 from .last_value import LastValue
 from .mnf import Moses
 from .neural_flow import NeuralFlow

@@ -10,6 +10,7 @@ from torch.testing import assert_close
 from typing_extensions import TypedDict
 
 from linodenet_models.utils import (
+    DiscreteTimeEventBatch,
     EventBatch,
     JointTimeData,
     SplitTimeData,
@@ -17,6 +18,66 @@ from linodenet_models.utils import (
 )
 
 from .base import make_forecasting_request
+
+
+def test_discrete_time_event_batch_uses_zero_step_padding() -> None:
+    r"""Check integer event batches use masks for validity and zero step padding."""
+    context_steps = torch.tensor([1, 3, 0])
+    context_mask = torch.tensor(
+        [
+            [True, False],
+            [False, True],
+            [False, False],
+        ]
+    )
+    context_values = torch.tensor([[10.0, nan], [nan, 31.0], [nan, nan]])
+    query_steps = torch.tensor([2, 3, 0])
+    query_mask = torch.tensor(
+        [
+            [True, False],
+            [True, True],
+            [False, False],
+        ]
+    )
+    target_values = torch.tensor([[20.0, nan], [30.0, 31.0], [nan, nan]])
+
+    batch = DiscreteTimeEventBatch.from_request(
+        context_steps=context_steps,
+        context_values=context_values,
+        context_mask=context_mask,
+        query_steps=query_steps,
+        query_mask=query_mask,
+        target_values=target_values,
+    )
+
+    assert_close(batch.steps, torch.tensor([1, 2, 3, 3, 0, 0]))
+    assert torch.equal(
+        batch.context_mask,
+        torch.tensor(
+            [
+                [True, False],
+                [False, False],
+                [False, True],
+                [False, False],
+                [False, False],
+                [False, False],
+            ]
+        ),
+    )
+    assert torch.equal(
+        batch.query_mask,
+        torch.tensor(
+            [
+                [False, False],
+                [True, False],
+                [False, False],
+                [True, True],
+                [False, False],
+                [False, False],
+            ]
+        ),
+    )
+    assert_close(batch.query_mask[batch.query_indices], query_mask)
 
 
 class CanonicalTestData(TypedDict, closed=True):
