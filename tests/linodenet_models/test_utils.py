@@ -17,7 +17,7 @@ from linodenet_models.utils import (
     TripletTimeData,
 )
 
-from .base import make_forecasting_request
+from .base import make_continuous_time_request
 
 
 def test_discrete_time_event_batch_uses_zero_step_padding() -> None:
@@ -1658,7 +1658,7 @@ class TestSplitTimeData:
         self,
         batch_shape: tuple[int, ...],
     ) -> None:
-        original = make_forecasting_request(
+        original = make_continuous_time_request(
             seed=3141,
             batch_shape=batch_shape,
             min_steps=4,
@@ -1681,7 +1681,7 @@ class TestSplitTimeData:
         self,
         batch_shape: tuple[int, ...],
     ) -> None:
-        original = make_forecasting_request(
+        original = make_continuous_time_request(
             seed=3141,
             batch_shape=batch_shape,
             min_steps=4,
@@ -1981,7 +1981,7 @@ class TestJointTimeData:
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_dense_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
-        original = make_forecasting_request(
+        original = make_continuous_time_request(
             seed=3141,
             batch_shape=batch_shape,
             min_steps=4,
@@ -1998,7 +1998,7 @@ class TestJointTimeData:
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_triplet_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
-        original = make_forecasting_request(
+        original = make_continuous_time_request(
             seed=3141,
             batch_shape=batch_shape,
             min_steps=4,
@@ -2018,7 +2018,7 @@ class TestJointTimeData:
         self,
         batch_shape: tuple[int, ...],
     ) -> None:
-        original = make_forecasting_request(
+        original = make_continuous_time_request(
             seed=3141,
             batch_shape=batch_shape,
             min_steps=1,
@@ -2488,7 +2488,7 @@ class TestTripletTimeData:
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_from_request_random(self, batch_shape: tuple[int, ...]) -> None:
-        req = make_forecasting_request(
+        req = make_continuous_time_request(
             seed=3141,
             batch_shape=batch_shape,
             min_steps=1,
@@ -2524,7 +2524,7 @@ class TestTripletTimeData:
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_from_request_batch_last(self, batch_shape: tuple[int, ...]) -> None:
-        req = make_forecasting_request(
+        req = make_continuous_time_request(
             seed=3141,
             batch_shape=batch_shape,
             min_steps=1,
@@ -2555,7 +2555,7 @@ class TestTripletTimeData:
 class TestEventBatch:
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_query_indices_random(self, batch_shape: tuple[int, ...]) -> None:
-        req = make_forecasting_request(
+        req = make_continuous_time_request(
             seed=3141,
             batch_shape=batch_shape,
             min_steps=1,
@@ -2585,7 +2585,7 @@ class TestEventBatch:
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_query_indices_batch_last(self, batch_shape: tuple[int, ...]) -> None:
-        req = make_forecasting_request(
+        req = make_continuous_time_request(
             seed=3141,
             batch_shape=batch_shape,
             min_steps=1,

@@ -4,7 +4,7 @@ import pytest
 import torch
 from torch.testing import assert_close
 
-from .base import make_forecasting_request
+from .base import make_continuous_time_request
 
 
 @pytest.mark.parametrize(
@@ -31,8 +31,8 @@ def test_make_forecasting_request_is_deterministic_and_valid(
         "input_missingness": input_missingness,
     }
 
-    actual = make_forecasting_request(**kwargs)
-    repeat = make_forecasting_request(**kwargs)
+    actual = make_continuous_time_request(**kwargs)
+    repeat = make_continuous_time_request(**kwargs)
 
     assert_close(actual.context_times, repeat.context_times, equal_nan=True)
     assert_close(actual.context_values, repeat.context_values, equal_nan=True)
