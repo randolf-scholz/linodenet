@@ -1,4 +1,3 @@
-import math
 from typing import ClassVar, NamedTuple
 
 import pytest
@@ -15,7 +14,11 @@ from linodenet_models.linodenet_probabilistic import (
 from linodenet_models.profiti import Shiesh
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestContinuousTimeModel, make_continuous_time_request
+from .base import (
+    TestContinuousTimeModel,
+    assert_probabilistic_self_consistent,
+    make_continuous_time_request,
+)
 
 
 class LinodenetProbabilisticTestConfig(NamedTuple):
@@ -90,106 +93,6 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
         (log_prob,) = predictions
         return -log_prob[targets.isfinite().any(dim=-1)].mean()
 
-    def assert_probabilistic_self_consistent(
-        self,
-        model: LinodenetProbabilistic,
-        /,
-        *,
-        seed: int,
-        num_futures: int = 8192,
-        num_probe: int = 8,
-    ) -> None:
-        r"""Check self-consistency by Monte Carlo marginalization over y⁎."""
-        data = make_continuous_time_request(
-            seed=seed,
-            batch_shape=(),
-            min_steps=4,
-            max_steps=4,
-            context_shape=self.CONTEXT_SHAPE,
-            output_shape=self.OUTPUT_SHAPE,
-        )
-
-        with torch.no_grad():
-            # S=num_futures, P=num_probe
-
-            # 1. Fix t⁎ and t, then sample y⁎∼p(yₜ⁎∣H) and probes yₜ.
-            query_times = data.query_times[:2]
-            query_mask = data.query_mask[:2]
-            torch.manual_seed(1)
-            futures = model.sample(  # (S, D)
-                num_futures,
-                query_times=query_times[:1],
-                query_mask=query_mask[:1],
-                context_times=data.context_times,
-                context_values=data.context_values,
-                context_mask=data.context_mask,
-            )[:, 0]
-            y_probe = model.sample(  # (P, 1, D)
-                num_probe,
-                query_times=query_times[1:2],
-                query_mask=query_mask[1:2],
-                context_times=data.context_times,
-                context_values=data.context_values,
-                context_mask=data.context_mask,
-            )
-
-            # 2. Score probes under the original predictive law p(yₜ∣H).
-            base_log_prob = model.log_prob(  # (P,)
-                y_probe,
-                query_times=query_times[1:2],
-                query_mask=query_mask[1:2],
-                context_times=data.context_times,
-                context_values=data.context_values,
-                context_mask=data.context_mask,
-            )[:, 0]
-
-            # 3. Append each sampled y⁎ to H as a hypothetical observation.
-            updated_context_times = torch.cat(  # (S, N+1)
-                [
-                    data.context_times.expand(num_futures, -1),
-                    query_times[:1].expand(num_futures, 1),
-                ],
-                dim=-1,
-            )
-            updated_context_values = torch.cat(  # (S, N+1, D)
-                [
-                    data.context_values.expand(num_futures, -1, -1),
-                    futures[:, None, :],
-                ],
-                dim=-2,
-            )
-            updated_context_mask = torch.cat(  # (S, N+1, D)
-                [
-                    data.context_mask.expand(num_futures, -1, -1),
-                    query_mask[:1].expand(num_futures, 1, -1),
-                ],
-                dim=-2,
-            )
-
-            # 4. Score p(yₜ∣H⊕(t⁎, y⁎)) for every probe and sampled y⁎.
-            conditional_log_prob = model.log_prob(  # (P, S)
-                y_probe[:, None].expand(num_probe, num_futures, 1, -1),
-                query_times=query_times[1:].expand(num_futures, 1),
-                query_mask=query_mask[1:].expand(num_futures, 1, -1),
-                context_times=updated_context_times,
-                context_values=updated_context_values,
-                context_mask=updated_context_mask,
-            )[:, :, 0]
-
-            # 5. Average densities in log-space over y⁎ samples.
-            mixture_log_prob = (  # (P,)
-                torch.logsumexp(conditional_log_prob, dim=-1) - math.log(num_futures)
-            )
-
-        single_future_error = (conditional_log_prob - base_log_prob[:, None]).abs()
-        assert single_future_error.max() > 1.0
-        torch.testing.assert_close(
-            mixture_log_prob,
-            base_log_prob,
-            atol=3e-2,
-            rtol=1e-2,
-        )
-
     def test_probabilistic_self_consistency_at_init(self) -> None:
         r"""Check self-consistency at initialization.
 
@@ -197,24 +100,52 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
         """
         torch.manual_seed(0)
         model = self.make_model(self.STANDARD_CONFIG)
+        generator = torch.Generator()
+        data = make_continuous_time_request(
+            rng=generator,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+        )
 
-        self.assert_probabilistic_self_consistent(model, seed=5)
+        assert_probabilistic_self_consistent(
+            model,
+            data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-1,
+            rtol=5e-2,
+        )
 
     def test_probabilistic_self_consistency_trained(self) -> None:
         r"""Check self-consistency after a few training steps.
 
         p(yₜ∣H) = E_{y⁎∼p(yₜ⁎∣H)}[p(yₜ∣H⊕(t⁎, y⁎))]
         """
+        generator = torch.Generator()
         torch.manual_seed(0)
         model = self.make_model(self.STANDARD_CONFIG)
+
         train_data = make_continuous_time_request(
-            seed=2,
+            rng=generator,
             batch_shape=(4,),
             min_steps=4,
             max_steps=4,
             context_shape=self.CONTEXT_SHAPE,
             output_shape=self.OUTPUT_SHAPE,
         )
+        eval_data = make_continuous_time_request(
+            rng=generator,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+        )
+
         assert train_data.target_values is not None
         optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
         for _ in range(self.NUM_STEPS):
@@ -224,7 +155,15 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
             loss.backward()
             optimizer.step()
 
-        self.assert_probabilistic_self_consistent(model, seed=3)
+        assert_probabilistic_self_consistent(
+            model,
+            eval_data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-1,
+            rtol=5e-2,
+        )
 
 
 def test_make_linodenet_prob_instantiates_expected_components() -> None:
@@ -267,7 +206,7 @@ def test_make_linodenet_prob_selects_forward_updater() -> None:
 def test_probabilistic_sample_api_shapes() -> None:
     r"""Sampling APIs should return padded samples and per-time log-probs."""
     data = make_continuous_time_request(
-        seed=0,
+        rng=0,
         batch_shape=(2,),
         min_steps=2,
         max_steps=4,

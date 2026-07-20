@@ -153,10 +153,10 @@ class TestLinODEnet(TestContinuousTimeModel[LinODEnet]):
         mask = targets.isfinite()
         return F.mse_loss(forecast[mask], targets[mask])
 
-    def assert_self_consistent(self, model: LinODEnet, /, *, seed: int) -> None:
+    def assert_self_consistent(self, model: LinODEnet, /, *, rng: int) -> None:
         r"""Check that treating a prediction as an observation is a no-op."""
         data = make_continuous_time_request(
-            seed=seed,
+            rng=rng,
             batch_shape=(4,),
             min_steps=4,
             max_steps=4,
@@ -217,7 +217,7 @@ class TestLinODEnet(TestContinuousTimeModel[LinODEnet]):
         model = self.make_model(model_config)
 
         # 2. check self-consistency on random data
-        self.assert_self_consistent(model, seed=1)
+        self.assert_self_consistent(model, rng=1)
 
     @pytest.mark.parametrize("config_key", MODEL_CONFIGS)
     def test_self_consistency_trained(self, config_key: str) -> None:
@@ -232,7 +232,7 @@ class TestLinODEnet(TestContinuousTimeModel[LinODEnet]):
 
         # 2. train model on random data for 3 iterations
         train_data = make_continuous_time_request(
-            seed=2,
+            rng=2,
             batch_shape=(4,),
             min_steps=4,
             max_steps=4,
@@ -249,7 +249,7 @@ class TestLinODEnet(TestContinuousTimeModel[LinODEnet]):
             optimizer.step()
 
         # 3. check self-consistency on random data
-        self.assert_self_consistent(model, seed=3)
+        self.assert_self_consistent(model, rng=3)
 
     def test_self_consistency_rejects_linear_rnn_cell(self) -> None:
         r"""Check that the self-consistency test rejects a non-consistent update."""
@@ -257,7 +257,7 @@ class TestLinODEnet(TestContinuousTimeModel[LinODEnet]):
         model = self.make_model(self.STANDARD_CONFIG._replace(updater="linear_rnn"))
 
         with pytest.raises(AssertionError):
-            self.assert_self_consistent(model, seed=4)
+            self.assert_self_consistent(model, rng=4)
 
 
 def test_make_linodenet_instantiates_expected_components() -> None:
@@ -321,7 +321,7 @@ def test_make_linodenet_uses_decoder_kwargs_for_prediction_shape() -> None:
 def test_linodenet_forward_succeeds_on_dense_context_sequence() -> None:
     r"""A direct forward pass should run on an unpadded dense context timeline."""
     data = make_continuous_time_request(
-        seed=0,
+        rng=0,
         batch_shape=(4,),
         min_steps=2,
         max_steps=6,

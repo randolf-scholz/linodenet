@@ -360,7 +360,7 @@ class TestMoses(TestContinuousTimeModel[Moses]):
     def make_inputs(self) -> dict[str, Tensor]:
         r"""Create a minimal irregular forecasting request."""
         data = make_continuous_time_request(
-            seed=self.SEED,
+            rng=self.SEED,
             batch_shape=(),
             min_steps=self.MIN_STEPS,
             max_steps=self.MAX_STEPS,

@@ -22,7 +22,7 @@ def test_make_forecasting_request_is_deterministic_and_valid(
     input_missingness: bool,
 ) -> None:
     kwargs = {
-        "seed": 123,
+        "rng": 123,
         "batch_shape": batch_shape,
         "min_steps": 2,
         "max_steps": 5,

@@ -10,11 +10,10 @@ from torch.testing import assert_close
 from linodenet_models import DiscreteKalmanFilter
 from linodenet_models.kalman_filter import (
     marginal_gaussian_log_prob,
-    marginal_gaussian_sample,
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestDiscreteTimeModel
+from .base import TestDiscreteTimeModel, assert_probabilistic_self_consistent
 
 
 def make_model() -> DiscreteKalmanFilter:
@@ -368,14 +367,13 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteKalmanFilter]):
         assert samples[:, ~qry_mask].isnan().all()
 
     def test_probabilistic_self_consistency_at_init(self) -> None:
-        r"""Check marginalizing over a sampled future observation is a no-op."""
-        num_futures = 8192
-        num_probe = 8
-
+        r"""Check self-consistency at initialization."""
+        generator = torch.Generator()
         torch.manual_seed(0)
+
         model = self.make_model(self.STANDARD_CONFIG)
         data = self.make_request(
-            seed=5,
+            rng=generator,
             batch_shape=(),
             min_steps=4,
             max_steps=4,
@@ -384,80 +382,56 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteKalmanFilter]):
             input_missingness=True,
         )
 
-        with torch.no_grad():
-            query_steps = data.query_times[:2]
-            query_mask = data.query_mask[:2]
-            base_mean, base_cov = model.predict(
-                query_steps=query_steps,
-                query_mask=query_mask,
-                context_steps=data.context_times,
-                context_values=data.context_values,
-                context_mask=data.context_mask,
-            )
+        assert_probabilistic_self_consistent(
+            model,
+            data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-2,
+            rtol=1e-2,
+        )
 
-            torch.manual_seed(1)
-            futures = marginal_gaussian_sample(
-                num_futures,
-                mean=base_mean[:1],
-                cov=base_cov[:1],
-                mask=query_mask[:1],
-            )[:, 0]
-            y_probe = marginal_gaussian_sample(
-                num_probe,
-                mean=base_mean[1:2],
-                cov=base_cov[1:2],
-                mask=query_mask[1:2],
-            )[:, 0]
+    def test_probabilistic_self_consistency_trained(self) -> None:
+        r"""Check self-consistency after a few training steps."""
+        generator = torch.Generator()
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
 
-            target_mask = query_mask[1]
-            base_log_prob = marginal_gaussian_log_prob(
-                y_probe,
-                mean=base_mean[1].expand(num_probe, -1),
-                cov=base_cov[1].expand(num_probe, -1, -1),
-                mask=target_mask.expand(num_probe, -1),
-            )
-            updated_context_steps = torch.cat(
-                [
-                    data.context_times.expand(num_futures, -1),
-                    query_steps[:1].expand(num_futures, 1),
-                ],
-                dim=-1,
-            )
-            updated_context_values = torch.cat(
-                [
-                    data.context_values.expand(num_futures, -1, -1),
-                    futures[:, None, :],
-                ],
-                dim=-2,
-            )
-            updated_context_mask = torch.cat(
-                [
-                    data.context_mask.expand(num_futures, -1, -1),
-                    query_mask[:1].expand(num_futures, 1, -1),
-                ],
-                dim=-2,
-            )
+        train_data = self.make_request(
+            rng=generator,
+            batch_shape=(4,),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+        eval_data = self.make_request(
+            rng=generator,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
 
-            conditional_mean, conditional_cov = model.predict(
-                query_steps=query_steps[1:].expand(num_futures, 1),
-                query_mask=query_mask[1:].expand(num_futures, 1, -1),
-                context_steps=updated_context_steps,
-                context_values=updated_context_values,
-                context_mask=updated_context_mask,
-            )
+        assert train_data.target_values is not None
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        for _ in range(self.NUM_STEPS):
+            optimizer.zero_grad()
+            predictions = self.forecast(model, train_data)
+            loss = self.loss(model, predictions, train_data.target_values)
+            loss.backward()
+            optimizer.step()
 
-            probe_values = y_probe[:, None, :].expand(num_probe, num_futures, -1)
-            conditional_log_prob = marginal_gaussian_log_prob(
-                probe_values,
-                mean=conditional_mean[:, 0, :].expand(num_probe, num_futures, -1),
-                cov=conditional_cov[:, 0].expand(num_probe, num_futures, -1, -1),
-                mask=target_mask.expand(num_probe, num_futures, -1),
-            )
-            mixture_log_prob = (
-                torch.logsumexp(conditional_log_prob, dim=-1)
-                - torch.tensor(num_futures).log()
-            )
-
-        single_future_error = (conditional_log_prob - base_log_prob[:, None]).abs()
-        assert single_future_error.max() > 1.0
-        assert_close(mixture_log_prob, base_log_prob, atol=3e-2, rtol=1e-2)
+        assert_probabilistic_self_consistent(
+            model,
+            eval_data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-2,
+            rtol=1e-2,
+        )

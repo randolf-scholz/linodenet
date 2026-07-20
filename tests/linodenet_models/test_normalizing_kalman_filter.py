@@ -10,7 +10,7 @@ from linodenet.mappings.transforms.scalar import Sinh
 from linodenet_models import NormalizingKalmanFilter
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestDiscreteTimeModel
+from .base import TestDiscreteTimeModel, assert_probabilistic_self_consistent
 
 
 class NormalizingKalmanFilterTestConfig(NamedTuple):
@@ -100,3 +100,73 @@ class TestNormalizingKalmanFilter(TestDiscreteTimeModel[NormalizingKalmanFilter]
         mean_loss = F.mse_loss(pred_mean[mask], targets[mask])
         scale_loss = F.mse_loss(pred_scale[mask], torch.ones_like(pred_scale[mask]))
         return 100.0 * (mean_loss + 1e-3 * scale_loss)
+
+    def test_probabilistic_self_consistency_at_init(self) -> None:
+        r"""Check self-consistency at initialization."""
+        generator = torch.Generator()
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        data = self.make_request(
+            rng=generator,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        assert_probabilistic_self_consistent(
+            model,
+            data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-2,
+            rtol=1e-2,
+        )
+
+    def test_probabilistic_self_consistency_trained(self) -> None:
+        r"""Check self-consistency after a few training steps."""
+        generator = torch.Generator()
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        train_data = self.make_request(
+            rng=generator,
+            batch_shape=(4,),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+        eval_data = self.make_request(
+            rng=generator,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        assert train_data.target_values is not None
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        for _ in range(self.NUM_STEPS):
+            optimizer.zero_grad()
+            predictions = self.forecast(model, train_data)
+            loss = self.loss(model, predictions, train_data.target_values)
+            loss.backward()
+            optimizer.step()
+
+        assert_probabilistic_self_consistent(
+            model,
+            eval_data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-2,
+            rtol=1e-2,
+        )

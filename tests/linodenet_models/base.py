@@ -2,7 +2,7 @@ r"""Base test classes for forecasting models."""
 
 import math
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import ClassVar, Protocol
 
 import pytest
 import torch
@@ -12,9 +12,154 @@ from torch.testing import assert_close
 from linodenet_models.utils import SplitTimeData
 
 
+class ProbabilisticSelfConsistentModel(Protocol):
+    r"""Model API required by :func:`assert_probabilistic_self_consistent`."""
+
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),
+        **kwargs: object,
+    ) -> Tensor:
+        r"""Sample from a time-marginal predictive distribution."""
+        ...
+
+    def log_prob(
+        self,
+        values: Tensor,
+        **kwargs: object,
+    ) -> Tensor:
+        r"""Evaluate time-marginal predictive log-likelihoods."""
+        ...
+
+
+def _as_generator(seed: int | torch.Generator, /) -> torch.Generator:
+    r"""Return a torch generator from an integer seed or existing generator."""
+    return torch.Generator().manual_seed(seed) if isinstance(seed, int) else seed
+
+
+def assert_probabilistic_self_consistent(
+    model: ProbabilisticSelfConsistentModel,
+    data: SplitTimeData,
+    *,
+    rng: int | torch.Generator,
+    num_futures: int,
+    num_probes: int,
+    atol: float,
+    rtol: float,
+) -> None:
+    r"""Check self-consistency by Monte Carlo marginalization over y⁎.
+
+    The identity is over predictive densities:
+    $p(yₜ∣H) = E_{y⁎∼p(yₜ⁎∣H)}[p(yₜ∣H⊕(t⁎, y⁎))]$.
+    In log-space this is estimated with ``logmeanexp`` over conditional
+    log-densities, not with an arithmetic mean of log-densities.
+    """
+    time_kwargs = (
+        {
+            "query_steps": data.query_times,
+            "context_steps": data.context_times,
+        }
+        if data.context_times.dtype == torch.long
+        else {
+            "query_times": data.query_times,
+            "context_times": data.context_times,
+        }
+    )
+    query_times = data.query_times[:2]
+    query_mask = data.query_mask[:2]
+
+    with torch.no_grad(), torch.random.fork_rng(devices=[]):
+        if isinstance(rng, torch.Generator):
+            torch.random.set_rng_state(rng.get_state())
+        else:
+            torch.manual_seed(rng)
+
+        futures = model.sample(
+            num_futures,
+            query_mask=query_mask[:1],
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+            **{
+                key: value[:1] if key.startswith("query_") else value
+                for key, value in time_kwargs.items()
+            },
+        )[:, 0]
+        y_probe = model.sample(
+            num_probes,
+            query_mask=query_mask[1:2],
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+            **{
+                key: value[1:2] if key.startswith("query_") else value
+                for key, value in time_kwargs.items()
+            },
+        )
+
+        base_log_prob = model.log_prob(
+            y_probe,
+            query_mask=query_mask[1:2],
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+            **{
+                key: value[1:2] if key.startswith("query_") else value
+                for key, value in time_kwargs.items()
+            },
+        )
+
+        updated_context_times = torch.cat(
+            [
+                data.context_times.expand(num_futures, -1),
+                query_times[:1].expand(num_futures, 1),
+            ],
+            dim=-1,
+        )
+        updated_context_values = torch.cat(
+            [
+                data.context_values.expand(num_futures, -1, -1),
+                futures[:, None, :],
+            ],
+            dim=-2,
+        )
+        updated_context_mask = torch.cat(
+            [
+                data.context_mask.expand(num_futures, -1, -1),
+                query_mask[:1].expand(num_futures, 1, -1),
+            ],
+            dim=-2,
+        )
+        conditional_time_kwargs = (
+            {
+                "query_steps": query_times[1:].expand(num_futures, 1),
+                "context_steps": updated_context_times,
+            }
+            if data.context_times.dtype == torch.long
+            else {
+                "query_times": query_times[1:].expand(num_futures, 1),
+                "context_times": updated_context_times,
+            }
+        )
+        conditional_log_prob = model.log_prob(
+            y_probe[:, None].expand(num_probes, num_futures, 1, -1),
+            query_mask=query_mask[1:].expand(num_futures, 1, -1),
+            context_values=updated_context_values,
+            context_mask=updated_context_mask,
+            **conditional_time_kwargs,
+        )[:, :, 0]
+        mixture_log_prob = torch.logsumexp(conditional_log_prob, dim=-1) - math.log(
+            num_futures
+        )
+        if isinstance(rng, torch.Generator):
+            rng.set_state(torch.random.get_rng_state())
+
+    base_log_prob = base_log_prob[:, 0]
+    single_future_error = (conditional_log_prob - base_log_prob[:, None]).abs()
+    assert single_future_error.max() > 0.0
+    assert_close(mixture_log_prob, base_log_prob, atol=atol, rtol=rtol)
+
+
 def make_continuous_time_request(
     *,
-    seed: int,
+    rng: int | torch.Generator,
     batch_shape: int | tuple[int, ...],
     min_steps: int,
     max_steps: int,
@@ -25,7 +170,7 @@ def make_continuous_time_request(
     batch_first: bool = True,
 ) -> SplitTimeData:
     r"""Sample random dense forecasting inputs for a forecasting model."""
-    rng = torch.Generator().manual_seed(seed)
+    rng = _as_generator(rng)
     batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
     output_shape = output_shape if output_shape is not None else context_shape
 
@@ -97,9 +242,12 @@ def make_continuous_time_request(
     )
 
 
+make_forecasting_request = make_continuous_time_request
+
+
 def make_discrete_time_request(
     *,
-    seed: int,
+    rng: int | torch.Generator,
     batch_shape: int | tuple[int, ...],
     min_steps: int,
     max_steps: int,
@@ -110,7 +258,7 @@ def make_discrete_time_request(
     batch_first: bool = True,
 ) -> SplitTimeData:
     r"""Sample random dense integer-step forecasting inputs."""
-    rng = torch.Generator().manual_seed(seed)
+    rng = _as_generator(rng)
     batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
     output_shape = output_shape if output_shape is not None else context_shape
 
@@ -223,7 +371,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
     def make_request(
         self,
         *,
-        seed: int,
+        rng: int | torch.Generator,
         batch_shape: int | tuple[int, ...],
         min_steps: int,
         max_steps: int,
@@ -235,7 +383,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
     ) -> SplitTimeData:
         r"""Sample synthetic forecasting inputs for this model family."""
         return make_continuous_time_request(
-            seed=seed,
+            rng=rng,
             batch_shape=batch_shape,
             min_steps=min_steps,
             max_steps=max_steps,
@@ -247,7 +395,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         )
 
     @pytest.fixture
-    def seed(self) -> int:
+    def rng(self) -> int:
         r"""Random seed used for synthetic data and model initialization."""
         return self.SEED
 
@@ -292,7 +440,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
     def test_forward_unbatched(
         self,
         model_config: object,
-        seed: int,
+        rng: int,
         min_steps: int,
         max_steps: int,
         context_shape: tuple[int, ...],
@@ -300,7 +448,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         input_missingness: bool,
     ) -> None:
         data = self.make_request(
-            seed=seed,
+            rng=rng,
             batch_shape=(),
             min_steps=min_steps,
             max_steps=max_steps,
@@ -308,14 +456,14 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
             output_shape=output_shape,
             input_missingness=input_missingness,
         )
-        torch.manual_seed(seed)
+        torch.manual_seed(rng)
         model = self.make_model(model_config)
         self.forecast(model, data)
 
     def test_forward_batched(
         self,
         model_config: object,
-        seed: int,
+        rng: int,
         min_steps: int,
         max_steps: int,
         context_shape: tuple[int, ...],
@@ -324,7 +472,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         input_missingness: bool,
     ) -> None:
         data = self.make_request(
-            seed=seed,
+            rng=rng,
             batch_shape=batch_shape,
             min_steps=min_steps,
             max_steps=max_steps,
@@ -332,20 +480,20 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
             output_shape=output_shape,
             input_missingness=input_missingness,
         )
-        torch.manual_seed(seed)
+        torch.manual_seed(rng)
         model = self.make_model(model_config)
         self.forecast(model, data)
 
     def test_forward_batched_matches_forward_unbatched(
         self,
         model_config: object,
-        seed: int,
+        rng: int,
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
         input_missingness: bool,
     ) -> None:
         r"""Check batched predictions do not depend on sequence padding."""
-        generator = torch.Generator().manual_seed(seed)
+        generator = torch.Generator().manual_seed(rng)
         context_lengths = torch.tensor([2, 17])
         query_lengths = torch.tensor([17, 2])
         context_size = int(context_lengths.max().item())
@@ -402,7 +550,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
             target_values=target_values,
         )
 
-        torch.manual_seed(seed)
+        torch.manual_seed(rng)
         model = self.make_model(model_config)
         batched_predictions = self.forecast(model, data)
         expected_predictions = [
@@ -452,7 +600,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
     def test_padding_invariance(
         self,
         model_config: object,
-        seed: int,
+        rng: int,
         min_steps: int,
         max_steps: int,
         context_shape: tuple[int, ...],
@@ -462,7 +610,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
     ) -> None:
         r"""Check predictions are unchanged by extra NaN tail padding."""
         data = self.make_request(
-            seed=seed,
+            rng=rng,
             batch_shape=batch_shape,
             min_steps=min_steps,
             max_steps=max_steps,
@@ -526,7 +674,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
             ),
         )
 
-        torch.manual_seed(seed)
+        torch.manual_seed(rng)
         model = self.make_model(model_config)
         predictions = self.forecast(model, data)
         padded_predictions = self.forecast(model, padded_data)
@@ -554,7 +702,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
     def test_training_unbatched(
         self,
         model_config: object,
-        seed: int,
+        rng: int,
         min_steps: int,
         max_steps: int,
         context_shape: tuple[int, ...],
@@ -562,9 +710,9 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         input_missingness: bool,
     ) -> None:
         assert self.GRADIENT_WARMUP_STEPS < self.NUM_STEPS
-        torch.manual_seed(seed)
+        torch.manual_seed(rng)
         data = self.make_request(
-            seed=seed,
+            rng=rng,
             batch_shape=(),
             min_steps=min_steps,
             max_steps=max_steps,
@@ -619,7 +767,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
     def test_training_batched(
         self,
         model_config: object,
-        seed: int,
+        rng: int,
         min_steps: int,
         max_steps: int,
         context_shape: tuple[int, ...],
@@ -628,9 +776,9 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         input_missingness: bool,
     ) -> None:
         assert self.GRADIENT_WARMUP_STEPS < self.NUM_STEPS
-        torch.manual_seed(seed)
+        torch.manual_seed(rng)
         data = self.make_request(
-            seed=seed,
+            rng=rng,
             batch_shape=batch_shape,
             min_steps=min_steps,
             max_steps=max_steps,
@@ -696,7 +844,7 @@ class TestDiscreteTimeModel[M: nn.Module](TestContinuousTimeModel[M], ABC):
     def make_request(
         self,
         *,
-        seed: int,
+        rng: int | torch.Generator,
         batch_shape: int | tuple[int, ...],
         min_steps: int,
         max_steps: int,
@@ -708,7 +856,7 @@ class TestDiscreteTimeModel[M: nn.Module](TestContinuousTimeModel[M], ABC):
     ) -> SplitTimeData:
         r"""Sample synthetic integer-step forecasting inputs."""
         return make_discrete_time_request(
-            seed=seed,
+            rng=rng,
             batch_shape=batch_shape,
             min_steps=min_steps,
             max_steps=max_steps,
@@ -722,13 +870,13 @@ class TestDiscreteTimeModel[M: nn.Module](TestContinuousTimeModel[M], ABC):
     def test_forward_batched_matches_forward_unbatched(
         self,
         model_config: object,
-        seed: int,
+        rng: int,
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
         input_missingness: bool,
     ) -> None:
         r"""Check batched predictions do not depend on sequence padding."""
-        generator = torch.Generator().manual_seed(seed)
+        generator = torch.Generator().manual_seed(rng)
         context_lengths = torch.tensor([2, 17])
         query_lengths = torch.tensor([17, 2])
         context_size = int(context_lengths.max().item())
@@ -786,7 +934,7 @@ class TestDiscreteTimeModel[M: nn.Module](TestContinuousTimeModel[M], ABC):
             validate_args=False,
         )
 
-        torch.manual_seed(seed)
+        torch.manual_seed(rng)
         model = self.make_model(model_config)
         batched_predictions = self.forecast(model, data)
         expected_predictions = [
@@ -837,7 +985,7 @@ class TestDiscreteTimeModel[M: nn.Module](TestContinuousTimeModel[M], ABC):
     def test_padding_invariance(
         self,
         model_config: object,
-        seed: int,
+        rng: int,
         min_steps: int,
         max_steps: int,
         context_shape: tuple[int, ...],
@@ -847,7 +995,7 @@ class TestDiscreteTimeModel[M: nn.Module](TestContinuousTimeModel[M], ABC):
     ) -> None:
         r"""Check predictions are unchanged by extra tail padding."""
         data = self.make_request(
-            seed=seed,
+            rng=rng,
             batch_shape=batch_shape,
             min_steps=min_steps,
             max_steps=max_steps,
@@ -912,7 +1060,7 @@ class TestDiscreteTimeModel[M: nn.Module](TestContinuousTimeModel[M], ABC):
             validate_args=False,
         )
 
-        torch.manual_seed(seed)
+        torch.manual_seed(rng)
         model = self.make_model(model_config)
         predictions = self.forecast(model, data)
         padded_predictions = self.forecast(model, padded_data)
