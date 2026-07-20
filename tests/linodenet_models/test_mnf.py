@@ -357,8 +357,43 @@ class TestMoses(TestContinuousTimeModel[Moses]):
         (log_prob,) = predictions
         return -log_prob[targets.isfinite()].mean()
 
-    def make_inputs(self) -> dict[str, Tensor]:
-        r"""Create a minimal irregular forecasting request."""
+    def test_initialization_succeeds(self) -> None:
+        r"""A small Moses model should instantiate successfully."""
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        assert isinstance(model, Moses)
+
+    def test_sample_succeeds(self) -> None:
+        r"""Sampling should succeed on a simple request."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        data = make_continuous_time_request(
+            rng=self.SEED,
+            batch_shape=(),
+            min_steps=self.MIN_STEPS,
+            max_steps=self.MAX_STEPS,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+            target_missingness=True,
+        )
+
+        samples = model.sample(
+            (),
+            query_times=data.query_times,
+            query_mask=data.query_mask,
+            context_times=data.context_times,
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+        )
+
+        assert samples.shape == data.query_mask.shape
+        assert torch.equal(samples.isfinite(), data.query_mask)
+
+    def test_log_prob_succeeds(self) -> None:
+        r"""Density evaluation should succeed on a simple request."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
         data = make_continuous_time_request(
             rng=self.SEED,
             batch_shape=(),
@@ -371,41 +406,14 @@ class TestMoses(TestContinuousTimeModel[Moses]):
         )
         assert data.target_values is not None
 
-        return {
-            "query_times": data.query_times.detach(),
-            "query_mask": data.query_mask,
-            "context_times": data.context_times.detach(),
-            "context_values": data.context_values.detach(),
-            "context_mask": data.context_mask,
-            "values": data.target_values.detach(),
-        }
-
-    def test_initialization_succeeds(self) -> None:
-        r"""A small Moses model should instantiate successfully."""
-        model = self.make_model(self.STANDARD_CONFIG)
-
-        assert isinstance(model, Moses)
-
-    def test_sample_succeeds(self) -> None:
-        r"""Sampling should succeed on a simple request."""
-        torch.manual_seed(0)
-        model = self.make_model(self.STANDARD_CONFIG)
-        inputs = self.make_inputs()
-        inputs.pop("values")
-
-        samples = model.sample((), **inputs)
-
-        assert samples.shape == inputs["query_mask"].shape
-        assert torch.equal(samples.isfinite(), inputs["query_mask"])
-
-    def test_log_prob_succeeds(self) -> None:
-        r"""Density evaluation should succeed on a simple request."""
-        torch.manual_seed(0)
-        model = self.make_model(self.STANDARD_CONFIG)
-        inputs = self.make_inputs()
-        values = inputs.pop("values")
-
-        log_prob = model.log_prob(values, **inputs)
+        log_prob = model.log_prob(
+            data.target_values,
+            query_times=data.query_times,
+            query_mask=data.query_mask,
+            context_times=data.context_times,
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+        )
 
         assert log_prob.shape == ()
         assert log_prob.isfinite()
@@ -414,15 +422,37 @@ class TestMoses(TestContinuousTimeModel[Moses]):
         r"""`sample_and_log_prob` should agree with `log_prob` on returned samples."""
         torch.manual_seed(0)
         model = self.make_model(self.STANDARD_CONFIG)
-        inputs = self.make_inputs()
-        inputs.pop("values")
+        data = make_continuous_time_request(
+            rng=self.SEED,
+            batch_shape=(),
+            min_steps=self.MIN_STEPS,
+            max_steps=self.MAX_STEPS,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+            target_missingness=True,
+        )
 
-        samples, log_prob_direct = model.sample_and_log_prob((), **inputs)
-        log_prob_via_sample = model.log_prob(samples, **inputs)
+        samples, log_prob_direct = model.sample_and_log_prob(
+            (),
+            query_times=data.query_times,
+            query_mask=data.query_mask,
+            context_times=data.context_times,
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+        )
+        log_prob_via_sample = model.log_prob(
+            samples,
+            query_times=data.query_times,
+            query_mask=data.query_mask,
+            context_times=data.context_times,
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+        )
 
-        assert samples.shape == inputs["query_mask"].shape
+        assert samples.shape == data.query_mask.shape
         assert log_prob_direct.shape == ()
-        assert torch.equal(samples.isfinite(), inputs["query_mask"])
+        assert torch.equal(samples.isfinite(), data.query_mask)
         assert_close(log_prob_direct, log_prob_via_sample)
 
 
