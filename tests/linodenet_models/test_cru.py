@@ -19,7 +19,7 @@ from linodenet_models.cru import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel
+from .base import TestContinuousTimeModel
 
 # language=yaml
 CRU_CONFIG_YAML = r"""
@@ -219,7 +219,7 @@ class TestUpdateMasked:
             assert parameter.grad.isfinite().all()
 
 
-class TestCRU(TestForecastingModel[CRU]):
+class TestCRU(TestContinuousTimeModel[CRU]):
     r"""Tests for direct CRU model construction."""
 
     GRADIENT_WARMUP_STEPS = 1

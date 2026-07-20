@@ -17,7 +17,7 @@ from linodenet_models.kalman_filter import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel, make_forecasting_request
+from .base import TestContinuousTimeModel, make_continuous_time_request
 
 
 def test_marginal_gaussian_log_prob_matches_explicit_subvectors() -> None:
@@ -148,7 +148,7 @@ class KalmanFilterTestConfig(NamedTuple):
     hidden_size: int
 
 
-class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
+class TestKalmanFilter(TestContinuousTimeModel[ContinuousKalmanFilter]):
     r"""Shared forecasting-model tests for continuous Kalman filters."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
@@ -500,7 +500,7 @@ class TestKalmanFilter(TestForecastingModel[ContinuousKalmanFilter]):
 
         torch.manual_seed(0)
         model = self.make_model(self.STANDARD_CONFIG)
-        data = make_forecasting_request(
+        data = make_continuous_time_request(
             seed=5,
             batch_shape=(),
             min_steps=4,

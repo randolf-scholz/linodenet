@@ -13,12 +13,12 @@ from linodenet_models import LastValue
 from linodenet_models.utils import SplitTimeData
 from tests.testing import PROJECT
 
-from .base import TestForecastingModel
+from .base import TestContinuousTimeModel
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
-class TestLastValue(TestForecastingModel[LastValue]):
+class TestLastValue(TestContinuousTimeModel[LastValue]):
     r"""Shared forecasting-model tests for LastValue."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (4,)

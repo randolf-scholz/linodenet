@@ -18,7 +18,7 @@ from linodenet_models.state_update import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel, make_forecasting_request
+from .base import TestContinuousTimeModel, make_continuous_time_request
 
 
 class LinODEnetTestConfig(NamedTuple):
@@ -30,7 +30,7 @@ class LinODEnetTestConfig(NamedTuple):
     updater_config: str | None = None
 
 
-class TestLinODEnet(TestForecastingModel[LinODEnet]):
+class TestLinODEnet(TestContinuousTimeModel[LinODEnet]):
     r"""Shared forecasting-model tests for LinODEnet."""
 
     GRADIENT_WARMUP_STEPS = 1
@@ -155,7 +155,7 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
 
     def assert_self_consistent(self, model: LinODEnet, /, *, seed: int) -> None:
         r"""Check that treating a prediction as an observation is a no-op."""
-        data = make_forecasting_request(
+        data = make_continuous_time_request(
             seed=seed,
             batch_shape=(4,),
             min_steps=4,
@@ -231,7 +231,7 @@ class TestLinODEnet(TestForecastingModel[LinODEnet]):
         model = self.make_model(model_config)
 
         # 2. train model on random data for 3 iterations
-        train_data = make_forecasting_request(
+        train_data = make_continuous_time_request(
             seed=2,
             batch_shape=(4,),
             min_steps=4,
@@ -320,7 +320,7 @@ def test_make_linodenet_uses_decoder_kwargs_for_prediction_shape() -> None:
 
 def test_linodenet_forward_succeeds_on_dense_context_sequence() -> None:
     r"""A direct forward pass should run on an unpadded dense context timeline."""
-    data = make_forecasting_request(
+    data = make_continuous_time_request(
         seed=0,
         batch_shape=(4,),
         min_steps=2,

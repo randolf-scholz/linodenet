@@ -20,7 +20,7 @@ from linodenet_models.profiti import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel
+from .base import TestContinuousTimeModel
 
 
 class ProFITiTestConfig(NamedTuple):
@@ -342,7 +342,7 @@ class TestProFITiBlock:
         assert raw_context.grad.isfinite().all()
 
 
-class TestProfiti(TestForecastingModel[ProFITi]):
+class TestProfiti(TestContinuousTimeModel[ProFITi]):
     r"""Shared forecasting-model tests for ProFITi."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (4,)

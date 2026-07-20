@@ -21,7 +21,7 @@ from linodenet_models.mnf import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel, make_forecasting_request
+from .base import TestContinuousTimeModel, make_continuous_time_request
 
 
 def _manual_mixture_samples(
@@ -285,7 +285,7 @@ class TestMarginalizableNormalizingFlow:
         assert final_loss < initial_loss
 
 
-class TestMoses(TestForecastingModel[Moses]):
+class TestMoses(TestContinuousTimeModel[Moses]):
     r"""Shared forecasting-model and smoke tests for Moses."""
 
     SEED: ClassVar[int] = 0
@@ -359,7 +359,7 @@ class TestMoses(TestForecastingModel[Moses]):
 
     def make_inputs(self) -> dict[str, Tensor]:
         r"""Create a minimal irregular forecasting request."""
-        data = make_forecasting_request(
+        data = make_continuous_time_request(
             seed=self.SEED,
             batch_shape=(),
             min_steps=self.MIN_STEPS,

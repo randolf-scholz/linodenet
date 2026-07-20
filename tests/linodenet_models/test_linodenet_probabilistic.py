@@ -15,7 +15,7 @@ from linodenet_models.linodenet_probabilistic import (
 from linodenet_models.profiti import Shiesh
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel, make_forecasting_request
+from .base import TestContinuousTimeModel, make_continuous_time_request
 
 
 class LinodenetProbabilisticTestConfig(NamedTuple):
@@ -27,7 +27,7 @@ class LinodenetProbabilisticTestConfig(NamedTuple):
     retention_learnable: bool = True
 
 
-class TestLinodenetProbabilistic(TestForecastingModel[LinodenetProbabilistic]):
+class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]):
     r"""Shared forecasting-model tests for probabilistic Linodenet."""
 
     GRADIENT_WARMUP_STEPS = 1
@@ -100,7 +100,7 @@ class TestLinodenetProbabilistic(TestForecastingModel[LinodenetProbabilistic]):
         num_probe: int = 8,
     ) -> None:
         r"""Check self-consistency by Monte Carlo marginalization over y⁎."""
-        data = make_forecasting_request(
+        data = make_continuous_time_request(
             seed=seed,
             batch_shape=(),
             min_steps=4,
@@ -211,7 +211,7 @@ class TestLinodenetProbabilistic(TestForecastingModel[LinodenetProbabilistic]):
         """
         torch.manual_seed(0)
         model = self.make_model(self.STANDARD_CONFIG)
-        train_data = make_forecasting_request(
+        train_data = make_continuous_time_request(
             seed=2,
             batch_shape=(4,),
             min_steps=4,
@@ -270,7 +270,7 @@ def test_make_linodenet_prob_selects_forward_updater() -> None:
 
 def test_probabilistic_sample_api_shapes() -> None:
     r"""Sampling APIs should return padded samples and per-time log-probs."""
-    data = make_forecasting_request(
+    data = make_continuous_time_request(
         seed=0,
         batch_shape=(2,),
         min_steps=2,

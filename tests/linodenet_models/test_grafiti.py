@@ -14,7 +14,7 @@ from linodenet_models.utils import (
     TripletTimeData,
 )
 
-from .base import TestForecastingModel
+from .base import TestContinuousTimeModel
 
 
 class GrafitiTestConfig(NamedTuple):
@@ -26,7 +26,7 @@ class GrafitiTestConfig(NamedTuple):
     num_heads: int
 
 
-class TestGrafiti(TestForecastingModel[Grafiti]):
+class TestGrafiti(TestContinuousTimeModel[Grafiti]):
     r"""Shared forecasting-model tests for GraFITi."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (1,)

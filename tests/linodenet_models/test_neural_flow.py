@@ -17,10 +17,10 @@ from linodenet_models.neural_flow import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel
+from .base import TestContinuousTimeModel
 
 
-class TestNeuralFlow(TestForecastingModel[NeuralFlow]):
+class TestNeuralFlow(TestContinuousTimeModel[NeuralFlow]):
     r"""Shared forecasting-model tests for NeuralFlow."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (4,)

@@ -10,7 +10,7 @@ from torch.nn import functional as F
 from linodenet_models.gru_d import GRU_D
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel
+from .base import TestContinuousTimeModel
 
 
 class GRUDTestConfig(NamedTuple):
@@ -21,7 +21,7 @@ class GRUDTestConfig(NamedTuple):
     output_size: int
 
 
-class TestGRU_D(TestForecastingModel[GRU_D]):
+class TestGRU_D(TestContinuousTimeModel[GRU_D]):
     r"""Shared forecasting-model tests for GRU-D."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (4,)

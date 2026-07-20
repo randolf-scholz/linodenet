@@ -20,10 +20,10 @@ from linodenet_models.gru_ode_bayes import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestForecastingModel
+from .base import TestContinuousTimeModel
 
 
-class TestGRU_ODE_Bayes(TestForecastingModel[GRU_ODE_Bayes]):
+class TestGRU_ODE_Bayes(TestContinuousTimeModel[GRU_ODE_Bayes]):
     r"""Tests for direct GRU-ODE-Bayes model construction."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (5,)

@@ -12,7 +12,7 @@ from torch.testing import assert_close
 from linodenet_models.utils import SplitTimeData
 
 
-def make_forecasting_request(
+def make_continuous_time_request(
     *,
     seed: int,
     batch_shape: int | tuple[int, ...],
@@ -97,8 +97,8 @@ def make_forecasting_request(
     )
 
 
-class TestForecastingModel[M: nn.Module](ABC):
-    r"""Shared behavioral tests for forecasting models."""
+class TestContinuousTimeModel[M: nn.Module](ABC):
+    r"""Shared behavioral tests for continuous-time models."""
 
     SEED: ClassVar[int] = 0
     MIN_STEPS: ClassVar[int] = 2
@@ -178,7 +178,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         output_shape: tuple[int, ...],
         input_missingness: bool,
     ) -> None:
-        data = make_forecasting_request(
+        data = make_continuous_time_request(
             seed=seed,
             batch_shape=(),
             min_steps=min_steps,
@@ -202,7 +202,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         batch_shape: tuple[int, ...],
         input_missingness: bool,
     ) -> None:
-        data = make_forecasting_request(
+        data = make_continuous_time_request(
             seed=seed,
             batch_shape=batch_shape,
             min_steps=min_steps,
@@ -340,7 +340,7 @@ class TestForecastingModel[M: nn.Module](ABC):
         input_missingness: bool,
     ) -> None:
         r"""Check predictions are unchanged by extra NaN tail padding."""
-        data = make_forecasting_request(
+        data = make_continuous_time_request(
             seed=seed,
             batch_shape=batch_shape,
             min_steps=min_steps,
@@ -442,7 +442,7 @@ class TestForecastingModel[M: nn.Module](ABC):
     ) -> None:
         assert self.GRADIENT_WARMUP_STEPS < self.NUM_STEPS
         torch.manual_seed(seed)
-        data = make_forecasting_request(
+        data = make_continuous_time_request(
             seed=seed,
             batch_shape=(),
             min_steps=min_steps,
@@ -508,7 +508,7 @@ class TestForecastingModel[M: nn.Module](ABC):
     ) -> None:
         assert self.GRADIENT_WARMUP_STEPS < self.NUM_STEPS
         torch.manual_seed(seed)
-        data = make_forecasting_request(
+        data = make_continuous_time_request(
             seed=seed,
             batch_shape=batch_shape,
             min_steps=min_steps,
