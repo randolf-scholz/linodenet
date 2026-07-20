@@ -2,34 +2,15 @@ r"""Base test classes for forecasting models."""
 
 import math
 from abc import ABC, abstractmethod
-from typing import ClassVar, Protocol
+from typing import ClassVar
 
 import pytest
 import torch
 from torch import Tensor, nan, nn
 from torch.testing import assert_close
 
+from linodenet_models import ProbabilisticForecastingModel
 from linodenet_models.utils import SplitTimeData
-
-
-class ProbabilisticSelfConsistentModel(Protocol):
-    r"""Model API required by :func:`assert_probabilistic_self_consistent`."""
-
-    def sample(
-        self,
-        size: int | tuple[int, ...] = (),
-        **kwargs: object,
-    ) -> Tensor:
-        r"""Sample from a time-marginal predictive distribution."""
-        ...
-
-    def log_prob(
-        self,
-        values: Tensor,
-        **kwargs: object,
-    ) -> Tensor:
-        r"""Evaluate time-marginal predictive log-likelihoods."""
-        ...
 
 
 def _as_generator(seed: int | torch.Generator, /) -> torch.Generator:
@@ -38,7 +19,7 @@ def _as_generator(seed: int | torch.Generator, /) -> torch.Generator:
 
 
 def assert_probabilistic_self_consistent(
-    model: ProbabilisticSelfConsistentModel,
+    model: ProbabilisticForecastingModel,
     data: SplitTimeData,
     *,
     rng: int | torch.Generator,

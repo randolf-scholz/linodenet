@@ -7,7 +7,7 @@ References:
       | https://proceedings.neurips.cc/paper/2020/hash/1f47cef5e38c952f94c5d61726027439-Abstract.html
 """
 
-__all__ = ["DiscreteTimeNKF"]
+__all__ = ["ContinuousTimeNKF", "DiscreteTimeNKF"]
 
 from typing import TYPE_CHECKING, Final, cast
 
@@ -16,6 +16,7 @@ from numpy.typing import ArrayLike
 from torch import Generator, Tensor, nan, nn
 
 from .kalman_filter import (
+    ContinuousTimeKalmanFilter,
     DiscreteTimeKalmanFilter,
     marginal_gaussian_log_prob,
     marginal_gaussian_sample,
@@ -211,6 +212,7 @@ class DiscreteTimeNKF(nn.Module):
         self.pred_means, _ = self._encode_observations(mean, query_mask)
         self.pred_scales = (
             cov.diagonal(dim1=-2, dim2=-1)
+            .clamp_min(0.0)
             .sqrt()
             .masked_fill(
                 ~query_mask,
@@ -312,6 +314,267 @@ class DiscreteTimeNKF(nn.Module):
             context_mask=context_mask,
             initial_state=initial_state,
             initial_step=initial_step,
+        )
+        pseudo_samples, base_log_prob = marginal_gaussian_sample_and_log_prob(
+            size,
+            mean=mean,
+            cov=cov,
+            mask=query_mask,
+            rng=rng,
+        )
+        sample_shape = (size,) if isinstance(size, int) else size
+        mask = query_mask.expand(*sample_shape, *query_mask.shape)
+        samples, forward_logabsdet = self._encode_observations(pseudo_samples, mask)
+        return samples, base_log_prob - forward_logabsdet
+
+
+class ContinuousTimeNKF(nn.Module):
+    r"""Normalizing Kalman Filter with continuous, time-invariant dynamics.
+
+    The model keeps the paper's observation equation (Eq. (1c)),
+    $yₜ=f(Hlₜ+ηₜ)$, but uses the continuous latent dynamics implemented by
+    :class:`ContinuousTimeKalmanFilter`. Filtering still follows Proposition 1:
+    observations are pulled back to pseudo-observations $zₜ=f⁻¹(yₜ)$ before
+    applying ordinary Kalman updates. Likelihoods use the exact
+    change-of-variables term from Eq. (2) / Proposition 3.
+
+    Note:
+        As for :class:`DiscreteTimeNKF`, exact partial feature masks require a
+        coordinate-wise/local decoder. A global flow needs closed-form
+        marginalization over missing output dimensions, which the paper notes is
+        not available for the main global RealNVP NKF instantiation.
+    """
+
+    input_size: Final[int]
+    hidden_size: Final[int]
+    batch_first: Final[bool]
+
+    decoder: nn.Module
+    kalman: ContinuousTimeKalmanFilter
+
+    pred_means: Tensor
+    pred_scales: Tensor
+
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        *,
+        decoder: nn.Module,
+        system_matrix: ArrayLike | None = None,  # [n, n]
+        observation_matrix: ArrayLike | None = None,  # [k, n]
+        process_noise: ArrayLike | float = 0.1,  # [n, n]
+        measurement_noise: ArrayLike | float = 1.0,  # [k, k]
+        initial_mean: ArrayLike | float = 0.0,  # [n]
+        initial_covariance: ArrayLike | float = 1.0,  # [n, n]
+        use_cholesky: bool = False,
+        initial_state_learnable: bool = True,
+        process_noise_learnable: bool = False,
+        observation_noise_learnable: bool = False,
+        batch_first: bool = True,
+    ) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.batch_first = batch_first
+        self.decoder = decoder
+        self.kalman = ContinuousTimeKalmanFilter(
+            input_size,
+            hidden_size,
+            system_matrix=system_matrix,
+            observation_matrix=observation_matrix,
+            process_noise=process_noise,
+            measurement_noise=measurement_noise,
+            initial_mean=initial_mean,
+            initial_covariance=initial_covariance,
+            use_cholesky=use_cholesky,
+            initial_state_learnable=initial_state_learnable,
+            process_noise_learnable=process_noise_learnable,
+            observation_noise_learnable=observation_noise_learnable,
+            batch_first=batch_first,
+        )
+
+        self.register_buffer("pred_means", None, persistent=False)
+        self.register_buffer("pred_scales", None, persistent=False)
+
+    def _decode_observations(
+        self,
+        values: Tensor,
+        mask: Tensor,
+        /,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Compute $z=f⁻¹(y)$ and $\log|\det ∂f⁻¹/∂y|$ from Eq. (2)."""
+        dense_values = values.masked_fill(~mask, 0.0)
+        decoder = cast("Transform", self.decoder)
+        pseudo_values, inverse_logabsdet = decoder.decode_and_logabsdet(
+            dense_values,
+        )
+        logabsdet = _reduce_logabsdet(inverse_logabsdet, mask)
+        return pseudo_values.masked_fill(~mask, nan), logabsdet
+
+    def _encode_observations(
+        self,
+        values: Tensor,
+        mask: Tensor,
+        /,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Compute $y=f(z)$ and $\log|\det ∂f/∂z|$ from Eq. (1c)."""
+        dense_values = values.masked_fill(~mask, 0.0)
+        decoder = cast("Transform", self.decoder)
+        observations, forward_logabsdet = decoder.encode_and_logabsdet(
+            dense_values,
+        )
+        logabsdet = _reduce_logabsdet(forward_logabsdet, mask)
+        return observations.masked_fill(~mask, nan), logabsdet
+
+    def forward(
+        self,
+        *,
+        timestamps: Tensor,  # (..., T), float, padded NaN
+        query_mask: Tensor,  # (..., T, D), bool, padded False
+        context_values: Tensor,  # (..., T, D), float, padded NaN, sparse
+        context_mask: Tensor,  # (..., T, D), bool, padded False
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:  # (..., T, D), (..., T, D, D)
+        r"""Compute posterior latent states over combined context/query times."""
+        pseudo_values, _ = self._decode_observations(context_values, context_mask)
+        return self.kalman.forward(
+            timestamps=timestamps,
+            context_values=pseudo_values,
+            context_mask=context_mask,
+            query_mask=query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+
+    def predict(
+        self,
+        *,
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D)
+        r"""Return a point summary of the transformed predictive distribution."""
+        pseudo_values, _ = self._decode_observations(context_values, context_mask)
+        mean, cov = self.kalman.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=pseudo_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        self.pred_means, _ = self._encode_observations(mean, query_mask)
+        self.pred_scales = (
+            cov.diagonal(dim1=-2, dim2=-1)
+            .clamp_min(0.0)
+            .sqrt()
+            .masked_fill(
+                ~query_mask,
+                nan,
+            )
+        )
+        return self.pred_means, self.pred_scales
+
+    def log_prob(
+        self,
+        values: Tensor,  # (..., K, D)
+        *,
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> Tensor:  # (..., K)
+        r"""Compute exact time-marginal log-likelihoods via Proposition 3."""
+        pseudo_context, _ = self._decode_observations(context_values, context_mask)
+        mean, cov = self.kalman.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=pseudo_context,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+
+        mask = query_mask.expand(*values.shape)
+        pseudo_values, inverse_logabsdet = self._decode_observations(values, mask)
+        base_log_prob = marginal_gaussian_log_prob(
+            pseudo_values,
+            mean=mean.expand(*pseudo_values.shape),
+            cov=cov.expand(*pseudo_values.shape[:-1], *cov.shape[-2:]),
+            mask=mask,
+        )
+        return base_log_prob + inverse_logabsdet
+
+    def sample(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+        rng: Generator | None = None,
+    ) -> Tensor:  # (*S, ..., K, D)
+        r"""Sample from the transformed time-marginal predictive distribution."""
+        pseudo_context, _ = self._decode_observations(context_values, context_mask)
+        mean, cov = self.kalman.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=pseudo_context,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        pseudo_samples = marginal_gaussian_sample(
+            size,
+            mean=mean,
+            cov=cov,
+            mask=query_mask,
+            rng=rng,
+        )
+        sample_shape = (size,) if isinstance(size, int) else size
+        mask = query_mask.expand(*sample_shape, *query_mask.shape)
+        samples, _ = self._encode_observations(pseudo_samples, mask)
+        return samples
+
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+        rng: Generator | None = None,
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., K, D), (*S, ..., K)
+        r"""Sample and score via Eq. (1c) and the inverse of Prop. 3."""
+        pseudo_context, _ = self._decode_observations(context_values, context_mask)
+        mean, cov = self.kalman.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=pseudo_context,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
         )
         pseudo_samples, base_log_prob = marginal_gaussian_sample_and_log_prob(
             size,

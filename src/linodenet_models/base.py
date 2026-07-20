@@ -168,7 +168,7 @@ class PathForecastingModel(Protocol):
     @abstractmethod
     def log_prob(
         self,
-        samples: Tensor,  # Float[*S, ..., $K, F]
+        values: Tensor,  # Float[*S, ..., $K, F]
         /,
         *,
         query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
@@ -180,7 +180,7 @@ class PathForecastingModel(Protocol):
         r"""Compute the log-likelihood of the samples.
 
         Args:
-            samples: The samples to compute the log-likelihood of.
+            values: The samples to compute the log-likelihood of.
             query_times: $q = (t₁, t₂, …, tₖ)$ are the time indices we want to predict at
             query_mask: $c = (c₁, c₂, …, cₖ)$ indicate channels to be predicted at query time
             context_times: $τ = (τ₁, τ₂, …, τₙ)$ are the time indices of the observations
