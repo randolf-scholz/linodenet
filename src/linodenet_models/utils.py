@@ -182,13 +182,13 @@ class EventBatch(NamedTuple):
     @staticmethod
     def from_request(
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-        target_values: Tensor | None = None,  # Float[(..., $K, F)]  padded NaN, sparse
-        static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F],  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        target_values: Tensor | None = None,  # Float[..., $K, F],  padded NaN, sparse
+        static_covariates: Tensor | None = None,  # Float[..., M],  padded NaN, sparse
         batch_first: bool = True,
     ) -> EventBatch:
         seq_dim = -2 if batch_first else 0
@@ -329,13 +329,13 @@ class DiscreteTimeEventBatch(NamedTuple):
     @staticmethod
     def from_request(
         *,
-        query_steps: Tensor,  # Long[(..., $K)], padded 0, non-decreasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_steps: Tensor,  # Long[(..., $N)], padded 0, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-        target_values: Tensor | None = None,  # Float[(..., $K, F)] padded NaN, sparse
-        static_covariates: Tensor | None = None,  # Float[(..., M)] padded NaN, sparse
+        query_steps: Tensor,  # Long[..., $K], padded 0, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_steps: Tensor,  # Long[..., $N], padded 0, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        target_values: Tensor | None = None,  # Float[..., $K, F] padded NaN, sparse
+        static_covariates: Tensor | None = None,  # Float[..., M] padded NaN, sparse
         batch_first: bool = True,
     ) -> DiscreteTimeEventBatch:
         seq_dim = -2 if batch_first else 0
@@ -436,16 +436,16 @@ class SplitTimeData:
         - there is at least one target value observed per time stamp
     """
 
-    context_times: Tensor  # Float[(..., $N)], padded NaN, non-decreasing
-    context_values: Tensor  # Float[(..., $N, D)], padded NaN, sparse
-    context_mask: Tensor  # Bool[(..., $N, D)], padded False
+    context_times: Tensor  # Float[..., $N], padded NaN, non-decreasing
+    context_values: Tensor  # Float[..., $N, D], padded NaN, sparse
+    context_mask: Tensor  # Bool[..., $N, D], padded False
 
-    query_times: Tensor  # Float[(..., $K)], padded NaN, non-decreasing
-    query_mask: Tensor  # Bool[(..., $K, F)]  padded False
-    target_values: Tensor | None = None  # Float[(..., $K, F)]  padded NaN, sparse
+    query_times: Tensor  # Float[..., $K], padded NaN, non-decreasing
+    query_mask: Tensor  # Bool[..., $K, F]  padded False
+    target_values: Tensor | None = None  # Float[..., $K, F]  padded NaN, sparse
     r"""Only available during training, otherwise None."""
 
-    static_covariates: Tensor | None = None  # Float[(..., M)]  padded NaN, sparse
+    static_covariates: Tensor | None = None  # Float[..., M]  padded NaN, sparse
     r"""Optional time-independent data."""
 
     # metadata
@@ -849,13 +849,13 @@ class JointTimeData:
         - each valid time stamp has at least one context or query mask entry
     """
 
-    timestamps: Tensor  # Float[(..., $N + $K)], padded NaN, non-decreasing
-    context_mask: Tensor  # Bool[(..., $N + $K, D)], padded False
-    context_values: Tensor  # Float[(..., $N + $K, D)], padded NaN, sparse
-    query_mask: Tensor  # Bool[(..., $N + $K, E)], padded False
-    target_values: Tensor | None = None  # Float[(..., $N + $K, E)], padded NaN, sparse
+    timestamps: Tensor  # Float[..., $T], padded NaN, non-decreasing
+    context_mask: Tensor  # Bool[..., $T, D], padded False
+    context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
+    query_mask: Tensor  # Bool[..., $T, E], padded False
+    target_values: Tensor | None = None  # Float[..., $T, E], padded NaN, sparse
     r"""Only available during training, otherwise None."""
-    static_covariates: Tensor | None = None  # Float[(..., M)], padded NaN, sparse
+    static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
     r"""Optional time-independent data."""
 
     # metadata
