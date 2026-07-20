@@ -19,6 +19,7 @@ __all__ = [
     "LastValue",
     "Moses",
     "NeuralFlow",
+    "NormalizingKalmanFilter",
     "ProFITi",
 ]
 
@@ -36,6 +37,7 @@ from .kalman_filter import ContinuousKalmanFilter, DiscreteKalmanFilter
 from .last_value import LastValue
 from .mnf import Moses
 from .neural_flow import NeuralFlow
+from .normalizing_kalman_filter import NormalizingKalmanFilter
 from .profiti import ProFITi
 
 # TODO: allow time marginal gaussian models to be treated as point predictiors.
@@ -51,6 +53,7 @@ PROBABILISTIC_FORECASTING_MODELS: dict[str, type[ProbabilisticForecastingModel]]
     "cru": CRU,
     "gru_ode_bayes": GRU_ODE_Bayes,
     "neural_flow": NeuralFlow,
+    "normalizing_kalman_filter": NormalizingKalmanFilter,
 }
 r"""Dictionary containing all available probabilistic forecasting models."""
 
