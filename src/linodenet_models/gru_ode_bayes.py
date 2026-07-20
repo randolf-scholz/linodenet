@@ -32,7 +32,7 @@ from typing import Any, Final, NamedTuple
 
 import torch
 import torchode as to
-from torch import Tensor, nan, nn
+from torch import Generator, Tensor, nan, nn
 
 from .utils import EventBatch
 
@@ -65,6 +65,7 @@ def _marginal_logvar_gaussian_sample(
     mean: Tensor,
     logvar: Tensor,
     mask: Tensor,
+    rng: Generator | None = None,
 ) -> Tensor:
     r"""Sample from masked diagonal Gaussian marginals."""
     assert mean.shape == logvar.shape
@@ -78,6 +79,7 @@ def _marginal_logvar_gaussian_sample(
         (*sample_shape, *mean.shape),
         dtype=mean.dtype,
         device=mean.device,
+        generator=rng,
     )
     samples = (
         safe_mean.expand(*sample_shape, *mean.shape)
@@ -92,6 +94,7 @@ def _marginal_logvar_gaussian_sample_and_log_prob(
     mean: Tensor,
     logvar: Tensor,
     mask: Tensor,
+    rng: Generator | None = None,
 ) -> tuple[Tensor, Tensor]:
     r"""Sample from masked diagonal Gaussian marginals and score the samples."""
     samples = _marginal_logvar_gaussian_sample(
@@ -99,6 +102,7 @@ def _marginal_logvar_gaussian_sample_and_log_prob(
         mean=mean,
         logvar=logvar,
         mask=mask,
+        rng=rng,
     )
     return samples, _marginal_logvar_gaussian_log_prob(
         samples,
@@ -802,6 +806,7 @@ class GRU_ODE_Bayes(nn.Module):
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $K, D)
         r"""Sample from the time-marginal distribution.
 
@@ -822,6 +827,7 @@ class GRU_ODE_Bayes(nn.Module):
             mean=mean,
             logvar=logvar,
             mask=query_mask,
+            rng=rng,
         )
 
     def sample_and_log_prob(
@@ -835,6 +841,7 @@ class GRU_ODE_Bayes(nn.Module):
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
@@ -855,6 +862,7 @@ class GRU_ODE_Bayes(nn.Module):
             mean=mean,
             logvar=logvar,
             mask=query_mask,
+            rng=rng,
         )
 
 

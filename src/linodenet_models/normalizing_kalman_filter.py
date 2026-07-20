@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 import torch
 from numpy.typing import ArrayLike
-from torch import Tensor, nan, nn
+from torch import Generator, Tensor, nan, nn
 
 from .kalman_filter import (
     DiscreteKalmanFilter,
@@ -264,6 +264,7 @@ class NormalizingKalmanFilter(nn.Module):
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., K, D)
         r"""Sample from the transformed time-marginal predictive distribution."""
         pseudo_context, _ = self._decode_observations(context_values, context_mask)
@@ -281,6 +282,7 @@ class NormalizingKalmanFilter(nn.Module):
             mean=mean,
             cov=cov,
             mask=query_mask,
+            rng=rng,
         )
         sample_shape = (size,) if isinstance(size, int) else size
         mask = query_mask.expand(*sample_shape, *query_mask.shape)
@@ -298,6 +300,7 @@ class NormalizingKalmanFilter(nn.Module):
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., K, D), (*S, ..., K)
         r"""Sample and score via Eq. (1c) and the inverse of Prop. 3."""
         pseudo_context, _ = self._decode_observations(context_values, context_mask)
@@ -315,6 +318,7 @@ class NormalizingKalmanFilter(nn.Module):
             mean=mean,
             cov=cov,
             mask=query_mask,
+            rng=rng,
         )
         sample_shape = (size,) if isinstance(size, int) else size
         mask = query_mask.expand(*sample_shape, *query_mask.shape)

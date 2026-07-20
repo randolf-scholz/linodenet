@@ -14,7 +14,7 @@ from collections.abc import Callable, Mapping
 from typing import Any, Final, Optional
 
 import torch
-from torch import Tensor, nan, nn
+from torch import Generator, Tensor, nan, nn
 
 from linodenet.state_update import GaussianForwardUpdater, GaussianReverseUpdater
 
@@ -155,7 +155,7 @@ class LinearGaussianFlow(nn.Module):
 
     kernel_initialization: nn.Module
     r"""MODULE: Optional Initialization of the drift kernel."""
-    kernel_parametrization: nn.Module | None
+    kernel_parametrization: nn.Module
     r"""MODULE: Optional parametrization of the drift kernel."""
 
     def __init__(
@@ -461,6 +461,7 @@ class LinodenetProbabilistic(nn.Module):
         context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
+        rng: Generator | None = None,
     ) -> Tensor:
         r"""Sample from the time-marginal predictive distribution."""
         sample_shape = (size,) if isinstance(size, int) else size
@@ -476,7 +477,9 @@ class LinodenetProbabilistic(nn.Module):
         assert torch.equal(query_mask.any(dim=-1), query_mask.all(dim=-1)), (
             "LinodenetProbabilistic requires all query features present or none."
         )
-        z = marginal_gaussian_sample(sample_shape, mean=mean, cov=cov, mask=query_mask)
+        z = marginal_gaussian_sample(
+            sample_shape, mean=mean, cov=cov, mask=query_mask, rng=rng
+        )
         y, _ = self.decoder.decode_and_logabsdet(z.nan_to_num(0.0))
         return y.masked_fill(~query_mask.expand(*sample_shape, *query_mask.shape), nan)
 
@@ -491,6 +494,7 @@ class LinodenetProbabilistic(nn.Module):
         context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:
         r"""Sample from the model and compute sample log-probabilities."""
         samples = self.sample(
@@ -502,6 +506,7 @@ class LinodenetProbabilistic(nn.Module):
             context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
+            rng=rng,
         )
         return samples, self.log_prob(
             samples,

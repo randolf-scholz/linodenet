@@ -19,7 +19,7 @@ from itertools import chain
 from typing import TYPE_CHECKING, Any, Final, Protocol, overload
 
 import torch
-from torch import Tensor, nan, nn
+from torch import Generator, Tensor, nan, nn
 from torch.linalg import solve_triangular
 from torch.nn import functional as F
 
@@ -504,6 +504,7 @@ class ProFITi(nn.Module):
         context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[(..., $N, D)], padded False
         context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ...)
         # Shape legend: *S=sample, $T=combined steps, D=channels, P=packed targets
         sample_shape = (size,) if isinstance(size, int) else size
@@ -516,7 +517,12 @@ class ProFITi(nn.Module):
             context_values=context_values,
         )
 
-        Z = torch.randn((*sample_shape, *H.shape[:-1]), dtype=H.dtype, device=H.device)
+        Z = torch.randn(
+            (*sample_shape, *H.shape[:-1]),
+            dtype=H.dtype,
+            device=H.device,
+            generator=rng,
+        )
         Z = torch.where(valid_mask.expand_as(Z), Z, nan)
         log_prob = -0.5 * (Z.square() + _LOG2PI).nansum(dim=-1)  # (*S, ...)
 
@@ -538,6 +544,7 @@ class ProFITi(nn.Module):
         context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[(..., $N, D)], padded False
         context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $K, D)
         return self.sample_and_log_prob(
             size=size,
@@ -546,4 +553,5 @@ class ProFITi(nn.Module):
             context_times=context_times,
             context_mask=context_mask,
             context_values=context_values,
+            rng=rng,
         )[0]

@@ -13,7 +13,7 @@ from typing import Final
 
 import torch
 from numpy.typing import ArrayLike
-from torch import Tensor, einsum, nan, nn, stack
+from torch import Generator, Tensor, einsum, nan, nn, stack
 from torch.linalg import matrix_exp
 
 from .utils import DiscreteTimeEventBatch, EventBatch
@@ -107,6 +107,7 @@ def marginal_gaussian_sample(
     mean: Tensor,
     cov: Tensor,
     mask: Tensor,
+    rng: Generator | None = None,
 ) -> Tensor:
     r"""Sample from masked Gaussian marginals.
 
@@ -116,6 +117,7 @@ def marginal_gaussian_sample(
         cov: Dense Gaussian covariance matrices with shape `(..., D, D)`.
         mask: Boolean mask selecting the marginal dimensions to sample, with
             shape `(..., D)`.
+        rng: Optional random number generator to use for sampling.
 
     Returns:
         Samples with shape `(*size, ..., D)`, with unselected dimensions filled
@@ -133,6 +135,7 @@ def marginal_gaussian_sample(
         (*sample_shape, *mean.shape),
         dtype=mean.dtype,
         device=mean.device,
+        generator=rng,
     )
     samples = torch.where(mask, mean, torch.zeros_like(mean)).expand(
         *sample_shape,
@@ -149,6 +152,7 @@ def marginal_gaussian_sample_and_log_prob(
     mean: Tensor,
     cov: Tensor,
     mask: Tensor,
+    rng: Generator | None = None,
 ) -> tuple[Tensor, Tensor]:
     r"""Sample from masked Gaussian marginals and compute log-likelihoods."""
     dim = mean.shape[-1]
@@ -163,6 +167,7 @@ def marginal_gaussian_sample_and_log_prob(
         (*sample_shape, *mean.shape),
         dtype=mean.dtype,
         device=mean.device,
+        generator=rng,
     )
     samples = torch.where(mask, mean, torch.zeros_like(mean)).expand(
         *sample_shape,
@@ -646,6 +651,7 @@ class ContinuousKalmanFilter(nn.Module):
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $K, D)
         r"""Sample from the time-marginal distribution.
 
@@ -666,6 +672,7 @@ class ContinuousKalmanFilter(nn.Module):
             mean=mean,
             cov=cov,
             mask=query_mask,
+            rng=rng,
         )
 
     def sample_and_log_prob(
@@ -679,6 +686,7 @@ class ContinuousKalmanFilter(nn.Module):
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
@@ -699,6 +707,7 @@ class ContinuousKalmanFilter(nn.Module):
             mean=mean,
             cov=cov,
             mask=query_mask,
+            rng=rng,
         )
 
     def update_buffers(self) -> None:
@@ -1280,6 +1289,7 @@ class DiscreteKalmanFilter(nn.Module):
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $K, D)
         r"""Sample from the time-marginal predictive distribution."""
         sample_shape = (size,) if isinstance(size, int) else size
@@ -1297,6 +1307,7 @@ class DiscreteKalmanFilter(nn.Module):
             mean=mean,
             cov=cov,
             mask=query_mask,
+            rng=rng,
         )
 
     def sample_and_log_prob(
@@ -1310,6 +1321,7 @@ class DiscreteKalmanFilter(nn.Module):
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
         r"""Sample and score from the time-marginal predictive distribution."""
         sample_shape = (size,) if isinstance(size, int) else size
@@ -1327,6 +1339,7 @@ class DiscreteKalmanFilter(nn.Module):
             mean=mean,
             cov=cov,
             mask=query_mask,
+            rng=rng,
         )
 
     def propagate_state(

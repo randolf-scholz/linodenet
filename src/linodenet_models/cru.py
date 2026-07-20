@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from typing import Final, NotRequired, TypedDict
 
 import torch
-from torch import Tensor, nan, nn
+from torch import Generator, Tensor, nan, nn
 
 from .utils import EventBatch
 
@@ -338,6 +338,7 @@ def _marginal_var_gaussian_sample(
     mean: Tensor,
     var: Tensor,
     mask: Tensor,
+    rng: Generator | None = None,
 ) -> Tensor:
     r"""Sample from masked diagonal Gaussian marginals (variance parameterization)."""
     assert mean.shape == var.shape
@@ -348,7 +349,10 @@ def _marginal_var_gaussian_sample(
     safe_mean = torch.where(mask, mean, torch.zeros_like(mean))
     safe_std = torch.where(mask, var.sqrt(), torch.zeros_like(var))
     noise = torch.randn(
-        (*sample_shape, *mean.shape), dtype=mean.dtype, device=mean.device
+        (*sample_shape, *mean.shape),
+        dtype=mean.dtype,
+        device=mean.device,
+        generator=rng,
     )
     samples = (
         safe_mean.expand(*sample_shape, *mean.shape)
@@ -363,9 +367,12 @@ def _marginal_var_gaussian_sample_and_log_prob(
     mean: Tensor,
     var: Tensor,
     mask: Tensor,
+    rng: Generator | None = None,
 ) -> tuple[Tensor, Tensor]:
     r"""Sample from masked diagonal Gaussian marginals and score the samples."""
-    samples = _marginal_var_gaussian_sample(size, mean=mean, var=var, mask=mask)
+    samples = _marginal_var_gaussian_sample(
+        size, mean=mean, var=var, mask=mask, rng=rng
+    )
     return samples, _marginal_var_gaussian_log_prob(
         samples,
         mean=mean.expand(*samples.shape),
@@ -776,6 +783,7 @@ class CRU(nn.Module):
         context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $K, F)
         r"""Sample from the time-marginal distribution.
 
@@ -792,7 +800,7 @@ class CRU(nn.Module):
             initial_time=initial_time,
         )
         return _marginal_var_gaussian_sample(
-            sample_shape, mean=mean, var=var, mask=query_mask
+            sample_shape, mean=mean, var=var, mask=query_mask, rng=rng
         )
 
     def sample_and_log_prob(
@@ -806,6 +814,7 @@ class CRU(nn.Module):
         context_mask: Tensor,  # Bool[(..., N, D)], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, F), (*S, ..., $K)
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
@@ -822,7 +831,7 @@ class CRU(nn.Module):
             initial_time=initial_time,
         )
         return _marginal_var_gaussian_sample_and_log_prob(
-            sample_shape, mean=mean, var=var, mask=query_mask
+            sample_shape, mean=mean, var=var, mask=query_mask, rng=rng
         )
 
     def transition_matrix_model(self, mean: Tensor) -> Tensor:

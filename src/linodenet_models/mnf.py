@@ -45,7 +45,7 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Final, NamedTuple, Optional, overload
 
 import torch
-from torch import Tensor, nan, nn
+from torch import Generator, Tensor, nan, nn
 from torch.linalg import cholesky, solve_triangular
 from torch.nn import functional as F
 
@@ -1192,18 +1192,25 @@ class MultiHeadGaussian(nn.Module):
         ldj = -L.diagonal(dim1=-2, dim2=-1).log().sum(-1)
         return u, ldj
 
-    def sample(self, size: int | tuple[int, ...]) -> Tensor:
+    def sample(
+        self, size: int | tuple[int, ...], *, rng: Generator | None = None
+    ) -> Tensor:
         r"""Sample from the model.
 
         Args:
             size (int | tuple[int, ...]): size of the sample
+            rng: Optional random number generator to use for sampling.
 
         Returns:
             u (..., H, D): sample
         """
         shape = (size,) if isinstance(size, int) else size
         shape = (*shape, self.num_heads, self.num_features)
-        z = torch.randn(*shape, device=self.normalization_constant.device)
+        z = torch.randn(
+            *shape,
+            device=self.normalization_constant.device,
+            generator=rng,
+        )
         u = self.forward(z)
         self.samples = u  # store buffer for post-hoc analysis
         return u
@@ -1355,10 +1362,10 @@ class MarginalizableNormalizingFlow(nn.Module):
         self.log_probs = log_prob  # store log p(x) in buffer
         return log_prob
 
-    def sample(self, num: int) -> Tensor:
+    def sample(self, num: int, *, rng: Generator | None = None) -> Tensor:
         r"""Sample from the model."""
         # sample from the base distribution
-        u = self.base.sample(num)
+        u = self.base.sample(num, rng=rng)
         self.latents = u  # store buffer for post-hoc analysis
 
         # ℹ️ TRICK - shift by mean
@@ -1370,16 +1377,18 @@ class MarginalizableNormalizingFlow(nn.Module):
         # x = x + self.base.means
 
         # select mixture components (N, M, D), (N) -> (N, D)
-        select = self.sample_mixture(num)
+        select = self.sample_mixture(num, rng=rng)
         idx = torch.arange(num, device=select.device)
         samples = x[idx, select]  # NOTE: this is NOT the same as x[:, idx]
         self.samples = samples  # store buffer for post-hoc analysis
         return samples
 
-    def sample_mixture(self, num: int) -> Tensor:  # shape: N
+    def sample_mixture(
+        self, num: int, *, rng: Generator | None = None
+    ) -> Tensor:  # shape: N
         r"""Return indices of the mixture."""
         p = self.get_mixture_weights()
-        indices = torch.multinomial(p, num, replacement=True)
+        indices = torch.multinomial(p, num, replacement=True, generator=rng)
         self.sample_indices = indices  # save buffer for post-hoc analysis
         return indices
 
@@ -1709,6 +1718,8 @@ class MixtureWeightsModel(nn.Module):
         size: int | tuple[int, ...],  # (*S)
         log_weights: Tensor,  # Float[..., D]
         /,
+        *,
+        rng: Generator | None = None,
     ) -> Tensor:  # Long[*S, ...]
         r"""Sample component indices with leading sample axes."""
         sample_shape = (size,) if isinstance(size, int) else size
@@ -1718,6 +1729,7 @@ class MixtureWeightsModel(nn.Module):
             probs.reshape(-1, self.num_components),  # (B, D)
             num_samples=math.prod(sample_shape),  # (S)
             replacement=True,
+            generator=rng,
         )
         return flat_samples.mT.reshape((*sample_shape, *batch_shape))  # (*S, ...)
 
@@ -1739,9 +1751,10 @@ class MixtureWeightsModel(nn.Module):
         *,
         embeddings: Tensor,  # Float[..., $N, M]
         valid_mask: Tensor,  # Bool[..., $N]
+        rng: Generator | None = None,
     ) -> Tensor:  # Long[*S, ...]
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
-        samples = self.sample_from_weights(size, log_weights)
+        samples = self.sample_from_weights(size, log_weights, rng=rng)
         self.samples = samples
         return samples
 
@@ -1751,9 +1764,10 @@ class MixtureWeightsModel(nn.Module):
         *,
         embeddings: Tensor,  # Float[..., $N, M]
         valid_mask: Tensor,  # Bool[..., $N]
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # Long[*S, ...], Float[*S, ...]
         log_weights = self.forward(embeddings, valid_mask=valid_mask)
-        samples = self.sample_from_weights(size, log_weights)
+        samples = self.sample_from_weights(size, log_weights, rng=rng)
         log_prob = self._gather_log_weights(samples, log_weights)
         self.samples = samples
         self.log_probs = log_prob
@@ -2010,6 +2024,8 @@ class ConditionalGaussian(nn.Module):
         cov_factor: Tensor,  # (..., *H, $K, R)
         cov_scale: Tensor,  # (*H,)
         /,
+        *,
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., *H, $K)
         # Write Σ = σ²I + UUᵀ with U = cov_factor. Then [σI, U] is a
         # rectangular square root because [σI, U][σI, U]ᵀ = σ²I + UUᵀ = Σ.
@@ -2024,11 +2040,13 @@ class ConditionalGaussian(nn.Module):
             (*sample_shape, *mean.shape),
             dtype=mean.dtype,
             device=mean.device,
+            generator=rng,
         )
         rank_noise = torch.randn(  # (*S, ..., *H, R)
             (*sample_shape, *batch_and_head_shape, feat_dim),
             dtype=cov_factor.dtype,
             device=cov_factor.device,
+            generator=rng,
         )
         return (  # (*S, ..., *H, $K)
             mean
@@ -2055,10 +2073,11 @@ class ConditionalGaussian(nn.Module):
         /,
         *,
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., *H, $K)
         r"""Sample a Gaussian distribution from the conditional distribution."""
         mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
-        return self._sample(size, mean, cov_factor, cov_scale)
+        return self._sample(size, mean, cov_factor, cov_scale, rng=rng)
 
     def sample_and_log_prob(
         self,
@@ -2067,10 +2086,11 @@ class ConditionalGaussian(nn.Module):
         /,
         *,
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., *H, $K), (*S, ..., *H)
         r"""Sample a Gaussian distribution from the conditional distribution."""
         mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
-        samples = self._sample(size, mean, cov_factor, cov_scale)
+        samples = self._sample(size, mean, cov_factor, cov_scale, rng=rng)
         log_prob = self._log_prob(
             samples, mean, cov_factor, cov_scale, valid_mask=valid_mask
         )
@@ -2232,7 +2252,12 @@ class Moses(nn.Module):
         return log_probs  # (*S, ...,)
 
     def _sample_triplets(
-        self, size: int | tuple[int, ...], triplets: TripletTimeData, /
+        self,
+        size: int | tuple[int, ...],
+        triplets: TripletTimeData,
+        /,
+        *,
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $K)
         r"""Sample from the conditional distribution."""
         # compute embeddings (𝐡ᵒᵇˢ, 𝐡)
@@ -2249,7 +2274,7 @@ class Moses(nn.Module):
         # sample from base distribution (*S, ..., D, $K), (*S, ..., D)
         query_valid = triplets.query_channels.ge(0).unsqueeze(-2)
         z, _ = self.base_distribution.sample_and_log_prob(
-            size, h, valid_mask=query_valid
+            size, h, valid_mask=query_valid, rng=rng
         )
 
         # decode through the flow (*S, ..., D, $K), (*S, ..., D)
@@ -2261,7 +2286,9 @@ class Moses(nn.Module):
         )
 
         # sample indices from the mixture (*S, ...)
-        indices = self.conditional_mixture.sample_from_weights(size, log_weights)
+        indices = self.conditional_mixture.sample_from_weights(
+            size, log_weights, rng=rng
+        )
 
         # select one component along the head axis D: (*S, ..., D, $K) -> (*S, ..., $K)
         samples = y.take_along_dim(indices[..., None, None], dim=-2).squeeze(-2)
@@ -2318,6 +2345,7 @@ class Moses(nn.Module):
         context_times: Tensor,  # Float[..., $X], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $X, E], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $X, E], padded False
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $Q, F)
         r"""Sample from the conditional marginal distribution at each query position.
 
@@ -2328,6 +2356,7 @@ class Moses(nn.Module):
             context_times: Sorted time stamps for all context time steps.
             context_values: Context observations; ``NaN`` at unobserved positions.
             context_mask: Boolean mask selecting observed context positions.
+            rng: Optional random number generator to use for sampling.
 
         Returns:
             Samples with shape ``(*S, ..., $Q, F)``, ``NaN`` at non-query positions.
@@ -2340,7 +2369,7 @@ class Moses(nn.Module):
             query_mask=query_mask,
         )
 
-        samples = self._sample_triplets(size, triplets)  # (*S, ..., $K)
+        samples = self._sample_triplets(size, triplets, rng=rng)  # (*S, ..., $K)
 
         # reshape the samples from (*S, ..., $K) to (*S, ..., $Q, F)
         return samples[triplets.query_indices].masked_fill(~query_mask, nan)
@@ -2354,6 +2383,7 @@ class Moses(nn.Module):
         context_times: Tensor,  # Float[..., $X], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $X, E], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $X, E], padded False
+        rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $Q, F), (*S, ...)
         triplets = TripletTimeData.from_request(
             context_times=context_times,
@@ -2382,14 +2412,16 @@ class Moses(nn.Module):
         # sample from base distribution (*S, ..., D, $K), (*S, ..., D)
         query_valid = triplets.query_channels.ge(0).unsqueeze(-2)
         z, _ = self.base_distribution.sample_and_log_prob(
-            size, h, valid_mask=query_valid
+            size, h, valid_mask=query_valid, rng=rng
         )
 
         # decode through the flow (*S, ..., D, $K), (*S, ..., D)
         y, _ = self.conditional_flow.decode_and_logabsdet(z, h, valid_mask=query_valid)
 
         # sample indices from the mixture (*S, ...)
-        indices = self.conditional_mixture.sample_from_weights(size, log_weights)
+        indices = self.conditional_mixture.sample_from_weights(
+            size, log_weights, rng=rng
+        )
 
         # select one component along the head axis D: (*S, ..., D, $K) -> (*S, ..., $K)
         samples = y.take_along_dim(indices[..., None, None], dim=-2).squeeze(-2)

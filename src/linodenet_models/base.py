@@ -10,7 +10,7 @@ __all__ = [
 from abc import abstractmethod
 from typing import Protocol
 
-from torch import Tensor
+from torch import Generator, Tensor
 
 
 class PointForecastingModel(Protocol):
@@ -124,6 +124,7 @@ class ProbabilisticForecastingModel(Protocol):
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $N, D], padded False
+        rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $K, F)
         r"""Sample from the predictive distribution of the model.
 
@@ -134,6 +135,7 @@ class ProbabilisticForecastingModel(Protocol):
             context_times: $τ = (τ₁, τ₂, …, τₙ)$ are the time indices of the observations
             context_values: $x = (x₁, x₂, …, xₙ)$ are the values of the observations
             context_mask: $m = (m₁, m₂, …, mₙ)$ indicate valid observations (at feature level)
+            rng: The random number generator to use for sampling.
 
         Returns:
             samples: The sampled values from the predictive distribution.
@@ -199,6 +201,7 @@ class PathForecastingModel(Protocol):
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $N, D], padded False
+        rng: Generator | None = None,
     ) -> Tensor:  # Float[*S, ..., $K, F]
         r"""Sample from the predictive distribution of the model.
 
@@ -209,6 +212,7 @@ class PathForecastingModel(Protocol):
             context_times: $τ = (τ₁, τ₂, …, τₙ)$ are the time indices of the observations
             context_values: $x = (x₁, x₂, …, xₙ)$ are the values of the observations
             context_mask: $m = (m₁, m₂, …, mₙ)$ indicate valid observations (at feature level)
+            rng: The random number generator to use for sampling.
 
         Returns:
             samples: The sampled values from the predictive distribution.
