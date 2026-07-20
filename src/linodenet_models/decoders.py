@@ -1,3 +1,5 @@
+r"""Implementation of decoders and invertible transforms."""
+
 __all__ = ["LowRankTransform", "Transform", "TransformSequence"]
 
 from collections.abc import Iterable, Iterator, Mapping, Sequence

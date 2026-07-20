@@ -1,9 +1,12 @@
+r"""Parametrizations utilities."""
+
 __all__ = [
     "ReZero",
     "Symmetric",
     "SkewSymmetric",
     "PositiveScalarMatrix",
     "PositiveDiagonalMatrix",
+    "PositiveDefinite",
 ]
 
 from typing import cast
@@ -51,7 +54,7 @@ class ReZero[
             return None
 
         assert callable(right_inverse)
-        return right_inverse(y / self.scalar_map(self.scalar))
+        return right_inverse(y / self.scalar_map(self.scalar))  # type: ignore[return-value]
 
 
 class Symmetric(nn.Module):
