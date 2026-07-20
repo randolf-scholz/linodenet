@@ -22,6 +22,7 @@ from .kalman_filter import (
     marginal_gaussian_sample,
     marginal_gaussian_sample_and_log_prob,
 )
+from .utils import DiscreteTimeEventBatch, EventBatch
 
 if TYPE_CHECKING:
     from linodenet.mappings import Transform
@@ -83,6 +84,10 @@ class DiscreteTimeNKF(nn.Module):
     decoder: Transform
     kalman: DiscreteTimeKalmanFilter
 
+    pred_latent_means: Tensor
+    pred_latent_covs: Tensor
+    pred_pseudo_means: Tensor
+    pred_pseudo_covs: Tensor
     pred_means: Tensor
     pred_scales: Tensor
 
@@ -123,6 +128,10 @@ class DiscreteTimeNKF(nn.Module):
 
         self.register_buffer("pred_means", None, persistent=False)
         self.register_buffer("pred_scales", None, persistent=False)
+        self.register_buffer("pred_latent_means", None, persistent=False)
+        self.register_buffer("pred_latent_covs", None, persistent=False)
+        self.register_buffer("pred_pseudo_means", None, persistent=False)
+        self.register_buffer("pred_pseudo_covs", None, persistent=False)
 
     def _decode_observations(
         self,
@@ -189,20 +198,84 @@ class DiscreteTimeNKF(nn.Module):
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,  # t₀, ()
-    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D)
-        r"""Return a point summary of the transformed predictive distribution.
+    ) -> tuple[Tensor, Tensor]:  # (..., K, n), (..., K, n, n)
+        r"""Return posterior latent states at query steps.
 
-        Forecasting follows Appendix A.4 in distribution. Since $f(Z)$ is not
-        generally Gaussian, this method reports ``f(E[Z])`` and the marginal
-        standard deviation of the pseudo-Gaussian $Z$. Use :meth:`log_prob` and
-        :meth:`sample` for exact distributional operations.
+        This is Proposition 1 in split-time representation: context observations
+        are pulled back to pseudo-observations $zₜ=f⁻¹(yₜ)$ and ordinary Kalman
+        filtering returns the latent posterior $p(lₜ∣z_{1:t})$.
         """
         pseudo_values, _ = self._decode_observations(context_values, context_mask)
-        mean, cov = self.kalman.predict(
+        combined = DiscreteTimeEventBatch.from_request(
+            context_steps=context_steps,
+            context_values=pseudo_values,
+            context_mask=context_mask,
+            query_steps=query_steps,
+            query_mask=query_mask,
+            batch_first=self.batch_first,
+        )
+        post_means, post_covs = self.kalman.forward(
+            steps=combined.steps,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+            query_mask=combined.query_mask,
+            initial_state=initial_state,
+            initial_step=initial_step,
+        )
+        self.pred_latent_means = post_means[combined.query_indices]
+        self.pred_latent_covs = post_covs[combined.query_indices]
+        return self.pred_latent_means, self.pred_latent_covs
+
+    def predict_pseudo_observations(
+        self,
+        *,
+        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        # μ₀=(..., D) Σ₀=(..., D, D)
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_step: Tensor | None = None,  # t₀, ()
+    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D, D)
+        r"""Return the exact Gaussian predictive distribution of $Z=f⁻¹(Y)$."""
+        pseudo_values, _ = self._decode_observations(context_values, context_mask)
+        self.pred_pseudo_means, self.pred_pseudo_covs = self.kalman.predict(
             query_steps=query_steps,
             query_mask=query_mask,
             context_steps=context_steps,
             context_values=pseudo_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_step=initial_step,
+        )
+        return self.pred_pseudo_means, self.pred_pseudo_covs
+
+    def predict_observations(
+        self,
+        *,
+        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        # μ₀=(..., D) Σ₀=(..., D, D)
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_step: Tensor | None = None,  # t₀, ()
+    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D)
+        r"""Return a point summary of the transformed predictive distribution.
+
+        The NKF predictive distribution is the nonlinear pushforward $Y=f(Z)$ of
+        the Gaussian pseudo-observation $Z$. Since $Y$ is not generally Gaussian,
+        this method reports ``f(E[Z])`` and the marginal standard deviation of
+        $Z$. Use :meth:`log_prob` and :meth:`sample` for exact distributional
+        operations.
+        """
+        mean, cov = self.predict_pseudo_observations(
+            query_steps=query_steps,
+            query_mask=query_mask,
+            context_steps=context_steps,
+            context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
             initial_step=initial_step,
@@ -232,12 +305,11 @@ class DiscreteTimeNKF(nn.Module):
         initial_step: Tensor | None = None,
     ) -> Tensor:  # (..., K)
         r"""Compute exact time-marginal log-likelihoods via Proposition 3."""
-        pseudo_context, _ = self._decode_observations(context_values, context_mask)
-        mean, cov = self.kalman.predict(
+        mean, cov = self.predict_pseudo_observations(
             query_steps=query_steps,
             query_mask=query_mask,
             context_steps=context_steps,
-            context_values=pseudo_context,
+            context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
             initial_step=initial_step,
@@ -267,12 +339,11 @@ class DiscreteTimeNKF(nn.Module):
         rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., K, D)
         r"""Sample from the transformed time-marginal predictive distribution."""
-        pseudo_context, _ = self._decode_observations(context_values, context_mask)
-        mean, cov = self.kalman.predict(
+        mean, cov = self.predict_pseudo_observations(
             query_steps=query_steps,
             query_mask=query_mask,
             context_steps=context_steps,
-            context_values=pseudo_context,
+            context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
             initial_step=initial_step,
@@ -303,12 +374,11 @@ class DiscreteTimeNKF(nn.Module):
         rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., K, D), (*S, ..., K)
         r"""Sample and score via Eq. (1c) and the inverse of Prop. 3."""
-        pseudo_context, _ = self._decode_observations(context_values, context_mask)
-        mean, cov = self.kalman.predict(
+        mean, cov = self.predict_pseudo_observations(
             query_steps=query_steps,
             query_mask=query_mask,
             context_steps=context_steps,
-            context_values=pseudo_context,
+            context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
             initial_step=initial_step,
@@ -350,6 +420,10 @@ class ContinuousTimeNKF(nn.Module):
     decoder: Transform
     kalman: ContinuousTimeKalmanFilter
 
+    pred_latent_means: Tensor
+    pred_latent_covs: Tensor
+    pred_pseudo_means: Tensor
+    pred_pseudo_covs: Tensor
     pred_means: Tensor
     pred_scales: Tensor
 
@@ -394,6 +468,10 @@ class ContinuousTimeNKF(nn.Module):
 
         self.register_buffer("pred_means", None, persistent=False)
         self.register_buffer("pred_scales", None, persistent=False)
+        self.register_buffer("pred_latent_means", None, persistent=False)
+        self.register_buffer("pred_latent_covs", None, persistent=False)
+        self.register_buffer("pred_pseudo_means", None, persistent=False)
+        self.register_buffer("pred_pseudo_covs", None, persistent=False)
 
     def _decode_observations(
         self,
@@ -454,14 +532,77 @@ class ContinuousTimeNKF(nn.Module):
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D)
-        r"""Return a point summary of the transformed predictive distribution."""
+    ) -> tuple[Tensor, Tensor]:  # (..., K, n), (..., K, n, n)
+        r"""Return posterior latent states at query times."""
         pseudo_values, _ = self._decode_observations(context_values, context_mask)
-        mean, cov = self.kalman.predict(
+        combined = EventBatch.from_request(
+            context_times=context_times,
+            context_values=pseudo_values,
+            context_mask=context_mask,
+            query_times=query_times,
+            query_mask=query_mask,
+            batch_first=self.batch_first,
+        )
+        post_means, post_covs = self.kalman.forward(
+            timestamps=combined.timestamps,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+            query_mask=combined.query_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        self.pred_latent_means = post_means[combined.query_indices]
+        self.pred_latent_covs = post_covs[combined.query_indices]
+        return self.pred_latent_means, self.pred_latent_covs
+
+    def predict_pseudo_observations(
+        self,
+        *,
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D, D)
+        r"""Return the exact Gaussian predictive distribution of $Z=f⁻¹(Y)$."""
+        pseudo_values, _ = self._decode_observations(context_values, context_mask)
+        self.pred_pseudo_means, self.pred_pseudo_covs = self.kalman.predict(
             query_times=query_times,
             query_mask=query_mask,
             context_times=context_times,
             context_values=pseudo_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        return self.pred_pseudo_means, self.pred_pseudo_covs
+
+    def predict_observations(
+        self,
+        *,
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, D], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+    ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D)
+        r"""Return a point summary of the transformed predictive distribution.
+
+        The NKF predictive distribution is the nonlinear pushforward $Y=f(Z)$ of
+        the Gaussian pseudo-observation $Z$. Since $Y$ is not generally Gaussian,
+        this method reports ``f(E[Z])`` and the marginal standard deviation of
+        $Z$. Use :meth:`log_prob` and :meth:`sample` for exact distributional
+        operations.
+        """
+        mean, cov = self.predict_pseudo_observations(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
@@ -491,12 +632,11 @@ class ContinuousTimeNKF(nn.Module):
         initial_time: Tensor | None = None,
     ) -> Tensor:  # (..., K)
         r"""Compute exact time-marginal log-likelihoods via Proposition 3."""
-        pseudo_context, _ = self._decode_observations(context_values, context_mask)
-        mean, cov = self.kalman.predict(
+        mean, cov = self.predict_pseudo_observations(
             query_times=query_times,
             query_mask=query_mask,
             context_times=context_times,
-            context_values=pseudo_context,
+            context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
@@ -526,12 +666,11 @@ class ContinuousTimeNKF(nn.Module):
         rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., K, D)
         r"""Sample from the transformed time-marginal predictive distribution."""
-        pseudo_context, _ = self._decode_observations(context_values, context_mask)
-        mean, cov = self.kalman.predict(
+        mean, cov = self.predict_pseudo_observations(
             query_times=query_times,
             query_mask=query_mask,
             context_times=context_times,
-            context_values=pseudo_context,
+            context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,
@@ -562,12 +701,11 @@ class ContinuousTimeNKF(nn.Module):
         rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., K, D), (*S, ..., K)
         r"""Sample and score via Eq. (1c) and the inverse of Prop. 3."""
-        pseudo_context, _ = self._decode_observations(context_values, context_mask)
-        mean, cov = self.kalman.predict(
+        mean, cov = self.predict_pseudo_observations(
             query_times=query_times,
             query_mask=query_mask,
             context_times=context_times,
-            context_values=pseudo_context,
+            context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
             initial_time=initial_time,

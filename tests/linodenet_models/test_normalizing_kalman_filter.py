@@ -4,6 +4,7 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
+from torch.testing import assert_close
 
 from linodenet.mappings.transforms.scalar import Sinh
 from linodenet_models import ContinuousTimeNKF, DiscreteTimeNKF
@@ -75,7 +76,7 @@ class TestDiscreteTimeNKF(TestDiscreteTimeModel[DiscreteTimeNKF]):
     ) -> tuple[torch.Tensor, ...]:
         r"""Return NKF predictions for sequential forecasting inputs."""
         assert inputs.target_values is not None
-        pred_mean, pred_scale = model.predict(
+        pred_mean, pred_scale = model.predict_observations(
             context_steps=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_mask,
@@ -102,6 +103,38 @@ class TestDiscreteTimeNKF(TestDiscreteTimeModel[DiscreteTimeNKF]):
         assert log_prob[inputs.query_mask.any(dim=-1)].isfinite().all()
 
         return pred_mean, pred_scale, log_prob
+
+    def test_predict_returns_query_latent_states(self) -> None:
+        r"""Check split-time predict returns latent posterior states."""
+        model = self.make_model(self.STANDARD_CONFIG)
+        data = self.make_request(
+            rng=0,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        mean, cov = model.predict(
+            context_steps=data.context_times,
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+            query_steps=data.query_times,
+            query_mask=data.query_mask,
+        )
+
+        assert mean.shape == (*data.query_times.shape, model.hidden_size)
+        assert cov.shape == (
+            *data.query_times.shape,
+            model.hidden_size,
+            model.hidden_size,
+        )
+        assert mean[data.query_mask.any(dim=-1)].isfinite().all()
+        assert cov[data.query_mask.any(dim=-1)].isfinite().all()
+        assert_close(mean, model.pred_latent_means, equal_nan=True)
+        assert_close(cov, model.pred_latent_covs, equal_nan=True)
 
     def loss(
         self,
@@ -238,7 +271,7 @@ class TestContinuousTimeNKF(TestContinuousTimeModel[ContinuousTimeNKF]):
     ) -> tuple[torch.Tensor, ...]:
         r"""Return continuous NKF predictions for sequential forecasting inputs."""
         assert inputs.target_values is not None
-        pred_mean, pred_scale = model.predict(
+        pred_mean, pred_scale = model.predict_observations(
             context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_mask,
@@ -265,6 +298,38 @@ class TestContinuousTimeNKF(TestContinuousTimeModel[ContinuousTimeNKF]):
         assert log_prob[inputs.query_mask.any(dim=-1)].isfinite().all()
 
         return pred_mean, pred_scale, log_prob
+
+    def test_predict_returns_query_latent_states(self) -> None:
+        r"""Check split-time predict returns latent posterior states."""
+        model = self.make_model(self.STANDARD_CONFIG)
+        data = self.make_request(
+            rng=0,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        mean, cov = model.predict(
+            context_times=data.context_times,
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+            query_times=data.query_times,
+            query_mask=data.query_mask,
+        )
+
+        assert mean.shape == (*data.query_times.shape, model.hidden_size)
+        assert cov.shape == (
+            *data.query_times.shape,
+            model.hidden_size,
+            model.hidden_size,
+        )
+        assert mean[data.query_mask.any(dim=-1)].isfinite().all()
+        assert cov[data.query_mask.any(dim=-1)].isfinite().all()
+        assert_close(mean, model.pred_latent_means, equal_nan=True)
+        assert_close(cov, model.pred_latent_covs, equal_nan=True)
 
     def loss(
         self,
