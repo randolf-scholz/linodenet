@@ -1,5 +1,6 @@
 r"""Tests for LinODEnet model construction helpers."""
 
+import copy
 from types import MappingProxyType
 from typing import ClassVar, NamedTuple
 
@@ -43,19 +44,23 @@ class TestLinODEnet(TestContinuousTimeModel[LinODEnet]):
     )
     MODEL_CONFIGS: ClassVar[dict[str, LinODEnetTestConfig]] = {
         "gradient": STANDARD_CONFIG,
-        "innovation_constant": STANDARD_CONFIG._replace(
+        "innovation_constant": copy.replace(
+            STANDARD_CONFIG,
             updater="innovation",
             updater_config="constant",
         ),
-        "innovation_attention": STANDARD_CONFIG._replace(
+        "innovation_attention": copy.replace(
+            STANDARD_CONFIG,
             updater="innovation",
             updater_config="attention",
         ),
-        "kalman_constant": STANDARD_CONFIG._replace(
+        "kalman_constant": copy.replace(
+            STANDARD_CONFIG,
             updater="kalman",
             updater_config="constant",
         ),
-        "kalman_attention": STANDARD_CONFIG._replace(
+        "kalman_attention": copy.replace(
+            STANDARD_CONFIG,
             updater="kalman",
             updater_config="attention",
         ),
@@ -254,7 +259,9 @@ class TestLinODEnet(TestContinuousTimeModel[LinODEnet]):
     def test_self_consistency_rejects_linear_rnn_cell(self) -> None:
         r"""Check that the self-consistency test rejects a non-consistent update."""
         torch.manual_seed(0)
-        model = self.make_model(self.STANDARD_CONFIG._replace(updater="linear_rnn"))
+        model = self.make_model(
+            copy.replace(self.STANDARD_CONFIG, updater="linear_rnn")
+        )
 
         with pytest.raises(AssertionError):
             self.assert_self_consistent(model, rng=4)
