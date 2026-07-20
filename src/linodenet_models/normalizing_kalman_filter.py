@@ -164,7 +164,7 @@ class DiscreteTimeNKF(nn.Module):
     def forward(
         self,
         *,
-        steps: Tensor,  # Long[..., $T], padded arbitrary, non-decreasing
+        steps: Tensor,  # Integer[..., $T], padded arbitrary, non-decreasing
         query_mask: Tensor,  # (..., $T, D), bool, padded False
         context_values: Tensor,  # (..., $T, D), float, padded NaN, sparse
         context_mask: Tensor,  # (..., $T, D), bool, padded False
@@ -177,6 +177,8 @@ class DiscreteTimeNKF(nn.Module):
         This is Proposition 1: filtering in observation space is equivalent to
         ordinary Kalman filtering with pseudo-observations $zₜ=f⁻¹(yₜ)$.
         """
+        assert not torch.is_floating_point(steps)
+        assert initial_step is None or not torch.is_floating_point(initial_step)
         pseudo_values, _ = self._decode_observations(context_values, context_mask)
         return self.kalman.forward(
             steps=steps,
@@ -190,14 +192,14 @@ class DiscreteTimeNKF(nn.Module):
     def predict(
         self,
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., N], padded arbitrary, non-decreasing
         context_mask: Tensor,  # Bool[..., N, D], padded False
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,  # t₀, ()
+        initial_time: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # (..., K, n), (..., K, n, n)
         r"""Return posterior latent states at query steps.
 
@@ -205,12 +207,15 @@ class DiscreteTimeNKF(nn.Module):
         are pulled back to pseudo-observations $zₜ=f⁻¹(yₜ)$ and ordinary Kalman
         filtering returns the latent posterior $p(lₜ∣z_{1:t})$.
         """
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         pseudo_values, _ = self._decode_observations(context_values, context_mask)
         combined = DiscreteTimeEventBatch.from_request(
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=pseudo_values,
             context_mask=context_mask,
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
             batch_first=self.batch_first,
         )
@@ -220,7 +225,7 @@ class DiscreteTimeNKF(nn.Module):
             context_mask=combined.context_mask,
             query_mask=combined.query_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_step=initial_time,
         )
         self.pred_latent_means = post_means[combined.query_indices]
         self.pred_latent_covs = post_covs[combined.query_indices]
@@ -229,39 +234,42 @@ class DiscreteTimeNKF(nn.Module):
     def predict_pseudo_observations(
         self,
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., N], padded arbitrary, non-decreasing
         context_mask: Tensor,  # Bool[..., N, D], padded False
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,  # t₀, ()
+        initial_time: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D, D)
         r"""Return the exact Gaussian predictive distribution of $Z=f⁻¹(Y)$."""
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         pseudo_values, _ = self._decode_observations(context_values, context_mask)
         self.pred_pseudo_means, self.pred_pseudo_covs = self.kalman.predict(
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=pseudo_values,
             context_mask=context_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_time=initial_time,
         )
         return self.pred_pseudo_means, self.pred_pseudo_covs
 
     def predict_observations(
         self,
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., N], padded arbitrary, non-decreasing
         context_mask: Tensor,  # Bool[..., N, D], padded False
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,  # t₀, ()
+        initial_time: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # (..., K, D), (..., K, D)
         r"""Return a point summary of the transformed predictive distribution.
 
@@ -271,14 +279,17 @@ class DiscreteTimeNKF(nn.Module):
         $Z$. Use :meth:`log_prob` and :meth:`sample` for exact distributional
         operations.
         """
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         mean, cov = self.predict_pseudo_observations(
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_time=initial_time,
         )
         self.pred_means, _ = self._encode_observations(mean, query_mask)
         self.pred_scales = (
@@ -296,23 +307,26 @@ class DiscreteTimeNKF(nn.Module):
         self,
         values: Tensor,  # (..., K, D)
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., N], padded arbitrary, non-decreasing
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,
+        initial_time: Tensor | None = None,
     ) -> Tensor:  # (..., K)
         r"""Compute exact time-marginal log-likelihoods via Proposition 3."""
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         mean, cov = self.predict_pseudo_observations(
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_time=initial_time,
         )
 
         mask = query_mask.expand(*values.shape)
@@ -329,24 +343,27 @@ class DiscreteTimeNKF(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., N], padded arbitrary, non-decreasing
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,
+        initial_time: Tensor | None = None,
         rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., K, D)
         r"""Sample from the transformed time-marginal predictive distribution."""
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         mean, cov = self.predict_pseudo_observations(
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_time=initial_time,
         )
         pseudo_samples = marginal_gaussian_sample(
             size,
@@ -364,24 +381,27 @@ class DiscreteTimeNKF(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_steps: Tensor,  # Long[..., K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_steps: Tensor,  # Long[..., N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., N], padded arbitrary, non-decreasing
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,
+        initial_time: Tensor | None = None,
         rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., K, D), (*S, ..., K)
         r"""Sample and score via Eq. (1c) and the inverse of Prop. 3."""
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         mean, cov = self.predict_pseudo_observations(
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_time=initial_time,
         )
         pseudo_samples, base_log_prob = marginal_gaussian_sample_and_log_prob(
             size,

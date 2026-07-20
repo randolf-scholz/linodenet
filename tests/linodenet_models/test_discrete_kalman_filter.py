@@ -80,9 +80,9 @@ def test_predict_returns_query_marginals() -> None:
     query_mask = torch.tensor([[False, True, False], [True, False, True]])
 
     mean, cov = model.predict(
-        query_steps=query_steps,
+        query_times=query_steps,
         query_mask=query_mask,
-        context_steps=context_steps,
+        context_times=context_steps,
         context_values=context_values,
         context_mask=context_mask,
     )
@@ -117,9 +117,9 @@ def test_sample_and_log_prob_consistent() -> None:
 
     samples, log_prob = model.sample_and_log_prob(
         (2, 3),
-        query_steps=query_steps,
+        query_times=query_steps,
         query_mask=query_mask,
-        context_steps=context_steps,
+        context_times=context_steps,
         context_values=context_values,
         context_mask=context_mask,
     )
@@ -137,18 +137,18 @@ def test_sample_and_log_prob_consistent() -> None:
     assert_close(log_prob, expected)
 
 
-def test_predict_rejects_float_step_indices() -> None:
-    r"""Check the discrete API rejects continuous-time step inputs."""
+def test_predict_rejects_float_times() -> None:
+    r"""Check the discrete API rejects continuous-time inputs."""
     model = make_model()
     context_values = torch.randn(2, 3)
     context_mask = torch.ones_like(context_values, dtype=torch.bool)
     query_mask = torch.ones(1, 3, dtype=torch.bool)
 
-    with pytest.raises(TypeError, match="Long tensors"):
+    with pytest.raises(AssertionError):
         model.predict(
-            query_steps=torch.tensor([2.0]),
+            query_times=torch.tensor([2.0]),
             query_mask=query_mask,
-            context_steps=torch.tensor([0.0, 1.0]),
+            context_times=torch.tensor([0.0, 1.0]),
             context_values=context_values,
             context_mask=context_mask,
         )
@@ -209,10 +209,10 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteTimeKalmanFilter]):
         r"""Return Kalman filter predictions for sequential forecasting inputs."""
         assert inputs.target_values is not None
         pred_mean, pred_cov = model.predict(
-            context_steps=inputs.context_times,
+            context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_mask,
-            query_steps=inputs.query_times,
+            query_times=inputs.query_times,
             query_mask=inputs.query_mask,
         )
 
@@ -255,9 +255,9 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteTimeKalmanFilter]):
         ctx_steps = context_mask.any(dim=-1)  # [F, F, F]
         q_steps = query_mask.any(dim=-1)  # [T, T, T]
         model.predict(
-            query_steps=steps[q_steps],
+            query_times=steps[q_steps],
             query_mask=query_mask[q_steps],
-            context_steps=steps[ctx_steps],
+            context_times=steps[ctx_steps],
             context_values=values[ctx_steps],
             context_mask=context_mask[ctx_steps],
         )
@@ -302,16 +302,16 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteTimeKalmanFilter]):
 
         log_prob = model.log_prob(
             qry_values,
-            query_steps=query_steps,
+            query_times=query_steps,
             query_mask=qry_mask,
-            context_steps=context_steps,
+            context_times=context_steps,
             context_values=ctx_values,
             context_mask=ctx_mask,
         )
         mean, cov = model.predict(
-            query_steps=query_steps,
+            query_times=query_steps,
             query_mask=qry_mask,
-            context_steps=context_steps,
+            context_times=context_steps,
             context_values=ctx_values,
             context_mask=ctx_mask,
         )
@@ -355,9 +355,9 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteTimeKalmanFilter]):
 
         samples = model.sample(
             5,
-            query_steps=query_steps,
+            query_times=query_steps,
             query_mask=qry_mask,
-            context_steps=context_steps,
+            context_times=context_steps,
             context_values=ctx_values,
             context_mask=ctx_mask,
         )

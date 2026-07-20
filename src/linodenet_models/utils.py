@@ -329,9 +329,9 @@ class DiscreteTimeEventBatch(NamedTuple):
     @staticmethod
     def from_request(
         *,
-        query_steps: Tensor,  # Long[..., $K], padded 0, non-decreasing
+        query_times: Tensor,  # Integer[..., $K], padded 0, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
-        context_steps: Tensor,  # Long[..., $N], padded 0, non-decreasing
+        context_times: Tensor,  # Integer[..., $N], padded 0, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         target_values: Tensor | None = None,  # Float[..., $K, F] padded NaN, sparse
@@ -339,13 +339,13 @@ class DiscreteTimeEventBatch(NamedTuple):
         batch_first: bool = True,
     ) -> DiscreteTimeEventBatch:
         seq_dim = -2 if batch_first else 0
-        if query_steps.dtype != torch.long or context_steps.dtype != torch.long:
-            raise TypeError("Discrete step indices must be Long tensors.")
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
 
-        T = context_steps.unsqueeze(-1).movedim(seq_dim, 0)
+        T = context_times.unsqueeze(-1).movedim(seq_dim, 0)
         C = context_mask.movedim(seq_dim, 0)
         X = context_values.movedim(seq_dim, 0)
-        Q = query_steps.unsqueeze(-1).movedim(seq_dim, 0)
+        Q = query_times.unsqueeze(-1).movedim(seq_dim, 0)
         M = query_mask.movedim(seq_dim, 0)
         Y = target_values.movedim(seq_dim, 0) if target_values is not None else None
 

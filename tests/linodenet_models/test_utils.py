@@ -42,10 +42,10 @@ def test_discrete_time_event_batch_uses_zero_step_padding() -> None:
     target_values = torch.tensor([[20.0, nan], [30.0, 31.0], [nan, nan]])
 
     batch = DiscreteTimeEventBatch.from_request(
-        context_steps=context_steps,
+        context_times=context_steps,
         context_values=context_values,
         context_mask=context_mask,
-        query_steps=query_steps,
+        query_times=query_steps,
         query_mask=query_mask,
         target_values=target_values,
     )

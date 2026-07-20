@@ -35,17 +35,6 @@ def assert_probabilistic_self_consistent(
     In log-space this is estimated with ``logmeanexp`` over conditional
     log-densities, not with an arithmetic mean of log-densities.
     """
-    time_kwargs = (
-        {
-            "query_steps": data.query_times,
-            "context_steps": data.context_times,
-        }
-        if data.context_times.dtype == torch.long
-        else {
-            "query_times": data.query_times,
-            "context_times": data.context_times,
-        }
-    )
     query_times = data.query_times[:2]
     query_mask = data.query_mask[:2]
 
@@ -57,34 +46,28 @@ def assert_probabilistic_self_consistent(
 
         futures = model.sample(
             num_futures,
+            query_times=query_times[:1],
             query_mask=query_mask[:1],
+            context_times=data.context_times,
             context_values=data.context_values,
             context_mask=data.context_mask,
-            **{
-                key: value[:1] if key.startswith("query_") else value
-                for key, value in time_kwargs.items()
-            },
         )[:, 0]
         y_probe = model.sample(
             num_probes,
+            query_times=query_times[1:2],
             query_mask=query_mask[1:2],
+            context_times=data.context_times,
             context_values=data.context_values,
             context_mask=data.context_mask,
-            **{
-                key: value[1:2] if key.startswith("query_") else value
-                for key, value in time_kwargs.items()
-            },
         )
 
         base_log_prob = model.log_prob(
             y_probe,
+            query_times=query_times[1:2],
             query_mask=query_mask[1:2],
+            context_times=data.context_times,
             context_values=data.context_values,
             context_mask=data.context_mask,
-            **{
-                key: value[1:2] if key.startswith("query_") else value
-                for key, value in time_kwargs.items()
-            },
         )
 
         updated_context_times = torch.cat(
@@ -108,23 +91,13 @@ def assert_probabilistic_self_consistent(
             ],
             dim=-2,
         )
-        conditional_time_kwargs = (
-            {
-                "query_steps": query_times[1:].expand(num_futures, 1),
-                "context_steps": updated_context_times,
-            }
-            if data.context_times.dtype == torch.long
-            else {
-                "query_times": query_times[1:].expand(num_futures, 1),
-                "context_times": updated_context_times,
-            }
-        )
         conditional_log_prob = model.log_prob(
             y_probe[:, None].expand(num_probes, num_futures, 1, -1),
+            query_times=query_times[1:].expand(num_futures, 1),
             query_mask=query_mask[1:].expand(num_futures, 1, -1),
+            context_times=updated_context_times,
             context_values=updated_context_values,
             context_mask=updated_context_mask,
-            **conditional_time_kwargs,
         )[:, :, 0]
         mixture_log_prob = torch.logsumexp(conditional_log_prob, dim=-1) - math.log(
             num_futures

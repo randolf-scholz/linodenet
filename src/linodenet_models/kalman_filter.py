@@ -1049,21 +1049,24 @@ class DiscreteTimeKalmanFilter(nn.Module):
     def predict(
         self,
         *,
-        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., $K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, D], padded False
-        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., $N], padded arbitrary, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         # μ₀=(..., d) Σ₀=(..., d, d)
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,
+        initial_time: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D, D)
         r"""Compute posterior predictive means and covariances at query steps."""
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         combined = DiscreteTimeEventBatch.from_request(
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
             batch_first=self.batch_first,
         )
@@ -1073,7 +1076,7 @@ class DiscreteTimeKalmanFilter(nn.Module):
             context_mask=combined.context_mask,
             query_mask=combined.query_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_step=initial_time,
         )
 
         valid_steps = (combined.context_mask | combined.query_mask).any(dim=-1)
@@ -1096,7 +1099,7 @@ class DiscreteTimeKalmanFilter(nn.Module):
     def forward(
         self,
         *,
-        steps: Tensor,  # Long[..., $T], padded arbitrary, non-decreasing
+        steps: Tensor,  # Integer[..., $T], padded arbitrary, non-decreasing
         query_mask: Tensor,  # (..., $T, D), bool, padded False
         context_values: Tensor,  # (..., $T, D), float, padded NaN, sparse
         context_mask: Tensor,  # (..., $T, D), bool, padded False
@@ -1111,10 +1114,8 @@ class DiscreteTimeKalmanFilter(nn.Module):
         valid_steps = (context_mask | query_mask).any(dim=-1)
         mean_mask = valid_steps.unsqueeze(dim=-1)
         cov_mask = mean_mask.unsqueeze(dim=-1)
-        if steps.dtype != torch.long:
-            raise TypeError("Discrete Kalman step indices must be Long tensors.")
-        if initial_step is not None and initial_step.dtype != torch.long:
-            raise TypeError("Discrete Kalman initial step must be a Long tensor.")
+        assert not torch.is_floating_point(steps)
+        assert initial_step is None or not torch.is_floating_point(initial_step)
 
         if self.batch_first:
             # Move the time axis to the front.
@@ -1253,23 +1254,26 @@ class DiscreteTimeKalmanFilter(nn.Module):
         self,
         values: Tensor,  # (..., $K, D)
         *,
-        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., $K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, D], padded False
-        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., $N], padded arbitrary, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,
+        initial_time: Tensor | None = None,
     ) -> Tensor:  # (..., $K)
         r"""Compute the time-marginal log-likelihood of the model."""
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         mean, cov = self.predict(
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_time=initial_time,
         )
         return marginal_gaussian_log_prob(
             values,
@@ -1282,25 +1286,28 @@ class DiscreteTimeKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., $K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, D], padded False
-        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., $N], padded arbitrary, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,
+        initial_time: Tensor | None = None,
         rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $K, D)
         r"""Sample from the time-marginal predictive distribution."""
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         sample_shape = (size,) if isinstance(size, int) else size
         mean, cov = self.predict(
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_time=initial_time,
         )
         return marginal_gaussian_sample(
             sample_shape,
@@ -1314,25 +1321,28 @@ class DiscreteTimeKalmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_steps: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Integer[..., $K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, D], padded False
-        context_steps: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Integer[..., $N], padded arbitrary, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
-        initial_step: Tensor | None = None,
+        initial_time: Tensor | None = None,
         rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
         r"""Sample and score from the time-marginal predictive distribution."""
+        assert not torch.is_floating_point(query_times)
+        assert not torch.is_floating_point(context_times)
+        assert initial_time is None or not torch.is_floating_point(initial_time)
         sample_shape = (size,) if isinstance(size, int) else size
         mean, cov = self.predict(
-            query_steps=query_steps,
+            query_times=query_times,
             query_mask=query_mask,
-            context_steps=context_steps,
+            context_times=context_times,
             context_values=context_values,
             context_mask=context_mask,
             initial_state=initial_state,
-            initial_step=initial_step,
+            initial_time=initial_time,
         )
         return marginal_gaussian_sample_and_log_prob(
             sample_shape,

@@ -77,10 +77,10 @@ class TestDiscreteTimeNKF(TestDiscreteTimeModel[DiscreteTimeNKF]):
         r"""Return NKF predictions for sequential forecasting inputs."""
         assert inputs.target_values is not None
         pred_mean, pred_scale = model.predict_observations(
-            context_steps=inputs.context_times,
+            context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_mask,
-            query_steps=inputs.query_times,
+            query_times=inputs.query_times,
             query_mask=inputs.query_mask,
         )
 
@@ -93,10 +93,10 @@ class TestDiscreteTimeNKF(TestDiscreteTimeModel[DiscreteTimeNKF]):
 
         log_prob = model.log_prob(
             inputs.target_values,
-            context_steps=inputs.context_times,
+            context_times=inputs.context_times,
             context_values=inputs.context_values,
             context_mask=inputs.context_mask,
-            query_steps=inputs.query_times,
+            query_times=inputs.query_times,
             query_mask=inputs.query_mask,
         )
         assert log_prob.shape == inputs.query_times.shape
@@ -118,10 +118,10 @@ class TestDiscreteTimeNKF(TestDiscreteTimeModel[DiscreteTimeNKF]):
         )
 
         mean, cov = model.predict(
-            context_steps=data.context_times,
+            context_times=data.context_times,
             context_values=data.context_values,
             context_mask=data.context_mask,
-            query_steps=data.query_times,
+            query_times=data.query_times,
             query_mask=data.query_mask,
         )
 
