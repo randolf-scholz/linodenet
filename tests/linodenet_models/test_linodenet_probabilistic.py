@@ -110,11 +110,13 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
         )
 
         with torch.no_grad():
+            # S=num_futures, P=num_probe
+
             # 1. Fix t⁎ and t, then sample y⁎∼p(yₜ⁎∣H) and probes yₜ.
             query_times = data.query_times[:2]
             query_mask = data.query_mask[:2]
             torch.manual_seed(1)
-            futures = model.sample(
+            futures = model.sample(  # (S, D)
                 num_futures,
                 query_times=query_times[:1],
                 query_mask=query_mask[:1],
@@ -122,7 +124,7 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
                 context_values=data.context_values,
                 context_mask=data.context_mask,
             )[:, 0]
-            y_probe = model.sample(
+            y_probe = model.sample(  # (P, 1, D)
                 num_probe,
                 query_times=query_times[1:2],
                 query_mask=query_mask[1:2],
@@ -130,10 +132,9 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
                 context_values=data.context_values,
                 context_mask=data.context_mask,
             )
-            # futures: (S, D), y_probe: (P, 1, D), S=num_futures, P=num_probe
 
             # 2. Score probes under the original predictive law p(yₜ∣H).
-            base_log_prob = model.log_prob(
+            base_log_prob = model.log_prob(  # (P,)
                 y_probe,
                 query_times=query_times[1:2],
                 query_mask=query_mask[1:2],
@@ -141,35 +142,32 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
                 context_values=data.context_values,
                 context_mask=data.context_mask,
             )[:, 0]
-            # base_log_prob: (P,)
 
             # 3. Append each sampled y⁎ to H as a hypothetical observation.
-            updated_context_times = torch.cat(
+            updated_context_times = torch.cat(  # (S, N+1)
                 [
                     data.context_times.expand(num_futures, -1),
                     query_times[:1].expand(num_futures, 1),
                 ],
                 dim=-1,
             )
-            updated_context_values = torch.cat(
+            updated_context_values = torch.cat(  # (S, N+1, D)
                 [
                     data.context_values.expand(num_futures, -1, -1),
                     futures[:, None, :],
                 ],
                 dim=-2,
             )
-            updated_context_mask = torch.cat(
+            updated_context_mask = torch.cat(  # (S, N+1, D)
                 [
                     data.context_mask.expand(num_futures, -1, -1),
                     query_mask[:1].expand(num_futures, 1, -1),
                 ],
                 dim=-2,
             )
-            # updated_context_times: (S, N+1)
-            # updated_context_values, updated_context_mask: (S, N+1, D)
 
             # 4. Score p(yₜ∣H⊕(t⁎, y⁎)) for every probe and sampled y⁎.
-            conditional_log_prob = model.log_prob(
+            conditional_log_prob = model.log_prob(  # (P, S)
                 y_probe[:, None].expand(num_probe, num_futures, 1, -1),
                 query_times=query_times[1:].expand(num_futures, 1),
                 query_mask=query_mask[1:].expand(num_futures, 1, -1),
@@ -177,13 +175,11 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
                 context_values=updated_context_values,
                 context_mask=updated_context_mask,
             )[:, :, 0]
-            # conditional_log_prob: (P, S)
 
             # 5. Average densities in log-space over y⁎ samples.
-            mixture_log_prob = torch.logsumexp(conditional_log_prob, dim=-1) - math.log(
-                num_futures
+            mixture_log_prob = (  # (P,)
+                torch.logsumexp(conditional_log_prob, dim=-1) - math.log(num_futures)
             )
-            # mixture_log_prob: (P,)
 
         single_future_error = (conditional_log_prob - base_log_prob[:, None]).abs()
         assert single_future_error.max() > 1.0
