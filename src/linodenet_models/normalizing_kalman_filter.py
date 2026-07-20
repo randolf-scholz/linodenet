@@ -9,7 +9,7 @@ References:
 
 __all__ = ["ContinuousTimeNKF", "DiscreteTimeNKF"]
 
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Final
 
 import torch
 from numpy.typing import ArrayLike
@@ -80,7 +80,7 @@ class DiscreteTimeNKF(nn.Module):
     hidden_size: Final[int]
     batch_first: Final[bool]
 
-    decoder: nn.Module
+    decoder: Transform
     kalman: DiscreteTimeKalmanFilter
 
     pred_means: Tensor
@@ -106,7 +106,7 @@ class DiscreteTimeNKF(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.batch_first = batch_first
-        self.decoder = decoder
+        self.decoder = decoder  # type: ignore[assignment]
         self.kalman = DiscreteTimeKalmanFilter(
             input_size,
             hidden_size,
@@ -132,8 +132,7 @@ class DiscreteTimeNKF(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         r"""Compute $z=f⁻¹(y)$ and $\log|\det ∂f⁻¹/∂y|$ from Eq. (2)."""
         dense_values = values.masked_fill(~mask, 0.0)
-        decoder = cast("Transform", self.decoder)
-        pseudo_values, inverse_logabsdet = decoder.decode_and_logabsdet(
+        pseudo_values, inverse_logabsdet = self.decoder.decode_and_logabsdet(
             dense_values,
         )
         logabsdet = _reduce_logabsdet(inverse_logabsdet, mask)
@@ -147,8 +146,7 @@ class DiscreteTimeNKF(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         r"""Compute $y=f(z)$ and $\log|\det ∂f/∂z|$ from Eq. (1c)."""
         dense_values = values.masked_fill(~mask, 0.0)
-        decoder = cast("Transform", self.decoder)
-        observations, forward_logabsdet = decoder.encode_and_logabsdet(
+        observations, forward_logabsdet = self.decoder.encode_and_logabsdet(
             dense_values,
         )
         logabsdet = _reduce_logabsdet(forward_logabsdet, mask)
@@ -349,7 +347,7 @@ class ContinuousTimeNKF(nn.Module):
     hidden_size: Final[int]
     batch_first: Final[bool]
 
-    decoder: nn.Module
+    decoder: Transform
     kalman: ContinuousTimeKalmanFilter
 
     pred_means: Tensor
@@ -377,7 +375,7 @@ class ContinuousTimeNKF(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.batch_first = batch_first
-        self.decoder = decoder
+        self.decoder = decoder  # type: ignore[assignment]
         self.kalman = ContinuousTimeKalmanFilter(
             input_size,
             hidden_size,
@@ -405,9 +403,8 @@ class ContinuousTimeNKF(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         r"""Compute $z=f⁻¹(y)$ and $\log|\det ∂f⁻¹/∂y|$ from Eq. (2)."""
         dense_values = values.masked_fill(~mask, 0.0)
-        decoder = cast("Transform", self.decoder)
-        pseudo_values, inverse_logabsdet = decoder.decode_and_logabsdet(
-            dense_values,
+        pseudo_values, inverse_logabsdet = self.decoder.decode_and_logabsdet(
+            dense_values
         )
         logabsdet = _reduce_logabsdet(inverse_logabsdet, mask)
         return pseudo_values.masked_fill(~mask, nan), logabsdet
@@ -420,8 +417,7 @@ class ContinuousTimeNKF(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         r"""Compute $y=f(z)$ and $\log|\det ∂f/∂z|$ from Eq. (1c)."""
         dense_values = values.masked_fill(~mask, 0.0)
-        decoder = cast("Transform", self.decoder)
-        observations, forward_logabsdet = decoder.encode_and_logabsdet(
+        observations, forward_logabsdet = self.decoder.encode_and_logabsdet(
             dense_values,
         )
         logabsdet = _reduce_logabsdet(forward_logabsdet, mask)
