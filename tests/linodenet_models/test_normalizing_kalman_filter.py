@@ -7,7 +7,7 @@ import torch
 from torch.nn import functional as F
 
 from linodenet.mappings.transforms.scalar import Sinh
-from linodenet_models import NormalizingKalmanFilter
+from linodenet_models import DiscreteTimeNKF
 from linodenet_models.utils import SplitTimeData
 
 from .base import TestDiscreteTimeModel, assert_probabilistic_self_consistent
@@ -20,7 +20,7 @@ class NormalizingKalmanFilterTestConfig(NamedTuple):
     hidden_size: int
 
 
-class TestNormalizingKalmanFilter(TestDiscreteTimeModel[NormalizingKalmanFilter]):
+class TestNormalizingKalmanFilter(TestDiscreteTimeModel[DiscreteTimeNKF]):
     r"""Shared forecasting-model tests for normalizing Kalman filters."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
@@ -42,14 +42,14 @@ class TestNormalizingKalmanFilter(TestDiscreteTimeModel[NormalizingKalmanFilter]
         r"""Whether to randomly mask half of the context values with NaN."""
         return request.param
 
-    def make_model(self, model_config: object, /) -> NormalizingKalmanFilter:
+    def make_model(self, model_config: object, /) -> DiscreteTimeNKF:
         r"""Instantiate an NKF from :attr:`STANDARD_CONFIG`."""
         if not isinstance(model_config, NormalizingKalmanFilterTestConfig):
             raise TypeError("model_config must be a NormalizingKalmanFilterTestConfig.")
 
         input_size = model_config.input_size
         hidden_size = model_config.hidden_size
-        return NormalizingKalmanFilter(
+        return DiscreteTimeNKF(
             input_size,
             hidden_size,
             decoder=Sinh(),
@@ -64,7 +64,7 @@ class TestNormalizingKalmanFilter(TestDiscreteTimeModel[NormalizingKalmanFilter]
 
     def forecast(
         self,
-        model: NormalizingKalmanFilter,
+        model: DiscreteTimeNKF,
         inputs: SplitTimeData,
         /,
     ) -> tuple[torch.Tensor, ...]:
@@ -89,7 +89,7 @@ class TestNormalizingKalmanFilter(TestDiscreteTimeModel[NormalizingKalmanFilter]
 
     def loss(
         self,
-        model: NormalizingKalmanFilter,
+        model: DiscreteTimeNKF,
         predictions: tuple[torch.Tensor, ...],
         targets: torch.Tensor,
     ) -> torch.Tensor:

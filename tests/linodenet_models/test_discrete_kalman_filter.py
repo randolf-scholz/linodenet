@@ -7,7 +7,7 @@ import torch
 from torch.nn import functional as F
 from torch.testing import assert_close
 
-from linodenet_models import DiscreteKalmanFilter
+from linodenet_models import DiscreteTimeKalmanFilter
 from linodenet_models.kalman_filter import (
     marginal_gaussian_log_prob,
 )
@@ -16,10 +16,10 @@ from linodenet_models.utils import SplitTimeData
 from .base import TestDiscreteTimeModel, assert_probabilistic_self_consistent
 
 
-def make_model() -> DiscreteKalmanFilter:
+def make_model() -> DiscreteTimeKalmanFilter:
     r"""Instantiate a small stable discrete Kalman filter."""
     torch.manual_seed(0)
-    return DiscreteKalmanFilter(
+    return DiscreteTimeKalmanFilter(
         3,
         5,
         system_matrix=0.1 * torch.randn(5, 5),
@@ -161,7 +161,7 @@ class KalmanFilterTestConfig(NamedTuple):
     hidden_size: int
 
 
-class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteKalmanFilter]):
+class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteTimeKalmanFilter]):
     r"""Shared forecasting-model tests for discrete Kalman filters."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
@@ -181,14 +181,14 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteKalmanFilter]):
         r"""Whether to randomly mask half of the context values with NaN."""
         return request.param
 
-    def make_model(self, model_config: object, /) -> DiscreteKalmanFilter:
+    def make_model(self, model_config: object, /) -> DiscreteTimeKalmanFilter:
         r"""Instantiate a discrete Kalman filter from :attr:`STANDARD_CONFIG`."""
         if not isinstance(model_config, KalmanFilterTestConfig):
             raise TypeError("model_config must be a KalmanFilterTestConfig.")
 
         input_size = model_config.input_size
         hidden_size = model_config.hidden_size
-        return DiscreteKalmanFilter(
+        return DiscreteTimeKalmanFilter(
             input_size,
             hidden_size,
             system_matrix=0.1 * torch.randn(hidden_size, hidden_size),
@@ -202,7 +202,7 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteKalmanFilter]):
 
     def forecast(
         self,
-        model: DiscreteKalmanFilter,
+        model: DiscreteTimeKalmanFilter,
         inputs: SplitTimeData,
         /,
     ) -> tuple[torch.Tensor, ...]:
@@ -228,7 +228,7 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteKalmanFilter]):
 
     def loss(
         self,
-        model: DiscreteKalmanFilter,
+        model: DiscreteTimeKalmanFilter,
         predictions: tuple[torch.Tensor, ...],
         targets: torch.Tensor,
     ) -> torch.Tensor:

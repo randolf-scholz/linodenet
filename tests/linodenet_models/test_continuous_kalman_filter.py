@@ -9,7 +9,7 @@ from torch.nn import functional as F
 from torch.testing import assert_close
 
 from linodenet_models.kalman_filter import (
-    ContinuousKalmanFilter,
+    ContinuousTimeKalmanFilter,
     marginal_gaussian_log_prob,
     marginal_gaussian_sample,
     marginal_gaussian_sample_and_log_prob,
@@ -151,7 +151,7 @@ class KalmanFilterTestConfig(NamedTuple):
     hidden_size: int
 
 
-class TestKalmanFilter(TestContinuousTimeModel[ContinuousKalmanFilter]):
+class TestKalmanFilter(TestContinuousTimeModel[ContinuousTimeKalmanFilter]):
     r"""Shared forecasting-model tests for continuous Kalman filters."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
@@ -171,14 +171,14 @@ class TestKalmanFilter(TestContinuousTimeModel[ContinuousKalmanFilter]):
         r"""Whether to randomly mask half of the context values with NaN."""
         return request.param
 
-    def make_model(self, model_config: object, /) -> ContinuousKalmanFilter:
+    def make_model(self, model_config: object, /) -> ContinuousTimeKalmanFilter:
         r"""Instantiate a continuous Kalman filter from :attr:`STANDARD_CONFIG`."""
         if not isinstance(model_config, KalmanFilterTestConfig):
             raise TypeError("model_config must be a KalmanFilterTestConfig.")
 
         input_size = model_config.input_size
         hidden_size = model_config.hidden_size
-        return ContinuousKalmanFilter(
+        return ContinuousTimeKalmanFilter(
             input_size,
             hidden_size,
             system_matrix=0.05 * torch.randn(hidden_size, hidden_size),
@@ -194,7 +194,7 @@ class TestKalmanFilter(TestContinuousTimeModel[ContinuousKalmanFilter]):
 
     def forecast(
         self,
-        model: ContinuousKalmanFilter,
+        model: ContinuousTimeKalmanFilter,
         inputs: SplitTimeData,
         /,
     ) -> tuple[torch.Tensor, ...]:
@@ -221,7 +221,7 @@ class TestKalmanFilter(TestContinuousTimeModel[ContinuousKalmanFilter]):
 
     def loss(
         self,
-        model: ContinuousKalmanFilter,
+        model: ContinuousTimeKalmanFilter,
         predictions: tuple[torch.Tensor, ...],
         targets: torch.Tensor,
     ) -> torch.Tensor:
@@ -261,7 +261,7 @@ class TestKalmanFilter(TestContinuousTimeModel[ContinuousKalmanFilter]):
     def test_default_system_matrix_is_skew_symmetric(self) -> None:
         r"""Check default continuous-time dynamics are norm-preserving."""
         torch.manual_seed(0)
-        model = ContinuousKalmanFilter(
+        model = ContinuousTimeKalmanFilter(
             self.STANDARD_CONFIG.input_size,
             self.STANDARD_CONFIG.hidden_size,
         )

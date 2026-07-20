@@ -11,15 +11,15 @@ __all__ = [
     "ProbabilisticForecastingModel",
     # Classes
     "CRU",
-    "ContinuousKalmanFilter",
-    "DiscreteKalmanFilter",
+    "ContinuousTimeKalmanFilter",
+    "DiscreteTimeKalmanFilter",
     "GRU_D",
     "GRU_ODE_Bayes",
     "Grafiti",
     "LastValue",
     "Moses",
     "NeuralFlow",
-    "NormalizingKalmanFilter",
+    "DiscreteTimeNKF",
     "ProFITi",
 ]
 
@@ -33,32 +33,32 @@ from .cru import CRU
 from .grafiti import Grafiti
 from .gru_d import GRU_D
 from .gru_ode_bayes import GRU_ODE_Bayes
-from .kalman_filter import ContinuousKalmanFilter, DiscreteKalmanFilter
+from .kalman_filter import ContinuousTimeKalmanFilter, DiscreteTimeKalmanFilter
 from .last_value import LastValue
 from .mnf import Moses
 from .neural_flow import NeuralFlow
-from .normalizing_kalman_filter import NormalizingKalmanFilter
+from .normalizing_kalman_filter import DiscreteTimeNKF
 from .profiti import ProFITi
 
 # TODO: allow time marginal gaussian models to be treated as point predictiors.
 POINT_FORECASTING_MODELS: dict[str, type[PointForecastingModel]] = {
-    "grafiti": Grafiti,
-    "gru_d": GRU_D,
-    "last_value": LastValue,
+    "Grafiti": Grafiti,
+    "GRU_D": GRU_D,
+    "LastValue": LastValue,
 }
 r"""Dictionary containing all available forecasting models."""
 
 PROBABILISTIC_FORECASTING_MODELS: dict[str, type[ProbabilisticForecastingModel]] = {
-    "continuous_kalman_filter": ContinuousKalmanFilter,
-    "cru": CRU,
-    "gru_ode_bayes": GRU_ODE_Bayes,
-    "neural_flow": NeuralFlow,
-    "normalizing_kalman_filter": NormalizingKalmanFilter,
+    "ContinuousTimeKalmanFilter": ContinuousTimeKalmanFilter,
+    "CRU": CRU,
+    "GRU_ODE_Bayes": GRU_ODE_Bayes,
+    "NeuralFlow": NeuralFlow,
+    "DiscreteTimeNKF": DiscreteTimeNKF,
 }
 r"""Dictionary containing all available probabilistic forecasting models."""
 
 PATH_FORECASTING_MODELS: dict[str, type[PathForecastingModel]] = {
-    "profiti": ProFITi,
-    "moses": Moses,
+    "ProFITi": ProFITi,
+    "Moses": Moses,
 }
 r"""Dictionary containing all available path forecasting models."""

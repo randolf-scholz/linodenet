@@ -1,8 +1,8 @@
 r"""Discrete Kalman Filter implementation."""
 
 __all__ = [
-    "ContinuousKalmanFilter",
-    "DiscreteKalmanFilter",
+    "ContinuousTimeKalmanFilter",
+    "DiscreteTimeKalmanFilter",
     "marginal_gaussian_log_prob",
     "marginal_gaussian_sample",
     "marginal_gaussian_sample_and_log_prob",
@@ -197,8 +197,8 @@ def marginal_gaussian_sample_and_log_prob(
     return samples, log_prob
 
 
-class ContinuousKalmanFilter(nn.Module):
-    r"""Continuous, time-invariant Kalman Filter.
+class ContinuousTimeKalmanFilter(nn.Module):
+    r"""Continuous time, time-invariant Kalman Filter.
 
     .. math::
         ∂ₜxₜ &= Fxₜ + wₜ  &  wₜ &~ N(0, Qₜ)  \\
@@ -855,7 +855,7 @@ class ContinuousKalmanFilter(nn.Module):
         return P_new
 
 
-class DiscreteKalmanFilter(nn.Module):
+class DiscreteTimeKalmanFilter(nn.Module):
     r"""Discrete, time-invariant Kalman Filter.
 
     .. math::

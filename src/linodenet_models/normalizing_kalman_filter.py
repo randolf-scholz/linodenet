@@ -7,7 +7,7 @@ References:
       | https://proceedings.neurips.cc/paper/2020/hash/1f47cef5e38c952f94c5d61726027439-Abstract.html
 """
 
-__all__ = ["NormalizingKalmanFilter"]
+__all__ = ["DiscreteTimeNKF"]
 
 from typing import TYPE_CHECKING, Final, cast
 
@@ -16,7 +16,7 @@ from numpy.typing import ArrayLike
 from torch import Generator, Tensor, nan, nn
 
 from .kalman_filter import (
-    DiscreteKalmanFilter,
+    DiscreteTimeKalmanFilter,
     marginal_gaussian_log_prob,
     marginal_gaussian_sample,
     marginal_gaussian_sample_and_log_prob,
@@ -53,7 +53,7 @@ def _reduce_logabsdet(logabsdet: Tensor, mask: Tensor) -> Tensor:
     )
 
 
-class NormalizingKalmanFilter(nn.Module):
+class DiscreteTimeNKF(nn.Module):
     r"""Normalizing Kalman Filter (NKF) with discrete, time-invariant dynamics.
 
     The implemented model follows Eq. (1) in the paper:
@@ -80,7 +80,7 @@ class NormalizingKalmanFilter(nn.Module):
     batch_first: Final[bool]
 
     decoder: nn.Module
-    kalman: DiscreteKalmanFilter
+    kalman: DiscreteTimeKalmanFilter
 
     pred_means: Tensor
     pred_scales: Tensor
@@ -106,7 +106,7 @@ class NormalizingKalmanFilter(nn.Module):
         self.hidden_size = hidden_size
         self.batch_first = batch_first
         self.decoder = decoder
-        self.kalman = DiscreteKalmanFilter(
+        self.kalman = DiscreteTimeKalmanFilter(
             input_size,
             hidden_size,
             system_matrix=system_matrix,
