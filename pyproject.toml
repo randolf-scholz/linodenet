@@ -305,7 +305,8 @@ python-version = "3.14"
 output-format = "concise"
 
 [tool.ty.analysis]
-respect-type-ignore-comments = false
+respect-type-ignore-comments = true
+replace-imports-with-any = ["torchdiffeq.**", "torchode.**"]
 
 # region pyrefly configuration ---------------------------------------------------------
 [tool.pyrefly]
