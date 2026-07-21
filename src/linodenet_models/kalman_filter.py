@@ -467,8 +467,8 @@ class ContinuousTimeKalmanFilter(nn.Module):
             batch_first=self.batch_first,
         )
         post_means, post_covs = self.forward(
-            timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
-            context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
+            timestamps=combined.timestamps,  # Float[..., $T], padded NaN, non-decreasing
+            context_values=combined.context_values,  # Float[..., $T, D], padded NaN, sparse
             context_mask=combined.context_mask,  # Bool[..., $T, D], padded False
             query_mask=combined.query_mask,  # Bool[..., $T, F], padded False
             initial_state=initial_state,
@@ -497,14 +497,14 @@ class ContinuousTimeKalmanFilter(nn.Module):
     def forward(
         self,
         *,
-        timestamps: Tensor,  # (..., $T), float, padded NaN
-        query_mask: Tensor,  # (..., $T, D), bool, padded False
-        context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
-        context_mask: Tensor,  # (..., $T, D), bool, padded False
+        timestamps: Tensor,  # Float[..., $T], padded NaN
+        query_mask: Tensor,  # Bool[..., $T, D], padded False
+        context_values: Tensor,  # Float[..., $T, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $T, D], padded False
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
-    ) -> tuple[Tensor, Tensor]:  # (..., $T, D), (..., $T, D, D)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $T, D], Float[..., $T, D, D]
         r"""Compute the posterior latent states over joint time representation.
 
         Args:
@@ -610,16 +610,16 @@ class ContinuousTimeKalmanFilter(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (..., $K, D)
+        values: Tensor,  # Float[..., $K, D]
         *,
         query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
         query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_times: Tensor,  # Float[..., N), padded NaN, non-decreasing
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
-    ) -> Tensor:  # (..., $K)
+    ) -> Tensor:  # Float[..., $K]
         r"""Compute the time-marginal log-likelihood of the model.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
@@ -1099,14 +1099,14 @@ class DiscreteTimeKalmanFilter(nn.Module):
     def forward(
         self,
         *,
-        steps: Tensor,  # Integer[..., $T], padded arbitrary, non-decreasing
-        query_mask: Tensor,  # (..., $T, D), bool, padded False
-        context_values: Tensor,  # (..., $T, D), float, padded NaN, sparse
-        context_mask: Tensor,  # (..., $T, D), bool, padded False
+        steps: Tensor,  # Long[..., $T], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $T, D], padded False
+        context_values: Tensor,  # Float[..., $T, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $T, D], padded False
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (..., $T, D), (..., $T, D, D)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $T, D], Float[..., $T, D, D]
         r"""Compute posterior latent states over joint discrete event steps.
 
         Integer step gaps propagate by that many transition steps.
@@ -1252,16 +1252,16 @@ class DiscreteTimeKalmanFilter(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (..., $K, D)
+        values: Tensor,  # Float[..., $K, D]
         *,
-        query_times: Tensor,  # Integer[..., $K], padded arbitrary, non-decreasing
+        query_times: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, D], padded False
-        context_times: Tensor,  # Integer[..., $N], padded arbitrary, non-decreasing
+        context_times: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
-    ) -> Tensor:  # (..., $K)
+    ) -> Tensor:  # Float[..., $K]
         r"""Compute the time-marginal log-likelihood of the model."""
         assert not torch.is_floating_point(query_times)
         assert not torch.is_floating_point(context_times)

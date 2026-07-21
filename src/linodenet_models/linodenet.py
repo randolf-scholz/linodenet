@@ -22,12 +22,12 @@ from .utils import EventBatch
 
 
 def linear_flow(
-    timedeltas: Tensor,  # (..., $n)
-    x0: Tensor,  # (..., d)
-    kernel: Tensor,  # (d, d)
+    timedeltas: Tensor,  # Float[..., $n]
+    x0: Tensor,  # Float[..., d]
+    kernel: Tensor,  # Float[d, d]
     bias: Optional[Tensor] = None,
     /,
-) -> Tensor:  # (..., $n, d)
+) -> Tensor:  # Float[..., $n, d]
     r"""Linear ODE.
 
     .. math:: dxₜ/dt = Axₜ + b
@@ -156,10 +156,10 @@ class LinearFlow(nn.Module):
 
     def forward(
         self,
-        timedeltas: Tensor,  # (...)
-        x0: Tensor,  # (..., d)
+        timedeltas: Tensor,  # Float[...]
+        x0: Tensor,  # Float[..., d]
         /,
-    ) -> Tensor:  # (..., d)
+    ) -> Tensor:  # Float[..., d]
         r"""Propagate the linear ODE for a single time-delta.
 
         .. math:: step(∆t, x) = e^{ρ(π(A))∆t}x
@@ -168,10 +168,10 @@ class LinearFlow(nn.Module):
 
     def propagate(
         self,
-        timedeltas: Tensor,  # (..., $n)
-        x0: Tensor,  # (..., d)
+        timedeltas: Tensor,  # Float[..., $n]
+        x0: Tensor,  # Float[..., d]
         /,
-    ) -> Tensor:  # (..., $n, d)
+    ) -> Tensor:  # Float[..., $n, d]
         r"""Propagate the linear ODE for a sequence of time-deltas.
 
         .. math:: step(∆tₙ, x) = e^{ρ(π(A))∆tₙ}x
@@ -182,11 +182,11 @@ class LinearFlow(nn.Module):
 
     def forecast(
         self,
-        timestamps: Tensor,  # (..., $n),
-        x0: Tensor,  # (..., d)
+        timestamps: Tensor,  # Float[..., $n)]
+        x0: Tensor,  # Float[..., d]
         *,
-        t0: Tensor | float,  # (..., $n, d)
-    ) -> Tensor:
+        t0: Tensor | float,  # Float[...]
+    ) -> Tensor:  # Float[..., $n, d]
         r"""Propagate the linear ODE for a sequence of timestamps.
 
         .. math::

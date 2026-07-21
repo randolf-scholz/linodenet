@@ -33,15 +33,15 @@ from .parametrizations import (
 
 
 def lp_loss(
-    x: Tensor,  # (..., d)
-    y: Tensor,  # (..., d)
+    x: Tensor,  # Float[..., d]
+    y: Tensor,  # Float[..., d]
     /,
     *,
-    mask: Tensor | None = None,  # (..., d)
+    mask: Tensor | None = None,  # Bool[..., d]
     p: float = 2.0,
     dim: int = -1,
     aggregation: str = "sum",
-) -> Tensor:  # (...)
+) -> Tensor:  # Float[...]
     r"""Compute a per-batch-element $Lᵖ$ reconstruction loss $‖x-y‖ₚᵖ$."""
     r = x - y
     if mask is not None:
@@ -170,21 +170,21 @@ class GradientStepUpdater(nn.Module):
     @partial(torch.func.grad, argnums=2)
     def _grad_fn_no_mask(
         self,
-        y: Tensor,  # (..., e)
-        x: Tensor,  # (..., d)
+        y: Tensor,  # Float[..., e]
+        x: Tensor,  # Float[..., d]
         /,
-    ) -> Tensor:  # (...,)
+    ) -> Tensor:  # Float[...,]
         # Note: ∇_θ ∑ᵢ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
         return self.loss(self.decoder(x), y).sum()  # ℓ(f(x), y)
 
     @partial(torch.func.grad, argnums=2)
     def _grad_fn_with_mask(
         self,
-        y: Tensor,  # (..., e)
-        x: Tensor,  # (..., d)
-        mask: Tensor,  # (..., e)
+        y: Tensor,  # Float[..., e]
+        x: Tensor,  # Float[..., d]
+        mask: Tensor,  # Bool[..., e]
         /,
-    ) -> Tensor:  # (...,)
+    ) -> Tensor:  # Float[...,]
         # Note: ∇_θ ∑ᵢ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
         return self.loss(self.decoder(x), y, mask=mask).sum()  # pyright: ignore[reportCallIssue]
 
@@ -200,12 +200,12 @@ class GradientStepUpdater(nn.Module):
 
     def forward(
         self,
-        y: Tensor,  # (..., e)
-        x: Tensor,  # (..., d)
+        y: Tensor,  # Float[..., e]
+        x: Tensor,  # Float[..., d]
         /,
         *,
-        mask: Tensor | None = None,  # (..., e)
-    ) -> Tensor:  # (..., d)
+        mask: Tensor | None = None,  # Bool[..., e]
+    ) -> Tensor:  # Float[..., d]
         r"""Compute $x - η∇ₓℒ(x)$ with canonical state-update argument order."""
         return x - self.step_size * self.grad_fn(y, x, mask=mask)
 

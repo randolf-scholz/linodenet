@@ -294,12 +294,12 @@ class LinearRationalSpline(nn.Module):
     def get_spline_knots(
         self,
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K)
-        x_center: Tensor,  # (...,)
-        y_center: Tensor,  # (...,)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K]
+        x_center: Tensor,  # Float[...,]
+        y_center: Tensor,  # Float[...,]
     ) -> BinKnots:
         r"""Determine the spline parameters from the raw inputs.
 
@@ -340,13 +340,13 @@ class LinearRationalSpline(nn.Module):
 
     def encode_and_logabsdet(
         self,
-        inputs: Tensor,  # (...)
+        inputs: Tensor,  # Float[...]
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K+1)
-    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K+1]
+    ) -> tuple[Tensor, Tensor]:  # Float[...], Float[...]
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
         knots = self.get_spline_knots(
@@ -362,13 +362,13 @@ class LinearRationalSpline(nn.Module):
 
     def decode_and_logabsdet(
         self,
-        inputs: Tensor,  # (...)
+        inputs: Tensor,  # Float[...]
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K+1)
-    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K+1]
+    ) -> tuple[Tensor, Tensor]:  # Float[...], Float[...]
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
         knots = self.get_spline_knots(
@@ -388,13 +388,13 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
 
     def encode_and_logabsdet(
         self,
-        inputs: Tensor,  # (...)
+        inputs: Tensor,  # Float[...]
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K+1)
-    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K+1]
+    ) -> tuple[Tensor, Tensor]:  # Float[...], Float[...]
         r"""Use linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
@@ -424,13 +424,13 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
 
     def decode_and_logabsdet(
         self,
-        inputs: Tensor,  # (...)
+        inputs: Tensor,  # Float[...]
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K+1)
-    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K+1]
+    ) -> tuple[Tensor, Tensor]:  # Float[...], Float[...]
         r"""Invert the linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
@@ -854,12 +854,12 @@ class ConditionalSplineFlow(ModuleSequence[ConditionalLRS]):
 
     def encode_and_logabsdet(
         self,
-        x: Tensor,  # (..., *H, $K)
-        context: Tensor,  # (..., *H, $K, D)
+        x: Tensor,  # Float[..., *H, $K]
+        context: Tensor,  # Float[..., *H, $K, D]
         /,
         *,
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
-    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., *H, $K], Float[..., *H]
         logabsdet = torch.zeros_like(x[..., 0])
         for layer in self:
             x, ldj = layer.encode_and_logabsdet(x, context, valid_mask=valid_mask)
@@ -868,12 +868,12 @@ class ConditionalSplineFlow(ModuleSequence[ConditionalLRS]):
 
     def decode_and_logabsdet(
         self,
-        y: Tensor,  # (..., *H, $K)
-        context: Tensor,  # (..., *H, $K, D)
+        y: Tensor,  # Float[..., *H, $K]
+        context: Tensor,  # Float[..., *H, $K, D]
         /,
         *,
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
-    ) -> tuple[Tensor, Tensor]:  # (..., *H, $K), (..., *H)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., *H, $K], Float[..., *H]
         logabsdet = torch.zeros_like(y[..., 0])
         for layer in reversed(self):
             y, ldj = layer.decode_and_logabsdet(y, context, valid_mask=valid_mask)
@@ -1565,10 +1565,10 @@ class MultiHeadAttention(nn.Module):
         k = k.unflatten(-1, (self.num_heads, self.dim_head))  # (..., $X, H, d_h)
         v = v.unflatten(-1, (self.num_heads, self.dim_head))  # (..., $X, H, d_h)
 
-        h = F.scaled_dot_product_attention(  # (..., H, $Q, d_h)
-            q.swapaxes(-2, -3),  # (..., H, $Q, d_h)
-            k.swapaxes(-2, -3),  # (..., H, $X, d_h)
-            v.swapaxes(-2, -3),  # (..., H, $X, d_h)
+        h = F.scaled_dot_product_attention(  # Float[..., H, $Q, d_h]
+            q.swapaxes(-2, -3),  # Float[..., H, $Q, d_h]
+            k.swapaxes(-2, -3),  # Float[..., H, $X, d_h]
+            v.swapaxes(-2, -3),  # Float[..., H, $X, d_h]
             attn_mask=(  # (..., 1, 1, $X)
                 key_mask[..., None, None, :] if key_mask is not None else None
             ),
@@ -1715,7 +1715,7 @@ class MixtureWeightsModel(nn.Module):
 
     def sample_from_weights(
         self,
-        size: int | tuple[int, ...],  # (*S)
+        size: int | tuple[int, ...],  # *S
         log_weights: Tensor,  # Float[..., D]
         /,
         *,
@@ -1727,7 +1727,7 @@ class MixtureWeightsModel(nn.Module):
         probs = log_weights.exp()  # (B, D)
         flat_samples = torch.multinomial(  # (B, S)
             probs.reshape(-1, self.num_components),  # (B, D)
-            num_samples=math.prod(sample_shape),  # (S)
+            num_samples=math.prod(sample_shape),  # S
             replacement=True,
             generator=rng,
         )
@@ -1747,7 +1747,7 @@ class MixtureWeightsModel(nn.Module):
 
     def sample(
         self,
-        size: int | tuple[int, ...] = (),  # (*S)
+        size: int | tuple[int, ...] = (),  # *S
         *,
         embeddings: Tensor,  # Float[..., $N, M]
         valid_mask: Tensor,  # Bool[..., $N]
@@ -1760,7 +1760,7 @@ class MixtureWeightsModel(nn.Module):
 
     def sample_and_log_prob(
         self,
-        size: int | tuple[int, ...] = (),  # (*S)
+        size: int | tuple[int, ...] = (),  # *S
         *,
         embeddings: Tensor,  # Float[..., $N, M]
         valid_mask: Tensor,  # Bool[..., $N]
@@ -1977,14 +1977,14 @@ class ConditionalGaussian(nn.Module):
 
     def _log_prob(
         self,
-        x: Tensor,  # (..., *H, $K)
-        mean: Tensor,  # (..., *H, $K)
-        cov_factor: Tensor,  # (..., *H, $K, R)
-        cov_scale: Tensor,  # (..., *H,)
+        x: Tensor,  # Float[..., *H, $K]
+        mean: Tensor,  # Float[..., *H, $K]
+        cov_factor: Tensor,  # Float[..., *H, $K, R]
+        cov_scale: Tensor,  # Float[..., *H]
         /,
         *,
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
-    ) -> Tensor:  # (..., *H)
+    ) -> Tensor:  # Float[..., *H]
         if valid_mask is not None:
             cov_factor = torch.where(valid_mask[..., None], cov_factor, 0.0)
             centered = torch.where(valid_mask, x - mean, 0.0)
@@ -2020,13 +2020,13 @@ class ConditionalGaussian(nn.Module):
     def _sample(
         self,
         size: int | tuple[int, ...],  # *S
-        mean: Tensor,  # (..., *H, $K)
-        cov_factor: Tensor,  # (..., *H, $K, R)
-        cov_scale: Tensor,  # (*H,)
+        mean: Tensor,  # Float[..., *H, $K]
+        cov_factor: Tensor,  # Float[..., *H, $K, R]
+        cov_scale: Tensor,  # Float[..., *H]
         /,
         *,
         rng: Generator | None = None,
-    ) -> Tensor:  # (*S, ..., *H, $K)
+    ) -> Tensor:  # Float[*S, ..., *H, $K]
         # Write Σ = σ²I + UUᵀ with U = cov_factor. Then [σI, U] is a
         # rectangular square root because [σI, U][σI, U]ᵀ = σ²I + UUᵀ = Σ.
         sample_shape = (size,) if isinstance(size, int) else size
@@ -2056,38 +2056,38 @@ class ConditionalGaussian(nn.Module):
 
     def log_prob(
         self,
-        x: Tensor,  # (*S, ..., *H, $K)
-        context: Tensor,  # (..., *H, $K, M)
+        x: Tensor,  # Float[*S, ..., *H, $K]
+        context: Tensor,  # Float[..., *H, $K, M]
         /,
         *,
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
-    ) -> Tensor:  # (*S, ..., *H)
+    ) -> Tensor:  # Float[*S, ..., *H]
         r"""Compute the log-likelihood of the input."""
         mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
         return self._log_prob(x, mean, cov_factor, cov_scale, valid_mask=valid_mask)
 
     def sample(
         self,
-        size: int | tuple[int, ...],  # (*S)
-        context: Tensor,  # (..., *H, $K, M)
+        size: int | tuple[int, ...],  # *S
+        context: Tensor,  # Float[..., *H, $K, M]
         /,
         *,
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
         rng: Generator | None = None,
-    ) -> Tensor:  # (*S, ..., *H, $K)
+    ) -> Tensor:  # Float[*S, ..., *H, $K]
         r"""Sample a Gaussian distribution from the conditional distribution."""
         mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
         return self._sample(size, mean, cov_factor, cov_scale, rng=rng)
 
     def sample_and_log_prob(
         self,
-        size: int | tuple[int, ...],  # (*S)
-        context: Tensor,  # (..., *H, $K, M)
+        size: int | tuple[int, ...],  # *S
+        context: Tensor,  # Float[..., *H, $K, M]
         /,
         *,
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
         rng: Generator | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., *H, $K), (*S, ..., *H)
+    ) -> tuple[Tensor, Tensor]:  # Float[*S, ..., *H, $K], Float[*S, ..., *H]
         r"""Sample a Gaussian distribution from the conditional distribution."""
         mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
         samples = self._sample(size, mean, cov_factor, cov_scale, rng=rng)

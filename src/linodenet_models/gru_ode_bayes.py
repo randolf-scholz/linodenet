@@ -113,13 +113,13 @@ def _marginal_logvar_gaussian_sample_and_log_prob(
 
 
 def update_masked(
-    target: Tensor,  # (..., *e)
+    target: Tensor,  # Float[..., *e]
     fn: Callable[..., Tensor],  # [*(..., *dᵢ)] -> (..., *e)
     /,
     *,
     args: tuple[Tensor, ...],
     batch_mask: Tensor,  # Bool[...]
-) -> Tensor:  # (..., *e)
+) -> Tensor:  # Float[..., *e]
     r"""Update ``target`` with ``fn`` applied to selected batch elements."""
     return target.masked_scatter(
         batch_mask.reshape(*batch_mask.shape, *(1,) * (target.ndim - batch_mask.ndim)),
@@ -174,9 +174,9 @@ class TorchODESolver(nn.Module):
     def forward(
         self,
         vector_field: nn.Module,  # [(...), (..., H)] -> (..., H)
-        delta_time: Tensor,  # (...)
-        state: Tensor,  # (..., H)
-    ) -> Tensor:  # (..., H)
+        delta_time: Tensor,  # Float[...]
+        state: Tensor,  # Float[..., H]
+    ) -> Tensor:  # Float[..., H]
         r"""Propagate ``state`` independently for exactly ``delta_time``."""
         assert (delta_time >= 0).all(), "delta_time must be non-negative."
         assert delta_time.shape == state.shape[:-1]
@@ -227,18 +227,19 @@ class ODE_Flow(nn.Module):
 
     def forward(
         self,
-        delta_time: Tensor,  # (...)
-        state: Tensor,  # (..., H)
-    ) -> Tensor:  # (..., H)
+        delta_time: Tensor,  # Float[...]
+        state: Tensor,  # Float[..., H]
+        /,
+    ) -> Tensor:  # Float[..., H]
         r"""Propagate ``state`` for ``delta_time``."""
         return self.solver(self.vector_field, delta_time, state)
 
     def step(
         self,
-        delta_time: Tensor,  # (...)
-        state: Tensor,  # (..., H)
+        delta_time: Tensor,  # Float[...]
+        state: Tensor,  # Float[..., H]
         /,
-    ) -> Tensor:  # (..., H)
+    ) -> Tensor:  # Float[..., H]
         r"""Propagate ``state`` for a single time delta."""
         return self.forward(delta_time, state)
 
@@ -348,11 +349,11 @@ class GRU_Bayes(nn.Module):
 
     def forward(
         self,
-        state: Tensor,  # (..., H)
-        observation: Tensor,  # (..., D), may contain NaNs
-        mean: Tensor,  # (..., D)
-        logvar: Tensor,  # (..., D)
-    ) -> Tensor:  # (..., H)
+        state: Tensor,  # Float[..., H]
+        observation: Tensor,  # Float[..., D], may contain NaN
+        mean: Tensor,  # Float[..., D]
+        logvar: Tensor,  # Float[..., D]
+    ) -> Tensor:  # Float[..., H]
         r"""Apply one discrete Bayesian jump update."""
         assert mean.shape == logvar.shape == observation.shape
 
@@ -610,17 +611,19 @@ class GRU_ODE_Bayes(nn.Module):
 
     def propagate_state(
         self,
-        delta_time: Tensor,  # (...)
-        posterior_state: Tensor,  # (..., H)
-    ) -> Tensor:  # (..., H)
+        delta_time: Tensor,  # Float[...]
+        posterior_state: Tensor,  # Float[..., H]
+        /,
+    ) -> Tensor:  # Float[..., H]
         r"""Propagate a posterior state through the continuous GRU-ODE dynamics."""
         return self.flow(delta_time, posterior_state)
 
     def update_state(
         self,
-        prior_state: Tensor,  # (..., H)
-        observation: Tensor,  # (..., D)
-    ) -> Tensor:  # (..., H)
+        prior_state: Tensor,  # Float[..., H]
+        observation: Tensor,  # Float[..., D]
+        /,
+    ) -> Tensor:  # Float[..., H]
         r"""Apply one Bayesian jump update to a prior latent state."""
         batch_shape = prior_state.shape[:-1]
         assert observation.shape == (*batch_shape, self.input_size)
@@ -637,9 +640,9 @@ class GRU_ODE_Bayes(nn.Module):
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
-        initial_state: Tensor | None = None,  # (..., H)
+        initial_state: Tensor | None = None,  # Float[..., H]
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (..., $K, F)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $K, F], Float[..., $K, F]
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -649,8 +652,8 @@ class GRU_ODE_Bayes(nn.Module):
             batch_first=self.batch_first,
         )
         trace = self.filter(
-            timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
-            context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
+            timestamps=combined.timestamps,  # Float[..., $T], padded NaN, non-decreasing
+            context_values=combined.context_values,  # Float[..., $T, D], padded NaN, sparse
             context_mask=combined.context_mask,  # Bool[..., $T, D], padded False
             query_mask=combined.query_mask,  # Bool[..., $T, F], padded False
             initial_state=initial_state,
@@ -668,11 +671,11 @@ class GRU_ODE_Bayes(nn.Module):
     def filter(
         self,
         *,
-        timestamps: Tensor,  # (..., $T), float, padded NaN
-        query_mask: Tensor,  # (..., $T, D), bool, padded False
-        context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
-        context_mask: Tensor,  # (..., $T, D), bool, padded False
-        initial_state: Tensor | None = None,  # (..., H)
+        timestamps: Tensor,  # Float[..., $T], padded NaN
+        query_mask: Tensor,  # Bool[..., $T, D], padded False
+        context_values: Tensor,  # Float[..., $T, D], padded Nan, sparse
+        context_mask: Tensor,  # Bool[..., $T, D], padded False
+        initial_state: Tensor | None = None,  # Float[..., H]
         initial_time: Tensor | None = None,  # t₀, () or (...)
     ) -> GRUODEBayesTrace:
         r"""Filter and forecast over combined context/query time points.
@@ -764,17 +767,17 @@ class GRU_ODE_Bayes(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (..., $N + $K, D)
+        values: Tensor,  # Float[..., $K, D]
         /,
         *,
-        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[..., K, F]  padded False
-        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., N, D], padded False
-        initial_state: Tensor | None = None,  # (..., H)
+        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        initial_state: Tensor | None = None,  # Float[..., H]
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> Tensor:  # (..., $K)
+    ) -> Tensor:  # Float[..., $K]
         r"""Compute the time-marginal log-likelihood of the model.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
@@ -804,7 +807,7 @@ class GRU_ODE_Bayes(nn.Module):
         context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., N, D], padded False
-        initial_state: Tensor | None = None,  # (..., H)
+        initial_state: Tensor | None = None,  # Float[..., H]
         initial_time: Tensor | None = None,  # t₀, () or (...)
         rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $K, D)
@@ -839,7 +842,7 @@ class GRU_ODE_Bayes(nn.Module):
         context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., N, D], padded False
-        initial_state: Tensor | None = None,  # (..., H)
+        initial_state: Tensor | None = None,  # Float[..., H]
         initial_time: Tensor | None = None,  # t₀, () or (...)
         rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
@@ -867,10 +870,10 @@ class GRU_ODE_Bayes(nn.Module):
 
 
 def gaussian_kl(
-    left: tuple[Tensor, Tensor],  # (..., d), (..., d)
-    right: tuple[Tensor, Tensor],  # (..., d), (..., d)
+    left: tuple[Tensor, Tensor],  # Float[..., d], Float[..., d]
+    right: tuple[Tensor, Tensor],  # Float[..., d], Float[..., d]
     /,
-) -> Tensor:  # (...)
+) -> Tensor:  # Float[...]
     r"""Return the KL divergence between two diagonal Gaussians.
 
     .. math::

@@ -160,15 +160,14 @@ class TriangularAttention(nn.Module):
         self.scale = dim_hidden**-0.5
         self.eps = eps
 
-    # (..., $K, D) -> (..., $K, $K)
     def _scores(
         self,
-        query: Tensor,
-        key: Tensor,
+        query: Tensor,  # Float[..., $K, D]
+        key: Tensor,  # Float[..., $K, D]
         /,
         *,
-        valid_mask: Tensor | None = None,  # (..., $K), bool
-    ) -> Tensor:
+        valid_mask: Tensor | None = None,  # Bool[..., $K]
+    ) -> Tensor:  # Float[..., $K, $K]
         Q = self.q_proj(query)  # (..., $K, L)
         K = self.k_proj(key)  # (..., $K, L)
 
@@ -187,13 +186,13 @@ class TriangularAttention(nn.Module):
 
     def encode_and_logabsdet(
         self,
-        query: Tensor,  # (..., $K, D), finite
-        key: Tensor,  # (..., $K, D), finite
-        value: Tensor,  # (..., $K, F), finite
+        query: Tensor,  # Float[..., $K, D]
+        key: Tensor,  # Float[..., $K, D]
+        value: Tensor,  # Float[..., $K, F]
         /,
         *,
-        valid_mask: Tensor | None = None,  # (..., $K), bool
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (...)
+        valid_mask: Tensor | None = None,  # Bool[..., $K]
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $K, F], Float[...]
         scores = self._scores(query, key, valid_mask=valid_mask)  # (..., $K, $K)
         y = torch.einsum("...MN, ...NF -> ...MF", scores, value)
         # for a linear transform x -> Ax, the logabsdet is |A|
@@ -203,13 +202,13 @@ class TriangularAttention(nn.Module):
 
     def decode_and_logabsdet(
         self,
-        query: Tensor,  # (..., $K, D)
-        key: Tensor,  # (..., $K, D)
-        value: Tensor,  # (..., $K, F)
+        query: Tensor,  # Float[..., $K, D]
+        key: Tensor,  # Float[..., $K, D]
+        value: Tensor,  # Float[..., $K, F]
         /,
         *,
-        valid_mask: Tensor | None = None,  # (..., $K), bool
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (...)
+        valid_mask: Tensor | None = None,  # Bool[..., $K]
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $K, F], Float[...]
         scores = self._scores(query, key, valid_mask=valid_mask)  # (..., $K, $K)
         # solve Ax = y for x
         x = solve_triangular(scores, value, upper=False)
@@ -266,10 +265,10 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
 
     def encode_and_logabsdet(
         self,
-        x: Tensor,  # (..., K)
-        context: Tensor,  # (..., K, D)
+        x: Tensor,  # Float[..., K]
+        context: Tensor,  # Float[..., K, D]
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., K), (...)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., K], Float[...]
         # zero out NaN values (prevents NaN poisioning)
         # this is OK because the operations are either element-wise, or account for masking
         # nevertheless, in the unit tests we check padding invariance explictly
@@ -298,10 +297,10 @@ class ProFITiBlock(nn.Module, ConditionalTransform):
 
     def decode_and_logabsdet(
         self,
-        y: Tensor,  # (..., K)
-        context: Tensor,  # (..., K, D)
+        y: Tensor,  # Float[..., K]
+        context: Tensor,  # Float[..., K, D]
         /,
-    ) -> tuple[Tensor, Tensor]:  # (..., K), (...)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., K], Float[...]
         # zero out NaN values (prevents NaN poisioning)
         # this is OK because the operations are either element-wise, or account for masking
         # nevertheless, in the unit tests we check padding invariance explictly
@@ -455,7 +454,7 @@ class ProFITi(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (*S, ..., $K, F)
+        values: Tensor,  # Float[*S, ..., $K, F]
         /,
         *,
         query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing

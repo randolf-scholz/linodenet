@@ -164,14 +164,14 @@ class DiscreteTimeNKF(nn.Module):
     def forward(
         self,
         *,
-        steps: Tensor,  # Integer[..., $T], padded arbitrary, non-decreasing
-        query_mask: Tensor,  # (..., $T, D), bool, padded False
-        context_values: Tensor,  # (..., $T, D), float, padded NaN, sparse
-        context_mask: Tensor,  # (..., $T, D), bool, padded False
+        steps: Tensor,  # Long[..., $T], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $T, D], padded False
+        context_values: Tensor,  # Float[..., $T, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $T, D], padded False
         # μ₀=(..., D) Σ₀=(..., D, D)
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_step: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (..., $T, D), (..., $T, D, D)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $T, D], Float[..., $T, D, D]
         r"""Compute posterior latent states given combined context/query steps.
 
         This is Proposition 1: filtering in observation space is equivalent to
@@ -305,16 +305,16 @@ class DiscreteTimeNKF(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (..., K, D)
+        values: Tensor,  # Float[..., $K, D]
         *,
-        query_times: Tensor,  # Integer[..., K], padded arbitrary, non-decreasing
-        query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_times: Tensor,  # Integer[..., N], padded arbitrary, non-decreasing
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., N, D], padded False
+        query_times: Tensor,  # Long[..., $K], padded arbitrary, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, D], padded False
+        context_times: Tensor,  # Long[..., $N], padded arbitrary, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
-    ) -> Tensor:  # (..., K)
+    ) -> Tensor:  # Float[..., $K]
         r"""Compute exact time-marginal log-likelihoods via Proposition 3."""
         assert not torch.is_floating_point(query_times)
         assert not torch.is_floating_point(context_times)
@@ -524,13 +524,13 @@ class ContinuousTimeNKF(nn.Module):
     def forward(
         self,
         *,
-        timestamps: Tensor,  # (..., T), float, padded NaN
-        query_mask: Tensor,  # (..., T, D), bool, padded False
-        context_values: Tensor,  # (..., T, D), float, padded NaN, sparse
-        context_mask: Tensor,  # (..., T, D), bool, padded False
+        timestamps: Tensor,  # Float[..., $T], padded NaN
+        query_mask: Tensor,  # Bool[..., $T, D], padded False
+        context_values: Tensor,  # Float[..., $T, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $T, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (..., T, D), (..., T, D, D)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $T, D], Float[..., $T, D, D]
         r"""Compute posterior latent states over combined context/query times."""
         pseudo_values, _ = self._decode_observations(context_values, context_mask)
         return self.kalman.forward(
@@ -641,16 +641,16 @@ class ContinuousTimeNKF(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (..., K, D)
+        values: Tensor,  # Float[..., $K, D]
         *,
-        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[..., K, D], padded False
-        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        context_mask: Tensor,  # Bool[..., N, D], padded False
+        query_times: Tensor,  # Float[..., K$], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, D], padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
-    ) -> Tensor:  # (..., K)
+    ) -> Tensor:  # Float[..., $K]
         r"""Compute exact time-marginal log-likelihoods via Proposition 3."""
         mean, cov = self.predict_pseudo_observations(
             query_times=query_times,

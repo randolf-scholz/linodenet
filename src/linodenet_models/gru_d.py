@@ -123,7 +123,7 @@ class GRU_D(nn.Module):
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
-        initial_state: Tensor | None = None,  # (..., H)
+        initial_state: Tensor | None = None,  # Float[..., H]
         initial_time: Tensor | None = None,  # t₀, () or (...)
     ) -> Tensor:  # Float[..., $K, F]
         combined = EventBatch.from_request(
@@ -149,13 +149,13 @@ class GRU_D(nn.Module):
     def forward(
         self,
         *,
-        timestamps: Tensor,  # (..., $T), float, padded NaN
-        query_mask: Tensor,  # (..., $T, D), bool, padded False
-        context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
-        context_mask: Tensor,  # (..., $T, D), bool, padded False
-        initial_state: Tensor | None = None,  # (..., H)
+        timestamps: Tensor,  # Float[..., $T], padded NaN
+        query_mask: Tensor,  # Bool[..., $T, D], padded False
+        context_values: Tensor,  # Float[..., $T, D], padded Nan, sparse
+        context_mask: Tensor,  # Bool[..., $T, D], padded False
+        initial_state: Tensor | None = None,  # Float[..., H]
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> Tensor:  # (..., $T, F)
+    ) -> Tensor:  # Float[..., $T, F]
         r"""Filter and forecast over combined context/query time points."""
         # sanitize values
         context_values = context_values.masked_fill(~context_mask, nan)

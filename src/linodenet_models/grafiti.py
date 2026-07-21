@@ -53,12 +53,12 @@ class MAB(nn.Module):
 
     def forward(
         self,
-        Q: Tensor,  # (..., Nq, dim_Q)
-        K: Tensor,  # (..., Nk, dim_K)
-        V: Tensor,  # (..., Nk, dim_V)
+        Q: Tensor,  # Float[..., Nq, dim_Q]
+        K: Tensor,  # Float[..., Nk, dim_K]
+        V: Tensor,  # Float[..., Nk, dim_V]
         *,
-        mask: Tensor | None = None,  # (..., Nq, Nk)
-    ) -> Tensor:  # (..., Nq, dim_hidden)
+        mask: Tensor | None = None,  # Bool[..., Nq, Nk]
+    ) -> Tensor:  # Float[..., Nq, dim_hidden]
         r"""Apply the attention block.
 
         Args:
@@ -297,11 +297,11 @@ class Grafiti(nn.Module):
 
     def _encode_features(
         self,
-        timestamps: Tensor,  # (..., $T)
+        timestamps: Tensor,  # Float[..., $T]
         *,
         num_channels: int,
-        edge_values: Tensor,  # (..., $E)
-        edge_context_mask: Tensor,  # (..., $E)
+        edge_values: Tensor,  # Float[..., $E]
+        edge_context_mask: Tensor,  # Bool[..., $E]
     ) -> tuple[Tensor, Tensor, Tensor]:  # (..., $E, M), (..., $T, M), (..., D, M)
         r"""Encode edge, time-node, and channel-node features.
 
@@ -336,9 +336,9 @@ class Grafiti(nn.Module):
             0.0,
         )
         return (
-            e_encoded,  # (..., $E, M)
-            t_encoded,  # (..., $T, M)
-            c_encoded,  # (..., D, M)
+            e_encoded,  # Float[..., $E, M]
+            t_encoded,  # Float[..., $T, M]
+            c_encoded,  # Float[..., D, M]
         )
 
     def predict(

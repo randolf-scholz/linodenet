@@ -192,8 +192,9 @@ class Decoder(nn.Module):
 
     def forward(
         self,
-        mean: Tensor,  # (..., 2d)
-        covariance: Tensor,  # (..., d, 3)
+        mean: Tensor,  # Float[..., 2d]
+        covariance: Tensor,  # Float[..., d, 3]
+        /,
     ) -> tuple[Tensor, Tensor]:  # (..., d),
         cov = torch.cat(covariance.unbind(dim=-1), dim=-1)
         return self.mean_model(mean), self.variance_model(cov)
@@ -290,7 +291,7 @@ def update_masked[R: Tensor | tuple[Tensor, ...]](
     /,
     *,
     args: tuple[Tensor, ...],
-    batch_mask: Tensor,  # (...)
+    batch_mask: Tensor,  # Bool[...]
 ) -> R:  # (*(..., *eᵢ),)
     r"""Update ``target`` with ``fn`` applied to selected batch elements."""
     assert batch_mask.dtype == torch.bool
@@ -600,13 +601,13 @@ class CRU(nn.Module):
     def forward(
         self,
         *,
-        timestamps: Tensor,  # (..., $T), float, padded NaN
-        query_mask: Tensor,  # (..., $T, D), bool, padded False
-        context_values: Tensor,  # (..., $T, D), float, padded Nan, sparse
-        context_mask: Tensor,  # (..., $T, D), bool, padded False
+        timestamps: Tensor,  # Float[..., $T], padded NaN
+        query_mask: Tensor,  # Bool[..., $T, D], padded False
+        context_values: Tensor,  # Float[..., $T, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $T, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,  # (..., 2d), (..., d, 3)
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, F), (..., $K, F)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $K, F], Float[..., $K, F]
         r"""Filter and forecast over combined context/query time points.
 
         Context and query masks explicitly select valid feature-level entries.
@@ -858,9 +859,10 @@ class CRU(nn.Module):
 
     def propagate_state(
         self,
-        delta_time: Tensor,  # (...)
-        posterior_mean: Tensor,  # (..., 2d)
-        posterior_variance: Tensor,  # (..., d, 3)
+        delta_time: Tensor,  # Float[...]
+        posterior_mean: Tensor,  # Float[..., 2d]
+        posterior_variance: Tensor,  # Float[..., d, 3]
+        /,
     ) -> tuple[Tensor, Tensor]:
         r"""Propagate a latent posterior through the continuous transition model."""
         # reconstruct Σ from σᵤ, σᵥ, σₛ
@@ -903,12 +905,12 @@ class CRU(nn.Module):
 
     def update_state(
         self,
-        observation_mean: Tensor,  # (..., d)
-        observation_variance: Tensor,  # (..., d)
-        observation_mask: Tensor,  # (...,)
-        prior_mean: Tensor,  # (..., 2d)
-        prior_variance: Tensor,  # (..., d, 3)
-    ) -> tuple[Tensor, Tensor]:  # (..., 2d), (..., d, 3)
+        observation_mean: Tensor,  # Float[..., d]
+        observation_variance: Tensor,  # Float[..., d]
+        observation_mask: Tensor,  # Float[...,]
+        prior_mean: Tensor,  # Float[..., 2d]
+        prior_variance: Tensor,  # Float[..., d, 3]
+    ) -> tuple[Tensor, Tensor]:  # Float[..., 2d], Float[..., d, 3]
         r"""Apply the CRU/Kalman measurement update for one time step."""
         # assumptions:
         # H = [𝕀_d, 0_d]

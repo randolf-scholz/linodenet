@@ -17,12 +17,12 @@ class LastValue(nn.Module):
     def forward(
         self,
         *,
-        query_times: Tensor,  # (..., $K)
-        context_times: Tensor,  # (..., $N)        context_mask: Tensor,  # (..., $N, D), bool
-        context_mask: Tensor,  # (..., $N, D), bool
-        context_values: Tensor,  # (..., $N, D)
-        initial_state: Tensor | None = None,  # (...?, D)
-    ) -> Tensor:  # (..., $K, D)
+        query_times: Tensor,  # Float[..., $K]
+        context_times: Tensor,  # Float[..., $N]
+        context_mask: Tensor,  # Bool[..., $N, D]
+        context_values: Tensor,  # Float[..., $N, D]
+        initial_state: Tensor | None = None,  # Float[..., D]
+    ) -> Tensor:  # Float[..., $K, D]
         r"""Compute last-value forecasts.
 
         Args:
