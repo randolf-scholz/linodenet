@@ -118,14 +118,14 @@ class GRU_D(nn.Module):
     def predict(
         self,
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         initial_state: Tensor | None = None,  # (..., H)
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> Tensor:  # (..., $K, F)
+    ) -> Tensor:  # Float[..., $K, F]
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -135,10 +135,10 @@ class GRU_D(nn.Module):
             batch_first=self.batch_first,
         )
         predictions = self.forward(
-            timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
-            context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
-            context_mask=combined.context_mask,  # Bool[(..., $T, D)], padded False
-            query_mask=combined.query_mask,  # Bool[(..., $T, F)], padded False
+            timestamps=combined.timestamps,  # Float[..., $T], padded NaN, non-decreasing
+            context_values=combined.context_values,  # Float[..., $T, D], padded NaN, sparse
+            context_mask=combined.context_mask,  # Bool[..., $T, D], padded False
+            query_mask=combined.query_mask,  # Bool[..., $T, F], padded False
             initial_state=initial_state,
             initial_time=initial_time,
         )

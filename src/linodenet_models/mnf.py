@@ -1542,14 +1542,14 @@ class MultiHeadAttention(nn.Module):
 
     def forward(
         self,
-        x_q: Tensor,  # (..., $Q, d_q)
-        x_k: Tensor,  # (..., $X, d_k)
-        x_v: Tensor,  # (..., $X, d_v)
+        x_q: Tensor,  # Float[..., $Q, d_q]
+        x_k: Tensor,  # Float[..., $X, d_k]
+        x_v: Tensor,  # Float[..., $X, d_v]
         /,
         *,
-        query_mask: Tensor | None = None,  # Bool[(..., $Q)]
-        key_mask: Tensor | None = None,  # Bool[(..., $X)]
-    ) -> Tensor:  # (..., $Q, d_q)
+        query_mask: Tensor | None = None,  # Bool[..., $Q]
+        key_mask: Tensor | None = None,  # Bool[..., $X]
+    ) -> Tensor:  # Float[..., $Q, d_q]
         # sanitize arguments
         if query_mask is not None:
             x_q = torch.where(query_mask[..., :, None], x_q, 0.0)
@@ -1826,14 +1826,14 @@ class SeparableEncoder(nn.Module):
     def forward(
         self,
         *,
-        query_times: Tensor,  # Float[(..., $Q)], padded with NaN
-        query_channels: Tensor,  # Long[(..., $Q)], padded with -1
-        query_valid: Tensor | None = None,  # Bool[(..., $Q)],
-        context_times: Tensor,  # Float[(..., $X)], padded with NaN
-        context_channels: Tensor,  # Long[(..., $X)], padded with -1
-        context_values: Tensor,  # Float[(..., $X)], padded with NaN
-        context_valid: Tensor | None = None,  # Bool[(..., $X)],
-    ) -> tuple[Tensor, Tensor]:  # (..., $X, M), (..., *H, $Q, M), padded with NaN
+        query_times: Tensor,  # Float[..., $Q], padded with NaN
+        query_channels: Tensor,  # Long[..., $Q], padded with -1
+        query_valid: Tensor | None = None,  # Bool[..., $Q],
+        context_times: Tensor,  # Float[..., $X], padded with NaN
+        context_channels: Tensor,  # Long[..., $X], padded with -1
+        context_values: Tensor,  # Float[..., $X], padded with NaN
+        context_valid: Tensor | None = None,  # Bool[..., $X],
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $X, M], Float[..., *H, $Q, M]
         r"""Compute per-query embeddings and mixture weights.
 
         Args:

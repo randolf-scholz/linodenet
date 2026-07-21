@@ -568,14 +568,14 @@ class CRU(nn.Module):
     def predict(
         self,
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
+        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         initial_state: tuple[Tensor, Tensor] | None = None,  # (..., 2d), (..., d, 3)
         initial_time: Tensor | None = None,  # t₀, () or (...)
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $K, D], Float[..., $K, D, D]
         combined = EventBatch.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -585,10 +585,10 @@ class CRU(nn.Module):
             batch_first=self.batch_first,
         )
         post_means, post_logvars = self.forward(
-            timestamps=combined.timestamps,  # (..., $T), padded NaN, non-decreasing
-            context_values=combined.context_values,  # (..., $T, D), padded NaN, sparse
-            context_mask=combined.context_mask,  # Bool[(..., $T, D)], padded False
-            query_mask=combined.query_mask,  # Bool[(..., $T, F)], padded False
+            timestamps=combined.timestamps,  # Float[..., $T], padded NaN, non-decreasing
+            context_values=combined.context_values,  # Float[..., $T, D], padded NaN, sparse
+            context_mask=combined.context_mask,  # Bool[..., $T, D], padded False
+            query_mask=combined.query_mask,  # Bool[..., $T, F], padded False
             initial_state=initial_state,
             initial_time=initial_time,
         )
@@ -741,17 +741,17 @@ class CRU(nn.Module):
 
     def log_prob(
         self,
-        values: Tensor,  # (..., $K, F)
+        values: Tensor,  # Float[..., $K, F]
         /,
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, F]  padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
-    ) -> Tensor:  # (..., $K)
+    ) -> Tensor:  # Float[..., $K]
         r"""Compute the time-marginal log-likelihood of the model.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
@@ -776,15 +776,15 @@ class CRU(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
         rng: Generator | None = None,
-    ) -> Tensor:  # (*S, ..., $K, F)
+    ) -> Tensor:  # Float[*S, ..., $K, F]
         r"""Sample from the time-marginal distribution.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
@@ -807,15 +807,15 @@ class CRU(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[(..., K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., K, F)]  padded False
-        context_times: Tensor,  # Float[(..., N)], padded NaN, non-decreasing
-        context_values: Tensor,  # Float[(..., N, D)], padded NaN, sparse
-        context_mask: Tensor,  # Bool[(..., N, D)], padded False
+        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., K, F]  padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
         rng: Generator | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, F), (*S, ..., $K)
+    ) -> tuple[Tensor, Tensor]:  # Float[*S, ..., $K, F], Float[*S, ..., $K]
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))

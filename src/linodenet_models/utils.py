@@ -1059,13 +1059,13 @@ class JointTimeData:
     def from_request(
         cls,
         *,
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, non-decreasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        target_values: Tensor | None = None,  # Float[(..., $K, F)]  padded NaN, sparse
-        static_covariates: Tensor | None = None,  # Float[(..., M)]  padded NaN, sparse
+        context_times: Tensor,  # Float[..., $N)], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        target_values: Tensor | None = None,  # Float[..., $K, F], padded NaN, sparse
+        static_covariates: Tensor | None = None,  # Float[..., M], padded NaN, sparse
         # extra args
         batch_first: bool = True,
         validate: bool = False,

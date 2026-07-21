@@ -427,12 +427,12 @@ class ProFITi(nn.Module):
     def _encode(
         self,
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-    ) -> tuple[Tensor, Tensor]:  # (..., P, latent_dim), (..., P)
+        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+    ) -> tuple[Tensor, Tensor]:  # Float[..., P, latent_dim], Float[..., P]
         request = EventBatch.from_request(
             query_times=query_times,
             query_mask=query_mask,
@@ -458,12 +458,12 @@ class ProFITi(nn.Module):
         values: Tensor,  # (*S, ..., $K, F)
         /,
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
-    ) -> Tensor:  # (*S, ...)
+        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+    ) -> Tensor:  # Float[*S, ...]
         r"""Compute the joint log-likelihood of the target values under the model.
 
         .. math:: \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ)))
@@ -499,13 +499,13 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         rng: Generator | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ...)
+    ) -> tuple[Tensor, Tensor]:  # Float[*S, ..., $K, D], Float[*S, ...]
         # Shape legend: *S=sample, $T=combined steps, D=channels, P=packed targets
         sample_shape = (size,) if isinstance(size, int) else size
 
@@ -539,13 +539,13 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[(..., $K)], padded NaN, strictly increasing
-        query_mask: Tensor,  # Bool[(..., $K, F)]  padded False
-        context_times: Tensor,  # Float[(..., $N)], padded NaN, non-decreasing
-        context_mask: Tensor,  # Bool[(..., $N, D)], padded False
-        context_values: Tensor,  # Float[(..., $N, D)], padded NaN, sparse
+        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_mask: Tensor,  # Bool[..., $K, F]  padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         rng: Generator | None = None,
-    ) -> Tensor:  # (*S, ..., $K, D)
+    ) -> Tensor:  # Float[*S, ..., $K, D]
         return self.sample_and_log_prob(
             size=size,
             query_times=query_times,
