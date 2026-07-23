@@ -100,7 +100,7 @@ def _centered_cumulative_knots(widths: Tensor, center: Tensor, /) -> Tensor:
             + cumwidths[..., right_center_idx : right_center_idx + 1]
         )
 
-    return cumwidths - center_offset + center.unsqueeze(-1)
+    return cumwidths - center_offset + center[..., None]
 
 
 class BinKnots(NamedTuple):
@@ -334,6 +334,8 @@ class LinearRationalSpline(nn.Module):
         x = _centered_cumulative_knots(widths, x_center)
         y = _centered_cumulative_knots(heights, y_center)
 
+        lambdas = torch.broadcast_to(lambdas, (*x.shape[:-1], -1))
+        derivatives = torch.broadcast_to(derivatives, (*x.shape[:-1], -1))
         derivatives = derivatives.clip(self.MIN_DERIVATIVE)
 
         return BinKnots(x=x, y=y, lambdas=lambdas, derivatives=derivatives)
@@ -2324,8 +2326,14 @@ class Moses(nn.Module):
             context_mask: Boolean mask selecting observed context positions.
 
         Returns:
-            Joint log-likelihood with shape ``(...,)``.
+            Joint log-likelihood with shape ``(*S, ...)``.
         """
+        sample_shape = values.shape[:-2]
+        context_times = torch.broadcast_to(context_times, (*sample_shape, -1))
+        context_values = torch.broadcast_to(context_values, (*sample_shape, -1, -1))
+        context_mask = torch.broadcast_to(context_mask, (*sample_shape, -1, -1))
+        query_times = torch.broadcast_to(query_times, (*sample_shape, -1))
+        query_mask = torch.broadcast_to(query_mask, (*sample_shape, -1, -1))
         triplets = TripletTimeData.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -2372,7 +2380,7 @@ class Moses(nn.Module):
         samples = self._sample_triplets(size, triplets, rng=rng)  # (*S, ..., $K)
 
         # reshape the samples from (*S, ..., $K) to (*S, ..., $Q, F)
-        return samples[triplets.query_indices].masked_fill(~query_mask, nan)
+        return samples[..., *triplets.query_indices].masked_fill(~query_mask, nan)
 
     def sample_and_log_prob(
         self,
@@ -2430,7 +2438,7 @@ class Moses(nn.Module):
         # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
         # log pᵢ(x) = log qᵢ(f⁻¹(x)) + log |det J(f⁻¹(x))|
         z_selected, logabsdet = self.conditional_flow.encode_and_logabsdet(
-            samples, h, valid_mask=query_valid
+            samples.unsqueeze(-2), h, valid_mask=query_valid
         )
         base_log_prob = self.base_distribution.log_prob(
             z_selected, h, valid_mask=query_valid
@@ -2447,6 +2455,6 @@ class Moses(nn.Module):
         self.log_probs = log_probs  # (*S, ...)
 
         # reshape the samples from (*S, ..., $K) to (*S, ..., $Q, F)
-        samples = samples[triplets.query_indices].masked_fill(~query_mask, nan)
+        samples = samples[..., *triplets.query_indices].masked_fill(~query_mask, nan)
 
         return samples, log_probs

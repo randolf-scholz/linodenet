@@ -21,7 +21,7 @@ from linodenet_models.mnf import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestContinuousTimeModel, make_continuous_time_request
+from .base import TestPathCTM
 
 
 def _manual_mixture_samples(
@@ -285,7 +285,7 @@ class TestMarginalizableNormalizingFlow:
         assert final_loss < initial_loss
 
 
-class TestMoses(TestContinuousTimeModel[Moses]):
+class TestMoses(TestPathCTM[Moses]):
     r"""Shared forecasting-model and smoke tests for Moses."""
 
     SEED: ClassVar[int] = 0
@@ -362,143 +362,6 @@ class TestMoses(TestContinuousTimeModel[Moses]):
         model = self.make_model(self.STANDARD_CONFIG)
 
         assert isinstance(model, Moses)
-
-    @pytest.mark.parametrize("batch_shape", [(), (1,), (1, 2, 3)])
-    @pytest.mark.parametrize("size", [(), 1, (1,), (1, 2, 3)])
-    def test_sample_succeeds(
-        self, batch_shape: tuple[int, ...], size: int | tuple[int, ...]
-    ) -> None:
-        r"""Sampling should succeed on a simple request."""
-        torch.manual_seed(0)
-        model = self.make_model(self.STANDARD_CONFIG)
-        data = make_continuous_time_request(
-            rng=self.SEED,
-            batch_shape=batch_shape,
-            min_steps=self.MIN_STEPS,
-            max_steps=self.MAX_STEPS,
-            context_shape=self.CONTEXT_SHAPE,
-            output_shape=self.OUTPUT_SHAPE,
-            input_missingness=True,
-            target_missingness=True,
-        )
-
-        samples = model.sample(
-            size,
-            query_times=data.query_times,
-            query_mask=data.query_mask,
-            context_times=data.context_times,
-            context_values=data.context_values,
-            context_mask=data.context_mask,
-        )
-
-        sample_shape = (size,) if isinstance(size, int) else size
-        assert samples.shape == (*sample_shape, *data.query_mask.shape)
-        assert torch.equal(samples.isfinite(), data.query_mask.expand_as(samples))
-
-    @pytest.mark.parametrize("batch_shape", [(), (1,), (1, 2, 3)])
-    def test_log_prob_succeeds(self, batch_shape: tuple[int, ...]) -> None:
-        r"""Density evaluation should succeed on a simple request."""
-        torch.manual_seed(0)
-        model = self.make_model(self.STANDARD_CONFIG)
-        data = make_continuous_time_request(
-            rng=self.SEED,
-            batch_shape=batch_shape,
-            min_steps=self.MIN_STEPS,
-            max_steps=self.MAX_STEPS,
-            context_shape=self.CONTEXT_SHAPE,
-            output_shape=self.OUTPUT_SHAPE,
-            input_missingness=True,
-            target_missingness=True,
-        )
-        assert data.target_values is not None
-
-        log_prob = model.log_prob(
-            data.target_values,
-            query_times=data.query_times,
-            query_mask=data.query_mask,
-            context_times=data.context_times,
-            context_values=data.context_values,
-            context_mask=data.context_mask,
-        )
-
-        assert log_prob.shape == batch_shape
-        assert log_prob.isfinite().all()
-
-    @pytest.mark.parametrize("batch_shape", [(), (1,), (1, 2, 3)])
-    @pytest.mark.parametrize("size", [1, (1, 2, 3)])
-    def test_sample_and_log_prob_consistent(
-        self, batch_shape: tuple[int, ...], size: int | tuple[int, ...]
-    ) -> None:
-        r"""`sample_and_log_prob` should agree with `log_prob` on returned samples."""
-        torch.manual_seed(0)
-        model = self.make_model(self.STANDARD_CONFIG)
-        data = make_continuous_time_request(
-            rng=self.SEED,
-            batch_shape=batch_shape,
-            min_steps=self.MIN_STEPS,
-            max_steps=self.MAX_STEPS,
-            context_shape=self.CONTEXT_SHAPE,
-            output_shape=self.OUTPUT_SHAPE,
-            input_missingness=True,
-            target_missingness=True,
-        )
-
-        samples, log_prob_direct = model.sample_and_log_prob(
-            size,
-            query_times=data.query_times,
-            query_mask=data.query_mask,
-            context_times=data.context_times,
-            context_values=data.context_values,
-            context_mask=data.context_mask,
-        )
-        log_prob_via_sample = model.log_prob(
-            samples,
-            query_times=data.query_times,
-            query_mask=data.query_mask,
-            context_times=data.context_times,
-            context_values=data.context_values,
-            context_mask=data.context_mask,
-        )
-
-        sample_shape = (size,) if isinstance(size, int) else size
-        assert samples.shape == (*sample_shape, *data.query_mask.shape)
-        assert log_prob_direct.shape == (*sample_shape, *batch_shape)
-        assert torch.equal(samples.isfinite(), data.query_mask.expand_as(samples))
-        assert_close(log_prob_direct, log_prob_via_sample)
-
-    @pytest.mark.parametrize("batch_shape", [(), (1,), (1, 2, 3)])
-    @pytest.mark.parametrize("size", [1, (1, 2, 3)])
-    def test_sample_and_log_prob_succeeds(
-        self, batch_shape: tuple[int, ...], size: int | tuple[int, ...]
-    ) -> None:
-        r"""Sampling with log probabilities should preserve leading sample axes."""
-        torch.manual_seed(0)
-        model = self.make_model(self.STANDARD_CONFIG)
-        data = make_continuous_time_request(
-            rng=self.SEED,
-            batch_shape=batch_shape,
-            min_steps=self.MIN_STEPS,
-            max_steps=self.MAX_STEPS,
-            context_shape=self.CONTEXT_SHAPE,
-            output_shape=self.OUTPUT_SHAPE,
-            input_missingness=True,
-            target_missingness=True,
-        )
-
-        samples, log_probs = model.sample_and_log_prob(
-            size,
-            query_times=data.query_times,
-            query_mask=data.query_mask,
-            context_times=data.context_times,
-            context_values=data.context_values,
-            context_mask=data.context_mask,
-        )
-
-        sample_shape = (size,) if isinstance(size, int) else size
-        assert samples.shape == (*sample_shape, *data.query_mask.shape)
-        assert log_probs.shape == (*sample_shape, *batch_shape)
-        assert torch.equal(samples.isfinite(), data.query_mask.expand_as(samples))
-        assert log_probs.isfinite().all()
 
 
 class TestMHA:

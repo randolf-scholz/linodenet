@@ -66,28 +66,6 @@ class ProbabilisticForecastingModel(Protocol):
       $p(y_{tₖ} | tₖ, S, M)$ for each time step $tₖ ∈ T$.
     """
 
-    # @abstractmethod
-    # def __call__(
-    #     self,
-    #     query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
-    #     query_mask: Tensor,  # Bool[..., $K, F], padded False
-    #     context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
-    #     context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
-    #     context_mask: Tensor,  # Bool[..., $N, D], padded False
-    # ) -> Distribution:  # p(
-    #     r"""Forward pass of the model.
-    #
-    #     Args:
-    #         query_times: $q = (t₁, t₂, …, tₖ)$ are the time indices we want to predict at
-    #         query_mask: $c = (c₁, c₂, …, cₖ)$ indicate channels to be predicted at query time
-    #         context_times: $τ = (τ₁, τ₂, …, τₙ)$ are the time indices of the observations
-    #         context_values: $x = (x₁, x₂, …, xₙ)$ are the values of the observations
-    #         context_mask: $m = (m₁, m₂, …, mₙ)$ indicate valid observations (at feature level)
-    #
-    #     Returns:
-    #         prediction: Batched Distribution object.
-    #     """
-
     @abstractmethod
     def log_prob(
         self,
@@ -152,7 +130,7 @@ class ProbabilisticForecastingModel(Protocol):
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         rng: Generator | None = None,
-    ) -> Tensor:  # (*S, ..., $K, F), (*S, ..., $K) or (*S, ...)
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, F), (*S, ..., $K)
         r"""Sample from the predictive distribution of the model."""
 
 
@@ -166,18 +144,6 @@ class PathForecastingModel(Protocol):
             model: \Seq(𝓣)×\Seq(𝓣×𝓧) ⟶ 𝓟(\Seq(𝓧)),
             ((t₁, …, tₙ), S, M) ⟼ p̂(y_{t₁}, y_{t₂}, …, y_{tₙ} | (t₁, …, tₙ), S, M)
     """
-
-    # @abstractmethod
-    # def __call__(self, query: Tensor, context: Tensor, /) -> Distribution:
-    #     r"""Forward pass of the model.
-    #
-    #     Args:
-    #       query: $q = (t₁, t₂, …, tₙ)$ are the time indices we want to predict at
-    #       context: $S = ((τ₁, x₁), (τ₂, x₂), …, (τₘ, xₘ))$ are the observations and covariates.
-    #
-    #     Returns:
-    #         prediction: The joint distribution over the future time steps.
-    #     """
 
     @abstractmethod
     def log_prob(
@@ -231,6 +197,20 @@ class PathForecastingModel(Protocol):
         Returns:
             samples: The sampled values from the predictive distribution.
         """
+
+    @abstractmethod
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F], padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        rng: Generator | None = None,
+    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, F), (*S, ...)
+        r"""Sample from the predictive distribution of the model."""
 
 
 class ProbabilisticLSSM(Protocol):
