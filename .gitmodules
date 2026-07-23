@@ -31,3 +31,6 @@
 [submodule "third_party/latent_ode"]
 	path = third_party/latent_ode
 	url = git@github.com:YuliaRubanova/latent_ode.git
+[submodule "survae_flows"]
+	path = survae_flows
+	url = git@github.com:didriknielsen/survae_flows.git
