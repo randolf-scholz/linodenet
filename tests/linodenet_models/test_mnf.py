@@ -421,8 +421,8 @@ class TestMoses(TestContinuousTimeModel[Moses]):
             context_mask=data.context_mask,
         )
 
-        assert log_prob.shape == ()
-        assert log_prob.isfinite()
+        assert log_prob.shape == batch_shape
+        assert log_prob.isfinite().all()
 
     @pytest.mark.parametrize("batch_shape", [(), (1,), (1, 2, 3)])
     @pytest.mark.parametrize("size", [1, (1, 2, 3)])
@@ -460,9 +460,10 @@ class TestMoses(TestContinuousTimeModel[Moses]):
             context_mask=data.context_mask,
         )
 
-        assert samples.shape == data.query_mask.shape
-        assert log_prob_direct.shape == ()
-        assert torch.equal(samples.isfinite(), data.query_mask)
+        sample_shape = (size,) if isinstance(size, int) else size
+        assert samples.shape == (*sample_shape, *data.query_mask.shape)
+        assert log_prob_direct.shape == (*sample_shape, *batch_shape)
+        assert torch.equal(samples.isfinite(), data.query_mask.expand_as(samples))
         assert_close(log_prob_direct, log_prob_via_sample)
 
     @pytest.mark.parametrize("batch_shape", [(), (1,), (1, 2, 3)])
@@ -495,7 +496,7 @@ class TestMoses(TestContinuousTimeModel[Moses]):
 
         sample_shape = (size,) if isinstance(size, int) else size
         assert samples.shape == (*sample_shape, *data.query_mask.shape)
-        assert log_probs.shape == sample_shape
+        assert log_probs.shape == (*sample_shape, *batch_shape)
         assert torch.equal(samples.isfinite(), data.query_mask.expand_as(samples))
         assert log_probs.isfinite().all()
 
