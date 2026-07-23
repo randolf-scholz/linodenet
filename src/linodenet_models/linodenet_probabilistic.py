@@ -16,6 +16,7 @@ from typing import Any, Final, Optional
 
 import torch
 from torch import Generator, Tensor, nan, nn
+from torch.linalg import solve_triangular
 
 from linodenet.state_update import GaussianForwardUpdater, GaussianReverseUpdater
 
@@ -611,6 +612,23 @@ def make_linodenet_prob(
     )
 
 
+class Augment(nn.Module):
+    def __init__(
+        self, input_size: int, latent_size: int, *, encoder: nn.Module
+    ) -> None:
+        super().__init__()
+        self.input_size = input_size
+        self.latent_size = latent_size
+        self.encoder = encoder
+
+    def encode_and_logabsdet(self, x: Tensor, /) -> Tensor:
+        e, ldj = self.encoder.sample_and_log_prob(x.shape[:-1])
+        return torch.cat([x, e], dim=self.dim), ldj
+
+    def decode(self, z: Tensor, /) -> Tensor:
+        return z[..., : self.input_size]  # only keep the first n values
+
+
 class KoopmanFilter(nn.Module):
     r"""Working title.
 
@@ -669,6 +687,78 @@ class KoopmanFilter(nn.Module):
         self.register_buffer("prior_covs", None, persistent=False)
         self.register_buffer("posterior_means", None, persistent=False)
         self.register_buffer("posterior_covs", None, persistent=False)
+
+    def update_iekf(
+        self,
+        y_obs: Tensor,
+        state: tuple[Tensor, Tensor],
+        /,
+        *,
+        mask: Tensor | None = None,
+        n_iter: int = 3,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Update the state given an observation using iterated Extended Kalman Filter.
+
+        .. math:: μ₊, Σ₊ = \argmin_{μ, Σ} 𝐄_{z∼𝓝(μ, Σ)}[ ½‖yₒ - hₒ(z)‖²_{Rₒ⁻¹}]
+                                          + KL(𝓝(μ, Σ) || 𝓝(μ₋, Σ₋))
+
+        The argmin is computed via Gauss-Newton:
+
+            # r = y - h(μ⁽ⁱ⁻¹⁾) - 𝐃h(μ⁽ⁱ⁻¹⁾)(μ₋ - μ⁽ⁱ⁻¹⁾)
+            # S = 𝐃h(μ⁽ⁱ⁻¹⁾) Σ₋ 𝐃h(μ⁽ⁱ⁻¹⁾)ᵀ + R
+            # K = Σ₋ 𝐃h(μ⁽ⁱ⁻¹⁾)ᵀ S⁻¹
+            # μ⁽ⁱ⁾ = μ₋ + K r
+            # Σ⁽ⁱ⁾ = Σ₋ - K S Kᵀ
+
+            Given Σ₋ = LLᵀ, we need to compute:
+              - h(μ), 𝐃h(μ)(μ₋ - μ), 𝐃h(μ)L
+              - we can do this with a single torch.func.jvp call, using:
+                𝐃h(μ)(μ₋ - μ) = 𝐃h(μ)L L⁻¹(μ₋ - μ)
+
+        References:
+            - | Algorithm 7.9, Bayesian Filtering and Smoothing, 2nd Edition
+              | Simo Särkkä and Lennart Svensson
+        """
+        μ_prior, Σ_prior = state
+        L = torch.linalg.cholesky(Σ_prior)
+        μ = μ_prior
+        batch_shape = y_obs.shape[:-1]
+
+        R = self.R.expand(*batch_shape, self.input_size, self.input_size)
+
+        if mask is not None:
+            R = (
+                torch.where(mask.unsqueeze(-1) & mask.unsqueeze(-2), R, 0.0)
+                + (~mask).to(dtype=R.dtype).diag_embed()
+            )
+
+        for _ in range(n_iter):
+            # compute both h(μ⁽ⁱ⁻¹⁾) and 𝐃h(μ⁽ⁱ⁻¹⁾)L
+            h, HL = torch.func.jvp(self.decoder, (μ,), (L,))
+            r = y_obs - h - HL @ solve_triangular(L, μ_prior - μ, upper=False)
+            if mask is not None:
+                r = torch.where(mask, r, 0.0)
+                HL = torch.where(mask[..., None], HL, 0.0)
+
+            S = HL @ HL.mT + R
+            K = solve_triangular(L, HL.mT, upper=False).mT @ torch.linalg.solve(
+                S, torch.eye(self.input_size, device=S.device)
+            )
+            μ = μ_prior + K @ r
+            Σ = Σ_prior - K @ HL @ Σ_prior
+
+        return μ, Σ
+
+    def update_iplf(
+        self,
+        y_obs: Tensor,
+        state: tuple[Tensor, Tensor],
+        /,
+        *,
+        mask: Tensor | None = None,
+        n_iter: int = 3,
+    ) -> tuple[Tensor, Tensor]:
+        r"""Update the state given an observation using iterated Predictive Latent Filter."""
 
     def forward(
         self,
