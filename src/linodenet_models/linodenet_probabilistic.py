@@ -632,17 +632,15 @@ class Augment(nn.Module):
 class KoopmanFilter(nn.Module):
     r"""Working title.
 
-    - high dimensional latent linear gaussian system
-    - Normalizing flow decoder + dropping coordinates + noise
-    - z ∼ 𝓝(μ, Σ)
-    - u = g(z), g is normalizing flow
-    - y = π(u) + ε, π projection, ε∼𝓝(0, R) noise
+    - high dimensional latent space ℝᴺ, low dimensional data space ℝⁿ
+    - latent linear gaussian system.
+    - non-linear decoder g: ℝᴺ -> ℝᴺ (possibly normalizing flow)
+    - y = π(g(u)) + ε, π projection that drops last N-n coordinates, ε∼𝓝(0, R) noise
 
     Bound on the log-likelihood of partial observations:
 
     .. math:: log p(y_obs) ≥ 𝐄_{z∼q(z)} [ log 𝓝(y_obs ∣ μ_obs(z), R_obs) ]
         - KL(q(z) || 𝓝(μₜ⁻, Σₜ⁻))
-
     """
 
     input_size: Final[int]
@@ -710,10 +708,10 @@ class KoopmanFilter(nn.Module):
             # μ⁽ⁱ⁾ = μ₋ + K r
             # Σ⁽ⁱ⁾ = Σ₋ - K S Kᵀ
 
-            Given Σ₋ = LLᵀ, we need to compute:
-              - h(μ), 𝐃h(μ)(μ₋ - μ), 𝐃h(μ)L
-              - we can do this with a single torch.func.jvp call, using:
-                𝐃h(μ)(μ₋ - μ) = 𝐃h(μ)L L⁻¹(μ₋ - μ)
+        Given Σ₋ = LLᵀ, we need to compute:
+          - h(μ), 𝐃h(μ)(μ₋ - μ), 𝐃h(μ)L
+          - we can do this with a single torch.func.jvp call, using:
+            𝐃h(μ)(μ₋ - μ) = 𝐃h(μ)L L⁻¹(μ₋ - μ)
 
         References:
             - | Algorithm 7.9, Bayesian Filtering and Smoothing, 2nd Edition
@@ -862,7 +860,7 @@ class KoopmanFilter(nn.Module):
         post_covs = post_covs[combined.query_indices]
         return post_means, post_covs
 
-    def log_prob_bound(
+    def log_prob(
         self,
         values: Tensor,  # Float[..., $K, F]
         /,
