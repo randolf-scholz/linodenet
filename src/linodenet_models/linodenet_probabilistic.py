@@ -6,6 +6,7 @@ __all__ = [
     "LinodenetProbabilistic",
     "LinearGaussianFlow",
     "KoopmanFilter",
+    "make_koopman_filter",
     "make_linodenet_prob",
     "make_linodenet",
 ]
@@ -15,8 +16,8 @@ from collections.abc import Callable, Mapping
 from typing import Any, Final, Optional
 
 import torch
-from torch import Generator, Tensor, nan, nn
-from torch.linalg import solve_triangular
+from torch import Generator, Tensor, einsum, nan, nn
+from torch.linalg import cholesky, solve_triangular
 
 from linodenet.state_update import GaussianForwardUpdater, GaussianReverseUpdater
 
@@ -115,12 +116,12 @@ def linear_gaussian_flow(
         )
 
     # exp(M∆t) is a block matrix
-    Mdt = torch.einsum("..., kl -> ...kl", delta_t, M)
+    Mdt = einsum("..., kl -> ...kl", delta_t, M)
     P = torch.linalg.matrix_exp(Mdt)
     F = P[..., :n, :n]  # top left block
     C = P[..., :n, n : 2 * n]  # top center block
     r = P[..., :n, -1] if b is not None else 0.0  # top right block
-    mu_t = torch.einsum("...nkl, ...l -> ...nk", F, mu_0) + r  # eᴬᵗμ₀ + φ₁(At)bt
+    mu_t = einsum("...nkl, ...l -> ...nk", F, mu_0) + r  # eᴬᵗμ₀ + φ₁(At)bt
     sigma_t = F @ sigma_0.unsqueeze(-3) @ F.mT + C @ F.mT  # eᴬᵗΣ₀eᴬᵀᵗ + CFᵀ
 
     return mu_t, sigma_t
@@ -662,29 +663,115 @@ class KoopmanFilter(nn.Module):
         latent_size: int,
         *,
         decoder: nn.Module,
-        state_updater: nn.Module,
         state_propagator: nn.Module,
+        observation_noise: float = 0.5,
+        n_iter: int = 1,
+        max_num_samples: int = 256,
         batch_first: bool = True,
     ) -> None:
         super().__init__()
         if input_size <= 0 or latent_size <= 0 or latent_size < input_size:
             raise ValueError(f"Invalid {input_size=}, {latent_size=}")
+        if observation_noise <= 0:
+            raise ValueError(
+                f"Expected observation_noise > 0, got {observation_noise=}."
+            )
+        if n_iter < 1:
+            raise ValueError(f"Expected n_iter >= 1, got {n_iter=}.")
+        if max_num_samples < 1:
+            raise ValueError(f"Expected max_num_samples >= 1, got {max_num_samples=}.")
 
         self.input_size = input_size
         self.latent_size = latent_size
         self.decoder = decoder
-        self.state_updater = state_updater
         self.state_propagator = state_propagator
+        self.n_iter = n_iter
+        self.max_num_samples = max_num_samples
         self.batch_first = batch_first
 
         self.initial_mean = nn.Parameter(torch.zeros(self.latent_size))
         self.initial_cov = nn.Parameter(torch.zeros(self.latent_size, self.latent_size))
         self.initial_cov_parametrization = PositiveDefinite()
+        self.observation_log_variance = nn.Parameter(
+            torch.full((input_size,), 2.0 * torch.log(torch.tensor(observation_noise)))
+        )
+
+        # Common random numbers make Monte Carlo bounds reproducible across
+        # equivalent padded and unpadded batches.
+        self.register_buffer(
+            "mc_noise",
+            torch.randn(max_num_samples, latent_size),
+            persistent=False,
+        )
 
         self.register_buffer("prior_means", None, persistent=False)
         self.register_buffer("prior_covs", None, persistent=False)
         self.register_buffer("posterior_means", None, persistent=False)
         self.register_buffer("posterior_covs", None, persistent=False)
+
+    @property
+    def observation_covariance(self) -> Tensor:
+        r"""Return the diagonal observation-noise covariance."""
+        return (
+            self.observation_log_variance.exp()
+            + torch.finfo(self.initial_mean.dtype).eps
+        ).diag_embed()
+
+    def observation(self, z: Tensor, /) -> Tensor:
+        r"""Decode latent states and retain the observed slice."""
+        match self.decoder:
+            case TransformSequence() as decoder:
+                value = z
+                for layer in reversed(decoder):
+                    value = layer.decode(value)  # type: ignore[attr-defined]
+            case decoder if hasattr(decoder, "decode"):
+                value = decoder.decode(z)  # type: ignore[attr-defined]
+            case decoder:
+                value = decoder(z)
+        return value[..., : self.input_size]
+
+    def _kl_gaussian(
+        self,
+        posterior: tuple[Tensor, Tensor],
+        prior: tuple[Tensor, Tensor],
+        /,
+    ) -> Tensor:
+        r"""Compute ``KL(posterior || prior)`` for batched dense Gaussians."""
+        mean, cov = posterior
+        prior_mean, prior_cov = prior
+        prior_scale = cholesky(prior_cov)
+        posterior_scale = cholesky(cov)
+        delta = mean - prior_mean
+        trace = (
+            torch.cholesky_solve(cov, prior_scale)
+            .diagonal(dim1=-2, dim2=-1)
+            .sum(dim=-1)
+        )
+        quadratic = (
+            delta * torch.cholesky_solve(delta.unsqueeze(-1), prior_scale).squeeze(-1)
+        ).sum(dim=-1)
+        logdet_prior = 2.0 * prior_scale.diagonal(dim1=-2, dim2=-1).log().sum(dim=-1)
+        logdet_posterior = 2.0 * posterior_scale.diagonal(dim1=-2, dim2=-1).log().sum(
+            dim=-1
+        )
+        return 0.5 * (
+            trace + quadratic - self.latent_size + logdet_prior - logdet_posterior
+        )
+
+    def _observation_log_prob(
+        self, values: Tensor, means: Tensor, mask: Tensor, /
+    ) -> Tensor:
+        r"""Evaluate diagonal Normal observation densities with arbitrary masks."""
+        variance = self.observation_covariance.diagonal(dim1=-2, dim2=-1)
+        residual = torch.where(mask, values - means, torch.zeros_like(means))
+        log_prob = -0.5 * (
+            residual.square() / variance
+            + variance.log()
+            + torch.log(
+                torch.tensor(2.0 * torch.pi, dtype=values.dtype, device=values.device)
+            )
+        )
+        return torch.where(mask, log_prob, torch.zeros_like(log_prob)).sum(dim=-1)
 
     def update_iekf(
         self,
@@ -695,12 +782,13 @@ class KoopmanFilter(nn.Module):
         mask: Tensor | None = None,
         n_iter: int = 3,
     ) -> tuple[Tensor, Tensor]:
-        r"""Update the state given an observation using iterated Extended Kalman Filter.
+        r"""Update a Gaussian state using a masked iterated extended Kalman filter.
 
-        .. math:: μ₊, Σ₊ = \argmin_{μ, Σ} 𝐄_{z∼𝓝(μ, Σ)}[ ½‖yₒ - hₒ(z)‖²_{Rₒ⁻¹}]
-                                          + KL(𝓝(μ, Σ) || 𝓝(μ₋, Σ₋))
+        The update applies Gauss--Newton to the MAP objective induced by the
+        nonlinear Normal observation model. It is a Laplace approximation, not
+        the exact minimizer of the Gaussian ELBO returned by :meth:`log_prob`.
 
-        The argmin is computed via Gauss-Newton:
+        The iteration is:
 
             # r = y - h(μ⁽ⁱ⁻¹⁾) - 𝐃h(μ⁽ⁱ⁻¹⁾)(μ₋ - μ⁽ⁱ⁻¹⁾)
             # S = 𝐃h(μ⁽ⁱ⁻¹⁾) Σ₋ 𝐃h(μ⁽ⁱ⁻¹⁾)ᵀ + R
@@ -708,43 +796,52 @@ class KoopmanFilter(nn.Module):
             # μ⁽ⁱ⁾ = μ₋ + K r
             # Σ⁽ⁱ⁾ = Σ₋ - K S Kᵀ
 
-        Given Σ₋ = LLᵀ, we need to compute:
-          - h(μ), 𝐃h(μ)(μ₋ - μ), 𝐃h(μ)L
-          - we can do this with a single torch.func.jvp call, using:
-            𝐃h(μ)(μ₋ - μ) = 𝐃h(μ)L L⁻¹(μ₋ - μ)
-
         References:
             - | Algorithm 7.9, Bayesian Filtering and Smoothing, 2nd Edition
               | Simo Särkkä and Lennart Svensson
         """
-        μ_prior, Σ_prior = state
-        L = torch.linalg.cholesky(Σ_prior)
-        μ = μ_prior
+        assert n_iter >= 1
+        assert mask is None or (mask.shape == y_obs.shape and mask.dtype == torch.bool)
+
         batch_shape = y_obs.shape[:-1]
 
-        R = self.R.expand(*batch_shape, self.input_size, self.input_size)
+        μ_prior, Σ_prior = state
+        μ = μ_prior
+
+        R = self.observation_covariance.expand(
+            *batch_shape, self.input_size, self.input_size
+        )
+        L = cholesky(Σ_prior)
 
         if mask is not None:
-            R = (
-                torch.where(mask.unsqueeze(-1) & mask.unsqueeze(-2), R, 0.0)
-                + (~mask).to(dtype=R.dtype).diag_embed()
-            )
+            y_obs = torch.where(mask, y_obs, 0.0)
+            cov_mask = mask.unsqueeze(-1) & mask.unsqueeze(-2)
+            R = torch.where(cov_mask, R, 0.0) + (~mask).to(dtype=R.dtype).diag_embed()
 
         for _ in range(n_iter):
-            # compute both h(μ⁽ⁱ⁻¹⁾) and 𝐃h(μ⁽ⁱ⁻¹⁾)L
-            h, HL = torch.func.jvp(self.decoder, (μ,), (L,))
-            r = y_obs - h - HL @ solve_triangular(L, μ_prior - μ, upper=False)
-            if mask is not None:
-                r = torch.where(mask, r, 0.0)
-                HL = torch.where(mask[..., None], HL, 0.0)
-
-            S = HL @ HL.mT + R
-            K = solve_triangular(L, HL.mT, upper=False).mT @ torch.linalg.solve(
-                S, torch.eye(self.input_size, device=S.device)
+            # Pack the N Cholesky columns as a batch of tangent directions.
+            # This computes H L without materializing the full H (..., n, N).
+            h, HL_transposed = torch.func.jvp(
+                self.observation,
+                (μ.unsqueeze(-2).expand_as(L.mT).clone(),),
+                (L.mT,),
             )
-            μ = μ_prior + K @ r
-            Σ = Σ_prior - K @ HL @ Σ_prior
+            HL = HL_transposed.mT
+            h = h[..., 0, :]
+            δ = solve_triangular(L, (μ_prior - μ).unsqueeze(-1), upper=False).squeeze(
+                -1
+            )
+            r = y_obs - h - einsum("...ij, ...j -> ...i", HL, δ)
+            if mask is not None:
+                HL = torch.where(mask[..., None], HL, 0.0)
+                r = torch.where(mask, r, 0.0)
 
+            ΣHt = L @ HL.mT
+            K = torch.linalg.solve(HL @ HL.mT + R, ΣHt.mT).mT
+            μ = μ_prior + einsum("...ij, ...j -> ...i", K, r)
+
+        Σ = Σ_prior - ΣHt @ K.mT  # type: ignore[unbound-name]
+        Σ = (Σ + Σ.mT) / 2  # ensure symmetry.
         return μ, Σ
 
     def update(
@@ -757,7 +854,7 @@ class KoopmanFilter(nn.Module):
         n_iter: int = 3,
     ) -> tuple[Tensor, Tensor]:
         r"""Update the state given an observation."""
-        raise NotImplementedError
+        return self.update_iekf(y_obs, state, mask=mask, n_iter=n_iter)
 
     def forward(
         self,
@@ -810,9 +907,11 @@ class KoopmanFilter(nn.Module):
 
             post_state = update_masked(
                 prior_state,
-                lambda y, mean, cov: self.state_updater(y, (mean, cov), mask=obs_mask),
-                args=(x_obs, *prior_state),
-                batch_mask=active,
+                lambda y, mean, cov, mask: self.update(
+                    y, (mean, cov), mask=mask, n_iter=self.n_iter
+                ),
+                args=(x_obs, *prior_state, obs_mask),
+                batch_mask=obs_mask.any(dim=-1),
             )
 
             prior_means.append(prior_state[0])
@@ -873,8 +972,81 @@ class KoopmanFilter(nn.Module):
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
+        num_samples: int = 16,
     ) -> Tensor:  # Float[..., $K]
-        raise NotImplementedError
+        r"""Estimate a per-timestamp ELBO for noisy marginal observations.
+
+        The nonlinear decoder makes the predictive density intractable in
+        general. This therefore returns a Monte Carlo estimate of a *lower
+        bound* on ``log p(values | context)`` rather than an exact log-density.
+        ``num_samples`` controls the reparameterized expectation under the
+        Gaussian iEKF posterior; it must not exceed ``max_num_samples``.
+        """
+        return self.log_prob_bound(
+            values,
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+            num_samples=num_samples,
+        )
+
+    def log_prob_bound(
+        self,
+        values: Tensor,
+        /,
+        *,
+        query_times: Tensor,
+        query_mask: Tensor,
+        context_times: Tensor,
+        context_values: Tensor,
+        context_mask: Tensor,
+        initial_state: tuple[Tensor, Tensor] | None = None,
+        initial_time: Tensor | None = None,
+        num_samples: int = 16,
+    ) -> Tensor:
+        r"""Return the Monte Carlo ELBO used by :meth:`log_prob`.
+
+        This is an estimated lower bound, not an exact marginal log-likelihood.
+        Common random numbers are used only to make equivalent batch layouts
+        produce identical estimates.
+        """
+        if not 1 <= num_samples <= self.max_num_samples:
+            raise ValueError(f"Expected 1 <= num_samples <= {self.max_num_samples}.")
+
+        mean_prior, cov_prior = self.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        mask = query_mask.expand_as(values)
+        posterior = self.update(
+            values,
+            (mean_prior, cov_prior),
+            mask=mask,
+            n_iter=self.n_iter,
+        )
+        mean, cov = posterior
+        scale = cholesky(cov)
+        noise = self.mc_noise[:num_samples].to(dtype=mean.dtype, device=mean.device)
+        noise = noise.reshape(num_samples, *(1,) * (mean.ndim - 1), self.latent_size)
+        samples = mean.unsqueeze(0) + (
+            scale.unsqueeze(0) @ noise.unsqueeze(-1)
+        ).squeeze(-1)
+        log_likelihood = self._observation_log_prob(
+            values.unsqueeze(0),
+            self.observation(samples),
+            mask.unsqueeze(0),
+        ).mean(dim=0)
+        bound = log_likelihood - self._kl_gaussian(posterior, (mean_prior, cov_prior))
+        return torch.where(mask.any(dim=-1), bound, torch.zeros_like(bound))
 
     def sample(
         self,
@@ -890,7 +1062,32 @@ class KoopmanFilter(nn.Module):
         rng: Generator | None = None,
     ) -> Tensor:  # Float[*S, ..., $K, F]
         r"""Sample from the time-marginal predictive distribution."""
-        raise NotImplementedError
+        sample_shape = (size,) if isinstance(size, int) else size
+        mean, cov = self.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
+        )
+        latent_mask = torch.ones_like(mean, dtype=torch.bool)
+        z = marginal_gaussian_sample(
+            sample_shape, mean=mean, cov=cov, mask=latent_mask, rng=rng
+        )
+        observations = self.observation(z)
+        noise = (
+            torch.randn(
+                observations.shape,
+                dtype=observations.dtype,
+                device=observations.device,
+                generator=rng,
+            )
+            * self.observation_covariance.diagonal(dim1=-2, dim2=-1).sqrt()
+        )
+        mask = query_mask.expand(*sample_shape, *query_mask.shape)
+        return (observations + noise).masked_fill(~mask, nan)
 
     def sample_and_log_prob(
         self,
@@ -927,3 +1124,64 @@ class KoopmanFilter(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
+
+
+def make_koopman_filter(
+    *,
+    input_size: int,
+    latent_size: int | None = None,
+    decoder: str | nn.Module = "shiesh-lowrank-shiesh",
+    low_rank: int | None = None,
+    observation_noise: float = 0.5,
+    n_iter: int = 1,
+    batch_first: bool = True,
+    state_propagator: Mapping[str, Any] | None = None,
+) -> KoopmanFilter:
+    r"""Instantiate the high-dimensional noisy flow-observation filter."""
+    latent_size = 2 * input_size if latent_size is None else latent_size
+    if isinstance(decoder, nn.Module):
+        decoder_module = decoder
+    else:
+        match decoder:
+            case "identity":
+                decoder_module = nn.Identity()
+            case "shiesh":
+                decoder_module = TransformSequence([Shiesh(t=1.0, a=1.0)])
+            case "lowrank":
+                rank = input_size if low_rank is None else low_rank
+                layer = LowRankTransform(latent_size, rank=rank)
+                nn.init.constant_(layer.theta, 0.1)
+                decoder_module = TransformSequence([layer])
+            case "shiesh-lowrank-shiesh":
+                rank = input_size if low_rank is None else low_rank
+                layer = LowRankTransform(latent_size, rank=rank)
+                nn.init.constant_(layer.theta, 0.1)
+                decoder_module = TransformSequence(
+                    [
+                        Shiesh(t=1.0, a=1.0),
+                        layer,
+                        Shiesh(t=1.0, a=1.0),
+                    ]
+                )
+            case _:
+                raise ValueError(f"Unknown decoder: {decoder!r}.")
+
+    propagator_kwargs = {
+        "input_size": latent_size,
+        "kernel_initialization": "zero",
+        "kernel_parametrization": "identity",
+        "use_rezero": False,
+        "use_bias": False,
+    }
+    if state_propagator is not None:
+        propagator_kwargs.update(state_propagator)
+
+    return KoopmanFilter(
+        input_size=input_size,
+        latent_size=latent_size,
+        decoder=decoder_module,
+        state_propagator=LinearGaussianFlow(**propagator_kwargs),
+        observation_noise=observation_noise,
+        n_iter=n_iter,
+        batch_first=batch_first,
+    )

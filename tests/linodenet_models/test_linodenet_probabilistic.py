@@ -7,8 +7,10 @@ from torch import nan
 from linodenet.state_update import GaussianForwardUpdater, GaussianReverseUpdater
 from linodenet_models.decoders import TransformSequence
 from linodenet_models.linodenet_probabilistic import (
+    KoopmanFilter,
     LinearGaussianFlow,
     LinodenetProbabilistic,
+    make_koopman_filter,
     make_linodenet_prob,
 )
 from linodenet_models.profiti import Shiesh
@@ -228,3 +230,89 @@ def test_probabilistic_sample_api_shapes() -> None:
     assert samples[data.query_mask.expand_as(samples)].isfinite().all()
     assert samples[~data.query_mask.expand_as(samples)].isnan().all()
     assert log_prob[:, data.query_mask.any(dim=-1)].isfinite().all()
+
+
+class TestKoopmanFilter(TestContinuousTimeModel[KoopmanFilter]):
+    r"""Shared forecasting-model tests for the noisy flow-observation filter."""
+
+    GRADIENT_WARMUP_STEPS = 1
+    NUM_STEPS = 4
+
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    STANDARD_CONFIG: ClassVar[LinodenetProbabilisticTestConfig] = (
+        LinodenetProbabilisticTestConfig(input_size=CONTEXT_SHAPE[0])
+    )
+
+    @pytest.fixture
+    def model_config(self) -> LinodenetProbabilisticTestConfig:
+        r"""Configuration used to instantiate the model under test."""
+        return self.STANDARD_CONFIG
+
+    @pytest.fixture(params=[False, True], ids=["dense", "sparse"])
+    def input_missingness(self, request: pytest.FixtureRequest) -> bool:
+        r"""Exercise the masked iEKF update for sparse observations."""
+        return request.param
+
+    def make_model(self, model_config: object, /) -> KoopmanFilter:
+        r"""Instantiate a high-dimensional Koopman filter."""
+        if not isinstance(model_config, LinodenetProbabilisticTestConfig):
+            raise TypeError("model_config must be a LinodenetProbabilisticTestConfig.")
+        return make_koopman_filter(
+            input_size=model_config.input_size,
+            latent_size=model_config.input_size + 2,
+            decoder="lowrank",
+            low_rank=2,
+            n_iter=1,
+        )
+
+    def forecast(
+        self,
+        model: KoopmanFilter,
+        inputs: SplitTimeData,
+        /,
+    ) -> tuple[torch.Tensor, ...]:
+        r"""Return estimated per-timestamp ELBOs for target values."""
+        assert inputs.target_values is not None
+        query_valid = inputs.query_mask.any(dim=-1)
+        bound = model.log_prob(
+            inputs.target_values,
+            context_times=inputs.context_times,
+            context_values=inputs.context_values,
+            context_mask=inputs.context_mask,
+            query_times=inputs.query_times,
+            query_mask=inputs.query_mask,
+            num_samples=8,
+        ).masked_fill(~query_valid, nan)
+
+        assert bound.shape == inputs.query_times.shape
+        assert bound[query_valid].isfinite().all()
+        assert bound[~query_valid].isnan().all()
+        return (bound,)
+
+    def loss(
+        self,
+        model: KoopmanFilter,
+        predictions: tuple[torch.Tensor, ...],
+        targets: torch.Tensor,
+    ) -> torch.Tensor:
+        r"""Return the negative mean estimated ELBO."""
+        del model
+        (bound,) = predictions
+        return -bound[targets.isfinite().any(dim=-1)].mean()
+
+
+def test_koopman_filter_iekf_ignores_fully_missing_observations() -> None:
+    r"""A fully missing timestamp must leave the Gaussian state unchanged."""
+    model = make_koopman_filter(input_size=3, latent_size=5, decoder="lowrank")
+    mean = torch.randn(2, 5)
+    covariance = torch.eye(5).expand(2, 5, 5)
+    values = torch.full((2, 3), nan)
+    mask = torch.zeros_like(values, dtype=torch.bool)
+
+    updated_mean, updated_covariance = model.update_iekf(
+        values, (mean, covariance), mask=mask
+    )
+
+    torch.testing.assert_close(updated_mean, mean)
+    torch.testing.assert_close(updated_covariance, covariance)
