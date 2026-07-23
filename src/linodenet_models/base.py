@@ -141,6 +141,20 @@ class ProbabilisticForecastingModel(Protocol):
             samples: The sampled values from the predictive distribution.
         """
 
+    @abstractmethod
+    def sample_and_log_prob(
+        self,
+        size: int | tuple[int, ...] = (),  # *S
+        *,
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., $K, F], padded False
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., $N, D], padded False
+        rng: Generator | None = None,
+    ) -> Tensor:  # (*S, ..., $K, F), (*S, ..., $K) or (*S, ...)
+        r"""Sample from the predictive distribution of the model."""
+
 
 class PathForecastingModel(Protocol):
     r"""Protocol for path-forecasting models.
