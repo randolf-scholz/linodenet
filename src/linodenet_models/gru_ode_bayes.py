@@ -635,7 +635,7 @@ class GRU_ODE_Bayes(nn.Module):
     def predict(
         self,
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
@@ -770,7 +770,7 @@ class GRU_ODE_Bayes(nn.Module):
         values: Tensor,  # Float[..., $K, D]
         /,
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
@@ -802,7 +802,7 @@ class GRU_ODE_Bayes(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., K, F]  padded False
         context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
@@ -837,7 +837,7 @@ class GRU_ODE_Bayes(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., K, F]  padded False
         context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse

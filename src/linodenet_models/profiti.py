@@ -426,7 +426,7 @@ class ProFITi(nn.Module):
     def _encode(
         self,
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
@@ -457,7 +457,7 @@ class ProFITi(nn.Module):
         values: Tensor,  # Float[*S, ..., $K, F]
         /,
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
@@ -498,7 +498,7 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
@@ -538,7 +538,7 @@ class ProFITi(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False

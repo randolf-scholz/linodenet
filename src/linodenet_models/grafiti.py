@@ -343,7 +343,7 @@ class Grafiti(nn.Module):
 
     def predict(
         self,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         *,
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing

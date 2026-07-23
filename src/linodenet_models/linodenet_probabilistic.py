@@ -385,7 +385,7 @@ class LinodenetProbabilistic(nn.Module):
     def predict(
         self,
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
@@ -419,7 +419,7 @@ class LinodenetProbabilistic(nn.Module):
         values: Tensor,  # Float[..., $K, F]
         /,
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
@@ -458,7 +458,7 @@ class LinodenetProbabilistic(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
@@ -491,7 +491,7 @@ class LinodenetProbabilistic(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
@@ -747,7 +747,7 @@ class KoopmanFilter(nn.Module):
 
         return μ, Σ
 
-    def update_iplf(
+    def update(
         self,
         y_obs: Tensor,
         state: tuple[Tensor, Tensor],
@@ -756,7 +756,8 @@ class KoopmanFilter(nn.Module):
         mask: Tensor | None = None,
         n_iter: int = 3,
     ) -> tuple[Tensor, Tensor]:
-        r"""Update the state given an observation using iterated Predictive Latent Filter."""
+        r"""Update the state given an observation."""
+        raise NotImplementedError
 
     def forward(
         self,
@@ -831,7 +832,7 @@ class KoopmanFilter(nn.Module):
     def predict(
         self,
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
@@ -865,8 +866,7 @@ class KoopmanFilter(nn.Module):
         values: Tensor,  # Float[..., $K, F]
         /,
         *,
-        num_probe: int = 16,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
@@ -874,21 +874,13 @@ class KoopmanFilter(nn.Module):
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,
     ) -> Tensor:  # Float[..., $K]
-        post_means, post_covs = self.predict(
-            query_times=query_times,
-            query_mask=query_mask,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-            initial_state=initial_state,
-            initial_time=initial_time,
-        )
+        raise NotImplementedError
 
     def sample(
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
@@ -904,7 +896,7 @@ class KoopmanFilter(nn.Module):
         self,
         size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,  # Float[..., $K], padded NaN, strictly increasing
+        query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
         query_mask: Tensor,  # Bool[..., $K, F]  padded False
         context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
