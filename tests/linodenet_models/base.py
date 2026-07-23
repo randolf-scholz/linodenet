@@ -800,7 +800,7 @@ class TestProbabilisticModel[
         batch_shape: tuple[int, ...],
     ) -> None:
         r"""Log probability should succeed on a simple request."""
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).eval()  # type: ignore[attr]
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -834,7 +834,7 @@ class TestProbabilisticModel[
         size: int | tuple[int, ...],
     ) -> None:
         r"""Sampling should succeed on a simple request."""
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).eval()  # type: ignore[attr]
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -869,7 +869,7 @@ class TestProbabilisticModel[
         size: int | tuple[int, ...],
     ) -> None:
         r"""Sampling with log probabilities should preserve leading sample axes."""
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).eval()  # type: ignore[attr]
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -907,7 +907,7 @@ class TestProbabilisticModel[
         size: int | tuple[int, ...],
     ) -> None:
         r"""`sample_and_log_prob` should agree with `log_prob` on returned samples."""
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).eval()  # type: ignore[attr]
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -954,7 +954,7 @@ class TestPathCTM[
         batch_shape: tuple[int, ...],
     ) -> None:
         r"""Log probability should succeed on a simple request."""
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).eval()  # type: ignore[attr]
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -987,7 +987,7 @@ class TestPathCTM[
         size: int | tuple[int, ...],
     ) -> None:
         r"""Sampling should succeed on a simple request."""
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).eval()  # type: ignore[attr]
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -1022,7 +1022,7 @@ class TestPathCTM[
         size: int | tuple[int, ...],
     ) -> None:
         r"""Sampling with log probabilities should preserve leading sample axes."""
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).eval()  # type: ignore[attr]
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -1059,7 +1059,7 @@ class TestPathCTM[
         size: int | tuple[int, ...],
     ) -> None:
         r"""`sample_and_log_prob` should agree with `log_prob` on returned samples."""
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).eval()  # type: ignore[attr]
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
