@@ -227,8 +227,8 @@ class DiscreteTimeNKF(nn.Module):
             initial_state=initial_state,
             initial_step=initial_time,
         )
-        self.pred_latent_means = post_means[combined.query_indices]
-        self.pred_latent_covs = post_covs[combined.query_indices]
+        self.pred_latent_means = post_means[..., *combined.query_indices, :]
+        self.pred_latent_covs = post_covs[..., *combined.query_indices, :, :]
         return self.pred_latent_means, self.pred_latent_covs
 
     def predict_pseudo_observations(
@@ -571,8 +571,8 @@ class ContinuousTimeNKF(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
-        self.pred_latent_means = post_means[combined.query_indices]
-        self.pred_latent_covs = post_covs[combined.query_indices]
+        self.pred_latent_means = post_means[..., *combined.query_indices, :]
+        self.pred_latent_covs = post_covs[..., *combined.query_indices, :, :]
         return self.pred_latent_means, self.pred_latent_covs
 
     def predict_pseudo_observations(

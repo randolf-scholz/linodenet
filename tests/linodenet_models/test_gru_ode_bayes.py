@@ -20,10 +20,10 @@ from linodenet_models.gru_ode_bayes import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestContinuousTimeModel
+from .base import TestProbabilisticModel
 
 
-class TestGRU_ODE_Bayes(TestContinuousTimeModel[GRU_ODE_Bayes]):
+class TestGRU_ODE_Bayes(TestProbabilisticModel[GRU_ODE_Bayes]):
     r"""Tests for direct GRU-ODE-Bayes model construction."""
 
     CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (5,)
@@ -193,47 +193,6 @@ class TestGRU_ODE_Bayes(TestContinuousTimeModel[GRU_ODE_Bayes]):
         assert model.flow.solver.step_size == config.step_size
         assert isinstance(model.update_cell, GRU_Bayes)
         assert model.update_cell.feature_embedding_size == config.feature_embedding_size
-
-    @pytest.mark.parametrize("size", [(), (5,), (1, 2, 3)])
-    def test_sample_and_log_prob_consistent(self, size: tuple[int, ...]) -> None:
-        torch.manual_seed(0)
-        model = self.make_cru()
-        D = self.STANDARD_CONFIG.input_size
-        times = torch.tensor([0.0, 0.5, 1.0, 1.5])
-        context_mask_all = torch.tensor(
-            [[True] * D, [True] * D, [False] * D, [True] * D]
-        )
-        context_values_all = torch.randn(4, D).masked_fill(~context_mask_all, nan)
-        query_mask_all = torch.zeros(4, D, dtype=torch.bool)
-        query_mask_all[2] = True
-        query_mask_all[3] = True
-
-        ctx_steps = context_mask_all.any(dim=-1)  # [T, T, F, T]
-        q_steps = query_mask_all.any(dim=-1)  # [F, F, T, T]
-        context_times = times[ctx_steps]
-        context_values = context_values_all[ctx_steps]
-        context_mask = context_mask_all[ctx_steps]
-        query_times = times[q_steps]
-        query_mask = query_mask_all[q_steps]
-
-        samples, log_prob_direct = model.sample_and_log_prob(
-            size,
-            query_times=query_times,
-            query_mask=query_mask,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-        )
-        log_prob_via_sample = model.log_prob(
-            samples,
-            query_times=query_times,
-            query_mask=query_mask,
-            context_times=context_times,
-            context_values=context_values,
-            context_mask=context_mask,
-        )
-
-        torch.testing.assert_close(log_prob_direct, log_prob_via_sample)
 
 
 class TestGRUODEBayes:

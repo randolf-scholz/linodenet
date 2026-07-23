@@ -490,8 +490,8 @@ class ContinuousTimeKalmanFilter(nn.Module):
         pred_means = pred_means.masked_fill(~mean_mask, nan)
         pred_covs = pred_covs.masked_fill(~cov_mask, nan)
 
-        self.pred_means = pred_means[combined.query_indices]
-        self.pred_covs = pred_covs[combined.query_indices]
+        self.pred_means = pred_means[..., *combined.query_indices, :]
+        self.pred_covs = pred_covs[..., *combined.query_indices, :, :]
         return self.pred_means, self.pred_covs
 
     def forward(
@@ -1092,8 +1092,8 @@ class DiscreteTimeKalmanFilter(nn.Module):
         pred_means = pred_means.masked_fill(~mean_mask, nan)
         pred_covs = pred_covs.masked_fill(~cov_mask, nan)
 
-        self.pred_means = pred_means[combined.query_indices]
-        self.pred_covs = pred_covs[combined.query_indices]
+        self.pred_means = pred_means[..., *combined.query_indices, :]
+        self.pred_covs = pred_covs[..., *combined.query_indices, :, :]
         return self.pred_means, self.pred_covs
 
     def forward(

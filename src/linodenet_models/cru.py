@@ -594,8 +594,8 @@ class CRU(nn.Module):
             initial_time=initial_time,
         )
 
-        self.pred_means = post_means[combined.query_indices]
-        self.pred_variances = post_logvars[combined.query_indices]
+        self.pred_means = post_means[..., *combined.query_indices, :]
+        self.pred_variances = post_logvars[..., *combined.query_indices, :]
         return self.pred_means, self.pred_variances
 
     def forward(

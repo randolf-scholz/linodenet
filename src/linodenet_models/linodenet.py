@@ -320,7 +320,7 @@ class LinODEnet(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
-        result = predictions[combined.query_indices]
+        result = predictions[..., *combined.query_indices, :]
         assert result.shape == query_mask.shape
         return result
 
@@ -462,7 +462,7 @@ class LinODEnet_EncoderDecoder(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
-        result = predictions[combined.query_indices]
+        result = predictions[..., *combined.query_indices, :]
         assert result.shape == query_mask.shape
         return result
 

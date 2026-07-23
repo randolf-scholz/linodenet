@@ -411,8 +411,8 @@ class LinodenetProbabilistic(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
-        post_means = post_means[combined.query_indices]
-        post_covs = post_covs[combined.query_indices]
+        post_means = post_means[..., *combined.query_indices, :]
+        post_covs = post_covs[..., *combined.query_indices, :, :]
         return post_means, post_covs
 
     def log_prob(
@@ -956,8 +956,8 @@ class KoopmanFilter(nn.Module):
             initial_state=initial_state,
             initial_time=initial_time,
         )
-        post_means = post_means[combined.query_indices]
-        post_covs = post_covs[combined.query_indices]
+        post_means = post_means[..., *combined.query_indices, :]
+        post_covs = post_covs[..., *combined.query_indices, :, :]
         return post_means, post_covs
 
     def log_prob(

@@ -664,8 +664,8 @@ class GRU_ODE_Bayes(nn.Module):
         self.prior_logvars = trace.prior_logvars
         self.posterior_means = trace.posterior_means
         self.posterior_logvars = trace.posterior_logvars
-        self.pred_means = trace.posterior_means[combined.query_indices]
-        self.pred_logvars = trace.posterior_logvars[combined.query_indices]
+        self.pred_means = trace.posterior_means[..., *combined.query_indices, :]
+        self.pred_logvars = trace.posterior_logvars[..., *combined.query_indices, :]
         return self.pred_means, self.pred_logvars
 
     def filter(

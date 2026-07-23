@@ -19,7 +19,7 @@ from linodenet_models.cru import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestContinuousTimeModel
+from .base import TestProbabilisticModel
 
 # language=yaml
 CRU_CONFIG_YAML = r"""
@@ -219,7 +219,7 @@ class TestUpdateMasked:
             assert parameter.grad.isfinite().all()
 
 
-class TestCRU(TestContinuousTimeModel[CRU]):
+class TestCRU(TestProbabilisticModel[CRU]):
     r"""Tests for direct CRU model construction."""
 
     GRADIENT_WARMUP_STEPS = 1
@@ -440,47 +440,6 @@ class TestCRU(TestContinuousTimeModel[CRU]):
                 context_values=context_values[ctx_steps],
                 context_mask=context_mask[ctx_steps],
             )
-
-    @pytest.mark.parametrize("size", [(), (5,), (1, 2, 3)])
-    def test_sample_and_log_prob_consistent(self, size: tuple[int, ...]) -> None:
-        torch.manual_seed(0)
-        model = self.make_cru()
-        D = self.STANDARD_CONFIG.input_size
-        F = self.STANDARD_CONFIG.output_size
-        times = torch.tensor([0.0, 0.5, 1.0, 1.5])
-        context_values = torch.randn(4, D)
-        context_mask = torch.tensor([[True] * D, [True] * D, [False] * D, [True] * D])
-        context_values = context_values.masked_fill(~context_mask, torch.nan)
-        query_mask = torch.zeros(4, F, dtype=torch.bool)
-        query_mask[2] = True
-        query_mask[3] = True
-
-        ctx_steps = context_mask.any(dim=-1)  # [T, T, F, T]
-        q_steps = query_mask.any(dim=-1)  # [F, F, T, T]
-        context_times = times[ctx_steps]
-        query_times = times[q_steps]
-        ctx_values = context_values[ctx_steps]
-        ctx_mask = context_mask[ctx_steps]
-        qry_mask = query_mask[q_steps]
-
-        samples, log_prob_direct = model.sample_and_log_prob(
-            size,
-            query_times=query_times,
-            query_mask=qry_mask,
-            context_times=context_times,
-            context_values=ctx_values,
-            context_mask=ctx_mask,
-        )
-        log_prob_via_sample = model.log_prob(
-            samples,
-            query_times=query_times,
-            query_mask=qry_mask,
-            context_times=context_times,
-            context_values=ctx_values,
-            context_mask=ctx_mask,
-        )
-
-        torch.testing.assert_close(log_prob_direct, log_prob_via_sample)
 
 
 def test_build_cru_instantiates_from_dataclass_config() -> None:

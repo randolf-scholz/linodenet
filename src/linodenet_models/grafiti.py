@@ -364,7 +364,7 @@ class Grafiti(nn.Module):
             context_values=combined.context_values,
             context_mask=combined.context_mask,
         )
-        return result[combined.query_indices]
+        return result[..., *combined.query_indices]
 
     def forward(
         self,
