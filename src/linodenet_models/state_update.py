@@ -600,17 +600,18 @@ class KalmanCell(nn.Module):
         assert J.shape == (*batch_shape, self.input_size, self.input_size)
         assert HL.shape == (*batch_shape, self.input_size, self.hidden_size)
 
-        # u = (M(𝐃h(x)LLᵀ𝐃h(x)ᵀ + JJᵀ)M + I_missing)⁻¹r
-        # note: M(𝐃h(x)LLᵀ𝐃h(x)ᵀ + JJᵀ)M + I_missing = J(𝕀 + BBᵀ)Jᵀ, B = J⁻¹M𝐃h(x)L
-        # solve via: z = J⁻¹r, w = (𝕀 + BBᵀ)⁻¹z, u = J⁻ᵀw
-        # middle part via woodbury: (𝕀 + BBᵀ)⁻¹ = 𝕀 - B(𝕀 + BᵀB)⁻¹Bᵀ (good if m>n)
-        B = solve_triangular(J, HL, upper=False)  # J⁻¹M𝐃h(x)L (..., n, m)
+        # H := 𝐃h(x)
+        # u := (M(HLLᵀHᵀ + JJᵀ)M + diag(missing))⁻¹r
+        # note: M(HLLᵀHᵀ + JJᵀ)M + diag(missing) = J(𝕀ₘ + BBᵀ)Jᵀ, B = J⁻¹MHL
+        # solve via: z = J⁻¹r, w = (𝕀ₘ + BBᵀ)⁻¹z, u = J⁻ᵀw
+        # middle part via woodbury: (𝕀ₘ + BBᵀ)⁻¹ = 𝕀ₙ - B(𝕀ₙ + BᵀB)⁻¹Bᵀ (good if m>n)
+        B = solve_triangular(J, HL, upper=False)  # J⁻¹MHL (..., n, m)
         z = solve_triangular(J, r.unsqueeze(-1), upper=False)  # J⁻¹r
         w = solve(self.eye + B @ B.mT, z)  # shape: (..., n, 1)
         u = solve_triangular(J.mT, w, upper=True).squeeze(-1)  # J⁻ᵀw (..., n)
         assert u.shape == (*batch_shape, self.input_size)
 
-        # δ = Σₓ₞u = L(x)L(x)ᵀ𝐃h(x)ᵀu
+        # δ = Σₓ₞u = L(x)L(x)ᵀHᵀu
         d = torch.einsum("...n, ...nm, ...km -> ...k", u, HL, L)  # (..., m)
 
         return x - self.gate(d)
