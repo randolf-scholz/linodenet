@@ -6,10 +6,13 @@ import pytest
 
 
 def pytest_collection_modifyitems(config, items):  # noqa: ARG001
-    interactive = [item for item in items if item.get_closest_marker(INTERACTIVE_MARK)]
-    non_interactive = [
-        item for item in items if not item.get_closest_marker(INTERACTIVE_MARK)
-    ]
+    interactive = []
+    non_interactive = []
+    for item in items:
+        if any(item.get_closest_marker(mark) for mark in INTERACTIVE_MARKS):
+            interactive.append(item)
+        else:
+            non_interactive.append(item)
 
     # If the current selection contains at least one non-interactive test,
     # skip interactive ones.
@@ -28,6 +31,8 @@ def pytest_collection_modifyitems(config, items):  # noqa: ARG001
 
 
 INTERACTIVE_MARK = "interactive"
+MANUAL_MARK = "manual"
+INTERACTIVE_MARKS = (INTERACTIVE_MARK, MANUAL_MARK)
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
