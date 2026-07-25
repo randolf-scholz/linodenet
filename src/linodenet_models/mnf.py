@@ -671,6 +671,7 @@ class ConditionalLRS(nn.Module):
         self.head_shape = torch.Size(
             (num_heads,) if isinstance(num_heads, int) else num_heads
         )
+        self.use_fp64 = use_fp64
         self.num_bins = int(num_bins)
         self.x_bounds = x_bounds
         self.y_bounds = y_bounds
@@ -733,11 +734,18 @@ class ConditionalLRS(nn.Module):
             raise ValueError(
                 f"context dim must be {self.dim_context}, got {context.shape[-1]}"
             )
+        work_dtype = torch.float64 if self.use_fp64 else context.dtype
+        eps = torch.finfo(work_dtype).eps
 
-        widths = self.spline.MIN_BIN_WIDTH + F.softplus(self.width_model(context))
-        heights = self.spline.MIN_BIN_HEIGHT + F.softplus(self.height_model(context))
-        lambdas = torch.sigmoid(self.lambda_model(context))
-        derivatives = F.softplus(self.derivative_model(context))
+        width_param = self.width_model(context).to(dtype=work_dtype)
+        height_param = self.height_model(context).to(dtype=work_dtype)
+        lambda_param = self.lambda_model(context).to(dtype=work_dtype)
+        derivative_param = self.derivative_model(context).to(dtype=work_dtype)
+
+        widths = self.spline.MIN_BIN_WIDTH + F.softplus(width_param)
+        heights = self.spline.MIN_BIN_HEIGHT + F.softplus(height_param)
+        lambdas = torch.sigmoid(lambda_param) * (1 - 2 * eps) + eps  # (ε, 1-ε)
+        derivatives = F.softplus(derivative_param)
         self.widths = widths.detach()
         self.heights = heights.detach()
         self.lambdas = lambdas.detach()
