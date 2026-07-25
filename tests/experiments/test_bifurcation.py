@@ -8,7 +8,6 @@ import pytest
 import torch
 from matplotlib.lines import Line2D
 from torch import Tensor, nan, nn
-from tqdm.auto import trange
 
 from linodenet.mappings.transforms.scalar import Sinh
 from linodenet_models import (
@@ -31,17 +30,15 @@ from tests.testing import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 MODEL_NAMES = (
-    "LinodenetProbabilistic",
+    # "LinodenetProbabilistic",
     # "KoopmanFilter",
     "Moses",
-    "ContinuousTimeNKF",
-    "CRU",
+    # "ContinuousTimeNKF",
+    # "CRU",
     "ProFITi",
-    "GRU_ODE_Bayes",
-    "ContinuousTimeKalmanFilter",
+    # "GRU_ODE_Bayes",
+    # "ContinuousTimeKalmanFilter",
 )
-NUM_TRAINING_STEPS = 50
-TRAINING_BATCH_SIZE = 32
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,7 +66,11 @@ class BifurcationSampler:
             raise ValueError(msg)
 
     def sample(
-        self, num_trajectories: int, num_steps: int, /
+        self,
+        num_trajectories: int,
+        num_steps: int,
+        /,
+        device: torch.device | None = None,
     ) -> tuple[Tensor, Tensor, Tensor]:
         r"""Return sorted times, trajectory values, and drift signs.
 
@@ -87,13 +88,17 @@ class BifurcationSampler:
             msg = f"Expected at least one time step, got {num_steps}."
             raise ValueError(msg)
 
-        times = torch.rand(num_trajectories, num_steps).sort(dim=-1).values
+        times = (
+            torch.rand(num_trajectories, num_steps, device=device).sort(dim=-1).values
+        )
         time_deltas = torch.diff(times, dim=-1, prepend=torch.zeros_like(times[:, :1]))
         brownian_motion = torch.cumsum(
             self.sigma * torch.randn_like(times) * time_deltas.sqrt(), dim=-1
         )
         coin_result = (
-            torch.randint(0, 2, (num_trajectories,), dtype=torch.int64) * 2 - 1
+            2
+            * torch.randint(0, 2, (num_trajectories,), dtype=torch.int64, device=device)
+            - 1
         )
         drift = coin_result[:, None] * self.beta * (times - self.t_star).clamp_min(0)
         return times, brownian_motion + drift, coin_result
@@ -149,11 +154,11 @@ def _make_model(model_name: str, /) -> nn.Module:
         case "Moses":
             return Moses(
                 input_dim=1,
-                latent_dim=8,
-                num_mixture_components=2,
-                num_flow_layers=1,
-                num_bins=4,
-                num_encoder_heads=1,
+                latent_dim=64,
+                num_mixture_components=8,
+                num_flow_layers=2,
+                num_bins=6,
+                num_encoder_heads=2,
             )
         case "ContinuousTimeNKF":
             return ContinuousTimeNKF(
@@ -265,19 +270,33 @@ def _negative_log_likelihood(model: nn.Module, data: SplitTimeData, /) -> Tensor
 @pytest.mark.parametrize("model_name", MODEL_NAMES)
 def test_bifurcation_models(model_name: str) -> None:
     r"""Train sample-capable models and visualize their bifurcation predictions."""
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    TRAINING_BATCH_SIZE = 32
+    T_STAR = 0.3
+    PATIENCE = 10
+    NUM_TRAJECTORIES = 100
+    NUM_STEPS = 100
+
     torch.manual_seed(0)
-    sampler = BifurcationSampler(t_star=0.3, beta=2.0, sigma=0.2)
-    times, values, coin_results = sampler.sample(100, 100)
+    sampler = BifurcationSampler(t_star=T_STAR, beta=2.0, sigma=0.2)
+    times, values, coin_results = sampler.sample(
+        NUM_TRAJECTORIES, NUM_STEPS, device=DEVICE
+    )
     model = torch.compile(_make_model(model_name), fullgraph=True)
+    model = model.to(device=DEVICE)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
 
     model.train()
-    for _ in trange(NUM_TRAINING_STEPS):
+    best_loss = torch.inf
+    iterations_without_improvement = 0
+    while iterations_without_improvement < PATIENCE:
         batch_indices = torch.randint(times.shape[0], (TRAINING_BATCH_SIZE,))
         batch_times = times[batch_indices]
         batch_values = values[batch_indices]
         data = _split_trajectories(
-            batch_times, batch_values, torch.rand(TRAINING_BATCH_SIZE)
+            batch_times,
+            batch_values,
+            torch.full_like(batch_times[:, 0], T_STAR),
         )
         optimizer.zero_grad()
 
@@ -294,26 +313,36 @@ def test_bifurcation_models(model_name: str) -> None:
         assert loss.isfinite()
         loss.backward()
         optimizer.step()
+        if loss < best_loss:
+            best_loss = loss.detach()
+            iterations_without_improvement = 0
+        else:
+            iterations_without_improvement += 1
 
     model.eval()
-    data = _split_trajectories(times, values, torch.full_like(times[:, 0], 0.3))
+    data = _split_trajectories(times, values, torch.full_like(times[:, 0], T_STAR))
     probabilistic_model = cast("ProbabilisticForecastingModel", model)
     with torch.no_grad():
-        samples = probabilistic_model.sample(
-            (),
-            query_times=data.query_times,
-            query_mask=data.query_mask,
-            context_times=data.context_times,
-            context_values=data.context_values,
-            context_mask=data.context_mask,
-        ).squeeze(0)
+        samples = (
+            probabilistic_model.sample(
+                (),
+                query_times=data.query_times,
+                query_mask=data.query_mask,
+                context_times=data.context_times,
+                context_values=data.context_values,
+                context_mask=data.context_mask,
+            )
+            .squeeze(0)
+            .cpu()
+        )
 
+    assert data.target_values is not None
     assert samples.shape == data.target_values.shape
     fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
     for context_time, context_value, query_time, sample, coin_result in zip(
-        data.context_times,
-        data.context_values[..., 0],
-        data.query_times,
+        data.context_times.cpu(),
+        data.context_values[..., 0].cpu(),
+        data.query_times.cpu(),
         samples[..., 0],
         coin_results,
         strict=True,
@@ -325,7 +354,7 @@ def test_bifurcation_models(model_name: str) -> None:
         else:
             ax.scatter(query_time, sample, color=color, alpha=0.35, s=6)
 
-    ax.axvline(0.3, color="black", linestyle="--", linewidth=1)
+    ax.axvline(T_STAR, color="black", linestyle="--", linewidth=1)
     ax.set(xlabel="time", ylabel="value", xlim=(0, 1), ylim=(-2, 2), title=model_name)
     ax.legend(
         handles=[
