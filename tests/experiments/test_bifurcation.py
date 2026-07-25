@@ -1,17 +1,20 @@
 r"""Generate and visualize Brownian trajectories with a random drift bifurcation."""
 
+import datetime as dt
 import json
+import shutil
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, TypedDict, cast
 
 import matplotlib.pyplot as plt
 import optuna
 import pytest
 import torch
+from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from torch import Tensor, nan, nn
-from tqdm.auto import tqdm
 
 from linodenet.mappings.transforms.scalar import Sinh
 from linodenet_models import (
@@ -42,6 +45,47 @@ MODEL_NAMES = (
     # "GRU_ODE_Bayes",
     # "ContinuousTimeKalmanFilter",
 )
+
+
+def _run_id(path: Path, /) -> int | None:
+    r"""Parse the integer run id from a run directory name."""
+    prefix = path.name.split("_", maxsplit=1)[0]
+    return int(prefix) if prefix.isdecimal() else None
+
+
+def _create_run_directory(model_name: str, /) -> tuple[str, int, str, Path, Path]:
+    r"""Create a timestamped result directory for one tuning run."""
+    runs_dir = RESULT_DIR / "runs" / model_name
+    existing_run_ids = (
+        [
+            run_id
+            for path in runs_dir.iterdir()
+            if path.is_dir() and (run_id := _run_id(path)) is not None
+        ]
+        if runs_dir.is_dir()
+        else []
+    )
+    run_id = max(existing_run_ids, default=0) + 1
+    timestamp = dt.datetime.now(dt.UTC).isoformat(timespec="minutes")
+    run_dir = RESULT_DIR / "runs" / model_name / f"{run_id}_{timestamp}"
+    checkpoints_dir = run_dir / "checkpoints"
+    checkpoints_dir.mkdir(parents=True, exist_ok=False)
+    return model_name.lower(), run_id, timestamp, run_dir, checkpoints_dir
+
+
+def _latest_run_directory(model_name: str, /) -> Path | None:
+    r"""Return the highest-id run directory for a tuned model, if one exists."""
+    runs_dir = RESULT_DIR / "runs" / model_name
+    if not runs_dir.is_dir():
+        return None
+    candidates = [
+        (run_id, path)
+        for path in runs_dir.iterdir()
+        if path.is_dir() and (run_id := _run_id(path)) is not None
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
 
 
 class BifurcationDataset(TypedDict):
@@ -384,6 +428,7 @@ def run_experiment(
         "test": [],
     }
     best_validation_loss = float("inf")
+    best_state_dict: dict[str, Tensor] | None = None
     iterations_without_improvement = 0
 
     for step in range(1, max_steps + 1):
@@ -441,12 +486,18 @@ def run_experiment(
             )
             if validation_value < best_validation_loss:
                 best_validation_loss = validation_value
+                best_state_dict = {
+                    name: tensor.detach().clone().cpu()
+                    for name, tensor in model.state_dict().items()
+                }
                 iterations_without_improvement = 0
             else:
                 iterations_without_improvement += 1
             if iterations_without_improvement >= patience:
                 break
 
+    if best_state_dict is not None:
+        model.load_state_dict(best_state_dict)
     model.eval()
     return model, history
 
@@ -527,12 +578,16 @@ def tune_model_hyperparameters(model_name: str, /) -> None:
         num_steps=NUM_STEPS,
         device=DEVICE,
     )
+    model_stem, run_id, timestamp, run_dir, checkpoints_dir = _create_run_directory(
+        model_name
+    )
+    storage_path = run_dir / f"{model_stem}_bifurcation_optuna.db"
 
     def objective(trial: optuna.Trial) -> float:
         torch.manual_seed(SEED + trial.number + 1)
         model, model_config = _initialize_model(model_name, trial)
         try:
-            _, loss_history = run_experiment(
+            trained_model, loss_history = run_experiment(
                 model_name,
                 model_config,
                 dataset,
@@ -566,6 +621,16 @@ def tune_model_hyperparameters(model_name: str, /) -> None:
                 trial.report(validation_loss, step)
                 if trial.should_prune():
                     raise optuna.TrialPruned
+            state_dict_name = f"trial_{trial.number}_state_dict.pt"
+            torch.save(
+                {
+                    name: tensor.detach().cpu()
+                    for name, tensor in trained_model.state_dict().items()
+                },
+                checkpoints_dir / state_dict_name,
+            )
+            trial.set_user_attr("state_dict", f"checkpoints/{state_dict_name}")
+            trial.set_user_attr("state_dict_kind", "best_validation")
             trial.set_user_attr("loss_history", loss_history)
             return min(loss_history["validation"])
         except RuntimeError as exc:
@@ -574,10 +639,6 @@ def tune_model_hyperparameters(model_name: str, /) -> None:
             if DEVICE.type == "cuda":
                 torch.cuda.empty_cache()
 
-    config_dir = RESULT_DIR / "config"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    model_stem = model_name.lower()
-    storage_path = config_dir / f"{model_stem}_bifurcation_optuna.db"
     study = optuna.create_study(
         study_name=f"{model_stem}_bifurcation",
         storage=f"sqlite:///{storage_path}",
@@ -605,8 +666,26 @@ def tune_model_hyperparameters(model_name: str, /) -> None:
             if trial.state == optuna.trial.TrialState.COMPLETE
         ]
         if complete_trials:
-            best_params = study.best_params
+            reloadable_trials = [
+                trial
+                for trial in complete_trials
+                if trial.user_attrs.get("state_dict_kind") == "best_validation"
+            ]
+            best_trial = min(
+                reloadable_trials or complete_trials,
+                key=lambda trial: float("inf") if trial.value is None else trial.value,
+            )
+            best_params = best_trial.params
+            best_checkpoint = None
+            if best_trial.user_attrs.get("state_dict_kind") == "best_validation":
+                checkpoint_name = best_trial.user_attrs["state_dict"]
+                checkpoint_path = run_dir / checkpoint_name
+                best_checkpoint = f"{model_stem}_bifurcation_best_state_dict.pt"
+                shutil.copy2(checkpoint_path, run_dir / best_checkpoint)
             best_run_config = {
+                "run_id": run_id,
+                "timestamp": timestamp,
+                "run_dir": str(run_dir),
                 "model_name": model_name,
                 "model": {
                     "input_dim": 1,
@@ -640,12 +719,15 @@ def tune_model_hyperparameters(model_name: str, /) -> None:
                 },
                 "objective": {
                     "metric": "validation_nll",
-                    "best_value": study.best_value,
-                    "best_trial": study.best_trial.number,
+                    "best_value": best_trial.value,
+                    "best_trial": best_trial.number,
                 },
-                "loss_history": study.best_trial.user_attrs.get("loss_history"),
+                "state_dict": best_checkpoint,
+                "state_dict_kind": best_trial.user_attrs.get("state_dict_kind"),
+                "trial_state_dict": best_trial.user_attrs.get("state_dict"),
+                "loss_history": best_trial.user_attrs.get("loss_history"),
             }
-            (config_dir / f"{model_stem}_bifurcation_best_config.json").write_text(
+            (run_dir / f"{model_stem}_bifurcation_best_config.json").write_text(
                 json.dumps(best_run_config, indent=2) + "\n",
                 encoding="utf8",
             )
@@ -653,6 +735,9 @@ def tune_model_hyperparameters(model_name: str, /) -> None:
         study_summary = {
             "study_name": study.study_name,
             "storage": str(storage_path),
+            "run_id": run_id,
+            "timestamp": timestamp,
+            "run_dir": str(run_dir),
             "direction": study.direction.name,
             "num_trials": len(study.trials),
             "num_complete_trials": len(complete_trials),
@@ -670,7 +755,7 @@ def tune_model_hyperparameters(model_name: str, /) -> None:
                 for trial in study.trials
             ],
         }
-        (config_dir / f"{model_stem}_bifurcation_optuna_summary.json").write_text(
+        (run_dir / f"{model_stem}_bifurcation_optuna_summary.json").write_text(
             json.dumps(study_summary, indent=2) + "\n",
             encoding="utf8",
         )
@@ -689,6 +774,113 @@ def test_tune_moses_bifurcation_hyperparameters() -> None:
             tests/experiments/test_bifurcation.py::test_tune_moses_bifurcation_hyperparameters
     """
     tune_model_hyperparameters("Moses")
+
+
+def visualize_model_prediction(
+    ax: Axes,
+    data: BifurcationDataset,
+    model: nn.Module,
+    /,
+) -> None:
+    r"""Plot model samples for the held-out bifurcation test split."""
+    test_data = data["test_data"]
+    model.eval()
+    base_model = getattr(model, "_orig_mod", model)
+    plot_lines = isinstance(base_model, (Moses, ProFITi))
+    probabilistic_model = cast("ProbabilisticForecastingModel", model)
+    with torch.no_grad():
+        samples = (
+            probabilistic_model.sample(
+                (),
+                query_times=test_data.query_times,
+                query_mask=test_data.query_mask,
+                context_times=test_data.context_times,
+                context_values=test_data.context_values,
+                context_mask=test_data.context_mask,
+            )
+            .squeeze(0)
+            .cpu()
+        )
+
+    assert test_data.target_values is not None
+    assert samples.shape == test_data.target_values.shape
+    for context_time, context_value, query_time, sample, coin_result in zip(
+        test_data.context_times.cpu(),
+        test_data.context_values[..., 0].cpu(),
+        test_data.query_times.cpu(),
+        samples[..., 0],
+        data["test_coin_results"],
+        strict=True,
+    ):
+        color = "tab:blue" if coin_result.item() < 0 else "tab:orange"
+        ax.plot(context_time, context_value, color="0.5", alpha=0.2, linewidth=0.8)
+        if plot_lines:
+            ax.plot(query_time, sample, color=color, alpha=0.35, linewidth=0.8)
+        else:
+            ax.scatter(query_time, sample, color=color, alpha=0.35, s=6)
+
+    ax.axvline(data["t_star"], color="black", linestyle="--", linewidth=1)
+    ax.set(xlabel="time", ylabel="value", xlim=(0, 1), ylim=(-2, 2))
+    ax.legend(
+        handles=[
+            Line2D([], [], color="tab:blue", label="negative ground-truth drift"),
+            Line2D([], [], color="tab:orange", label="positive ground-truth drift"),
+        ],
+        loc=0,
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.manual
+@pytest.mark.parametrize("model_name", ["Moses"])
+def test_visualize_results(model_name: str) -> None:
+    r"""Load the best stored model and visualize its bifurcation predictions."""
+    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model_stem = model_name.lower()
+    run_dir = _latest_run_directory(model_name)
+    if run_dir is None:
+        pytest.skip(f"No stored hyperparameter tuning runs found for {model_name}.")
+    config_path = run_dir / f"{model_stem}_bifurcation_best_config.json"
+    if not config_path.is_file():
+        pytest.skip(f"No stored hyperparameter tuning result found at {config_path}.")
+
+    run_config = json.loads(config_path.read_text(encoding="utf8"))
+    if run_config.get("state_dict_kind") != "best_validation":
+        pytest.skip("Stored result does not contain a best-validation checkpoint.")
+    state_dict_name = run_config.get("state_dict")
+    if not isinstance(state_dict_name, str):
+        pytest.skip("Stored result does not reference a model state_dict.")
+    state_dict_path = run_dir / state_dict_name
+    if not state_dict_path.is_file():
+        pytest.skip(f"No stored state_dict found at {state_dict_path}.")
+
+    model_config = dict(run_config["model"])
+    if isinstance(model_config.get("bounds"), list):
+        model_config["bounds"] = tuple(model_config["bounds"])
+    model = _make_model(model_name, model_config).to(device=DEVICE)
+    state_dict = torch.load(state_dict_path, map_location=DEVICE, weights_only=True)
+    model.load_state_dict(state_dict)
+
+    data_config = run_config["data"]
+    torch.manual_seed(0)
+    dataset = make_bifurcation_dataset(
+        BifurcationSampler(
+            t_star=data_config["t_star"],
+            beta=data_config["beta"],
+            sigma=data_config["sigma"],
+        ),
+        num_train_trajectories=data_config["num_train_trajectories"],
+        num_validation_trajectories=data_config["num_valid_trajectories"],
+        num_test_trajectories=data_config["num_test_trajectories"],
+        num_steps=data_config["num_steps"],
+        device=DEVICE,
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
+    visualize_model_prediction(ax, dataset, model)
+    ax.set(title=f"{model_name} tuned")
+    fig.savefig(RESULT_DIR / f"{model_name}_tuned.png", dpi=200)
+    plt.close(fig)
 
 
 @pytest.mark.slow
@@ -713,50 +905,9 @@ def test_bifurcation_models(model_name: str) -> None:
     model, loss_history = run_experiment(model_name, {}, dataset)
     assert loss_history["validation"]
 
-    data = dataset["test_data"]
-    coin_results = dataset["test_coin_results"]
-    probabilistic_model = cast("ProbabilisticForecastingModel", model)
-    with torch.no_grad():
-        samples = (
-            probabilistic_model.sample(
-                (),
-                query_times=data.query_times,
-                query_mask=data.query_mask,
-                context_times=data.context_times,
-                context_values=data.context_values,
-                context_mask=data.context_mask,
-            )
-            .squeeze(0)
-            .cpu()
-        )
-
-    assert data.target_values is not None
-    assert samples.shape == data.target_values.shape
     fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
-    for context_time, context_value, query_time, sample, coin_result in zip(
-        data.context_times.cpu(),
-        data.context_values[..., 0].cpu(),
-        data.query_times.cpu(),
-        samples[..., 0],
-        coin_results,
-        strict=True,
-    ):
-        color = "tab:blue" if coin_result.item() < 0 else "tab:orange"
-        ax.plot(context_time, context_value, color="0.5", alpha=0.2, linewidth=0.8)
-        if model_name in {"Moses", "ProFITi"}:
-            ax.plot(query_time, sample, color=color, alpha=0.35, linewidth=0.8)
-        else:
-            ax.scatter(query_time, sample, color=color, alpha=0.35, s=6)
-
-    ax.axvline(T_STAR, color="black", linestyle="--", linewidth=1)
-    ax.set(xlabel="time", ylabel="value", xlim=(0, 1), ylim=(-2, 2), title=model_name)
-    ax.legend(
-        handles=[
-            Line2D([], [], color="tab:blue", label="negative ground-truth drift"),
-            Line2D([], [], color="tab:orange", label="positive ground-truth drift"),
-        ],
-        loc=0,
-    )
+    visualize_model_prediction(ax, dataset, model)
+    ax.set(title=model_name)
     fig.savefig(RESULT_DIR / f"{model_name}.png", dpi=200)
     plt.close(fig)
 
