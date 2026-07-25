@@ -826,7 +826,7 @@ def visualize_model_prediction(
             Line2D([], [], color="tab:blue", label="negative ground-truth drift"),
             Line2D([], [], color="tab:orange", label="positive ground-truth drift"),
         ],
-        loc=0,
+        loc="upper left",
     )
 
 
