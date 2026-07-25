@@ -553,7 +553,12 @@ def _initialize_model(
             raise ValueError(msg)
 
 
-def tune_model_hyperparameters(model_name: str, /) -> None:
+def tune_model_hyperparameters(
+    model_name: str,
+    /,
+    *,
+    make_plots: bool = True,
+) -> None:
     r"""Tune model hyperparameters on the bifurcation experiment with Optuna."""
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     SEED = 0
@@ -591,22 +596,11 @@ def tune_model_hyperparameters(model_name: str, /) -> None:
                 model_name,
                 model_config,
                 dataset,
-                batch_size=trial.suggest_categorical(
-                    "train_batch_size",
-                    [16, 32, 64],
-                ),
+                batch_size=trial.suggest_categorical("train_batch_size", [16, 32, 64]),
                 learning_rate=trial.suggest_float(
-                    "learning_rate",
-                    1e-4,
-                    3e-3,
-                    log=True,
+                    "learning_rate", 1e-4, 1e-3, log=True
                 ),
-                weight_decay=trial.suggest_float(
-                    "weight_decay",
-                    1e-6,
-                    1e-2,
-                    log=True,
-                ),
+                weight_decay=trial.suggest_float("weight_decay", 1e-6, 1e-2, log=True),
                 max_steps=MAX_TRAIN_STEPS,
                 validate_every=VALIDATE_EVERY,
                 patience=PATIENCE,
@@ -632,6 +626,25 @@ def tune_model_hyperparameters(model_name: str, /) -> None:
             trial.set_user_attr("state_dict", f"checkpoints/{state_dict_name}")
             trial.set_user_attr("state_dict_kind", "best_validation")
             trial.set_user_attr("loss_history", loss_history)
+            if make_plots:
+                best_step_index = min(
+                    range(len(loss_history["validation"])),
+                    key=loss_history["validation"].__getitem__,
+                )
+                plots_dir = run_dir / "plots"
+                plots_dir.mkdir(exist_ok=True)
+                fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
+                visualize_model_prediction(ax, dataset, trained_model)
+                ax.set(
+                    title=(
+                        f"{model_name} trial {trial.number} "
+                        f"train={loss_history['train'][best_step_index]:.4f} "
+                        f"valid={loss_history['validation'][best_step_index]:.4f} "
+                        f"test={loss_history['test'][best_step_index]:.4f}"
+                    )
+                )
+                fig.savefig(plots_dir / f"{trial.number}_predictions.png", dpi=200)
+                plt.close(fig)
             return min(loss_history["validation"])
         except RuntimeError as exc:
             raise optuna.TrialPruned(str(exc)) from exc
