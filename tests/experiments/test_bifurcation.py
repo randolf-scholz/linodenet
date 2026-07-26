@@ -514,26 +514,19 @@ def _initialize_model(
             model_config = {
                 "input_dim": 1,
                 "latent_dim": trial.suggest_categorical(
-                    "latent_dim",
-                    [16, 32, 64, 128],
+                    "latent_dim", [16, 32, 64, 128]
                 ),
                 "num_mixture_components": trial.suggest_categorical(
-                    "num_mixture_components",
-                    [2, 4, 8, 16],
+                    "num_mixture_components", [2, 4, 8, 16]
                 ),
                 "num_flow_layers": trial.suggest_int("num_flow_layers", 1, 4),
-                "num_bins": trial.suggest_categorical(
-                    "num_bins",
-                    [4, 6, 8, 12, 16],
-                ),
+                "num_bins": trial.suggest_categorical("num_bins", [4, 6, 8, 12, 16]),
                 "bounds": (-bound, bound),
                 "num_encoder_heads": trial.suggest_categorical(
-                    "num_encoder_heads",
-                    [1, 2, 4],
+                    "num_encoder_heads", [1, 2, 4]
                 ),
                 "covariance_rank": trial.suggest_categorical(
-                    "covariance_rank",
-                    [None, 1, 2, 4, 8],
+                    "covariance_rank", [None, 1, 2, 4, 8]
                 ),
             }
             return Moses(**model_config), model_config
