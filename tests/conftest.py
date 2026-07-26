@@ -22,7 +22,11 @@ def pytest_collection_modifyitems(config, items):  # noqa: ARG001
     # - "pytest tests/x.py" -> if mixed, interactive skipped
     # - "pytest path::test_my_plot" -> only interactive selected, so it runs
     # - "pytest -k plot"    -> if selection resolves only to interactive tests, they run
-    if non_interactive or len(interactive) > 1:
+    interactive_test_ids = {
+        (item.parent.nodeid, getattr(item, "originalname", None) or item.name)
+        for item in interactive
+    }
+    if non_interactive or len(interactive_test_ids) > 1:
         skip = pytest.mark.skip(
             reason="Skipping interactive plot test in mixed test run"
         )
