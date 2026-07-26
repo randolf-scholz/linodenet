@@ -369,6 +369,7 @@ class ProFITiConfig:
     num_heads: int = 4
     latent_dim: int = 128
     num_layers: int = 2
+    num_flow_layers: int = 2
 
 
 class ProFITi(nn.Module):
@@ -404,7 +405,7 @@ class ProFITi(nn.Module):
         flow = ConditionalFlowSequence(
             [
                 ProFITiBlock(latent_dim=config.latent_dim)
-                for _ in range(config.num_layers)
+                for _ in range(config.num_flow_layers)
             ]
         )
 
