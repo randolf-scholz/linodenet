@@ -370,8 +370,8 @@ class TestProfiti(TestPathCTM[ProFITi]):
             raise TypeError("model_config must be a ProFITiTestConfig.")
         return ProFITi.from_config(
             ProFITiConfig(
-                input_dim=model_config.input_dim,
-                latent_dim=model_config.latent_dim,
+                dim_input=model_config.input_dim,
+                dim_latent=model_config.latent_dim,
                 num_layers=model_config.num_layers,
                 num_heads=model_config.num_heads,
             )
@@ -420,17 +420,17 @@ class TestProfiti(TestPathCTM[ProFITi]):
     def test_from_config_uses_grafiti_and_flow_sequence(self) -> None:
         r"""Check that ProFITi.from_config wires the default submodules."""
         config = ProFITiConfig(
-            input_dim=7,
+            dim_input=7,
             num_heads=2,
-            latent_dim=12,
+            dim_latent=12,
             num_layers=3,
         )
 
         model = ProFITi.from_config(config)
 
         assert isinstance(model.context_embedding, Grafiti)
-        assert model.context_embedding.channel_init.in_features == config.input_dim
-        assert model.context_embedding.latent_dim == config.latent_dim
+        assert model.context_embedding.channel_init.in_features == config.dim_input
+        assert model.context_embedding.latent_dim == config.dim_latent
         assert model.context_embedding.num_heads == config.num_heads
         assert model.context_embedding.num_layers == config.num_layers
         assert isinstance(model.conditional_flow, ConditionalFlowSequence)
@@ -580,9 +580,9 @@ class TestProfiti(TestPathCTM[ProFITi]):
         r"""Check ProFITi handles batches with variable target counts."""
         torch.manual_seed(0)
         config = ProFITiConfig(
-            input_dim=2,
+            dim_input=2,
             num_heads=1,
-            latent_dim=4,
+            dim_latent=4,
             num_layers=1,
         )
         model = ProFITi.from_config(config)
@@ -592,7 +592,7 @@ class TestProfiti(TestPathCTM[ProFITi]):
         context_values = torch.randn(
             2,
             2,
-            config.input_dim,
+            config.dim_input,
             requires_grad=True,
         )
         context_mask = context_values.isfinite()

@@ -365,9 +365,9 @@ class ConditionalFlowSequence(ModuleSequence[ConditionalTransform]):  # type: ig
 class ProFITiConfig:
     r"""Configuration for constructing a ProFITi model."""
 
-    input_dim: int = 41
+    dim_input: int = 41
     num_heads: int = 4
-    latent_dim: int = 128
+    dim_latent: int = 128
     num_layers: int = 2
     num_flow_layers: int = 2
 
@@ -395,8 +395,8 @@ class ProFITi(nn.Module):
             config = ProFITiConfig(**config)
 
         conditioning_module = Grafiti(
-            dim_input=config.input_dim,
-            dim_latent=config.latent_dim,
+            dim_input=config.dim_input,
+            dim_latent=config.dim_latent,
             num_layers=config.num_layers,
             num_heads=config.num_heads,
             output_mode="embeddings",
@@ -404,7 +404,7 @@ class ProFITi(nn.Module):
 
         flow = ConditionalFlowSequence(
             [
-                ProFITiBlock(latent_dim=config.latent_dim)
+                ProFITiBlock(latent_dim=config.dim_latent)
                 for _ in range(config.num_flow_layers)
             ]
         )

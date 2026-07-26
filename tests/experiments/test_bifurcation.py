@@ -25,12 +25,11 @@ from linodenet_models import (
     ProbabilisticForecastingModel,
     ProFITi,
 )
-from linodenet_models.cru import CRUConfig, DecoderConfig, EncoderConfig, build_cru
+from linodenet_models.cru import DecoderConfig, EncoderConfig, build_cru
 from linodenet_models.linodenet_probabilistic import (
     make_koopman_filter,
     make_linodenet_prob,
 )
-from linodenet_models.profiti import ProFITiConfig
 from linodenet_models.utils import SplitTimeData
 from tests.testing import PROJECT
 
@@ -205,99 +204,6 @@ def test_samples() -> None:
     plt.close(fig)
 
 
-def _make_model(model_name: str, model_config: Mapping[str, Any], /) -> nn.Module:
-    r"""Construct a small univariate continuous-time model with a sample API."""
-    match model_name:
-        case "LinodenetProbabilistic":
-            return make_linodenet_prob(
-                input_size=1,
-                state_update="forward",
-                retention=0.6,
-                decoder="shiesh",
-            )
-        case "KoopmanFilter":
-            return make_koopman_filter(
-                input_size=1,
-                latent_size=3,
-                decoder="lowrank",
-                low_rank=1,
-                n_iter=1,
-            )
-        case "Moses":
-            config = {
-                "input_dim": 1,
-                "latent_dim": 64,
-                "num_mixture_components": 8,
-                "num_flow_layers": 2,
-                "num_bins": 6,
-                "num_encoder_heads": 2,
-            } | dict(model_config)
-            return Moses(**config)
-        case "ContinuousTimeNKF":
-            return ContinuousTimeNKF(
-                1,
-                4,
-                decoder=Sinh(),
-                system_matrix=0.1 * torch.randn(4, 4),
-                observation_matrix=torch.randn(1, 4),
-                process_noise=0.2,
-                measurement_noise=0.5,
-                initial_mean=torch.randn(4),
-                initial_covariance=2.0,
-                initial_state_learnable=True,
-                process_noise_learnable=True,
-                observation_noise_learnable=True,
-            )
-        case "CRU":
-            return build_cru(
-                CRUConfig(
-                    input_size=1,
-                    output_size=1,
-                    latent_size=4,
-                    encoder=EncoderConfig(input_size=1, output_size=4, hidden_size=8),
-                    decoder=DecoderConfig(input_size=4, output_size=1, hidden_size=8),
-                    num_basis=4,
-                    bandwidth=1,
-                    initial_variance=2.0,
-                    validate_args=True,
-                )
-            )
-        case "ProFITi":
-            config = {
-                "input_dim": 1,
-                "latent_dim": 8,
-                "num_layers": 2,
-                "num_heads": 1,
-            } | dict(model_config)
-            return ProFITi.from_config(ProFITiConfig(**config))
-        case "GRU_ODE_Bayes":
-            return GRU_ODE_Bayes.from_parameters(
-                input_size=1,
-                hidden_size=8,
-                decoder_hidden_size=8,
-                feature_embedding_size=2,
-                step_size=0.1,
-                solver="euler",
-            )
-        case "ContinuousTimeKalmanFilter":
-            return ContinuousTimeKalmanFilter(
-                1,
-                4,
-                system_matrix=0.05 * torch.randn(4, 4),
-                observation_matrix=torch.randn(1, 4),
-                process_noise=0.2,
-                measurement_noise=0.5,
-                initial_mean=torch.randn(4),
-                initial_covariance=2.0 * torch.eye(4),
-                initial_state_learnable=True,
-                process_noise_learnable=True,
-                observation_noise_learnable=True,
-            )
-        case _:
-            msg = f"Unknown model: {model_name}."
-            raise ValueError(msg)
-
-
 def _split_trajectories(times: Tensor, values: Tensor, t0: Tensor, /) -> SplitTimeData:
     r"""Split trajectories into NaN-padded context and targets at per-row times."""
     num_steps = times.shape[-1]
@@ -407,14 +313,13 @@ def run_experiment(
     validate_every: int = 1,
     patience: int = 10,
     compile_model: bool = True,
-    model: nn.Module | None = None,
 ) -> tuple[nn.Module, LossHistory]:
     r"""Initialize and train a model, tracking train/validation/test NLL."""
     device = dataset["train_times"].device
-    model = _make_model(model_name, model_config) if model is None else model
+    model: nn.Module = _make_model(model_name, model_config).to(device=device)
     if compile_model:
-        model = torch.compile(model, fullgraph=True)
-    model = model.to(device=device)
+        model = torch.compile(model, fullgraph=True)  # type: ignore[assignment]
+
     optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=learning_rate,
@@ -502,16 +407,101 @@ def run_experiment(
     return model, history
 
 
-def _initialize_model(
-    model_name: str,
-    trial: optuna.Trial,
-    /,
-) -> tuple[nn.Module, dict[str, Any]]:
+def _default_config(model_name: str, /) -> dict[str, Any]:
+    match model_name:
+        case "LinodenetProbabilistic":
+            return {
+                "input_size": 1,
+                "state_update": "forward",
+                "retention": 0.6,
+                "decoder": "shiesh",
+            }
+        case "KoopmanFilter":
+            return {
+                "input_size": 1,
+                "latent_size": 3,
+                "decoder": "lowrank",
+                "low_rank": 1,
+                "n_iter": 1,
+            }
+        case "Moses":
+            return {
+                "input_dim": 1,
+                "latent_dim": 64,
+                "num_mixture_components": 8,
+                "num_flow_layers": 2,
+                "num_bins": 6,
+                "num_encoder_heads": 2,
+            }
+        case "ContinuousTimeNKF":
+            return {
+                "input_size": 1,
+                "hidden_size": 4,
+                "decoder": Sinh(),
+                "system_matrix": 0.1 * torch.randn(4, 4),
+                "observation_matrix": torch.randn(1, 4),
+                "process_noise": 0.2,
+                "measurement_noise": 0.5,
+                "initial_mean": torch.randn(4),
+                "initial_covariance": 2.0,
+                "initial_state_learnable": True,
+                "process_noise_learnable": True,
+                "observation_noise_learnable": True,
+            }
+        case "CRU":
+            return {
+                "input_size": 1,
+                "output_size": 1,
+                "latent_size": 4,
+                "encoder": EncoderConfig(input_size=1, output_size=4, hidden_size=8),
+                "decoder": DecoderConfig(input_size=4, output_size=1, hidden_size=8),
+                "num_basis": 4,
+                "bandwidth": 1,
+                "initial_variance": 2.0,
+                "validate_args": True,
+            }
+        case "ProFITi":
+            return {
+                "dim_input": 1,
+                "dim_latent": 8,
+                "num_layers": 2,
+                "num_heads": 1,
+                "num_flow_layers": 2,
+            }
+        case "GRU_ODE_Bayes":
+            return {
+                "input_size": 1,
+                "hidden_size": 8,
+                "decoder_hidden_size": 8,
+                "feature_embedding_size": 2,
+                "step_size": 0.1,
+                "solver": "euler",
+            }
+        case "ContinuousTimeKalmanFilter":
+            return {
+                "input_size": 1,
+                "hidden_size": 4,
+                "system_matrix": 0.05 * torch.randn(4, 4),
+                "observation_matrix": torch.randn(1, 4),
+                "process_noise": 0.2,
+                "measurement_noise": 0.5,
+                "initial_mean": torch.randn(4),
+                "initial_covariance": 2.0 * torch.eye(4),
+                "initial_state_learnable": True,
+                "process_noise_learnable": True,
+                "observation_noise_learnable": True,
+            }
+        case _:
+            msg = f"Unknown model: {model_name}."
+            raise ValueError(msg)
+
+
+def _sample_config(model_name: str, trial: optuna.Trial, /) -> dict[str, Any]:
     r"""Initialize a model with Optuna-suggested hyperparameters."""
     match model_name:
         case "Moses":
             bound = trial.suggest_float("bound", 2.0, 8.0)
-            model_config = {
+            return {
                 "input_dim": 1,
                 "latent_dim": trial.suggest_categorical(
                     "latent_dim", [16, 32, 64, 128]
@@ -529,16 +519,14 @@ def _initialize_model(
                     "covariance_rank", [None, 1, 2, 4, 8]
                 ),
             }
-            return Moses(**model_config), model_config
         case "ProFITi":
-            model_config = {
-                "input_dim": 1,
-                "latent_dim": trial.suggest_categorical("latent_dim", [8, 16, 32, 64]),
+            return {
+                "dim_input": 1,
+                "dim_latent": trial.suggest_categorical("latent_dim", [8, 16, 32, 64]),
                 "num_layers": trial.suggest_int("num_layers", 1, 4),
                 "num_heads": trial.suggest_categorical("num_heads", [1, 2, 4]),
                 "num_flow_layers": trial.suggest_int("num_flow_layers", 1, 4),
             }
-            return ProFITi.from_config(ProFITiConfig(**model_config)), model_config
         case (
             "LinodenetProbabilistic"
             | "KoopmanFilter"
@@ -549,6 +537,30 @@ def _initialize_model(
         ):
             msg = f"Hyperparameter tuning is not implemented for {model_name}."
             raise NotImplementedError(msg)
+        case _:
+            msg = f"Unknown model: {model_name}."
+            raise ValueError(msg)
+
+
+def _make_model(model_name: str, model_config: Mapping[str, Any], /) -> nn.Module:
+    r"""Construct a small univariate continuous-time model with a sample API."""
+    match model_name:
+        case "LinodenetProbabilistic":
+            return make_linodenet_prob(**model_config)
+        case "KoopmanFilter":
+            return make_koopman_filter(**model_config)
+        case "Moses":
+            return Moses(**model_config)
+        case "ContinuousTimeNKF":
+            return ContinuousTimeNKF(**model_config)
+        case "CRU":
+            return build_cru(model_config)
+        case "ProFITi":
+            return ProFITi.from_config(model_config)
+        case "GRU_ODE_Bayes":
+            return GRU_ODE_Bayes.from_parameters(**model_config)
+        case "ContinuousTimeKalmanFilter":
+            return ContinuousTimeKalmanFilter(**model_config)
         case _:
             msg = f"Unknown model: {model_name}."
             raise ValueError(msg)
@@ -591,7 +603,7 @@ def tune_model_hyperparameters(
 
     def objective(trial: optuna.Trial) -> float:
         torch.manual_seed(SEED + trial.number + 1)
-        model, model_config = _initialize_model(model_name, trial)
+        model_config = _sample_config(model_name, trial)
         trial.set_user_attr("model_config", model_config)
         try:
             trained_model, loss_history = run_experiment(
@@ -606,8 +618,7 @@ def tune_model_hyperparameters(
                 max_steps=MAX_TRAIN_STEPS,
                 validate_every=VALIDATE_EVERY,
                 patience=PATIENCE,
-                compile_model=False,
-                model=model,
+                # compile_model=False,
             )
             for step, validation_loss in zip(
                 loss_history["step"],
@@ -813,7 +824,6 @@ def visualize_model_prediction(
     )
 
 
-@pytest.mark.slow
 @pytest.mark.manual
 @pytest.mark.parametrize("model_name", ["Moses", "ProFITi"])
 def test_visualize_results(model_name: str) -> None:

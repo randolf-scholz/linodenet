@@ -18,9 +18,9 @@ __all__ = [
 ]
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Final, NotRequired, TypedDict
+from typing import Any, Final, NotRequired, TypedDict
 
 import torch
 from torch import Generator, Tensor, nan, nn
@@ -242,6 +242,22 @@ class CRUConfig:
     batch_first: bool = True
 
 
+class CRUConfigDict(TypedDict):
+    r"""Mapping form of ``CRUConfig``."""
+
+    input_size: int
+    latent_size: int
+    encoder: EncoderConfigLike
+    decoder: DecoderConfigLike
+    output_size: int
+    num_basis: NotRequired[int]
+    bandwidth: NotRequired[int]
+    variance_activation: NotRequired[str]
+    initial_variance: NotRequired[float]
+    validate_args: NotRequired[bool]
+    batch_first: NotRequired[bool]
+
+
 class EncoderConfigDict(TypedDict):
     r"""Mapping form of ``EncoderConfig``."""
 
@@ -267,22 +283,6 @@ class DecoderConfigDict(TypedDict):
 
 type EncoderConfigLike = EncoderConfig | EncoderConfigDict
 type DecoderConfigLike = DecoderConfig | DecoderConfigDict
-
-
-class CRUConfigDict(TypedDict):
-    r"""Mapping form of ``CRUConfig``."""
-
-    input_size: int
-    latent_size: int
-    encoder: EncoderConfigLike
-    decoder: DecoderConfigLike
-    output_size: int
-    num_basis: NotRequired[int]
-    bandwidth: NotRequired[int]
-    variance_activation: NotRequired[str]
-    initial_variance: NotRequired[float]
-    validate_args: NotRequired[bool]
-    batch_first: NotRequired[bool]
 
 
 def update_masked[R: Tensor | tuple[Tensor, ...]](
@@ -951,7 +951,7 @@ class CRU(nn.Module):
         return post_mean, post_cov
 
 
-def build_cru(config: CRUConfig | CRUConfigDict, /) -> CRU:
+def build_cru(config: CRUConfig | CRUConfigDict | Mapping[str, Any], /) -> CRU:
     r"""Construct a CRU from a hierarchical configuration object."""
     if not isinstance(config, CRUConfig):
         encoder = config["encoder"]
