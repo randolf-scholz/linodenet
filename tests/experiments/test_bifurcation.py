@@ -530,12 +530,20 @@ def _initialize_model(
                 ),
             }
             return Moses(**model_config), model_config
+        case "ProFITi":
+            model_config = {
+                "input_dim": 1,
+                "latent_dim": trial.suggest_categorical("latent_dim", [8, 16, 32, 64]),
+                "num_layers": trial.suggest_int("num_layers", 1, 4),
+                "num_heads": trial.suggest_categorical("num_heads", [1, 2, 4]),
+                "num_flow_layers": trial.suggest_int("num_flow_layers", 1, 4),
+            }
+            return ProFITi.from_config(ProFITiConfig(**model_config)), model_config
         case (
             "LinodenetProbabilistic"
             | "KoopmanFilter"
             | "ContinuousTimeNKF"
             | "CRU"
-            | "ProFITi"
             | "GRU_ODE_Bayes"
             | "ContinuousTimeKalmanFilter"
         ):
@@ -584,6 +592,7 @@ def tune_model_hyperparameters(
     def objective(trial: optuna.Trial) -> float:
         torch.manual_seed(SEED + trial.number + 1)
         model, model_config = _initialize_model(model_name, trial)
+        trial.set_user_attr("model_config", model_config)
         try:
             trained_model, loss_history = run_experiment(
                 model_name,
@@ -648,7 +657,6 @@ def tune_model_hyperparameters(
     study = optuna.create_study(
         study_name=f"{model_stem}_bifurcation",
         storage=f"sqlite:///{storage_path}",
-        load_if_exists=True,
         direction="minimize",
         sampler=optuna.samplers.TPESampler(
             seed=SEED,
@@ -661,112 +669,81 @@ def tune_model_hyperparameters(
         ),
     )
 
-    try:
-        study.optimize(
-            objective, n_trials=N_TRIALS, timeout=TIMEOUT, gc_after_trial=True
-        )
-    finally:
-        complete_trials = [
-            trial
-            for trial in study.trials
-            if trial.state == optuna.trial.TrialState.COMPLETE
-        ]
-        if complete_trials:
-            reloadable_trials = [
-                trial
-                for trial in complete_trials
-                if trial.user_attrs.get("state_dict_kind") == "best_validation"
-            ]
-            best_trial = min(
-                reloadable_trials or complete_trials,
-                key=lambda trial: float("inf") if trial.value is None else trial.value,
-            )
-            best_params = best_trial.params
-            best_checkpoint = None
-            if best_trial.user_attrs.get("state_dict_kind") == "best_validation":
-                checkpoint_name = best_trial.user_attrs["state_dict"]
-                checkpoint_path = run_dir / checkpoint_name
-                best_checkpoint = f"{model_stem}_bifurcation_best_state_dict.pt"
-                shutil.copy2(checkpoint_path, run_dir / best_checkpoint)
-            best_run_config = {
-                "run_id": run_id,
-                "timestamp": timestamp,
-                "run_dir": str(run_dir),
-                "model_name": model_name,
-                "model": {
-                    "input_dim": 1,
-                    "latent_dim": best_params["latent_dim"],
-                    "num_mixture_components": best_params["num_mixture_components"],
-                    "num_flow_layers": best_params["num_flow_layers"],
-                    "num_bins": best_params["num_bins"],
-                    "bounds": [-best_params["bound"], best_params["bound"]],
-                    "num_encoder_heads": best_params["num_encoder_heads"],
-                    "covariance_rank": best_params["covariance_rank"],
-                },
-                "optimizer": {
-                    "name": "AdamW",
-                    "lr": best_params["learning_rate"],
-                    "weight_decay": best_params["weight_decay"],
-                },
-                "training": {
-                    "train_batch_size": best_params["train_batch_size"],
-                    "max_train_steps": MAX_TRAIN_STEPS,
-                    "validate_every": VALIDATE_EVERY,
-                    "patience": PATIENCE,
-                },
-                "data": {
-                    "t_star": T_STAR,
-                    "beta": sampler.beta,
-                    "sigma": sampler.sigma,
-                    "num_train_trajectories": NUM_TRAIN_TRAJECTORIES,
-                    "num_valid_trajectories": NUM_VALID_TRAJECTORIES,
-                    "num_test_trajectories": NUM_TEST_TRAJECTORIES,
-                    "num_steps": NUM_STEPS,
-                },
-                "objective": {
-                    "metric": "validation_nll",
-                    "best_value": best_trial.value,
-                    "best_trial": best_trial.number,
-                },
-                "state_dict": best_checkpoint,
-                "state_dict_kind": best_trial.user_attrs.get("state_dict_kind"),
-                "trial_state_dict": best_trial.user_attrs.get("state_dict"),
-                "loss_history": best_trial.user_attrs.get("loss_history"),
+    study.optimize(objective, n_trials=N_TRIALS, timeout=TIMEOUT, gc_after_trial=True)
+
+    best_trial = study.best_trial
+    best_params = best_trial.params
+    checkpoint_name = best_trial.user_attrs["state_dict"]
+    best_checkpoint = f"{model_stem}_bifurcation_best_state_dict.pt"
+    shutil.copy2(run_dir / checkpoint_name, run_dir / best_checkpoint)
+    best_run_config = {
+        "run_id": run_id,
+        "timestamp": timestamp,
+        "run_dir": str(run_dir),
+        "model_name": model_name,
+        "model": best_trial.user_attrs["model_config"],
+        "optimizer": {
+            "name": "AdamW",
+            "lr": best_params["learning_rate"],
+            "weight_decay": best_params["weight_decay"],
+        },
+        "training": {
+            "train_batch_size": best_params["train_batch_size"],
+            "max_train_steps": MAX_TRAIN_STEPS,
+            "validate_every": VALIDATE_EVERY,
+            "patience": PATIENCE,
+        },
+        "data": {
+            "t_star": T_STAR,
+            "beta": sampler.beta,
+            "sigma": sampler.sigma,
+            "num_train_trajectories": NUM_TRAIN_TRAJECTORIES,
+            "num_valid_trajectories": NUM_VALID_TRAJECTORIES,
+            "num_test_trajectories": NUM_TEST_TRAJECTORIES,
+            "num_steps": NUM_STEPS,
+        },
+        "objective": {
+            "metric": "validation_nll",
+            "best_value": best_trial.value,
+            "best_trial": best_trial.number,
+        },
+        "state_dict": best_checkpoint,
+        "state_dict_kind": best_trial.user_attrs["state_dict_kind"],
+        "trial_state_dict": checkpoint_name,
+        "loss_history": best_trial.user_attrs["loss_history"],
+    }
+    (run_dir / f"{model_stem}_bifurcation_best_config.json").write_text(
+        json.dumps(best_run_config, indent=2) + "\n",
+        encoding="utf8",
+    )
+
+    study_summary = {
+        "study_name": study.study_name,
+        "storage": str(storage_path),
+        "run_id": run_id,
+        "timestamp": timestamp,
+        "run_dir": str(run_dir),
+        "direction": study.direction.name,
+        "num_trials": len(study.trials),
+        "best_value": study.best_value,
+        "best_params": study.best_params,
+        "trials": [
+            {
+                "number": trial.number,
+                "state": trial.state.name,
+                "value": trial.value,
+                "params": trial.params,
+                "intermediate_values": trial.intermediate_values,
+                "user_attrs": trial.user_attrs,
             }
-            (run_dir / f"{model_stem}_bifurcation_best_config.json").write_text(
-                json.dumps(best_run_config, indent=2) + "\n",
-                encoding="utf8",
-            )
+            for trial in study.trials
+        ],
+    }
+    (run_dir / f"{model_stem}_bifurcation_optuna_summary.json").write_text(
+        json.dumps(study_summary, indent=2) + "\n",
+        encoding="utf8",
+    )
 
-        study_summary = {
-            "study_name": study.study_name,
-            "storage": str(storage_path),
-            "run_id": run_id,
-            "timestamp": timestamp,
-            "run_dir": str(run_dir),
-            "direction": study.direction.name,
-            "num_trials": len(study.trials),
-            "num_complete_trials": len(complete_trials),
-            "best_value": study.best_value if complete_trials else None,
-            "best_params": study.best_params if complete_trials else None,
-            "trials": [
-                {
-                    "number": trial.number,
-                    "state": trial.state.name,
-                    "value": trial.value,
-                    "params": trial.params,
-                    "intermediate_values": trial.intermediate_values,
-                    "user_attrs": trial.user_attrs,
-                }
-                for trial in study.trials
-            ],
-        }
-        (run_dir / f"{model_stem}_bifurcation_optuna_summary.json").write_text(
-            json.dumps(study_summary, indent=2) + "\n",
-            encoding="utf8",
-        )
-
-    assert complete_trials, "Optuna completed without any successful trials."
     assert torch.isfinite(torch.tensor(study.best_value))
 
 
@@ -838,7 +815,7 @@ def visualize_model_prediction(
 
 @pytest.mark.slow
 @pytest.mark.manual
-@pytest.mark.parametrize("model_name", ["Moses"])
+@pytest.mark.parametrize("model_name", ["Moses", "ProFITi"])
 def test_visualize_results(model_name: str) -> None:
     r"""Load the best stored model and visualize its bifurcation predictions."""
     DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -919,4 +896,5 @@ def test_bifurcation_models(model_name: str) -> None:
 
 
 if __name__ == "__main__":
-    test_tune_moses_bifurcation_hyperparameters()
+    # tune_model_hyperparameters("Moses")
+    tune_model_hyperparameters("ProFITi")
