@@ -91,6 +91,7 @@ class BifurcationDataset(TypedDict):
     r"""Independent bifurcation train/validation/test splits."""
 
     t_star: float
+    t_pred: float
     train_times: Tensor
     train_values: Tensor
     train_data: SplitTimeData
@@ -238,6 +239,7 @@ def make_bifurcation_dataset(
     sampler: BifurcationSampler,
     /,
     *,
+    t_pred: float,
     num_train_trajectories: int,
     num_validation_trajectories: int,
     num_test_trajectories: int,
@@ -245,6 +247,9 @@ def make_bifurcation_dataset(
     device: torch.device,
 ) -> BifurcationDataset:
     r"""Sample independent train/validation/test data for the bifurcation task."""
+    if not 0.0 <= t_pred <= 1.0:
+        msg = f"Expected t_pred in [0, 1], got {t_pred}."
+        raise ValueError(msg)
     train_times, train_values, train_coin_results = sampler.sample(
         num_train_trajectories,
         num_steps,
@@ -262,24 +267,25 @@ def make_bifurcation_dataset(
     )
     return {
         "t_star": sampler.t_star,
+        "t_pred": t_pred,
         "train_times": train_times,
         "train_values": train_values,
         "train_data": _split_trajectories(
             train_times,
             train_values,
-            torch.full_like(train_times[:, 0], sampler.t_star),
+            torch.full_like(train_times[:, 0], t_pred),
         ),
         "train_coin_results": train_coin_results,
         "validation_data": _split_trajectories(
             validation_times,
             validation_values,
-            torch.full_like(validation_times[:, 0], sampler.t_star),
+            torch.full_like(validation_times[:, 0], t_pred),
         ),
         "validation_coin_results": validation_coin_results,
         "test_data": _split_trajectories(
             test_times,
             test_values,
-            torch.full_like(test_times[:, 0], sampler.t_star),
+            torch.full_like(test_times[:, 0], t_pred),
         ),
         "test_coin_results": test_coin_results,
     }
@@ -348,7 +354,7 @@ def run_experiment(
         batch_data = _split_trajectories(
             batch_times,
             batch_values,
-            torch.full_like(batch_times[:, 0], dataset["t_star"]),
+            torch.full_like(batch_times[:, 0], dataset["t_pred"]),
         )
 
         optimizer.zero_grad()
@@ -590,6 +596,7 @@ def tune_model_hyperparameters(
     sampler = BifurcationSampler(t_star=T_STAR, beta=2.0, sigma=0.2)
     dataset = make_bifurcation_dataset(
         sampler,
+        t_pred=T_STAR,
         num_train_trajectories=NUM_TRAIN_TRAJECTORIES,
         num_validation_trajectories=NUM_VALID_TRAJECTORIES,
         num_test_trajectories=NUM_TEST_TRAJECTORIES,
@@ -711,6 +718,7 @@ def tune_model_hyperparameters(
         },
         "data": {
             "t_star": T_STAR,
+            "t_pred": T_STAR,
             "beta": sampler.beta,
             "sigma": sampler.sigma,
             "num_train_trajectories": NUM_TRAIN_TRAJECTORIES,
@@ -788,45 +796,48 @@ def visualize_model_prediction(
     plot_lines = isinstance(base_model, (Moses, ProFITi))
     probabilistic_model = cast("ProbabilisticForecastingModel", model)
     with torch.no_grad():
-        samples = (
-            probabilistic_model.sample(
-                (),
-                query_times=test_data.query_times,
-                query_mask=test_data.query_mask,
-                context_times=test_data.context_times,
-                context_values=test_data.context_values,
-                context_mask=test_data.context_mask,
-            )
-            .squeeze(0)
-            .cpu()
-        )
+        samples = probabilistic_model.sample(
+            (),
+            query_times=test_data.query_times,
+            query_mask=test_data.query_mask,
+            context_times=test_data.context_times,
+            context_values=test_data.context_values,
+            context_mask=test_data.context_mask,
+        ).cpu()
 
     assert test_data.target_values is not None
     assert samples.shape == test_data.target_values.shape
     for context_time, context_value, query_time, sample, coin_result in zip(
         test_data.context_times.cpu(),
-        test_data.context_values[..., 0].cpu(),
+        test_data.context_values.squeeze(-1).cpu(),
         test_data.query_times.cpu(),
-        samples[..., 0],
+        samples.squeeze(-1),
         data["test_coin_results"],
         strict=True,
     ):
         color = "tab:blue" if coin_result.item() < 0 else "tab:orange"
-        ax.plot(context_time, context_value, color="0.5", alpha=0.2, linewidth=0.8)
+        ax.plot(context_time, context_value, color=color, alpha=0.2, linewidth=0.8)
         if plot_lines:
             ax.plot(query_time, sample, color=color, alpha=0.35, linewidth=0.8)
         else:
             ax.scatter(query_time, sample, color=color, alpha=0.35, s=6)
 
-    ax.axvline(data["t_star"], color="black", linestyle="--", linewidth=1)
+    # add vertical line
+    ax.axvline(data["t_pred"], color="black", linestyle="--", linewidth=1)
+    if data["t_pred"] != data["t_star"]:
+        ax.axvline(data["t_star"], color="0.35", linestyle=":", linewidth=1)
+
     ax.set(xlabel="time", ylabel="value", xlim=(0, 1), ylim=(-2, 2))
-    ax.legend(
-        handles=[
-            Line2D([], [], color="tab:blue", label="negative ground-truth drift"),
-            Line2D([], [], color="tab:orange", label="positive ground-truth drift"),
-        ],
-        loc="upper left",
-    )
+    legend_handles = [
+        Line2D([], [], color="tab:blue", label="negative ground-truth drift"),
+        Line2D([], [], color="tab:orange", label="positive ground-truth drift"),
+        Line2D([], [], color="black", linestyle="--", label="forecast split"),
+    ]
+    if data["t_pred"] != data["t_star"]:
+        legend_handles.append(
+            Line2D([], [], color="0.35", linestyle=":", label="drift start")
+        )
+    ax.legend(handles=legend_handles, loc="upper left")
 
 
 @pytest.mark.manual
@@ -860,23 +871,32 @@ def test_visualize_results(model_name: str) -> None:
     model.load_state_dict(state_dict)
 
     data_config = run_config["data"]
-    torch.manual_seed(0)
-    dataset = make_bifurcation_dataset(
-        BifurcationSampler(
-            t_star=data_config["t_star"],
-            beta=data_config["beta"],
-            sigma=data_config["sigma"],
-        ),
-        num_train_trajectories=data_config["num_train_trajectories"],
-        num_validation_trajectories=data_config["num_valid_trajectories"],
-        num_test_trajectories=data_config["num_test_trajectories"],
-        num_steps=data_config["num_steps"],
-        device=DEVICE,
+    t_preds = (0.3, 0.4, 0.5)
+    fig, axs = plt.subplots(
+        1,
+        len(t_preds),
+        figsize=(15, 5),
+        sharex=True,
+        sharey=True,
+        constrained_layout=True,
     )
-
-    fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
-    visualize_model_prediction(ax, dataset, model)
-    ax.set(title=f"{model_name} tuned")
+    for ax, t_pred in zip(axs, t_preds, strict=True):
+        torch.manual_seed(0)
+        dataset = make_bifurcation_dataset(
+            BifurcationSampler(
+                t_star=data_config["t_star"],
+                beta=data_config["beta"],
+                sigma=data_config["sigma"],
+            ),
+            t_pred=t_pred,
+            num_train_trajectories=data_config["num_train_trajectories"],
+            num_validation_trajectories=data_config["num_valid_trajectories"],
+            num_test_trajectories=data_config["num_test_trajectories"],
+            num_steps=data_config["num_steps"],
+            device=DEVICE,
+        )
+        visualize_model_prediction(ax, dataset, model)
+        ax.set(title=f"{model_name} tuned, t_pred={t_pred}")
     fig.savefig(RESULT_DIR / f"{model_name}_tuned.png", dpi=200)
     plt.close(fig)
 
@@ -894,6 +914,7 @@ def test_bifurcation_models(model_name: str) -> None:
     sampler = BifurcationSampler(t_star=T_STAR, beta=2.0, sigma=0.2)
     dataset = make_bifurcation_dataset(
         sampler,
+        t_pred=T_STAR,
         num_train_trajectories=NUM_TRAJECTORIES,
         num_validation_trajectories=NUM_TRAJECTORIES,
         num_test_trajectories=NUM_TRAJECTORIES,
