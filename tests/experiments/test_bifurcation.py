@@ -309,7 +309,7 @@ def run_experiment(
     batch_size: int = 32,
     learning_rate: float = 1e-3,
     weight_decay: float = 0.0,
-    max_steps: int = 200,
+    max_steps: int = 1000,
     validate_every: int = 1,
     patience: int = 10,
     compile_model: bool = True,
@@ -580,7 +580,7 @@ def tune_model_hyperparameters(
     NUM_VALID_TRAJECTORIES = 128
     NUM_TEST_TRAJECTORIES = 128
     NUM_STEPS = 100
-    MAX_TRAIN_STEPS = 200
+    MAX_TRAIN_STEPS = 1000
     VALIDATE_EVERY = 25
     PATIENCE = 8
     TIMEOUT = 1800
@@ -632,7 +632,12 @@ def tune_model_hyperparameters(
             torch.save(
                 {
                     name: tensor.detach().cpu()
-                    for name, tensor in trained_model.state_dict().items()
+                    for name, tensor in (
+                        # patch for torch.compiled model.
+                        getattr(trained_model, "_orig_mod", trained_model)
+                        .state_dict()
+                        .items()
+                    )
                 },
                 checkpoints_dir / state_dict_name,
             )
