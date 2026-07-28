@@ -143,7 +143,7 @@ def reconstruct_y(
     *,
     edge_mask: Tensor,  # Bool[..., $E]
     target_mask: Tensor,  # Bool[..., $T, D]
-) -> Tensor:  # (..., $T, D)
+) -> Tensor:  # Float[..., $T, D]
     r"""Reconstruct a dense tensor from flattened masked values.
 
     Args:
