@@ -25,10 +25,10 @@ DimType ::= ConstantDim | StaticDim | CompoundDim | DynamicDim | VariadicDim
 ConstantDim ::= Number
 // e.g. 'n': a single axis whose size will be fixed at runtime
 StaticDim ::= IdentifierType
-// e.g. '*Xs': a bundle of axes (x₁, ..., xₙ) whose shape will be fixed at runtime
-VariadicDim ::= "*" IdentifierType
 // e.g. '$n' a single axes whose size is variable at runtime
 DynamicDim ::= "$" IdentifierType
+// e.g. '*Xs': a bundle of axes (x₁, ..., xₙ) whose shape will be fixed at runtime
+VariadicDim ::= "*" IdentifierType
 
 // e.g. "2n", "3n+3", "n+2", "2u + 3v", "2a + 2b + 2c + 1", "2n - 1"
 // affine combination of Static Dims
@@ -44,10 +44,10 @@ IdentifierType ::= Letter (Letter | Digit | '_' )*
 Number ::= Digit+ ;
 Digit ::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' ;
 Letter ::= "A" | "B" | "C" | "D" | "E" | "F" | "G"
-       | "H" | "I" | "J" | "K" | "L" | "M" | "N"
-       | "O" | "P" | "Q" | "R" | "S" | "T" | "U"
-       | "V" | "W" | "X" | "Y" | "Z" | "a" | "b"
-       | "c" | "d" | "e" | "f" | "g" | "h" | "i"
-       | "j" | "k" | "l" | "m" | "n" | "o" | "p"
-       | "q" | "r" | "s" | "t" | "u" | "v" | "w"
-       | "x" | "y" | "z" ;
+         | "H" | "I" | "J" | "K" | "L" | "M" | "N"
+         | "O" | "P" | "Q" | "R" | "S" | "T" | "U"
+         | "V" | "W" | "X" | "Y" | "Z" | "a" | "b"
+         | "c" | "d" | "e" | "f" | "g" | "h" | "i"
+         | "j" | "k" | "l" | "m" | "n" | "o" | "p"
+         | "q" | "r" | "s" | "t" | "u" | "v" | "w"
+         | "x" | "y" | "z" ;
