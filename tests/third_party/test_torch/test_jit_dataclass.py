@@ -1,6 +1,7 @@
 r"""Test JIT scriptability and serialization of a dataclass module in PyTorch."""
 
 from dataclasses import dataclass
+from tempfile import TemporaryFile
 
 import torch
 from torch import Tensor, jit, nn
@@ -41,8 +42,10 @@ def test_serializable() -> None:
     scripted_module = jit.script(module)
 
     # Serialize and deserialize the scripted module
-    torch.jit.save(scripted_module, "temp_module.pt")
-    loaded_module = torch.jit.load("temp_module.pt")
+    with TemporaryFile() as file:
+        torch.jit.save(scripted_module, file)
+        file.seek(0)
+        loaded_module = torch.jit.load(file)
 
     # Verify the deserialized module produces the same output
     input_tensor = torch.tensor(3.0)
