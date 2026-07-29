@@ -76,183 +76,184 @@ class _ScaleDecodeFlow(nn.Module):
         return self.scale * y, logabsdet
 
 
-def test_shiesh_encode_decode_roundtrip_with_logabsdet() -> None:
-    r"""Check that Shiesh encode/decode are inverse maps."""
-    transform = Shiesh(t=1.0, a=1.0)
-    x = torch.linspace(-5.0, 5.0, 101)
+class TestShiesh:
+    def test_encode_decode_roundtrip_with_logabsdet(self) -> None:
+        r"""Check that Shiesh encode/decode are inverse maps."""
+        transform = Shiesh(t=1.0, a=1.0)
+        x = torch.linspace(-5.0, 5.0, 101)
 
-    y, forward_logabsdet = transform.encode_and_logabsdet(x)
-    xhat, inverse_logabsdet = transform.decode_and_logabsdet(y)
+        y, forward_logabsdet = transform.encode_and_logabsdet(x)
+        xhat, inverse_logabsdet = transform.decode_and_logabsdet(y)
 
-    assert_close(xhat, x, atol=1e-5, rtol=1e-5)
-    assert_close(
-        forward_logabsdet + inverse_logabsdet,
-        torch.zeros_like(forward_logabsdet),
-        atol=1e-5,
-        rtol=1e-5,
-    )
-
-
-def test_shiesh_logabsdet_matches_autograd_derivative() -> None:
-    r"""Check Shiesh logabsdet against autograd derivatives."""
-    transform = Shiesh(t=1.0, a=1.0)
-    x = torch.linspace(-5.0, 5.0, 101)
-
-    _, actual = transform.encode_and_logabsdet(x)
-    derivative = vmap(grad(lambda z: transform.encode_and_logabsdet(z)[0]))(x)
-    expected = derivative.abs().log()
-
-    assert actual.isfinite().all()
-    assert expected.isfinite().all()
-    assert_close(actual, expected, atol=1e-5, rtol=1e-5)
-
-
-def test_triangular_attention_encode_decode_roundtrip_with_logabsdet() -> None:
-    r"""Check that triangular attention encode/decode are inverse maps."""
-    torch.manual_seed(0)
-    attention = TriangularAttention(dim_context=4, dim_hidden=3)
-    context = torch.randn(5, 4)
-    x = torch.randn(5)
-
-    y, forward_logabsdet = attention.encode_and_logabsdet(
-        context,
-        context,
-        x.unsqueeze(-1),
-    )
-    xhat, inverse_logabsdet = attention.decode_and_logabsdet(context, context, y)
-    xhat = xhat.squeeze(-1)
-
-    assert_close(xhat, x, atol=1e-5, rtol=1e-5)
-    assert_close(
-        forward_logabsdet + inverse_logabsdet,
-        torch.zeros_like(forward_logabsdet),
-        atol=1e-5,
-        rtol=1e-5,
-    )
-
-
-def test_triangular_attention_logabsdet_matches_dense_jacobian() -> None:
-    r"""Check triangular attention logabsdet against a dense Jacobian."""
-    torch.manual_seed(0)
-    num_steps = 5
-    attention = TriangularAttention(dim_context=4, dim_hidden=3)
-    context = torch.randn(num_steps, 4)
-    x = torch.randn(num_steps)
-
-    _, actual = attention.encode_and_logabsdet(context, context, x.unsqueeze(-1))
-
-    def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
-        y, _ = attention.encode_and_logabsdet(
-            context,
-            context,
-            z.reshape(num_steps, 1),
+        assert_close(xhat, x, atol=1e-5, rtol=1e-5)
+        assert_close(
+            forward_logabsdet + inverse_logabsdet,
+            torch.zeros_like(forward_logabsdet),
+            atol=1e-5,
+            rtol=1e-5,
         )
-        return y.reshape(-1)
 
-    jacobian = torch.autograd.functional.jacobian(encode_flat, x.reshape(-1))
-    _, expected = torch.linalg.slogdet(jacobian)
+    def test_logabsdet_matches_autograd_derivative(self) -> None:
+        r"""Check Shiesh logabsdet against autograd derivatives."""
+        transform = Shiesh(t=1.0, a=1.0)
+        x = torch.linspace(-5.0, 5.0, 101)
 
-    assert actual.isfinite()
-    assert expected.isfinite()
-    assert_close(actual, expected, atol=1e-5, rtol=1e-5)
+        _, actual = transform.encode_and_logabsdet(x)
+        derivative = vmap(grad(lambda z: transform.encode_and_logabsdet(z)[0]))(x)
+        expected = derivative.abs().log()
 
-
-def test_triangular_attention_padding_invariance_with_nan_padding() -> None:
-    r"""Check masked NaN padding does not affect valid attention outputs."""
-    torch.manual_seed(0)
-    attention = TriangularAttention(dim_context=4, dim_hidden=3)
-    context = torch.randn(5, 4)
-    value = torch.randn(5, 1)
-
-    DUMMY_VALUE = 123456.789
-
-    expected, expected_logabsdet = attention.encode_and_logabsdet(
-        context, context, value
-    )
-
-    padded_context = torch.cat([context, context.new_full((2, 4), torch.nan)])
-    padded_value = torch.cat([value, value.new_full((2, 1), torch.nan)])
-
-    attn_mask = padded_context.isfinite().any(dim=-1)
-
-    padded_context = torch.where(attn_mask.unsqueeze(-1), padded_context, DUMMY_VALUE)
-    padded_value = torch.where(attn_mask.unsqueeze(-1), padded_value, DUMMY_VALUE)
-
-    padded_context = padded_context.requires_grad_()
-    padded_value = padded_value.requires_grad_()
-
-    actual, actual_logabsdet = attention.encode_and_logabsdet(
-        padded_context,
-        padded_context,
-        padded_value,
-        valid_mask=attn_mask,
-    )
-
-    assert_close(actual[:5], expected, atol=1e-5, rtol=1e-5)
-    assert_close(actual_logabsdet, expected_logabsdet, atol=1e-5, rtol=1e-5)
-
-    (actual.nansum() + actual_logabsdet.nansum()).backward()
-    assert padded_context.grad is not None
-    assert padded_value.grad is not None
-    assert padded_context.grad.isfinite().all()
-    assert padded_value.grad.isfinite().all()
-    for parameter in attention.parameters():
-        assert parameter.grad is not None
-        assert parameter.grad.isfinite().all()
+        assert actual.isfinite().all()
+        assert expected.isfinite().all()
+        assert_close(actual, expected, atol=1e-5, rtol=1e-5)
 
 
-def test_flow_sequence_encode_decode_roundtrip_with_logabsdet() -> None:
-    r"""Check that a sequence of ProFITi blocks is invertible."""
-    torch.manual_seed(0)
-    num_steps = 5
-    latent_dim = 4
-    flow = ConditionalFlowSequence(
-        [
-            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
-            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
-        ]
-    )
-    context = torch.randn(num_steps, latent_dim)
-    x = torch.randn(num_steps)
+class TestTriangularAttention:
+    def test_encode_decode_roundtrip_with_logabsdet(self) -> None:
+        r"""Check that triangular attention encode/decode are inverse maps."""
+        torch.manual_seed(0)
+        attention = TriangularAttention(dim_context=4, dim_hidden=3)
+        context = torch.randn(5, 4)
+        x = torch.randn(5)
 
-    y, forward_logabsdet = flow.encode_and_logabsdet(x, context)
-    xhat, inverse_logabsdet = flow.decode_and_logabsdet(y, context)
+        y, forward_logabsdet = attention.encode_and_logabsdet(
+            context,
+            context,
+            x.unsqueeze(-1),
+        )
+        xhat, inverse_logabsdet = attention.decode_and_logabsdet(context, context, y)
+        xhat = xhat.squeeze(-1)
 
-    assert_close(xhat, x, atol=1e-5, rtol=1e-5)
-    assert_close(
-        forward_logabsdet + inverse_logabsdet,
-        torch.zeros_like(forward_logabsdet),
-        atol=1e-5,
-        rtol=1e-5,
-    )
+        assert_close(xhat, x, atol=1e-5, rtol=1e-5)
+        assert_close(
+            forward_logabsdet + inverse_logabsdet,
+            torch.zeros_like(forward_logabsdet),
+            atol=1e-5,
+            rtol=1e-5,
+        )
+
+    def test_logabsdet_matches_dense_jacobian(self) -> None:
+        r"""Check triangular attention logabsdet against a dense Jacobian."""
+        torch.manual_seed(0)
+        num_steps = 5
+        attention = TriangularAttention(dim_context=4, dim_hidden=3)
+        context = torch.randn(num_steps, 4)
+        x = torch.randn(num_steps)
+
+        _, actual = attention.encode_and_logabsdet(context, context, x.unsqueeze(-1))
+
+        def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
+            y, _ = attention.encode_and_logabsdet(
+                context,
+                context,
+                z.reshape(num_steps, 1),
+            )
+            return y.reshape(-1)
+
+        jacobian = torch.autograd.functional.jacobian(encode_flat, x.reshape(-1))
+        _, expected = torch.linalg.slogdet(jacobian)
+
+        assert actual.isfinite()
+        assert expected.isfinite()
+        assert_close(actual, expected, atol=1e-5, rtol=1e-5)
+
+    def test_padding_invariance_with_nan_padding(self) -> None:
+        r"""Check masked NaN padding does not affect valid attention outputs."""
+        torch.manual_seed(0)
+        attention = TriangularAttention(dim_context=4, dim_hidden=3)
+        context = torch.randn(5, 4)
+        value = torch.randn(5, 1)
+
+        DUMMY_VALUE = 123456.789
+
+        expected, expected_logabsdet = attention.encode_and_logabsdet(
+            context, context, value
+        )
+
+        padded_context = torch.cat([context, context.new_full((2, 4), torch.nan)])
+        padded_value = torch.cat([value, value.new_full((2, 1), torch.nan)])
+
+        attn_mask = padded_context.isfinite().any(dim=-1)
+
+        padded_context = torch.where(
+            attn_mask.unsqueeze(-1), padded_context, DUMMY_VALUE
+        )
+        padded_value = torch.where(attn_mask.unsqueeze(-1), padded_value, DUMMY_VALUE)
+
+        padded_context = padded_context.requires_grad_()
+        padded_value = padded_value.requires_grad_()
+
+        actual, actual_logabsdet = attention.encode_and_logabsdet(
+            padded_context,
+            padded_context,
+            padded_value,
+            valid_mask=attn_mask,
+        )
+
+        assert_close(actual[:5], expected, atol=1e-5, rtol=1e-5)
+        assert_close(actual_logabsdet, expected_logabsdet, atol=1e-5, rtol=1e-5)
+
+        (actual.nansum() + actual_logabsdet.nansum()).backward()
+        assert padded_context.grad is not None
+        assert padded_value.grad is not None
+        assert padded_context.grad.isfinite().all()
+        assert padded_value.grad.isfinite().all()
+        for parameter in attention.parameters():
+            assert parameter.grad is not None
+            assert parameter.grad.isfinite().all()
 
 
-def test_flow_sequence_logabsdet_matches_dense_jacobian() -> None:
-    r"""Check a sequence of ProFITi blocks against a dense Jacobian."""
-    torch.manual_seed(0)
-    num_steps = 5
-    latent_dim = 4
-    flow = ConditionalFlowSequence(
-        [
-            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
-            ProFITiBlock(latent_dim=latent_dim, num_layers=1),
-        ]
-    )
-    context = torch.randn(num_steps, latent_dim)
-    x = torch.randn(num_steps)
+class TestFlowSequence:
+    def test_encode_decode_roundtrip_with_logabsdet(self) -> None:
+        r"""Check that a sequence of ProFITi blocks is invertible."""
+        torch.manual_seed(0)
+        num_steps = 5
+        latent_dim = 4
+        flow = ConditionalFlowSequence(
+            [
+                ProFITiBlock(latent_dim=latent_dim, num_layers=1),
+                ProFITiBlock(latent_dim=latent_dim, num_layers=1),
+            ]
+        )
+        context = torch.randn(num_steps, latent_dim)
+        x = torch.randn(num_steps)
 
-    _, actual = flow.encode_and_logabsdet(x, context)
+        y, forward_logabsdet = flow.encode_and_logabsdet(x, context)
+        xhat, inverse_logabsdet = flow.decode_and_logabsdet(y, context)
 
-    def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
-        y, _ = flow.encode_and_logabsdet(z.reshape(num_steps), context)
-        return y.reshape(-1)
+        assert_close(xhat, x, atol=1e-5, rtol=1e-5)
+        assert_close(
+            forward_logabsdet + inverse_logabsdet,
+            torch.zeros_like(forward_logabsdet),
+            atol=1e-5,
+            rtol=1e-5,
+        )
 
-    jacobian = torch.autograd.functional.jacobian(encode_flat, x.reshape(-1))
-    _, expected = torch.linalg.slogdet(jacobian)
+    def test_logabsdet_matches_dense_jacobian(self) -> None:
+        r"""Check a sequence of ProFITi blocks against a dense Jacobian."""
+        torch.manual_seed(0)
+        num_steps = 5
+        latent_dim = 4
+        flow = ConditionalFlowSequence(
+            [
+                ProFITiBlock(latent_dim=latent_dim, num_layers=1),
+                ProFITiBlock(latent_dim=latent_dim, num_layers=1),
+            ]
+        )
+        context = torch.randn(num_steps, latent_dim)
+        x = torch.randn(num_steps)
 
-    assert actual.isfinite()
-    assert expected.isfinite()
-    assert_close(actual, expected, atol=1e-4, rtol=1e-4)
+        _, actual = flow.encode_and_logabsdet(x, context)
+
+        def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
+            y, _ = flow.encode_and_logabsdet(z.reshape(num_steps), context)
+            return y.reshape(-1)
+
+        jacobian = torch.autograd.functional.jacobian(encode_flat, x.reshape(-1))
+        _, expected = torch.linalg.slogdet(jacobian)
+
+        assert actual.isfinite()
+        assert expected.isfinite()
+        assert_close(actual, expected, atol=1e-4, rtol=1e-4)
 
 
 class TestProFITiBlock:
@@ -435,7 +436,7 @@ class TestProfiti(TestPathCTM[ProFITi]):
         assert model.context_embedding.num_layers == config.num_layers
         assert isinstance(model.conditional_flow, ConditionalFlowSequence)
         assert not isinstance(model.conditional_flow, nn.Identity)
-        assert len(model.conditional_flow) == config.num_layers
+        assert len(model.conditional_flow) == config.num_flow_layers
         assert all(isinstance(layer, ProFITiBlock) for layer in model.conditional_flow)
 
     def test_sample_and_log_prob_uses_standard_normal_latent(self) -> None:
