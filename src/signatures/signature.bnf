@@ -7,16 +7,22 @@ FnType ::= "{" FnBody "}";
 FnBody ::= (ArgList | ArgType) "->" (ArgList | ArgType);
 
 // e.g. '[T, U, Tensor[(N, 3)]]'
-ArgList ::= "["  (Arg ("," Arg)*)?  (KeyArg ("," KeyArg)*)?  "]"
+ArgList ::= "["  ArgItems  "]"
+// there must be at least one argument.
+ArgItems ::= Arg ("," Arg)* (KeyArg ("," KeyArg)*)? | (Arg ("," Arg)*)? KeyArg ("," KeyArg)*
+
+// ? indicates that the argument is optional, e.g. `foo?` or `(..., m, n)?`
 Arg ::= ArgType "?"?
+
+// ? indicates that the key argument is optional, e.g. `foo?=int`
 KeyArg ::= IdentifierType "?"? "=" ArgType
 
 // e.g. 'T', 'Tensor[...]', 'Foo[Bar, (1,2)]', '{T -> U}'
-ArgType ::= ShapeType | IdentifierType | GenericType | FnType
+ArgType ::= IdentifierType ArgList? | ShapeType | FnType
 
 // e.g. '()', '(1,2,3)', '(..., m, n)', '(k,)'
-ShapeType ::= "(" ShapeBody? ")"
-ShapeBody ::= ("..." | DimType) ("," DimType)* ","?
+ShapeType ::= "(" ShapeItems? ")"
+ShapeItems ::= ("..." | DimType) ("," DimType)* ","?
 
 // Dimension types
 DimType ::= ConstantDim | StaticDim | CompoundDim | DynamicDim | VariadicDim
@@ -37,8 +43,6 @@ CompoundDim ::= ConstantDim StaticDim
     | (ConstantDim? StaticDim) (("+" | "-") (ConstantDim? StaticDim))* (("+" | "-") (ConstantDim))
     | (ConstantDim? StaticDim) (("+" | "-") (ConstantDim? StaticDim))+ (("+" | "-") (ConstantDim))?
 
-// e.g. 'Foo[Bar, (1,2)]'
-GenericType ::= IdentifierType ArgList
 
 // Basic tokens
 IdentifierType ::= Letter (Letter | Digit | '_' )*
