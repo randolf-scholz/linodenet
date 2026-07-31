@@ -65,7 +65,7 @@ class Identifier(str):
 
     __slots__ = ()
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, /) -> None:
         if not is_identifier(name):
             raise ValueError(f"Invalid identifier: {name}")
 
@@ -563,7 +563,6 @@ class Parser:
     def _parse_arglist(self) -> ArgList:
         self.consume(TokenKind.LBRACKET)
         args: ArgList = []
-        seen_optional = False
 
         if self.current.kind is not TokenKind.RBRACKET:
             arg = self._parse_arg()
