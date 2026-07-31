@@ -6,10 +6,14 @@ SignatureType ::= FnType | FnBody;
 FnType ::= "{" FnBody "}";
 FnBody ::= (ArgList | ArgType) "->" (ArgList | ArgType);
 
+// e.g. list<float>
+TypeArgs ::= "<" ArgItems ">"
+
 // e.g. '[T, U, Tensor[(N, 3)]]'
 ArgList ::= "["  ArgItems  "]"
 // there must be at least one argument.
-ArgItems ::= Arg ("," Arg)* (KeyArg ("," KeyArg)*)? | (Arg ("," Arg)*)? KeyArg ("," KeyArg)*
+ArgItems ::= Arg ("," Arg)* (KeyArg ("," KeyArg)*)?
+            | (Arg ("," Arg)*)? KeyArg ("," KeyArg)*
 
 // ? indicates that the argument is optional, e.g. `foo?` or `(..., m, n)?`
 Arg ::= ArgType "?"?
@@ -18,11 +22,15 @@ Arg ::= ArgType "?"?
 KeyArg ::= IdentifierType "?"? "=" ArgType
 
 // e.g. 'T', 'Tensor[...]', 'Foo[Bar, (1,2)]', '{T -> U}'
-ArgType ::= IdentifierType ArgList? | ShapeType | FnType
+ArgType ::= GenericType | ShapeType | FnType
+
+// e.g. list<float>
+GenericType ::= IdentifierType TypeArgs? ShapeSuffix?
 
 // e.g. '()', '(1,2,3)', '(..., m, n)', '(k,)'
-ShapeType ::= "(" ShapeItems ")"
-ShapeItems ::= ( ("..." | DimType) ("," DimType)* ","? )?
+ShapeSuffix ::= "[" ShapeType | ShapeItems "]"
+ShapeType ::= "(" ShapeItems? ")"
+ShapeItems ::= ("..." | DimType) ("," DimType)* ","?
 
 // Dimension types
 DimType ::= ConstantDim | StaticDim | CompoundDim | DynamicDim | VariadicDim
