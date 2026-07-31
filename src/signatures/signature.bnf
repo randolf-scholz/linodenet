@@ -34,8 +34,6 @@ ShapeItems ::= ("..." | DimType) ("," DimType)* ","?
 
 // Dimension types
 DimType ::= ConstantDim | StaticDim | CompoundDim | DynamicDim | VariadicDim
-// multiple unknown dimensions (could be one of Constant, Static or Dynamic)
-//  "*?"
 // e.g. '3': a fixed size dimension
 ConstantDim ::= Number
 // e.g. 'n': a single axis whose size will be fixed at runtime
@@ -44,8 +42,8 @@ StaticDim ::= IdentifierType
 DynamicDim ::= "$" IdentifierType
 // e.g. '*Xs': a bundle of axes (x₁, ..., xₙ) whose shape will be fixed at runtime
 VariadicDim ::= "*" IdentifierType
-// e.g. "2n", "3n+3", "n+2", "2u + 3v", "2a + 2b + 2c + 1", "2n - 1"
 // affine combination of Static Dims
+// e.g. "2n", "3n+3", "n+2", "2u + 3v", "2a + 2b + 2c + 1", "2n - 1"
 CompoundDim ::= ConstantDim StaticDim
     | (ConstantDim? StaticDim) (("+" | "-") (ConstantDim? StaticDim))* (("+" | "-") (ConstantDim))
     | (ConstantDim? StaticDim) (("+" | "-") (ConstantDim? StaticDim))+ (("+" | "-") (ConstantDim))?
