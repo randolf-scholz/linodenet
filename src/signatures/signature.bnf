@@ -15,7 +15,8 @@ KeyArg ::= IdentifierType "?"? "=" ArgType
 ArgType ::= ShapeType | IdentifierType | GenericType | FnType
 
 // e.g. '()', '(1,2,3)', '(..., m, n)', '(k,)'
-ShapeType ::= "(" ( ("..." | DimType) ("," DimType)* ","? )? ")"
+ShapeType ::= "(" ShapeBody? ")"
+ShapeBody ::= ("..." | DimType) ("," DimType)* ","?
 
 // Dimension types
 DimType ::= ConstantDim | StaticDim | CompoundDim | DynamicDim | VariadicDim
