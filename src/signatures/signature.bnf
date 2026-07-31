@@ -36,7 +36,6 @@ StaticDim ::= IdentifierType
 DynamicDim ::= "$" IdentifierType
 // e.g. '*Xs': a bundle of axes (x₁, ..., xₙ) whose shape will be fixed at runtime
 VariadicDim ::= "*" IdentifierType
-
 // e.g. "2n", "3n+3", "n+2", "2u + 3v", "2a + 2b + 2c + 1", "2n - 1"
 // affine combination of Static Dims
 CompoundDim ::= ConstantDim StaticDim
