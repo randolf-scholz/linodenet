@@ -168,7 +168,7 @@ def check_initialization[M: Module](
     except Exception as exc:
         raise AssertionError("Model initialization failed!") from exc
 
-    return module  # pyrefly: ignore[bad-return]
+    return module
 
 
 def check_forward(

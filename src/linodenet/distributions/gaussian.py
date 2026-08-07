@@ -238,7 +238,7 @@ def log_prob(
             return -0.5 * (dim * _LOG2PI + logdet + mahalanobis)
 
         case other:
-            assert_never(other)  # pyrefly: ignore[bad-argument-type]
+            assert_never(other)
 
 
 def _solve_w_closed_form(
