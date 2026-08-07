@@ -17,8 +17,8 @@ import-names = ["blueprint", "linodenet", "linodenet_special", "signatures"]
 keywords = ["kalman-filter", "machine-learning", "neural-ode", "time-series"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Environment :: GPU :: NVIDIA CUDA",
     "Intended Audience :: Science/Research",
+    "Environment :: GPU :: NVIDIA CUDA",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -45,18 +45,18 @@ dev = [
     { include-group = "tests" },
     { include-group = "typing" },
 ]
+devtools = [
+    "cmake>=4.4.2",
+    "ninja>=1.13.0",
+    "prek>=0.4.12",
+    "pybadges>=3.0.1",
+]
 debug = [
     "ipympl>=0.10.0",
     "ipywidgets>=8.1.8",
-    "jupyterlab>=4.6.1",
     "jupyterlab-execute-time>=3.3.0",
+    "jupyterlab>=4.6.2",
     "psutil>=7.2.2",
-]
-devtools = [
-    "cmake>=4.4.0",
-    "ninja>=1.13.0",
-    "prek>=0.4.10",
-    "pybadges>=3.0.1",
 ]
 docs = [
     "docutils>=0.22.4",
@@ -65,7 +65,6 @@ docs = [
     "piccolo-theme>=0.24.0",
     "pydata-sphinx-theme>=0.20.0",
     "pygments>=2.20.0",
-    "sphinx>=9.1.0",
     "sphinx-autoapi>=3.8.0",
     "sphinx-autodoc2>=0.5.0",
     "sphinx-automodapi>=0.22.0",
@@ -73,16 +72,17 @@ docs = [
     "sphinx-math-dollar>=1.3",
     "sphinx-togglebutton>=0.4.5",
     "sphinx-typo3-theme>=4.9.0",
+    "sphinx>=9.1.0",
 ]
 linters = [
-    "prek>=0.4.10",
-    "ruff>=0.15.22",
+    "prek>=0.4.12",
+    "ruff>=0.16.1",
     "tach>=0.35.0",
 ]
 tests = [
-    "coverage>=7.15.2",
-    "hypothesis[numpy,pytest]>=6.156.6",
-    "matplotlib>=3.11.0",
+    "coverage>=7.15.4",
+    "hypothesis[numpy,pytest]>=6.165.2",
+    "matplotlib>=3.11.1",
     "optuna>=4.9.0",
     "psutil>=7.2.2",
     "pygal>=3.1.3",
@@ -95,27 +95,27 @@ tests = [
     "pyyaml>=6.0.3",
     "torchdiffeq>=0.2.5",
     "torchinfo>=1.8.0",
-    "tqdm>=4.68.4",
+    "tqdm>=4.70.0",
 ]
 typing = [
     "mypy>=2.3.0",
-    "pyrefly>=1.1.1",
+    "pyrefly>=1.2.0",
     "pyright>=1.1.411",
     "scipy-stubs>=1.18.0.1",
-    "ty>=0.0.60",
+    "ty>=0.0.69",
     "types-colorama>=0.4.15.20260508",
     "types-defusedxml>=0.7.0.20260504",
     "types-jsonschema>=4.26.0.20260518",
-    "types-networkx>=3.6.1.20260624",
+    "types-networkx>=3.6.1.20260728",
     "types-pexpect>=4.9.0.20260518",
     "types-protobuf>=7.34.1.20260518",
     "types-psutil>=7.2.2.20260518",
-    "types-pygments>=2.20.0.20260518",
-    "types-pywin32>=312.0.0.20260609",
-    "types-pyyaml>=6.0.12.20260518",
-    "types-setuptools>=83.0.0.20260716",
+    "types-pygments>=2.20.0.20260728",
+    "types-pywin32>=312.0.0.20260724",
+    "types-pyyaml>=6.0.12.20260724",
+    "types-setuptools>=83.0.0.20260807",
     "types-tabulate>=0.10.0.20260508",
-    "types-tqdm>=4.68.0.20260608",
+    "types-tqdm>=4.70.0.20260805",
     "typing-extensions>=4.16.0",
 ]
 # endregion development dependencies ---------------------------------------------------
@@ -270,7 +270,6 @@ ignore = [
     "RUF001", # ambiguous-unicode-character-string
     "RUF002", # ambiguous-unicode-character-docstring
     "RUF003", # ambiguous-unicode-character-comment
-    "RUF005", # collection-literal-concatenation (not supported by JIT)
     "RUF012", # Mutable class attributes should be annotated with typing.ClassVar # FIXME: PEP 603
     "RUF013", # PEP 484 prohibits implicit Optional
     "RUF022", # __all__ not sorted
@@ -325,6 +324,7 @@ invalid-overload = false
 unused-ignore = true
 # endregion pyrefly configuration ------------------------------------------------------
 
+
 # region mypy configuration ------------------------------------------------------------
 [tool.mypy]
 # SEE: https://mypy.readthedocs.io/en/stable/config_file.html
@@ -346,7 +346,7 @@ disable_error_code = [
 warn_no_return = true
 warn_redundant_casts = true
 warn_return_any = false
-warn_unreachable = false  # unreliable
+warn_unreachable = true
 warn_unused_configs = true
 warn_unused_ignores = true
 
@@ -394,6 +394,7 @@ module = [
 ]
 ignore_missing_imports = true
 # endregion mypy configuration ---------------------------------------------------------
+
 
 # region pyright configuration ---------------------------------------------------------
 [tool.pyright]
@@ -514,6 +515,7 @@ reportUnusedImport = "error"  # default: "none"
 reportUnusedVariable = "error"  # default: "none"
 reportWildcardImportFromLibrary = "error"  # default: "warning"
 # endregion pyright configuration ------------------------------------------------------
+
 
 # region pytest configuration ----------------------------------------------------------
 [tool.pytest]
