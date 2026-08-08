@@ -6,7 +6,7 @@ import pytest
 import torch
 
 from linodenet_models.ncdssm import NCDSSM, NCDSSMConfig
-from linodenet_models.utils import SplitTimeData
+from linodenet_models.utils import EventBatch, SplitTimeData
 
 from .base import TestProbabilisticModel
 
@@ -103,3 +103,39 @@ class TestNCDSSM(TestProbabilisticModel[NCDSSM]):
         assert model.output_size == config.output_size
         assert model.latent_size == config.latent_size
         assert model.auxiliary_size == config.auxiliary_size
+
+    def test_forward_combined_request_matches_predict(self) -> None:
+        r"""Check the combined-event loop handles interleaved context and queries."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        context_times = torch.tensor([[0.0, 2.0]])
+        context_values = torch.tensor([[[1.0, 0.0, -1.0], [0.5, 1.0, 0.0]]])
+        context_mask = torch.ones_like(context_values, dtype=torch.bool)
+        query_times = torch.tensor([[1.0, 3.0]])
+        query_mask = torch.ones(1, 2, self.OUTPUT_SHAPE[0], dtype=torch.bool)
+        combined = EventBatch.from_request(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+        )
+
+        combined_mean, combined_variance = model(
+            timestamps=combined.timestamps,
+            query_mask=combined.query_mask,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+        )
+        mean, variance = model.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+        )
+
+        torch.testing.assert_close(combined_mean[..., *combined.query_indices, :], mean)
+        torch.testing.assert_close(
+            combined_variance[..., *combined.query_indices, :], variance
+        )

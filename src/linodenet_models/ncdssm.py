@@ -23,6 +23,8 @@ import torch
 from torch import Generator, Tensor, nan, nn
 from torch.nn import functional
 
+from .utils import EventBatch
+
 _LOG2PI = math.log(2.0 * math.pi)
 
 
@@ -51,7 +53,12 @@ class AuxiliaryInference(nn.Module):
             nn.Linear(hidden_size, 2 * auxiliary_size),
         )
 
-    def forward(self, values: Tensor, mask: Tensor, /) -> tuple[Tensor, Tensor]:
+    def forward(
+        self,
+        values: Tensor,  # Float[..., D], sparse
+        mask: Tensor,  # Bool[..., D]
+        /,
+    ) -> tuple[Tensor, Tensor]:  # Float[..., A], Float[..., A]
         r"""Return auxiliary mean and diagonal variance for one sparse event."""
         assert values.shape == mask.shape
         assert values.shape[-1] == self.input_size
@@ -95,8 +102,11 @@ class EmissionNetwork(nn.Module):
         )
 
     def forward(
-        self, auxiliary_mean: Tensor, auxiliary_variance: Tensor, /
-    ) -> tuple[Tensor, Tensor]:
+        self,
+        auxiliary_mean: Tensor,  # Float[..., A]
+        auxiliary_variance: Tensor,  # Float[..., A]
+        /,
+    ) -> tuple[Tensor, Tensor]:  # Float[..., F], Float[..., F]
         r"""Return predictive output mean and diagonal variance."""
         assert auxiliary_mean.shape == auxiliary_variance.shape
         assert auxiliary_mean.shape[-1] == self.auxiliary_size
@@ -133,7 +143,7 @@ class ContinuousLinearSDE(nn.Module):
         covariance: Tensor,  # Float[..., L, L]
         delta_time: Tensor,  # Float[...]
         /,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:  # Float[..., L], Float[..., L, L]
         r"""Predict state moments after a non-negative time interval."""
         assert mean.shape[:-1] == covariance.shape[:-2] == delta_time.shape
         assert (delta_time >= 0).all(), "delta_time must be non-negative."
@@ -329,72 +339,25 @@ class NCDSSM(nn.Module):
             functional.softplus(self.observation_log_variance) + self.min_variance
         )
 
-    def _canonical_request(
-        self,
-        *,
-        query_times: Tensor,
-        query_mask: Tensor,
-        context_times: Tensor,
-        context_values: Tensor,
-        context_mask: Tensor,
-    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-        r"""Convert a request to ``(..., time, feature)`` and validate shapes."""
-        if not self.batch_first:
-            query_times = query_times.movedim(0, -1)
-            query_mask = query_mask.movedim(0, -2)
-            context_times = context_times.movedim(0, -1)
-            context_values = context_values.movedim(0, -2)
-            context_mask = context_mask.movedim(0, -2)
-        batch_shape = context_times.shape[:-1]
-        if context_values.shape != (
-            *batch_shape,
-            context_times.shape[-1],
-            self.input_size,
-        ):
-            raise ValueError("context_values has incompatible shape.")
-        if (
-            context_mask.shape != context_values.shape
-            or context_mask.dtype != torch.bool
-        ):
-            raise ValueError("context_mask must be boolean and match context_values.")
-        if query_times.shape[:-1] != batch_shape:
-            raise ValueError("Context and query batch shapes must match.")
-        if query_mask.shape != (*batch_shape, query_times.shape[-1], self.output_size):
-            raise ValueError("query_mask has incompatible shape.")
-        if query_mask.dtype != torch.bool:
-            raise ValueError("query_mask must be boolean.")
-        if self.validate_args:
-            context_active = context_mask.any(dim=-1)
-            query_active = query_mask.any(dim=-1)
-            if not torch.equal(context_values.isfinite(), context_mask):
-                raise ValueError("context_values must be finite exactly where masked.")
-            if not torch.equal(context_times.isfinite(), context_active):
-                raise ValueError(
-                    "context_times must be finite exactly at context events."
-                )
-            if not torch.equal(query_times.isfinite(), query_active):
-                raise ValueError("query_times must be finite exactly at query events.")
-        return query_times, query_mask, context_times, context_values, context_mask
-
     def _update(
         self,
-        prior_mean: Tensor,
-        prior_covariance: Tensor,
-        auxiliary_mean: Tensor,
-        auxiliary_variance: Tensor,
+        prior_mean: Tensor,  # Float[..., L]
+        prior_covariance: Tensor,  # Float[..., L, L]
+        auxiliary_mean: Tensor,  # Float[..., A]
+        auxiliary_variance: Tensor,  # Float[..., A]
         /,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:  # Float[..., L], Float[..., L, L]
         r"""Apply the Equation (4) auxiliary-observation Kalman update."""
-        observation_matrix = self.observation_matrix
-        observation_covariance = torch.diag_embed(auxiliary_variance)
-        cross_covariance = prior_covariance @ observation_matrix.mT
-        innovation_covariance = (
+        observation_matrix = self.observation_matrix  # Float[A, L]
+        observation_covariance = torch.diag_embed(auxiliary_variance)  # (..., A, A)
+        cross_covariance = prior_covariance @ observation_matrix.mT  # (..., L, A)
+        innovation_covariance = (  # (..., A, A)
             observation_matrix @ cross_covariance + observation_covariance
         )
         gain = torch.linalg.solve(innovation_covariance, cross_covariance.mT).mT
-        innovation = auxiliary_mean - prior_mean @ observation_matrix.mT
+        innovation = auxiliary_mean - prior_mean @ observation_matrix.mT  # (..., A)
         posterior_mean = prior_mean + (gain @ innovation.unsqueeze(-1)).squeeze(-1)
-        correction = self.identity - gain @ observation_matrix
+        correction = self.identity - gain @ observation_matrix  # (..., L, L)
         # Joseph form: (I-KH)P(I-KH)ᵀ + KRₐKᵀ preserves positive semidefiniteness.
         posterior_covariance = (
             correction @ prior_covariance @ correction.mT
@@ -403,110 +366,182 @@ class NCDSSM(nn.Module):
         return posterior_mean, 0.5 * (posterior_covariance + posterior_covariance.mT)
 
     def _emit(
-        self, state_mean: Tensor, state_covariance: Tensor, /
-    ) -> tuple[Tensor, Tensor]:
+        self,
+        state_mean: Tensor,  # Float[..., L]
+        state_covariance: Tensor,  # Float[..., L, L]
+        /,
+    ) -> tuple[Tensor, Tensor]:  # Float[..., F], Float[..., F]
         r"""Moment-match $p_θ(xₜ\mid aₜ)$ given predictive state moments."""
-        observation_matrix = self.observation_matrix
-        auxiliary_mean = state_mean @ observation_matrix.mT
-        auxiliary_covariance = (
+        observation_matrix = self.observation_matrix  # Float[A, L]
+        auxiliary_mean = state_mean @ observation_matrix.mT  # (..., A)
+        auxiliary_covariance = (  # (..., A, A)
             observation_matrix @ state_covariance @ observation_matrix.mT
             + self.observation_covariance
         )
         auxiliary_variance = torch.diagonal(
             auxiliary_covariance, dim1=-2, dim2=-1
-        ).clamp_min(self.min_variance)
+        ).clamp_min(self.min_variance)  # (..., A)
         return self.emission(auxiliary_mean, auxiliary_variance)
+
+    def forward(
+        self,
+        *,
+        timestamps: Tensor,  # Float[..., T], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., T, F], padded False
+        context_values: Tensor,  # Float[..., T, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., T, D], padded False
+        initial_state: tuple[Tensor, Tensor] | None = None,  # (..., L), (..., L, L)
+        initial_time: Tensor | None = None,  # Float[] or Float[...]
+    ) -> tuple[Tensor, Tensor]:  # Float[..., T, F], Float[..., T, F]
+        r"""Filter and forecast over an ordered, combined event request.
+
+        Args:
+            timestamps: Combined context and query timestamps.
+            query_mask: Feature-level mask selecting requested output values.
+            context_values: Sparse context values at combined event times.
+            context_mask: Feature-level mask selecting observed context values.
+            initial_state: Optional initial latent Gaussian moments $(μ₀, Σ₀)$.
+            initial_time: Optional time associated with ``initial_state``.
+
+        Returns:
+            predicted_means: Output means for the combined event sequence. Values
+                outside ``query_mask`` are NaN.
+            predicted_variances: Output variances for the combined event sequence.
+                Values outside ``query_mask`` are NaN.
+        """
+        has_context = context_mask.any(dim=-1)  # (..., T)
+        has_query = query_mask.any(dim=-1)  # (..., T)
+        valid_steps = timestamps.isfinite() & (has_context | has_query)  # (..., T)
+
+        if self.validate_args:
+            assert (
+                context_values.shape[:-1] == context_mask.shape[:-1] == timestamps.shape
+            )
+            assert context_values.shape[-1] == context_mask.shape[-1] == self.input_size
+            assert query_mask.shape[:-1] == timestamps.shape
+            assert query_mask.shape[-1] == self.output_size
+            assert torch.equal(context_values.isfinite(), context_mask)
+            assert torch.equal(timestamps.isfinite(), valid_steps)
+
+        output_mask = query_mask
+        if self.batch_first:
+            timestamps = timestamps.movedim(-1, 0)  # (T, ...)
+            context_values = context_values.movedim(-2, 0)  # (T, ..., D)
+            context_mask = context_mask.movedim(-2, 0)  # (T, ..., D)
+            has_context = has_context.movedim(-1, 0)  # (T, ...)
+            valid_steps = valid_steps.movedim(-1, 0)  # (T, ...)
+
+        num_steps, *batch_shape = timestamps.shape
+        assert context_values.shape == (num_steps, *batch_shape, self.input_size)
+        assert context_mask.shape == context_values.shape
+        assert has_context.shape == valid_steps.shape == (num_steps, *batch_shape)
+
+        state_mean: Tensor  # Float[..., L]
+        state_covariance: Tensor  # Float[..., L, L]
+        if initial_state is None:
+            state_mean = self.initial_mean.expand(*batch_shape, self.latent_size)
+            state_covariance = self.initial_covariance.expand(
+                *batch_shape, self.latent_size, self.latent_size
+            )
+        else:
+            state_mean, state_covariance = initial_state
+            state_mean = state_mean.expand(*batch_shape, self.latent_size)
+            state_covariance = state_covariance.expand(
+                *batch_shape, self.latent_size, self.latent_size
+            )
+        state_time = timestamps[0] if initial_time is None else initial_time  # (...,)
+
+        predicted_means: list[Tensor] = []
+        predicted_variances: list[Tensor] = []
+        for timestamp, values, feature_mask, is_context, active in zip(
+            timestamps,
+            context_values,
+            context_mask,
+            has_context,
+            valid_steps,
+            strict=True,
+        ):
+            # Equation (3): propagate $p(zₛ\mid𝒟)$ to $p(zₜ\mid𝒟)$.
+            delta_time = torch.where(
+                active, timestamp - state_time, torch.zeros_like(timestamp)
+            )
+            prior_mean, prior_covariance = self.dynamics(
+                state_mean, state_covariance, delta_time
+            )
+            state_mean = torch.where(active[..., None], prior_mean, state_mean)
+            state_covariance = torch.where(
+                active[..., None, None], prior_covariance, state_covariance
+            )
+
+            # Equation (6): infer qϕ(aₜ|xₜ,mₜ), then update Equation (4).
+            auxiliary_mean, auxiliary_variance = self.encoder(values, feature_mask)
+            posterior_mean, posterior_covariance = self._update(
+                state_mean,
+                state_covariance,
+                auxiliary_mean,
+                auxiliary_variance,
+            )
+            update = active & is_context
+            state_mean = torch.where(update[..., None], posterior_mean, state_mean)
+            state_covariance = torch.where(
+                update[..., None, None], posterior_covariance, state_covariance
+            )
+            state_time = torch.where(active, timestamp, state_time)
+
+            output_mean, output_variance = self._emit(state_mean, state_covariance)
+            predicted_means.append(output_mean)
+            predicted_variances.append(output_variance)
+
+        stack_dim = -2 if self.batch_first else 0
+        mean = torch.stack(predicted_means, dim=stack_dim)  # (..., T, F)
+        variance = torch.stack(predicted_variances, dim=stack_dim)  # (..., T, F)
+        return mean.masked_fill(~output_mask, nan), variance.masked_fill(
+            ~output_mask, nan
+        )
 
     def predict(
         self,
         *,
-        query_times: Tensor,
-        query_mask: Tensor,
-        context_times: Tensor,
-        context_values: Tensor,
-        context_mask: Tensor,
-    ) -> tuple[Tensor, Tensor]:
-        r"""Return predictive mean and diagonal variance at all query times.
-
-        The state-space loop filters the context, then propagates the posterior
-        through each query time without conditioning on unknown query values.
-        Padded events leave both the state and state time intact.
-        """
-        query_times, query_mask, context_times, context_values, context_mask = (
-            self._canonical_request(
-                query_times=query_times,
-                query_mask=query_mask,
-                context_times=context_times,
-                context_values=context_values,
-                context_mask=context_mask,
-            )
+        query_times: Tensor,  # Float[..., K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., K, F], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+        initial_state: tuple[Tensor, Tensor] | None = None,  # (..., L), (..., L, L)
+        initial_time: Tensor | None = None,  # Float[] or Float[...]
+    ) -> tuple[Tensor, Tensor]:  # Float[..., K, F], Float[..., K, F]
+        r"""Return predictive output moments at the requested query events."""
+        combined = EventBatch.from_request(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+            batch_first=self.batch_first,
         )
-        batch_shape = context_times.shape[:-1]
-        batch_size = math.prod(batch_shape) if batch_shape else 1
-        num_context, num_queries = context_times.shape[-1], query_times.shape[-1]
-        context_times = context_times.reshape(batch_size, num_context)
-        context_values = context_values.reshape(
-            batch_size, num_context, self.input_size
+        if self.validate_args:
+            combined.validate()
+        means, variances = self(
+            timestamps=combined.timestamps,
+            query_mask=combined.query_mask,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+            initial_state=initial_state,
+            initial_time=initial_time,
         )
-        context_mask = context_mask.reshape(batch_size, num_context, self.input_size)
-        query_times = query_times.reshape(batch_size, num_queries)
-        query_mask = query_mask.reshape(batch_size, num_queries, self.output_size)
-
-        state_mean = self.initial_mean.expand(batch_size, -1)
-        state_covariance = self.initial_covariance.expand(batch_size, -1, -1)
-        state_time = context_times.new_zeros(batch_size)
-        for index in range(num_context):
-            feature_mask = context_mask[:, index]
-            active = feature_mask.any(dim=-1) & context_times[:, index].isfinite()
-            event_time = torch.where(active, context_times[:, index], state_time)
-            prior_mean, prior_covariance = self.dynamics(
-                state_mean, state_covariance, event_time - state_time
-            )
-            auxiliary_mean, auxiliary_variance = self.encoder(
-                context_values[:, index], feature_mask
-            )
-            posterior_mean, posterior_covariance = self._update(
-                prior_mean, prior_covariance, auxiliary_mean, auxiliary_variance
-            )
-            state_mean = torch.where(active[:, None], posterior_mean, state_mean)
-            state_covariance = torch.where(
-                active[:, None, None], posterior_covariance, state_covariance
-            )
-            state_time = torch.where(active, event_time, state_time)
-
-        means: list[Tensor] = []
-        variances: list[Tensor] = []
-        for index in range(num_queries):
-            active = query_mask[:, index].any(dim=-1) & query_times[:, index].isfinite()
-            event_time = torch.where(active, query_times[:, index], state_time)
-            next_mean, next_covariance = self.dynamics(
-                state_mean, state_covariance, event_time - state_time
-            )
-            state_mean = torch.where(active[:, None], next_mean, state_mean)
-            state_covariance = torch.where(
-                active[:, None, None], next_covariance, state_covariance
-            )
-            state_time = torch.where(active, event_time, state_time)
-            output_mean, output_variance = self._emit(state_mean, state_covariance)
-            means.append(output_mean)
-            variances.append(output_variance)
-
-        mean = torch.stack(means, dim=-2).reshape(
-            *batch_shape, num_queries, self.output_size
-        )
-        variance = torch.stack(variances, dim=-2).reshape(
-            *batch_shape, num_queries, self.output_size
-        )
-        if not self.batch_first:
-            mean, variance = mean.movedim(-2, 0), variance.movedim(-2, 0)
-        self.pred_means, self.pred_variances = mean, variance
-        self.pred_logvars = variance.log()
-        return mean, variance
+        self.pred_means = means[..., *combined.query_indices, :]
+        self.pred_variances = variances[..., *combined.query_indices, :]
+        self.pred_logvars = self.pred_variances.log()
+        return self.pred_means, self.pred_variances
 
     @staticmethod
     def _log_prob(
-        values: Tensor, *, mean: Tensor, variance: Tensor, mask: Tensor
-    ) -> Tensor:
+        values: Tensor,  # Float[*S, ..., K, F]
+        *,
+        mean: Tensor,  # Float[*S, ..., K, F]
+        variance: Tensor,  # Float[*S, ..., K, F]
+        mask: Tensor,  # Bool[*S, ..., K, F]
+    ) -> Tensor:  # Float[*S, ..., K]
         r"""Compute masked time-marginal diagonal Gaussian log-probabilities."""
         safe_values = torch.where(mask, values, torch.zeros_like(values))
         safe_mean = torch.where(mask, mean, torch.zeros_like(mean))
@@ -520,15 +555,15 @@ class NCDSSM(nn.Module):
 
     def log_prob(
         self,
-        samples: Tensor,
+        samples: Tensor,  # Float[*S, ..., K, F]
         /,
         *,
-        query_times: Tensor,
-        query_mask: Tensor,
-        context_times: Tensor,
-        context_values: Tensor,
-        context_mask: Tensor,
-    ) -> Tensor:
+        query_times: Tensor,  # Float[..., K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., K, F], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
+    ) -> Tensor:  # Float[*S, ..., K]
         r"""Compute time-marginal predictive log-likelihoods of ``samples``."""
         mean, variance = self.predict(
             query_times=query_times,
@@ -557,15 +592,15 @@ class NCDSSM(nn.Module):
 
     def sample(
         self,
-        size: int | tuple[int, ...] = (),
+        size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,
-        query_mask: Tensor,
-        context_times: Tensor,
-        context_values: Tensor,
-        context_mask: Tensor,
+        query_times: Tensor,  # Float[..., K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., K, F], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
         rng: Generator | None = None,
-    ) -> Tensor:
+    ) -> Tensor:  # Float[*S, ..., K, F]
         r"""Draw independent samples from the predictive time marginals."""
         mean, variance = self.predict(
             query_times=query_times,
@@ -588,15 +623,15 @@ class NCDSSM(nn.Module):
 
     def sample_and_log_prob(
         self,
-        size: int | tuple[int, ...] = (),
+        size: int | tuple[int, ...] = (),  # *S
         *,
-        query_times: Tensor,
-        query_mask: Tensor,
-        context_times: Tensor,
-        context_values: Tensor,
-        context_mask: Tensor,
+        query_times: Tensor,  # Float[..., K], padded NaN, non-decreasing
+        query_mask: Tensor,  # Bool[..., K, F], padded False
+        context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
+        context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
+        context_mask: Tensor,  # Bool[..., N, D], padded False
         rng: Generator | None = None,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor]:  # Float[*S, ..., K, F], Float[*S, ..., K]
         r"""Draw samples and score those same predictive marginals."""
         samples = self.sample(
             size,
