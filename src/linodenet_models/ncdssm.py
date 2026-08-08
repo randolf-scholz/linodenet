@@ -534,25 +534,6 @@ class NCDSSM(nn.Module):
         self.pred_logvars = self.pred_variances.log()
         return self.pred_means, self.pred_variances
 
-    @staticmethod
-    def _log_prob(
-        values: Tensor,  # Float[*S, ..., K, F]
-        *,
-        mean: Tensor,  # Float[*S, ..., K, F]
-        variance: Tensor,  # Float[*S, ..., K, F]
-        mask: Tensor,  # Bool[*S, ..., K, F]
-    ) -> Tensor:  # Float[*S, ..., K]
-        r"""Compute masked time-marginal diagonal Gaussian log-probabilities."""
-        safe_values = torch.where(mask, values, torch.zeros_like(values))
-        safe_mean = torch.where(mask, mean, torch.zeros_like(mean))
-        safe_variance = torch.where(mask, variance, torch.ones_like(variance))
-        log_prob = -0.5 * (
-            (safe_values - safe_mean).square() / safe_variance
-            + safe_variance.log()
-            + _LOG2PI
-        )
-        return torch.where(mask, log_prob, torch.zeros_like(log_prob)).sum(dim=-1)
-
     def log_prob(
         self,
         samples: Tensor,  # Float[*S, ..., K, F]
@@ -572,23 +553,20 @@ class NCDSSM(nn.Module):
             context_values=context_values,
             context_mask=context_mask,
         )
-        sample_dims = samples.ndim - query_mask.ndim
-        if sample_dims < 0:
-            raise ValueError("samples has fewer dimensions than query_mask.")
-        if not self.batch_first:
-            samples = samples.movedim(sample_dims, -2)
-            query_mask = query_mask.movedim(0, -2)
-            mean = mean.movedim(0, -2)
-            variance = variance.movedim(0, -2)
-        if samples.shape[-2:] != mean.shape[-2:]:
-            raise ValueError("samples must end in query-time and output dimensions.")
-        log_prob = self._log_prob(
-            samples,
-            mean=mean.expand_as(samples),
-            variance=variance.expand_as(samples),
-            mask=query_mask.expand_as(samples),
+
+        mean = mean.expand_as(samples)  # Float[*S, ..., K, F]
+        variance = variance.expand_as(samples)  # Float[*S, ..., K, F]
+        mask = query_mask.expand_as(samples)  # Bool[*S, ..., K, F]
+
+        safe_values = torch.where(mask, samples, 0.0)
+        safe_mean = torch.where(mask, mean, 0.0)
+        safe_variance = torch.where(mask, variance, 1.0)
+        log_prob = -0.5 * (
+            (safe_values - safe_mean).square() / safe_variance
+            + safe_variance.log()
+            + _LOG2PI
         )
-        return log_prob.movedim(-1, sample_dims) if not self.batch_first else log_prob
+        return torch.where(mask, log_prob, 0.0).sum(dim=-1)
 
     def sample(
         self,
