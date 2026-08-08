@@ -70,3 +70,14 @@ Project conventions for automated agents contributing to `linodenet`.
 
 - disable the `pytest-rerunfailures` plugin and skip benchmark tests:
   `.venv/bin/python -m pytest -p no:rerunfailures --benchmark-skip <tests>`.
+
+## Shell commands and approvals
+
+- Run read-only inspection commands separately rather than combining them with
+  `;`, `&&`, or other shell composition when there is no dependency between them.
+- In particular, run `sed -n`, `rg -n`, `rg --files`, and read-only `git`
+  commands such as `git diff`, `git status`, `git log`, and `git show`
+  as individual commands.
+- These commands are already permitted by the execution policy. Do not request elevated permissions or additional
+  approval for them.
+- Only combine commands when their execution genuinely depends on the previous command succeeding.
