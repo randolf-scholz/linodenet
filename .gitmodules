@@ -34,3 +34,6 @@
 [submodule "survae_flows"]
 	path = survae_flows
 	url = git@github.com:didriknielsen/survae_flows.git
+[submodule "third_party/NCDSSM"]
+	path = third_party/NCDSSM
+	url = https://github.com/clear-nus/NCDSSM
