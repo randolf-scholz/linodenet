@@ -47,12 +47,6 @@ Project conventions for automated agents contributing to `linodenet`.
 ## Tooling and docs
 
 - Follow formatting and linting configured in `pyproject.toml`.
-- Run shell commands with an explicit timeout; use `30s` by default unless a different limit is justified. For example,
-  prefer `timeout 30s <command>`.
-- Use the repo-local virtual environment at `.venv` for all project-local Python commands. Prefer
-  `.venv/bin/python -m <tool>` so the interpreter and installed packages are unambiguous.
-- For project-local Python commands, set `PYTHONPATH=src` by default unless there is a specific reason not to. This
-  applies to `python`, `pytest`, `pyright`, `mypy`, ad-hoc scripts, and one-off import checks.
 - Docstrings follow Google style; document invariants and edge cases.
 - Prefer raw docstrings (`r"""..."""`) by default.
 - Use Unicode characters in latex formulas in docstrings to improve readability. so $ℝ$ rather than $\mathbb{R}$, $ϕ$
@@ -66,10 +60,12 @@ Project conventions for automated agents contributing to `linodenet`.
 - Prefer f-string debug syntax (`{var=}`) for simple diagnostic prints.
 - `torch.jit` is deprecated for this project; do not introduce `torch.jit` usage in new code.
 
-## running tests
+## Running tests, formatting, and linting
 
-- disable the `pytest-rerunfailures` plugin and skip benchmark tests:
-  `.venv/bin/python -m pytest -p no:rerunfailures --benchmark-skip <tests>`.
+- use `uv run <tool>` for all project-local Python commands, including `python`, `pytest`, `ruff`, `pyrefly`, and
+  `pyright`.
+- disable the `pytest-rerunfailures` plugin and skip benchmark tests. Always run tests with a timeout like so:
+  `timeout 30s uv run pytest -p no:rerunfailures --benchmark-skip <tests>
 
 ## Shell commands and approvals
 
