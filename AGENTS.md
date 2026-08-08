@@ -34,7 +34,7 @@ Project conventions for automated agents contributing to `linodenet`.
 
 ## Typing
 
-- Type checking: `pyright`, `mypy`.
+- Type checking use `pyright` and `pyrefly`.
 - Use builtin generics and PEP 604 unions (`list[int]`, `T | U`).
 - Use `Optional[T]` only for optional kwargs and return types; otherwise `T | None`.
 - Prefer abstract types for inputs (`Sequence`, `Mapping`) and concrete types for outputs.
