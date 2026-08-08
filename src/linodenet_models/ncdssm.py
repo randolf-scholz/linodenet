@@ -37,7 +37,9 @@ class AuxiliaryInference(nn.Module):
 
     input_size: Final[int]
     auxiliary_size: Final[int]
-    network: nn.Sequential
+    min_stdv: Final[float]
+
+    network: nn.Module
 
     def __init__(
         self,
@@ -45,12 +47,12 @@ class AuxiliaryInference(nn.Module):
         auxiliary_size: int,
         hidden_size: int,
         *,
-        min_variance: float = 1e-4,
+        min_stdv: float = 1e-6,
     ) -> None:
         super().__init__()
         self.input_size = input_size
         self.auxiliary_size = auxiliary_size
-        self.min_variance = min_variance
+        self.min_stdv = min_stdv
         self.network = nn.Sequential(
             nn.Linear(2 * input_size, hidden_size),
             nn.SiLU(),
@@ -63,17 +65,17 @@ class AuxiliaryInference(nn.Module):
         /,
         mask: Tensor,  # Bool[..., D]
     ) -> tuple[Tensor, Tensor]:  # Float[..., A], Float[..., A]
-        r"""Return auxiliary mean and diagonal variance for one sparse event."""
+        r"""Return auxiliary mean and diagonal standard deviation for one sparse event."""
         assert values.shape == mask.shape
         assert values.shape[-1] == self.input_size
         # Values are zero-filled only after concatenating the feature mask, so an
         # observed zero remains distinct from a missing feature.
         y = torch.where(mask, values, 0.0)
-        μ_a, raw_Σ_a = self.network(
+        μ_a, raw_σ_a = self.network(
             torch.cat([y, mask.to(values.dtype)], dim=-1)
         ).chunk(2, dim=-1)
-        Σ_a = softplus(raw_Σ_a) + self.min_variance
-        return μ_a, Σ_a
+        σ_a = softplus(raw_σ_a) + self.min_stdv
+        return μ_a, σ_a
 
 
 class EmissionNetwork(nn.Module):
@@ -86,7 +88,9 @@ class EmissionNetwork(nn.Module):
 
     auxiliary_size: Final[int]
     output_size: Final[int]
-    network: nn.Sequential
+    min_stdv: Final[float]
+
+    network: nn.Module
 
     def __init__(
         self,
@@ -94,12 +98,12 @@ class EmissionNetwork(nn.Module):
         output_size: int,
         hidden_size: int,
         *,
-        min_variance: float = 1e-4,
+        min_stdv: float = 1e-4,
     ) -> None:
         super().__init__()
         self.auxiliary_size = auxiliary_size
         self.output_size = output_size
-        self.min_variance = min_variance
+        self.min_stdv = min_stdv
         self.network = nn.Sequential(
             nn.Linear(2 * auxiliary_size, hidden_size),
             nn.SiLU(),
@@ -109,16 +113,16 @@ class EmissionNetwork(nn.Module):
     def forward(
         self,
         mean: Tensor,  # Float[..., A]
-        variance: Tensor,  # Float[..., A]
+        stdvs: Tensor,  # Float[..., A]
         /,
     ) -> tuple[Tensor, Tensor]:  # Float[..., F], Float[..., F]
-        r"""Return predictive output mean and diagonal variance."""
-        assert mean.shape == variance.shape
+        r"""Return predictive output mean and diagonal standard deviation."""
+        assert mean.shape == stdvs.shape
         assert mean.shape[-1] == self.auxiliary_size
-        μ_y, raw_σ_y = self.network(torch.cat([mean, variance.log()], dim=-1)).chunk(
+        μ_y, raw_σ_y = self.network(torch.cat([mean, stdvs.log()], dim=-1)).chunk(
             2, dim=-1
         )
-        σ_y = softplus(raw_σ_y) + self.min_variance
+        σ_y = softplus(raw_σ_y) + self.min_stdv
         return μ_y, σ_y
 
 
@@ -129,20 +133,25 @@ class ContinuousLinearSDE(nn.Module):
     """
 
     latent_size: Final[int]
+    min_stdv: Final[float]
 
-    def __init__(self, latent_size: int, *, min_variance: float = 1e-4) -> None:
+    drift: nn.Parameter
+    process_log_stdv: nn.Parameter
+
+    def __init__(self, latent_size: int, *, min_stdv: float = 1e-4) -> None:
         super().__init__()
         self.latent_size = latent_size
-        self.min_variance = min_variance
+        self.min_stdv = min_stdv
         self.drift = nn.Parameter(
             -0.1 * torch.eye(latent_size) + 0.05 * torch.randn(latent_size, latent_size)
         )
-        self.process_log_variance = nn.Parameter(torch.full((latent_size,), -2.0))
+        self.process_log_stdv = nn.Parameter(torch.full((latent_size,), -2.0))
 
     @property
     def process_covariance(self) -> Tensor:
         r"""Return $Q=LLᵀ$, constrained to be positive diagonal."""
-        return torch.diag(softplus(self.process_log_variance) + self.min_variance)
+        σ = softplus(self.process_log_stdv) + self.min_stdv
+        return torch.diag(σ.square())
 
     def forward(
         self,
@@ -181,8 +190,8 @@ class NCDSSMConfig:
     auxiliary_size: int
     encoder_hidden_size: int
     decoder_hidden_size: int
-    initial_variance: float = 1.0
-    min_variance: float = 1e-4
+    initial_stdv: float = 1.0
+    min_stdv: float = 1e-6
     batch_first: bool = True
     validate_args: bool = True
 
@@ -194,8 +203,8 @@ class NCDSSM(nn.Module):
 
         dzₜ &= Fzₜdt + Ldβₜ, \\
         aₖ∣zₖ &∼ 𝓝(Hzₖ,R), \\
-        q_ϕ(aₖ∣yₖ,Mₖ) &= 𝓝(μₐ,diag(σₐ)), \\
-        yₖ∣𝒟 &≈ 𝓝(μᵧ,diag(Σᵧ)).
+        q_ϕ(aₖ∣yₖ,Mₖ) &= 𝓝(μₐ,diag(σₐ²)), \\
+        yₖ∣𝒟 &≈ 𝓝(μᵧ,diag(σᵧ²)).
 
     This is the linear time-invariant specialization in Equation (10) of
     Ansari et al. (2023), with the initial and emission distributions from
@@ -203,7 +212,7 @@ class NCDSSM(nn.Module):
     extended to account for a feature-level missingness mask $Mₖ$. Although
     Equation (14) denotes its second parameter as a covariance matrix, the
     $2h$ auxiliary-inference-network output specified in Appendix C.3 (p. 18)
-    implies $h$ independent variances, represented here by $diag(σₐ)$. Context
+    implies $h$ independent standard deviations, represented here by $diag(σₐ²)$. Context
     is filtered through pseudo-observations; the emission network
     moment-matches the output distribution.
     """
@@ -214,13 +223,14 @@ class NCDSSM(nn.Module):
     auxiliary_size: Final[int]
     batch_first: Final[bool]
     validate_args: Final[bool]
+    min_stdv: Final[float]
 
     pred_means: Tensor
     r"""BUFFER: Predictive means from the latest :meth:`predict` call."""
-    pred_variances: Tensor
-    r"""BUFFER: Predictive variances from the latest :meth:`predict` call."""
-    pred_logvars: Tensor
-    r"""BUFFER: Log variances from the latest :meth:`predict` call."""
+    pred_stdvs: Tensor
+    r"""BUFFER: Predictive standard deviations from the latest :meth:`predict` call."""
+    pred_log_stdvs: Tensor
+    r"""BUFFER: Log standard deviations from the latest :meth:`predict` call."""
 
     @classmethod
     def from_config(cls, config: NCDSSMConfig | Mapping[str, Any], /) -> NCDSSM:
@@ -231,13 +241,13 @@ class NCDSSM(nn.Module):
             config.input_size,
             config.auxiliary_size,
             config.encoder_hidden_size,
-            min_variance=config.min_variance,
+            min_stdv=config.min_stdv,
         )
         emission = EmissionNetwork(
             config.auxiliary_size,
             config.output_size,
             config.decoder_hidden_size,
-            min_variance=config.min_variance,
+            min_stdv=config.min_stdv,
         )
         return cls(
             config.input_size,
@@ -246,8 +256,8 @@ class NCDSSM(nn.Module):
             config.auxiliary_size,
             encoder=encoder,
             emission=emission,
-            initial_variance=config.initial_variance,
-            min_variance=config.min_variance,
+            initial_stdv=config.initial_stdv,
+            min_stdv=config.min_stdv,
             batch_first=config.batch_first,
             validate_args=config.validate_args,
         )
@@ -262,8 +272,8 @@ class NCDSSM(nn.Module):
         auxiliary_size: int,
         encoder_hidden_size: int,
         decoder_hidden_size: int,
-        initial_variance: float = 1.0,
-        min_variance: float = 1e-4,
+        initial_stdv: float = 1.0,
+        min_stdv: float = 1e-6,
         batch_first: bool = True,
         validate_args: bool = True,
     ) -> NCDSSM:
@@ -276,8 +286,8 @@ class NCDSSM(nn.Module):
                 auxiliary_size=auxiliary_size,
                 encoder_hidden_size=encoder_hidden_size,
                 decoder_hidden_size=decoder_hidden_size,
-                initial_variance=initial_variance,
-                min_variance=min_variance,
+                initial_stdv=initial_stdv,
+                min_stdv=min_stdv,
                 batch_first=batch_first,
                 validate_args=validate_args,
             )
@@ -293,59 +303,57 @@ class NCDSSM(nn.Module):
         encoder: AuxiliaryInference,
         emission: EmissionNetwork,
         dynamics: ContinuousLinearSDE | None = None,
-        initial_variance: float = 1.0,
-        min_variance: float = 1e-4,
+        initial_stdv: float = 1.0,
+        min_stdv: float = 1e-6,
         batch_first: bool = True,
         validate_args: bool = True,
     ) -> None:
         super().__init__()
         if min(input_size, output_size, latent_size, auxiliary_size) < 1:
             raise ValueError("All model dimensions must be positive.")
-        if initial_variance <= 0 or min_variance <= 0:
-            raise ValueError("Variances must be positive.")
+        if initial_stdv <= 0 or min_stdv <= 0:
+            raise ValueError("Standard deviations must be positive.")
         self.input_size = input_size
         self.output_size = output_size
         self.latent_size = latent_size
         self.auxiliary_size = auxiliary_size
         self.batch_first = batch_first
         self.validate_args = validate_args
-        self.min_variance = min_variance
+        self.min_stdv = min_stdv
         self.encoder = encoder
         self.emission = emission
         self.dynamics = (
             dynamics
             if dynamics is not None
-            else ContinuousLinearSDE(latent_size, min_variance=min_variance)
+            else ContinuousLinearSDE(latent_size, min_stdv=min_stdv)
         )
 
         # Equations (7)–(8): $z₀∼𝓝(μ₀,Σ₀)$ and $aₖ∣zₖ∼𝓝(Hzₖ,R)$.
         self.initial_mean = nn.Parameter(torch.zeros(latent_size))
-        raw_initial_variance = math.log(
-            math.expm1(max(initial_variance - min_variance, 1e-8))
-        )
-        self.initial_log_variance = nn.Parameter(
-            torch.full((latent_size,), raw_initial_variance)
+        raw_initial_stdv = math.log(math.expm1(max(initial_stdv - min_stdv, 1e-8)))
+        self.initial_log_stdv = nn.Parameter(
+            torch.full((latent_size,), raw_initial_stdv)
         )
         self.observation_matrix = nn.Parameter(
             nn.init.xavier_uniform_(torch.empty(auxiliary_size, latent_size))
         )
-        self.observation_log_variance = nn.Parameter(
-            torch.full((auxiliary_size,), -2.0)
-        )
+        self.observation_log_stdv = nn.Parameter(torch.full((auxiliary_size,), -2.0))
         self.register_buffer("identity", torch.eye(latent_size))
         self.register_buffer("pred_means", torch.empty(0), persistent=False)
-        self.register_buffer("pred_variances", torch.empty(0), persistent=False)
-        self.register_buffer("pred_logvars", torch.empty(0), persistent=False)
+        self.register_buffer("pred_stdvs", torch.empty(0), persistent=False)
+        self.register_buffer("pred_log_stdvs", torch.empty(0), persistent=False)
 
     @property
     def initial_covariance(self) -> Tensor:
         r"""Positive diagonal initial covariance $Σ₀$."""
-        return torch.diag(softplus(self.initial_log_variance) + self.min_variance)
+        σ = softplus(self.initial_log_stdv) + self.min_stdv
+        return torch.diag(σ.square())
 
     @property
     def observation_covariance(self) -> Tensor:
         r"""Positive diagonal auxiliary observation covariance $R$."""
-        return torch.diag(softplus(self.observation_log_variance) + self.min_variance)
+        σ = softplus(self.observation_log_stdv) + self.min_stdv
+        return torch.diag(σ.square())
 
     def _update(
         self,
@@ -363,15 +371,15 @@ class NCDSSM(nn.Module):
         m = mean
         P = cov
         H = self.observation_matrix  # Float[A, L]
-        σ_a = torch.diag_embed(σ_a)  # (..., A, A)
+        Σ_a = torch.diag_embed(σ_a.square())  # (..., A, A)
         PHt = P @ H.mT  # (..., L, A)
-        S = H @ PHt + σ_a  # (..., A, A), Equation (6a)
+        S = H @ PHt + Σ_a  # (..., A, A), Equation (6a)
         K = torch.linalg.solve(S, PHt.mT).mT  # (..., L, A), Equation (6b)
         innovation = μ_a - m @ H.mT  # (..., A)
         m = m + (K @ innovation.unsqueeze(-1)).squeeze(-1)  # Equation (6c)
         I_KH = self.identity - K @ H  # (..., L, L)
         # Joseph form: (I-KH)P(I-KH)ᵀ + KΣₐKᵀ preserves positive semidefiniteness.
-        P = I_KH @ P @ I_KH.mT + K @ σ_a @ K.mT
+        P = I_KH @ P @ I_KH.mT + K @ Σ_a @ K.mT
         return m, 0.5 * (P + P.mT)
 
     def _emit(
@@ -384,7 +392,7 @@ class NCDSSM(nn.Module):
         H = self.observation_matrix  # Float[A, L]
         μ_a = m @ H.mT  # (..., A)
         Σ_a = H @ P @ H.mT + self.observation_covariance  # (..., A, A)
-        σ_a = torch.diagonal(Σ_a, dim1=-2, dim2=-1).clamp_min(self.min_variance)
+        σ_a = torch.diagonal(Σ_a, dim1=-2, dim2=-1).sqrt().clamp_min(self.min_stdv)
         return self.emission(μ_a, σ_a)
 
     def forward(
@@ -410,7 +418,7 @@ class NCDSSM(nn.Module):
         Returns:
             predicted_means: Output means for the combined event sequence. Values
                 outside ``query_mask`` are NaN.
-            predicted_variances: Output variances for the combined event sequence.
+            predicted_stdvs: Output standard deviations for the combined event sequence.
                 Values outside ``query_mask`` are NaN.
         """
         has_context = context_mask.any(dim=-1)  # (..., T)
@@ -477,6 +485,7 @@ class NCDSSM(nn.Module):
             P = torch.where(has_update[..., None, None], P_posterior, P)
             t = torch.where(active, t_next, t)
 
+            # $p(yₖ∣aₖ) = 𝓝(f^μ(aₖ), f^Σ(aₖ))$  (eq 9)
             μ_y, σ_y = self._emit(m, P)
             μ_ys.append(μ_y)
             σ_ys.append(σ_y)
@@ -511,7 +520,7 @@ class NCDSSM(nn.Module):
         )
         if self.validate_args:
             combined.validate()
-        means, variances = self(
+        means, stdvs = self(
             timestamps=combined.timestamps,
             query_mask=combined.query_mask,
             context_values=combined.context_values,
@@ -520,9 +529,9 @@ class NCDSSM(nn.Module):
             initial_time=initial_time,
         )
         self.pred_means = means[..., *combined.query_indices, :]
-        self.pred_variances = variances[..., *combined.query_indices, :]
-        self.pred_logvars = self.pred_variances.log()
-        return self.pred_means, self.pred_variances
+        self.pred_stdvs = stdvs[..., *combined.query_indices, :]
+        self.pred_log_stdvs = self.pred_stdvs.log()
+        return self.pred_means, self.pred_stdvs
 
     def log_prob(
         self,
@@ -536,7 +545,7 @@ class NCDSSM(nn.Module):
         context_mask: Tensor,  # Bool[..., N, D], padded False
     ) -> Tensor:  # Float[*S, ..., K]
         r"""Compute time-marginal predictive log-likelihoods of ``samples``."""
-        mean, variance = self.predict(
+        mean, stdv = self.predict(
             query_times=query_times,
             query_mask=query_mask,
             context_times=context_times,
@@ -545,15 +554,15 @@ class NCDSSM(nn.Module):
         )
 
         mean = mean.expand_as(samples)  # Float[*S, ..., K, F]
-        variance = variance.expand_as(samples)  # Float[*S, ..., K, F]
+        stdv = stdv.expand_as(samples)  # Float[*S, ..., K, F]
         mask = query_mask.expand_as(samples)  # Bool[*S, ..., K, F]
 
         safe_values = torch.where(mask, samples, 0.0)
         safe_mean = torch.where(mask, mean, 0.0)
-        safe_variance = torch.where(mask, variance, 1.0)
+        safe_stdv = torch.where(mask, stdv, 1.0)
         log_prob = -0.5 * (
-            (safe_values - safe_mean).square() / safe_variance
-            + safe_variance.log()
+            ((safe_values - safe_mean) / safe_stdv).square()
+            + 2.0 * safe_stdv.log()
             + _LOG2PI
         )
         return torch.where(mask, log_prob, 0.0).sum(dim=-1)
@@ -570,7 +579,7 @@ class NCDSSM(nn.Module):
         rng: Generator | None = None,
     ) -> Tensor:  # Float[*S, ..., K, F]
         r"""Draw independent samples from the predictive time marginals."""
-        mean, variance = self.predict(
+        mean, stdv = self.predict(
             query_times=query_times,
             query_mask=query_mask,
             context_times=context_times,
@@ -585,7 +594,7 @@ class NCDSSM(nn.Module):
             device=mean.device,
             generator=rng,
         )
-        samples = mean.expand_as(noise) + variance.sqrt().expand_as(noise) * noise
+        samples = mean.expand_as(noise) + stdv.expand_as(noise) * noise
         samples = samples.masked_fill(~query_mask.expand_as(samples), nan)
         return samples
 

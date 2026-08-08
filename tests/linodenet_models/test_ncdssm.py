@@ -23,8 +23,8 @@ class TestNCDSSM(TestProbabilisticModel[NCDSSM]):
         auxiliary_size=5,
         encoder_hidden_size=7,
         decoder_hidden_size=11,
-        initial_variance=1.0,
-        min_variance=1e-4,
+        initial_stdv=1.0,
+        min_stdv=1e-4,
         validate_args=True,
     )
 
@@ -59,7 +59,7 @@ class TestNCDSSM(TestProbabilisticModel[NCDSSM]):
         )
         return (
             model.pred_means,
-            model.pred_variances,
+            model.pred_stdvs,
             log_prob.unsqueeze(-1).expand_as(model.pred_means),
         )
 
@@ -81,8 +81,10 @@ class TestNCDSSM(TestProbabilisticModel[NCDSSM]):
         assert model.output_size == self.STANDARD_CONFIG.output_size
         assert model.latent_size == self.STANDARD_CONFIG.latent_size
         assert model.auxiliary_size == self.STANDARD_CONFIG.auxiliary_size
-        encoder_layer = model.encoder.network[0]
-        emission_layer = model.emission.network[-1]
+        encoder_net = model.encoder.network
+        assert isinstance(encoder_net, torch.nn.Sequential)
+        encoder_layer = encoder_net[0]
+        emission_layer = encoder_net[-1]
         assert isinstance(encoder_layer, torch.nn.Linear)
         assert isinstance(emission_layer, torch.nn.Linear)
         assert encoder_layer.in_features == 2 * model.input_size
