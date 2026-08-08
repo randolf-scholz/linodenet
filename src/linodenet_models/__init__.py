@@ -20,6 +20,7 @@ __all__ = [
     "Grafiti",
     "LastValue",
     "Moses",
+    "NCDSSM",
     "NeuralFlow",
     "ProFITi",
 ]
@@ -37,6 +38,7 @@ from .gru_ode_bayes import GRU_ODE_Bayes
 from .kalman_filter import ContinuousTimeKalmanFilter, DiscreteTimeKalmanFilter
 from .last_value import LastValue
 from .mnf import Moses
+from .ncdssm import NCDSSM
 from .neural_flow import NeuralFlow
 from .normalizing_kalman_filter import ContinuousTimeNKF, DiscreteTimeNKF
 from .profiti import ProFITi
@@ -54,6 +56,7 @@ PROBABILISTIC_FORECASTING_MODELS: dict[str, type[ProbabilisticForecastingModel]]
     "ContinuousTimeNKF": ContinuousTimeNKF,
     "CRU": CRU,
     "GRU_ODE_Bayes": GRU_ODE_Bayes,
+    "NCDSSM": NCDSSM,
     "NeuralFlow": NeuralFlow,
     "DiscreteTimeNKF": DiscreteTimeNKF,
 }
