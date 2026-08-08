@@ -296,10 +296,7 @@ class DiscreteTimeNKF(nn.Module):
             cov.diagonal(dim1=-2, dim2=-1)
             .clamp_min(0.0)
             .sqrt()
-            .masked_fill(
-                ~query_mask,
-                nan,
-            )
+            .masked_fill(~query_mask, nan)
         )
         return self.pred_means, self.pred_scales
 
@@ -366,11 +363,7 @@ class DiscreteTimeNKF(nn.Module):
             initial_time=initial_time,
         )
         pseudo_samples = marginal_gaussian_sample(
-            size,
-            mean=mean,
-            cov=cov,
-            mask=query_mask,
-            rng=rng,
+            size, mean=mean, cov=cov, mask=query_mask, rng=rng
         )
         sample_shape = (size,) if isinstance(size, int) else size
         mask = query_mask.expand(*sample_shape, *query_mask.shape)
@@ -404,11 +397,7 @@ class DiscreteTimeNKF(nn.Module):
             initial_time=initial_time,
         )
         pseudo_samples, base_log_prob = marginal_gaussian_sample_and_log_prob(
-            size,
-            mean=mean,
-            cov=cov,
-            mask=query_mask,
-            rng=rng,
+            size, mean=mean, cov=cov, mask=query_mask, rng=rng
         )
         sample_shape = (size,) if isinstance(size, int) else size
         mask = query_mask.expand(*sample_shape, *query_mask.shape)
@@ -632,10 +621,7 @@ class ContinuousTimeNKF(nn.Module):
             cov.diagonal(dim1=-2, dim2=-1)
             .clamp_min(0.0)
             .sqrt()
-            .masked_fill(
-                ~query_mask,
-                nan,
-            )
+            .masked_fill(~query_mask, nan)
         )
         return self.pred_means, self.pred_scales
 
@@ -696,11 +682,7 @@ class ContinuousTimeNKF(nn.Module):
             initial_time=initial_time,
         )
         pseudo_samples = marginal_gaussian_sample(
-            size,
-            mean=mean,
-            cov=cov,
-            mask=query_mask,
-            rng=rng,
+            size, mean=mean, cov=cov, mask=query_mask, rng=rng
         )
         sample_shape = (size,) if isinstance(size, int) else size
         mask = query_mask.expand(*sample_shape, *query_mask.shape)
@@ -731,11 +713,7 @@ class ContinuousTimeNKF(nn.Module):
             initial_time=initial_time,
         )
         pseudo_samples, base_log_prob = marginal_gaussian_sample_and_log_prob(
-            size,
-            mean=mean,
-            cov=cov,
-            mask=query_mask,
-            rng=rng,
+            size, mean=mean, cov=cov, mask=query_mask, rng=rng
         )
         sample_shape = (size,) if isinstance(size, int) else size
         mask = query_mask.expand(*sample_shape, *query_mask.shape)
