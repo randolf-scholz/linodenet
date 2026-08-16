@@ -37,3 +37,9 @@
 [submodule "third_party/NCDSSM"]
 	path = third_party/NCDSSM
 	url = https://github.com/clear-nus/NCDSSM
+[submodule "third_party/hetvae"]
+	path = third_party/hetvae
+	url = git@github.com:reml-lab/hetvae.git
+[submodule "third_party/APN"]
+	path = third_party/APN
+	url = git@github.com:decisionintelligence/APN.git
