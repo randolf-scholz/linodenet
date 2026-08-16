@@ -70,12 +70,9 @@ logging.basicConfig(level=logging.WARNING)
 __logger__ = logging.getLogger(__package__)
 
 
-# region compile functions -------------------------------------------------------------
-def _compile_fns() -> KnownFunctions:
-    r"""Compile the available custom operators."""
+def _cache_dir_warning() -> str:
     from torch.utils import cpp_extension  # noqa: PLC0415
 
-    cpp_extension.verify_ninja_availability()
     cache_dir = Path(
         os.environ.get(
             "TORCH_EXTENSIONS_DIR",
@@ -83,7 +80,15 @@ def _compile_fns() -> KnownFunctions:
         )
     )
     assert not cache_dir.exists() or cache_dir.is_dir()
-    print("\nCompiling custom operators!")
+    return f"\nConsider clearing the torch_extension cache at {cache_dir!s}"
+
+
+def _compile_fns() -> KnownFunctions:
+    r"""Compile the available custom operators."""
+    from torch.utils import cpp_extension  # noqa: PLC0415
+
+    cpp_extension.verify_ninja_availability()
+    print("\nCompiling custom operators!" + _cache_dir_warning(), flush=True)
 
     compiled_fns: dict[str, Any] = {}
     exceptions: dict[str, Exception] = {}
@@ -119,11 +124,11 @@ def _compile_fns() -> KnownFunctions:
             f"Exceptions:\n{exception_details}"
             f"\n{'-' * 80}\n"
             + "\n".join(
-                f"{name:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
+                f"{name!s:<{max_len}}: {[SUCCESS, FAILURE][name in exceptions]}"
                 for name in fn_names
             )
             + f"\nFailed to compile {len(exceptions)}/{len(fn_names)} custom operators!"
-            + f"\nConsider clearing the torch_extension cache at {cache_dir!s}"
+            + _cache_dir_warning()
             + f"\n{'-' * 80}\n"
         )
         __logger__.warning("%s", message)
@@ -151,15 +156,21 @@ def _load_prebuilts() -> KnownFunctions:
 
 def _compile_liblinodenet() -> KnownFunctions:
     if _LIB_FILE.exists():
-        compiled_fns = _load_prebuilts()
+        try:
+            return _load_prebuilts()
+        except Exception as exc:
+            __logger__.warning(
+                f"\n\tCould not load custom binaries! ({_LIB_FILE!s})"
+                "\n\tConsider recompiling the linodenet_special extension."
+            )
+            __logger__.warning(f"\n\t{exc!r}")
     else:
         __logger__.warning(
             f"\n\tCustom binaries not found! ({_LIB_FILE!s})"
             "\n\tConsider compiling the linodenet_special extension."
         )
-        compiled_fns = _compile_fns()
 
-    return compiled_fns
+    return _compile_fns()
 
 
 # region wrappers ----------------------------------------------------------------------
