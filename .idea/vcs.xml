@@ -3,14 +3,19 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/survae_flows" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/APN" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/Continuous-Recurrent-Units" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/GraFITi" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/NCDSSM" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/ProFITi" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/diffrax" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/gru_ode_bayes" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/hetvae" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/latent_ode" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/neural-flows-experiments" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/separable_flows" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/set_transformer" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/torchdiffeq" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/torchode" vcs="Git" />
   </component>
 </project>
