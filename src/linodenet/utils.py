@@ -68,7 +68,7 @@ r"""Generic Type Alias for nested `Mapping`."""
 
 
 @overload
-def flatten_dict(
+def flatten_dict(  # pyrefly: ignore[inconsistent-overload-default]
     d: NestedMapping[str, Any],
     /,
     *,
@@ -166,7 +166,7 @@ def flatten_dict[K, K2](
 
 
 @overload
-def unflatten_dict(
+def unflatten_dict(  # pyrefly: ignore[inconsistent-overload-default]
     d: Mapping[str, Any],
     /,
     *,
