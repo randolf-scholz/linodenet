@@ -197,13 +197,13 @@ class TorchODESolver(nn.Module):
 
         term = to.ODETerm(vector_field)
         solver = to.AutoDiffAdjoint(
-            self.step_method(term),  # type: ignore[arg-type]
+            self.step_method(term),
             to.FixedStepController(),
         )
         solution = solver.solve(
-            to.InitialValueProblem(y0=y0, t_eval=t_eval),  # type: ignore[arg-type]
+            to.InitialValueProblem(y0=y0, t_eval=t_eval),
             term,
-            dt0=dt0,  # type: ignore[arg-type]
+            dt0=dt0,
         )
 
         if (solution.status != to.Status.SUCCESS.value).any():
