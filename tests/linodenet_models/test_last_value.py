@@ -43,9 +43,12 @@ class TestLastValue(TestContinuousTimeModel[LastValue]):
         r"""Return LastValue predictions for sequential forecasting inputs."""
         assert inputs.target_values is not None
         query_valid = inputs.query_mask.any(dim=-1)
-        initial_state = inputs.context_values.new_zeros(
-            inputs.context_values.shape[:-2] + (1,) + inputs.context_values.shape[-1:]
+        shape = (
+            *inputs.context_values.shape[:-2],
+            1,
+            *inputs.context_values.shape[-1:],
         )
+        initial_state = inputs.context_values.new_zeros(shape)
         pred = model(
             query_times=inputs.query_times,
             context_times=inputs.context_times,

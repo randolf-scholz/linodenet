@@ -79,7 +79,7 @@ class ConcatEmbedding(nn.Module, Embedding):
     @signature("(..., d) -> (..., d+e)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Concatenate the input with the padding."""
-        shape = x.shape[:-1] + (self.padding_size,)
+        shape = (*x.shape[:-1], self.padding_size)
         return torch.cat([x, self.padding.expand(shape)], dim=-1)
 
     @signature("(..., d+e) -> (..., d)")

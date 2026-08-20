@@ -78,4 +78,4 @@ def test_batched_multiple() -> None:
         return sol.ys
 
     result = apply_batched(solve, batch_shape, (y0, t_eval))
-    assert result.shape == batch_shape + (steps, dim)
+    assert result.shape == (*batch_shape, steps, dim)

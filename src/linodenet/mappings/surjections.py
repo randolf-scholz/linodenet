@@ -154,7 +154,7 @@ class ConcatProjection(nn.Module, Surjection):
     @signature("(..., d) -> (..., d+e)")
     def right_inverse(self, y: Tensor, /) -> Tensor:
         r"""Concatenate the input with the padding."""
-        shape = y.shape[:-1] + (self.padding_size,)
+        shape = (*y.shape[:-1], self.padding_size)
         return torch.cat([y, self.padding.expand(shape)], dim=-1)
 
 

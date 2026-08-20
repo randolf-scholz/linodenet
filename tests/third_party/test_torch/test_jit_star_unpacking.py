@@ -11,7 +11,7 @@ def tuple_unpack(x: Tensor) -> Tensor:
 
 
 def tuple_concat(x: Tensor) -> Tensor:
-    new_shape = x.shape[:1] + (1,)
+    new_shape = x.shape[:1] + (1,)  # ruff: ignore[RUF005]
     return torch.zeros(new_shape)
 
 
