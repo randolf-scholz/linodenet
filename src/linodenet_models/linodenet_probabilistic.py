@@ -6,6 +6,7 @@ __all__ = [
     "LinodenetProbabilistic",
     "LinearGaussianFlow",
     "KoopmanFilter",
+    "Augment",
     "make_koopman_filter",
     "make_linodenet_prob",
     "make_linodenet",
@@ -194,8 +195,6 @@ class LinearGaussianFlow(nn.Module):
 
     def _init_kernel(self, init: str | Tensor | nn.Module, /) -> Tensor:
         match init:
-            case None:
-                return torch.randn(self.input_size, self.input_size)
             case "zero":
                 return torch.zeros(self.input_size, self.input_size)
             case "skew-symmetric":
@@ -614,6 +613,8 @@ def make_linodenet_prob(
 
 
 class Augment(nn.Module):
+    r"""Augment a latent space with additional dimensions."""
+
     def __init__(
         self, input_size: int, latent_size: int, *, encoder: nn.Module
     ) -> None:
