@@ -2,6 +2,7 @@ r"""ContractiveFlow implementation (iResNet-block)."""
 
 __all__ = [
     "DEFAULT_REZERO_SCALAR_MAP",
+    "resolve_contraction_gate",
     "ResidualContractionBase",
     # Classes
     "ResidualContraction",
@@ -23,13 +24,29 @@ from linodenet.mappings.abstract import Transform
 from linodenet.mappings.scalar_contractions import NonExpansiveMapping
 from linodenet.mappings.surjections import OrthogonalHouseholder
 from linodenet.nn.parametrize import register_parametrization, update_parametrizations
-from linodenet.nn.rezero import resolve_gate
+from linodenet.nn.rezero import ReZero, resolve_gate
 from linodenet_special import fixpoint_solve
 from linodenet_special.trace_estimation import LogAbsDetEstimators
 
 DEFAULT_REZERO_SCALAR_MAP: Final[NonExpansiveMapping] = (
     NonExpansiveMapping.SMOOTH_SOFTSIGN
 )
+
+
+def resolve_contraction_gate(
+    gate: str | nn.Module | None,
+    /,
+    *,
+    scalar_map: nn.Module | str = DEFAULT_REZERO_SCALAR_MAP,
+) -> nn.Module:
+    r"""Resolve a gate with a contraction-preserving ReZero default."""
+    match gate:
+        case "rezero":
+            return ReZero(scalar_map=NonExpansiveMapping.new(scalar_map))
+        case _ if scalar_map is not DEFAULT_REZERO_SCALAR_MAP:
+            raise ValueError("scalar_map requires gate='rezero'")
+        case _:
+            return resolve_gate(gate)
 
 
 class ResidualContractionBase[M: nn.Module](nn.Module, Transform):
@@ -160,7 +177,7 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
         trace_probe_sampler: str = "sphere",
         trace_mode: str = "reverse",
     ) -> None:
-        gate = resolve_gate(gate, scalar_map=NonExpansiveMapping.new(scalar_map))
+        gate = resolve_contraction_gate(gate, scalar_map=scalar_map)
         super().__init__(
             contraction,
             gate,
@@ -270,7 +287,7 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
             input_size, hidden_size, bias=use_bias, device=device, dtype=dtype
         )
         contraction = nn.Sequential(V, bottleneck, U)
-        gate = resolve_gate(gate, scalar_map=NonExpansiveMapping.new(scalar_map))
+        gate = resolve_contraction_gate(gate, scalar_map=scalar_map)
 
         super().__init__(
             contraction,

@@ -12,7 +12,6 @@ __all__ = [
     "resolve_gate",
 ]
 
-import warnings
 from typing import cast
 
 import torch
@@ -72,30 +71,15 @@ class ReZero[
         return self.module.right_inverse(y / self.scalar_map(self.scalar))  # type: ignore[operator]
 
 
-def resolve_gate(
-    gate: str | nn.Module | None,
-    /,
-    *,
-    scalar_map: nn.Module | None = None,
-) -> nn.Module:
+def resolve_gate(gate: str | nn.Module | None, /) -> nn.Module:
     match gate:
         case None | "identity":
-            if scalar_map is not None:
-                warnings.warn(
-                    "Ignoring scalar_map because gate is not 'rezero'.",
-                    stacklevel=3,
-                )
             return nn.Identity()
 
         case "rezero":
-            return ReZero(scalar_map=scalar_map)
+            return ReZero()
 
         case nn.Module():
-            if scalar_map is not None:
-                warnings.warn(
-                    "Ignoring scalar_map because gate is not 'rezero'.",
-                    stacklevel=3,
-                )
             return gate
 
         case str():

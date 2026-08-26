@@ -27,19 +27,14 @@ class ShiftedHalfContraction(nn.Module):
         return 0.5 * x + self.bias
 
 
-def test_identity_gate_ignores_scalar_map_and_has_no_scalar() -> None:
-    r"""Non-ReZero gates should warn about unused scalar maps and expose no scalar."""
-    with pytest.warns(
-        UserWarning,
-        match="Ignoring scalar_map because gate is not 'rezero'.",
-    ):
-        flow = ResidualContraction(
+def test_identity_gate_rejects_scalar_map() -> None:
+    r"""Non-ReZero gates should reject explicitly configured scalar maps."""
+    with pytest.raises(ValueError, match="scalar_map requires gate='rezero'"):
+        ResidualContraction(
             nn.Identity(),
             gate="identity",
             scalar_map=nn.Identity(),
         )
-
-    assert isinstance(flow.gate, nn.Identity)
 
 
 @pytest.mark.parametrize("dtype", [torch.float32], ids=str)

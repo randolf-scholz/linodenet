@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from linodenet.nn.rezero import ReZero
+from linodenet.nn.rezero import ReZero, resolve_gate
 from tests.testing import TestSuite
 
 
@@ -11,6 +11,12 @@ class ShiftScalar(nn.Module):
 
 
 class TestReZero(TestSuite):
+    def test_resolve_gate_uses_identity_scalar_map(self) -> None:
+        gate = resolve_gate("rezero")
+
+        assert isinstance(gate, ReZero)
+        assert isinstance(gate.scalar_map, nn.Identity)
+
     def test_default_module_is_identity(self) -> None:
         module = ReZero()
 
