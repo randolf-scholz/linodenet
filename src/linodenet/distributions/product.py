@@ -25,27 +25,32 @@ class Product[D: DistributionBase](ModuleSequence[D]):
         marginals: A list of distributions $p(Zᵢ)$.
 
     Example:
-        >>> from torch.distributions import Uniform, Normal
+        >>> from linodenet.distributions import Uniform, Normal
+        >>> import torch
+        >>> _ = torch.manual_seed(0)
         >>> d = Product(Uniform(0.0, 1.0), Normal(0.0, 1.0))
         >>> d.event_shape
-        torch.Size([2])
+        (torch.Size([]), torch.Size([]))
         >>> d.sample()
-        tensor([ 0.8969, -2.6717])
+        (tensor([0.4963]), tensor([0.2072]))
     """
 
     has_rsample = True
     batch_shape: Final[tuple[int, ...]]
-    event_shape: Final[tuple[int, ...]]
+    event_shape: Final[tuple[tuple[int, ...], ...]]
 
     def __init__(self, *marginals: D) -> None:
         super().__init__(marginals)
+        if len(self) < 1:
+            raise ValueError("At least one marginal distribution is required.")
+
         self.batch_shape = torch.broadcast_shapes(*(m.batch_shape for m in self))
-        assert len(self) >= 1, "At least one marginal distribution is required."
-        first_marginal = self[0]
-        self.event_shape = first_marginal.event_shape
-        assert all(m.event_shape == self.event_shape for m in self), (
-            "All marginal distributions must have the same event shape."
-        )
+        self.event_shape = tuple(m.event_shape for m in self)
+
+        if not all(m.batch_shape == self.batch_shape for m in self):
+            raise ValueError(
+                "All marginal distributions must have the same batch shape."
+            )
 
     def sample(self, num_samples: int = 1, /) -> tuple[Tensor, ...]:
         r"""Sample from the product distribution."""
