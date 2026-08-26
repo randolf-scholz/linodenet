@@ -20,7 +20,7 @@ __all__ = [
 import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Final, NotRequired, TypedDict
+from typing import Any, Final, NotRequired, TypedDict, cast
 
 import torch
 from torch import Generator, Tensor, nan, nn
@@ -962,12 +962,12 @@ def build_cru(config: CRUConfig | CRUConfigDict | Mapping[str, Any], /) -> CRU:
             encoder=(
                 encoder
                 if isinstance(encoder, EncoderConfig)
-                else EncoderConfig(**encoder)
+                else EncoderConfig(**cast("EncoderConfigDict", encoder))
             ),
             decoder=(
                 decoder
                 if isinstance(decoder, DecoderConfig)
-                else DecoderConfig(**decoder)
+                else DecoderConfig(**cast("DecoderConfigDict", decoder))
             ),
             output_size=config["output_size"],
             num_basis=config.get("num_basis", 15),
