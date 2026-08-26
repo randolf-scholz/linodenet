@@ -69,6 +69,7 @@ MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "Masked"               : matrix_parametrizations.Masked,
     "NegativeDefinite"     : matrix_parametrizations.NegativeDefinite,
     "Normal"               : matrix_parametrizations.Normal,
+    "Orthogonal"           : matrix_parametrizations.OrthogonalHouseholder,  # use Householder as default "Orthogonal"
     "OrthogonalCayley"     : matrix_parametrizations.OrthogonalCayley,
     "OrthogonalHouseholder": matrix_parametrizations.OrthogonalHouseholder,
     "PositiveDefinite"     : matrix_parametrizations.PositiveDefinite,

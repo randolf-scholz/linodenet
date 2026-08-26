@@ -8,12 +8,8 @@ import pytest
 from linodenet.registry import REGISTRY, Registry, RegistryEntry
 from tests.testing import pytest_xfail
 
-OPTIONAL_FIELDS = {"name", "initialization"}
 
-
-@pytest_xfail(
-    condition=lambda name: REGISTRY[name].mapping_fn is None or name == "orthogonal"
-)
+@pytest_xfail(condition=lambda name: REGISTRY[name].mapping_fn is None)
 @pytest.mark.parametrize("name", sorted(REGISTRY))
 def test_registry_entries_are_complete(name: str) -> None:
     r"""Every registry entry should have all public objects populated."""
@@ -21,7 +17,8 @@ def test_registry_entries_are_complete(name: str) -> None:
     missing_fields = [
         field.name
         for field in fields(RegistryEntry)
-        if field.name not in OPTIONAL_FIELDS and getattr(entry, field.name) is None
+        if field.name not in {"name", "initialization"}
+        and getattr(entry, field.name) is None
     ]
     assert not missing_fields, f"Registry entry {name!r} is missing {missing_fields!r}."
 
