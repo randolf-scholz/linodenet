@@ -88,10 +88,10 @@ def test_benchmark_initialization(benchmark, method: str) -> None:
         coeffs = _COEFF_CACHE.get(key)
         if coeffs is None:
             coeffs = (
-                torch.tensor(_P1, device=device, dtype=dtype),
-                torch.tensor(_Q1, device=device, dtype=dtype),
-                torch.tensor(_P2, device=device, dtype=dtype),
-                torch.tensor(_Q2, device=device, dtype=dtype),
+                _P1.detach().clone().to(device=device, dtype=dtype),
+                _Q1.detach().clone().to(device=device, dtype=dtype),
+                _P2.detach().clone().to(device=device, dtype=dtype),
+                _Q2.detach().clone().to(device=device, dtype=dtype),
             )
             _COEFF_CACHE[key] = coeffs
         return coeffs

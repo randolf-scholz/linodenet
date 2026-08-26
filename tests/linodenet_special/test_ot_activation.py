@@ -464,8 +464,10 @@ class TestImplementation:
         x_star = μ * max(1, 1 / (1 - lam.item()))
         assert x_star.item() > 0
         tail_values = torch.linspace(10 * x_star, 100 * x_star, steps=1000, dtype=dtype)
-        tail = torch.tensor(
-            torch.cat([tail_values, tail_values.neg()]), dtype=dtype, requires_grad=True
+        tail = (
+            torch.cat([tail_values, tail_values.neg()])
+            .to(dtype=dtype)
+            .requires_grad_(True)
         )
         y_tail = self.psi(tail, μ, σ)
         assert y_tail.isfinite().all()
@@ -517,8 +519,10 @@ class TestImplementation:
         y_star = μ * max(1, lam / (1 - lam))
         assert y_star.item() > 0
         tail_values = torch.linspace(10 * y_star, 100 * y_star, steps=1000, dtype=dtype)
-        tail = torch.tensor(
-            torch.cat([tail_values, tail_values.neg()]), dtype=dtype, requires_grad=True
+        tail = (
+            torch.cat([tail_values, tail_values.neg()])
+            .to(dtype=dtype)
+            .requires_grad_(True)
         )
         y_tail = self.invpsi(tail, μ, σ)
         assert y_tail.isfinite().all()
