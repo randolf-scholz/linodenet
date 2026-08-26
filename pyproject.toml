@@ -531,6 +531,7 @@ filterwarnings = [
     and may break\\.:DeprecationWarning:torch\\.jit\\._serialization""",
     """ignore:`torch\\.jit\\.(script|script_method)` is not supported in Python 3\\.14\\+ and may break\\. \
     Please switch to `torch\\.compile` or `torch\\.export`\\.:DeprecationWarning:torch\\.jit\\._script""",
+    """ignore:Using inefficient research implementation without parametrization caching\\.:UserWarning:""",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
