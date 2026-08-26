@@ -62,12 +62,12 @@ class TestLinear:
                 dtype=torch.float64,
             )
             timedeltas = torch.tensor(
-                [
+                np.stack([
                     np.unique([0.0, *rng.uniform(0.0, 1.0, size=num_steps - 2), 2.0])
                     for _ in range(cls.BATCH_SIZE)
-                ],
+                ]),
                 dtype=torch.float64,
-            )
+            )  # fmt: skip
         else:
             x0 = torch.tensor(rng.normal(size=(dim,)), dtype=torch.float64)
             timedeltas = torch.tensor(
@@ -187,12 +187,12 @@ class TestLinearGaussian:
                 dtype=torch.float64,
             )
             timedeltas = torch.tensor(
-                [
+                np.stack([
                     np.unique([0.0, *rng.uniform(0.0, 1.0, size=num_steps - 2), 1.5])
                     for _ in range(cls.BATCH_SIZE)
-                ],
+                ]),
                 dtype=torch.float64,
-            )
+            )  # fmt: skip
         else:
             timedeltas = torch.tensor(
                 # note: unique also sorts
