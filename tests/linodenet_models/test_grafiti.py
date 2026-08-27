@@ -180,7 +180,7 @@ def test_grafiti_triplet_matches_combined_embeddings() -> None:
             [100.0, 310.0, 520.0, 710.0],
         ]),
     )  # fmt: skip
-    combined = args.to_joint_time()
+    combined = args.to_merged()
 
     expected = model.forward(
         timestamps=combined.timestamps,
@@ -241,7 +241,7 @@ def test_grafiti_triplet_matches_combined_embeddings_with_duplicate_times() -> N
         context_dim=3,
         query_dim=3,
     )  # fmt: skip
-    combined = args.to_joint_time(context_dim=3, query_dim=3)
+    combined = args.to_merged(context_dim=3, query_dim=3)
 
     expected = model.forward(
         timestamps=combined.timestamps,

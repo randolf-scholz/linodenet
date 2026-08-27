@@ -12,7 +12,7 @@ from typing_extensions import TypedDict
 from linodenet_models.utils import (
     DiscreteTimeEventBatch,
     EventBatch,
-    JointTimeData,
+    MergedTimeData,
     SplitTimeData,
     TripletTimeData,
 )
@@ -82,7 +82,7 @@ def test_discrete_time_event_batch_uses_zero_step_padding() -> None:
 
 class CanonicalTestData(TypedDict, closed=True):
     split: SplitTimeData
-    joint: JointTimeData
+    joint: MergedTimeData
     triplet: TripletTimeData
 
 
@@ -136,7 +136,7 @@ UNBATCHED_TEST_DATA: CanonicalTestData = {
         target_values=torch.tensor([[20.0, nan, 22.0], [40.0, 41.0, 42.0]]),
         static_covariates=torch.tensor([5.0, 6.0]),
     ),
-    "joint": JointTimeData(
+    "joint": MergedTimeData(
         timestamps=torch.tensor([1.0, 2.0, 3.0, 4.0]),
         context_values=torch.tensor([
             [10.0, nan, 12.0],
@@ -199,7 +199,7 @@ BATCHED_TEST_DATA: CanonicalTestData = {
         ]),
         static_covariates=torch.tensor([[5.0, 6.0], [7.0, 8.0]]),
     ),
-    "joint": JointTimeData(
+    "joint": MergedTimeData(
         timestamps=torch.tensor([
                 [1.0, 2.0, 3.0, 4.0],
                 [0.0, 5.0, nan, nan],
@@ -933,7 +933,7 @@ def test_initialization(case) -> None:
         static_covariates=split_data["static_covariates"],
         batch_first=batch_first,
     )
-    JointTimeData(
+    MergedTimeData(
         timestamps=joint_data["timestamps"],
         context_mask=joint_data["context_mask"],
         context_values=joint_data["context_values"],
@@ -970,7 +970,7 @@ def _init_time_data(data: TensorViewData, batch_first: bool) -> CanonicalTestDat
             static_covariates=split_data["static_covariates"],
             batch_first=batch_first,
         ),
-        "joint": JointTimeData(
+        "joint": MergedTimeData(
             timestamps=joint_data["timestamps"],
             context_mask=joint_data["context_mask"],
             context_values=joint_data["context_values"],
@@ -1294,7 +1294,7 @@ class TestSplitTimeData:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        actual = original.to_triplets()
+        actual = original.to_triplet()
         expected = TripletTimeData(
             context_times=torch.tensor([1.0, 1.0, 2.0, 2.0]),
             context_channels=torch.tensor([0, 2, 1, 2]),
@@ -1330,8 +1330,8 @@ class TestSplitTimeData:
             static_covariates=torch.tensor([5.0, 6.0]),
         )  # fmt: skip
 
-        actual = original.to_joint_time()
-        expected = JointTimeData(
+        actual = original.to_merged()
+        expected = MergedTimeData(
             timestamps=torch.tensor([1.0, 2.0, 3.0, 4.0]),
             context_values=torch.tensor([
                 [10.0,  nan],
@@ -1384,11 +1384,11 @@ class TestSplitTimeData:
             ]),
         )  # fmt: skip
 
-        combined = original.to_joint_time()
+        combined = original.to_merged()
         assert combined.context_values.shape == (4, 2)
         assert combined.query_mask.shape == (4, 3)
 
-        actual = combined.to_split_time()
+        actual = combined.to_split()
 
         assert actual == original
 
@@ -1487,7 +1487,7 @@ class TestSplitTimeData:
                 [[ nan, 40.0], [50.0, 60.0]],
             ]),
         )  # fmt: skip
-        actual = original.to_triplets()
+        actual = original.to_triplet()
 
         expected = TripletTimeData(
             context_times=torch.tensor([
@@ -1542,7 +1542,7 @@ class TestSplitTimeData:
             .unsqueeze(-1)
             .expand(*query_times.shape, 2),
         )
-        actual = original.to_triplets()
+        actual = original.to_triplet()
         actual.validate()
 
         expected = TripletTimeData(
@@ -1609,8 +1609,8 @@ class TestSplitTimeData:
             ]),
         )  # fmt: skip
 
-        triplet = original.to_triplets()
-        actual = triplet.to_split_time(context_dim=3, query_dim=3)
+        triplet = original.to_triplet()
+        actual = triplet.to_split(context_dim=3, query_dim=3)
         expected = SplitTimeData(
             context_times=torch.tensor([
                 [1.0, 2.0],
@@ -1651,7 +1651,7 @@ class TestSplitTimeData:
         )  # fmt: skip
 
         assert actual == expected
-        assert actual.to_triplets() == triplet
+        assert actual.to_triplet() == triplet
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_triplet_roundtrip(
@@ -1669,7 +1669,7 @@ class TestSplitTimeData:
             target_missingness=True,
         )
 
-        actual = original.to_triplets().to_split_time(
+        actual = original.to_triplet().to_split(
             context_dim=original.context_values.shape[-1],
             query_dim=3,
         )
@@ -1692,18 +1692,18 @@ class TestSplitTimeData:
             target_missingness=True,
         )
 
-        combined = original.to_joint_time()
+        combined = original.to_merged()
         assert combined.context_values.shape[-1] == 3
         assert combined.query_mask.shape[-1] == 4
 
-        actual = combined.to_split_time()
+        actual = combined.to_split()
 
         assert actual == original
 
 
 class TestJointTimeData:
     def test_eq_uses_tensor_value_comparison(self) -> None:
-        lhs = JointTimeData(
+        lhs = MergedTimeData(
             timestamps=torch.tensor([1.0, 2.0, nan]),
             context_values=torch.tensor(
                 [
@@ -1735,7 +1735,7 @@ class TestJointTimeData:
             ),
             static_covariates=torch.tensor([3.0, nan]),
         )
-        rhs = JointTimeData(
+        rhs = MergedTimeData(
             timestamps=torch.tensor([1.0, 2.0, nan]),
             context_values=torch.tensor(
                 [
@@ -1767,7 +1767,7 @@ class TestJointTimeData:
             ),
             static_covariates=torch.tensor([3.0, nan]),
         )
-        other = JointTimeData(
+        other = MergedTimeData(
             timestamps=torch.tensor([1.0, 2.0, nan]),
             context_values=torch.tensor(
                 [
@@ -1805,7 +1805,7 @@ class TestJointTimeData:
 
     def test_rejects_non_increasing_query_times(self) -> None:
         with pytest.raises(AssertionError):
-            JointTimeData(
+            MergedTimeData(
                 timestamps=torch.tensor([1.0, 1.0]),
                 context_values=torch.tensor([
                     [1.0, nan],
@@ -1827,7 +1827,7 @@ class TestJointTimeData:
 
     def test_rejects_mixed_query_value_availability(self) -> None:
         with pytest.raises(AssertionError):
-            JointTimeData(
+            MergedTimeData(
                 timestamps=torch.tensor([1.0, 2.0]),
                 context_values=torch.tensor([
                     [1.0, nan],
@@ -1848,7 +1848,7 @@ class TestJointTimeData:
             )  # fmt: skip
 
     def test_is_simple(self) -> None:
-        arg = JointTimeData(
+        arg = MergedTimeData(
             timestamps=torch.tensor([1.0, 2.0, 4.0]),
             context_values=torch.tensor(
                 [
@@ -1875,7 +1875,7 @@ class TestJointTimeData:
 
         assert arg.is_simple()
         assert not replace(arg, timestamps=torch.tensor([1.0, 2.0, 2.0])).is_simple()
-        assert not JointTimeData(
+        assert not MergedTimeData(
             timestamps=torch.tensor([[1.0, nan], [2.0, nan]]),
             context_values=torch.tensor(
                 [
@@ -1898,7 +1898,7 @@ class TestJointTimeData:
         ).is_simple()
 
     def test_is_trimmed(self) -> None:
-        assert JointTimeData(
+        assert MergedTimeData(
             timestamps=torch.tensor([[1.0, 2.0], [3.0, nan]]),
             context_values=torch.tensor(
                 [
@@ -1919,7 +1919,7 @@ class TestJointTimeData:
                 ]
             ),
         ).is_trimmed()
-        assert not JointTimeData(
+        assert not MergedTimeData(
             timestamps=torch.tensor([[1.0, nan], [2.0, nan]]),
             context_values=torch.tensor(
                 [
@@ -1945,7 +1945,7 @@ class TestJointTimeData:
         expected = BATCHED_TEST_DATA["joint"]
         args = expected.unbatch()
 
-        actual = JointTimeData.from_unbatched(args)
+        actual = MergedTimeData.from_unbatched(args)
 
         assert actual == expected
 
@@ -1958,7 +1958,7 @@ class TestJointTimeData:
     def test_to_dense_unbatched(self) -> None:
         original = UNBATCHED_TEST_DATA["joint"]
 
-        actual = original.to_split_time()
+        actual = original.to_split()
         expected = UNBATCHED_TEST_DATA["split"]
 
         assert actual == expected
@@ -1966,7 +1966,7 @@ class TestJointTimeData:
     def test_to_dense_unbatched_without_target_values(self) -> None:
         original = replace(UNBATCHED_TEST_DATA["joint"], target_values=None)
 
-        actual = original.to_split_time()
+        actual = original.to_split()
         expected = replace(UNBATCHED_TEST_DATA["split"], target_values=None)
 
         assert actual == expected
@@ -1974,7 +1974,7 @@ class TestJointTimeData:
     def test_to_dense_batched_without_target_values(self) -> None:
         original = replace(BATCHED_TEST_DATA["joint"], target_values=None)
 
-        actual = original.to_split_time()
+        actual = original.to_split()
         expected = replace(BATCHED_TEST_DATA["split"], target_values=None)
 
         assert actual == expected
@@ -1990,9 +1990,9 @@ class TestJointTimeData:
             output_shape=(3,),
             input_missingness=True,
             target_missingness=True,
-        ).to_joint_time()
+        ).to_merged()
 
-        actual = original.to_split_time().to_joint_time()
+        actual = original.to_split().to_merged()
 
         assert actual == original
 
@@ -2007,9 +2007,9 @@ class TestJointTimeData:
             output_shape=(3,),
             input_missingness=True,
             target_missingness=True,
-        ).to_joint_time()
+        ).to_merged()
 
-        actual = original.to_triplets().to_joint_time()
+        actual = original.to_triplet().to_merged()
 
         assert actual == original
 
@@ -2030,7 +2030,7 @@ class TestJointTimeData:
         )
         assert original.target_values is not None
 
-        joint = original.to_joint_time()
+        joint = original.to_merged()
         assert joint.target_values is not None
 
         query_indices = joint.query_indices
@@ -2155,7 +2155,7 @@ class TestTripletTimeData:
         case: tuple[DataType, BatchType, bool],
     ) -> None:
         split = TEST_DATA[case]["split"]
-        triplet = split.to_triplets()
+        triplet = split.to_triplet()
         y = triplet.target_values
         assert y is not None
 
@@ -2192,7 +2192,7 @@ class TestTripletTimeData:
             static_covariates=torch.tensor([5.0, 6.0]),
         )
 
-        actual = original.to_split_time()
+        actual = original.to_split()
         expected = SplitTimeData(
             context_times=torch.tensor([1.0, 2.0]),
             context_values=torch.tensor([
@@ -2221,7 +2221,7 @@ class TestTripletTimeData:
             target_values=torch.tensor([30.0]),
         )
 
-        actual = original.to_split_time(context_dim=3, query_dim=4)
+        actual = original.to_split(context_dim=3, query_dim=4)
         expected = SplitTimeData(
             context_times=torch.tensor([1.0, 2.0]),
             context_values=torch.tensor([
@@ -2383,7 +2383,7 @@ class TestTripletTimeData:
             ]),
         )  # fmt: skip
 
-        actual = original.to_split_time(context_dim=2, query_dim=2)
+        actual = original.to_split(context_dim=2, query_dim=2)
         expected = SplitTimeData(
             context_times=torch.tensor([
                 [1.0, 2.0, nan],
@@ -2441,7 +2441,7 @@ class TestTripletTimeData:
             ]),
         )  # fmt: skip
 
-        actual = original.to_split_time(context_dim=2, query_dim=2)
+        actual = original.to_split(context_dim=2, query_dim=2)
         expected = SplitTimeData(
             context_times=torch.tensor([
                 [1.0],
@@ -2474,7 +2474,7 @@ class TestTripletTimeData:
     ) -> None:
         original = _make_random_batched_triplet(batch_shape)
 
-        actual = original.to_split_time(context_dim=3, query_dim=4).to_triplets()
+        actual = original.to_split(context_dim=3, query_dim=4).to_triplet()
 
         assert actual == original
 
@@ -2482,7 +2482,7 @@ class TestTripletTimeData:
     def test_to_combined_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
         original = _make_random_batched_triplet(batch_shape)
 
-        actual = original.to_joint_time().to_triplets()
+        actual = original.to_merged().to_triplet()
 
         assert actual == original
 
@@ -2508,7 +2508,7 @@ class TestTripletTimeData:
             target_values=req.target_values,
             static_covariates=req.static_covariates,
         )
-        expected = req.to_triplets()
+        expected = req.to_triplet()
 
         actual = TripletTimeData(
             context_times=actual.context_times,
@@ -2546,7 +2546,7 @@ class TestTripletTimeData:
             static_covariates=req.static_covariates,
             batch_first=False,
         )
-        expected = req.to_triplets()
+        expected = req.to_triplet()
         expected.validate()
 
         assert actual == expected

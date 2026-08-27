@@ -1,25 +1,132 @@
 r"""Utility classes for forecasting."""
 
 __all__ = [
-    "JointTimeData",
+    # Protocol
+    "AbstractSplitTimeData",
+    "AbstractMergedTimeData",
+    "AbstractTripletTimeData",
+    # classes
+    "MergedTimeData",
     "SplitTimeData",
     "TripletTimeData",
     "EventBatch",
     "DiscreteTimeEventBatch",
     # functions
     "is_prefix_mask",
-    "unique_count",
+    "split_to_triplet",
+    "split_to_merged",
+    "merged_to_triplet",
+    "merged_to_split",
+    "triplet_to_merged",
+    "triplet_to_split",
+    "batch_split",
+    "batch_merged",
+    "batch_triplet",
+    "unbatch_merged",
+    "unbatch_split",
+    "unbatch_triplet",
 ]
 
 
 import math
 from collections.abc import Collection, Iterable
 from dataclasses import InitVar, dataclass, field
-from typing import NamedTuple
+from typing import NamedTuple, Protocol
 
 import torch
 from torch import Tensor, nan
 from torch.nn.utils.rnn import pad_sequence, unpad_sequence
+
+
+class AbstractSplitTimeData(Protocol):
+    r"""Protocol for split time representation.
+
+    Attributes:
+        context_times:     Float[..., $N], padded NaN, non-decreasing
+        context_values:    Float[..., $N, D], padded NaN
+        context_mask:      Bool[..., $N, D], padded False
+        query_times:       Float[..., $K], padded NaN, non-decreasing
+        query_mask:        Bool[..., $K, F],  padded False
+        target_values:     Float[..., $K, F],  padded NaN
+        static_covariates: Float[..., M],  padded NaN
+    """
+
+    @property
+    def context_times(self) -> Tensor: ...
+    @property
+    def context_values(self) -> Tensor: ...
+    @property
+    def context_mask(self) -> Tensor: ...
+
+    @property
+    def query_times(self) -> Tensor: ...
+    @property
+    def query_mask(self) -> Tensor: ...
+    @property
+    def target_values(self) -> Tensor | None: ...
+
+    @property
+    def static_covariates(self) -> Tensor | None: ...
+
+
+class AbstractMergedTimeData(Protocol):
+    r"""Protocol for joint time representation.
+
+    Attributes:
+        timestamps:        Float[..., $T], padded NaN, non-decreasing
+        context_mask:      Bool[..., $T, D], padded False
+        context_values:    Float[..., $T, D], padded NaN
+        query_mask:        Bool[..., $T, E], padded False
+        target_values:     Float[..., $T, E], padded NaN
+        static_covariates: Float[..., M], padded NaN
+    """
+
+    @property
+    def timestamps(self) -> Tensor: ...
+
+    @property
+    def context_mask(self) -> Tensor: ...
+    @property
+    def context_values(self) -> Tensor: ...
+
+    @property
+    def query_mask(self) -> Tensor: ...
+    @property
+    def target_values(self) -> Tensor | None: ...
+
+    @property
+    def static_covariates(self) -> Tensor | None: ...
+
+
+class AbstractTripletTimeData(Protocol):
+    r"""Protocol for triplet time representation.
+
+    Attributes:
+        context_times:     Float[..., $X], padded NaN, non-decreasing
+        context_channels:  Long[..., $X], padded -1
+        context_values:    Float[..., $X], padded NaN
+        query_times:       Float[..., $Q], padded NaN, non-decreasing
+        query_channels:    Long[..., $Q], padded -1
+        target_values:     Float[..., $Q], padded NaN
+        static_covariates: Float[..., M], padded NaN
+    """
+
+    @property
+    def context_times(self) -> Tensor: ...
+    @property
+    def context_channels(self) -> Tensor: ...
+    @property
+    def context_values(self) -> Tensor: ...
+
+    @property
+    def query_times(self) -> Tensor: ...
+    @property
+    def query_channels(self) -> Tensor: ...
+    @property
+    def target_values(self) -> Tensor | None: ...
+
+    @property
+    def static_covariates(self) -> Tensor | None: ...
 
 
 def _all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
@@ -57,7 +164,7 @@ def is_prefix_mask(x: Tensor, /, *, dim: int = -1) -> Tensor:
     return (x[..., :-1] | ~x[..., 1:]).all(dim=dim)
 
 
-def unique_count(x: Tensor, /) -> Tensor:
+def _unique_count(x: Tensor, /) -> Tensor:
     r"""Count unique non-NaN rows in each batch item."""
     *batch_shape, num_items, num_dims = x.shape
     rows = x.reshape(-1, num_items, num_dims)
@@ -118,7 +225,7 @@ def _has_unique_time_channel_pairs(times: Tensor, channels: Tensor, /) -> Tensor
     valid = times.isfinite()
     pairs = torch.stack([times, channels.to(times.dtype)], dim=-1)
     pairs = pairs.masked_fill(~valid.unsqueeze(-1), nan)
-    return unique_count(pairs).eq(valid.sum(dim=-1))
+    return _unique_count(pairs).eq(valid.sum(dim=-1))
 
 
 def _consecutive_group_indices(
@@ -466,6 +573,21 @@ class SplitTimeData:
     validate_args: InitVar[bool] = True
     r"""Whether to validate the data."""
 
+    def __eq__(self, other: object, /) -> bool:
+        if not isinstance(other, SplitTimeData):
+            return NotImplemented
+        return (
+            _tensor_values_equal(self.context_times, other.context_times)
+            and _tensor_values_equal(self.context_values, other.context_values)
+            and _tensor_values_equal(self.context_mask, other.context_mask)
+            and _tensor_values_equal(self.query_times, other.query_times)
+            and _tensor_values_equal(self.query_mask, other.query_mask)
+            and _optional_tensor_values_equal(self.target_values, other.target_values)
+            and _optional_tensor_values_equal(
+                self.static_covariates, other.static_covariates
+            )
+        )
+
     def __post_init__(self, validate_args: bool) -> None:
         self._normalize()
         if validate_args:
@@ -581,256 +703,47 @@ class SplitTimeData:
             ).all()
         )
 
-    def __eq__(self, other: object, /) -> bool:
-        if not isinstance(other, SplitTimeData):
-            return NotImplemented
-        return (
-            _tensor_values_equal(self.context_times, other.context_times)
-            and _tensor_values_equal(self.context_values, other.context_values)
-            and _tensor_values_equal(self.context_mask, other.context_mask)
-            and _tensor_values_equal(self.query_times, other.query_times)
-            and _tensor_values_equal(self.query_mask, other.query_mask)
-            and _optional_tensor_values_equal(self.target_values, other.target_values)
-            and _optional_tensor_values_equal(
-                self.static_covariates, other.static_covariates
-            )
+    @classmethod
+    def from_unbatched(
+        cls, args: Collection[AbstractSplitTimeData], /
+    ) -> SplitTimeData:
+        return batch_split(args)
+
+    @classmethod
+    def from_split(cls, arg: AbstractSplitTimeData, /) -> SplitTimeData:
+        return SplitTimeData(
+            context_times=arg.context_times,
+            context_values=arg.context_values,
+            context_mask=arg.context_mask,
+            query_times=arg.query_times,
+            query_mask=arg.query_mask,
+            target_values=arg.target_values,
+            static_covariates=arg.static_covariates,
         )
 
     @classmethod
-    def from_joint_time(cls, arg: JointTimeData, /) -> SplitTimeData:
-        return arg.to_split_time()
+    def from_merged(cls, arg: AbstractMergedTimeData, /) -> SplitTimeData:
+        return merged_to_split(arg)
 
     @classmethod
-    def from_triplets(cls, arg: TripletTimeData, /) -> SplitTimeData:
-        return arg.to_split_time()
-
-    @classmethod
-    def from_unbatched(cls, args: Collection[SplitTimeData], /) -> SplitTimeData:
-        if not args:
-            raise ValueError("Expected at least one DenseArg.")
-
-        if not all(arg.batch_first for arg in args):
-            raise NotImplementedError("Only batch_first=True is supported.")
-
-        return cls(
-            validate_args=False,  # skip validation since we trust the arguments
-            context_times=pad_sequence(
-                [arg.context_times for arg in args],
-                batch_first=True,
-                padding_value=nan,
-            ),
-            context_values=pad_sequence(
-                [arg.context_values for arg in args],
-                batch_first=True,
-                padding_value=nan,
-            ),
-            context_mask=pad_sequence(
-                [arg.context_mask for arg in args],
-                batch_first=True,
-                padding_value=False,
-            ),
-            query_times=pad_sequence(
-                [arg.query_times for arg in args],
-                batch_first=True,
-                padding_value=nan,
-            ),
-            query_mask=pad_sequence(
-                [arg.query_mask for arg in args],
-                batch_first=True,
-                padding_value=False,
-            ),
-            target_values=(
-                pad_sequence(V, batch_first=True, padding_value=nan)
-                if (V := _all_or_none(arg.target_values for arg in args)) is not None
-                else None
-            ),
-            static_covariates=(
-                torch.stack(S)
-                if (S := _all_or_none(arg.static_covariates for arg in args))
-                is not None
-                else None
-            ),
-        )
+    def from_triplet(cls, arg: AbstractTripletTimeData, /) -> SplitTimeData:
+        return triplet_to_split(arg)
 
     def unbatch(self) -> list[SplitTimeData]:
-        if not self.batch_first:
-            raise NotImplementedError
+        return unbatch_split(self)
 
-        T = self.context_times.unsqueeze(0).flatten(end_dim=-2)
-        C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
-        X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
-        Q = self.query_times.unsqueeze(0).flatten(end_dim=-2)
-        M = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
+    def to_split(self) -> SplitTimeData:
+        return self
 
-        context_lengths = T.isfinite().sum(dim=-1)
-        query_lengths = Q.isfinite().sum(dim=-1)
-        num_samples = T.shape[0]
+    def to_merged(self) -> MergedTimeData:
+        return split_to_merged(self)
 
-        return [
-            SplitTimeData(
-                validate_args=False,  # skip validation since we trust the arguments
-                context_times=c_time,
-                context_values=c_value,
-                context_mask=c_mask,
-                query_times=q_time,
-                query_mask=q_mask,
-                target_values=q_value,
-                static_covariates=static_arg,
-            )
-            for c_time, c_mask, c_value, q_time, q_mask, q_value, static_arg in zip(
-                unpad_sequence(T, context_lengths, batch_first=True),
-                unpad_sequence(C, context_lengths, batch_first=True),
-                unpad_sequence(X, context_lengths, batch_first=True),
-                unpad_sequence(Q, query_lengths, batch_first=True),
-                unpad_sequence(M, query_lengths, batch_first=True),
-                (
-                    unpad_sequence(
-                        self.target_values.unsqueeze(0).flatten(end_dim=-3),
-                        query_lengths,
-                        batch_first=True,
-                    )
-                    if self.target_values is not None
-                    else [None] * num_samples
-                ),
-                (
-                    self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
-                    if self.static_covariates is not None
-                    else [None] * num_samples
-                ),
-                strict=True,
-            )
-        ]
-
-    def to_triplets(self) -> TripletTimeData:
-        seq_dim = -2 if self.batch_first else 0
-        T = self.context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
-        C = self.context_mask.movedim(seq_dim, -2)
-        X = self.context_values.movedim(seq_dim, -2)
-        Q = self.query_times[..., None].movedim(seq_dim, -2).squeeze(-1)
-        M = self.query_mask.movedim(seq_dim, -2)
-        Y = (
-            self.target_values.movedim(seq_dim, -2)
-            if self.target_values is not None
-            else None
-        )
-
-        *batch_shape, _, _ = X.shape
-
-        # `nonzero` orders entries by batch, then time, then channel. Subtracting
-        # the number of earlier valid entries in the same batch converts the global
-        # nonzero order into a 0-based ragged position for that batch item.
-        *ctx_batch_idx, ctx_size, ctx_dim = C.nonzero(as_tuple=True)
-        counts = C.sum(dim=(-2, -1))  # (...)
-        positions = torch.arange(ctx_size.numel(), device=ctx_size.device)
-        offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts
-        ctx_idx = (*ctx_batch_idx, positions - offsets[*ctx_batch_idx])
-        num_context = int(counts.max().item())
-
-        *qry_batch_idx, qry_size, qry_dim = M.nonzero(as_tuple=True)
-        counts = M.sum(dim=(-2, -1))  # (...)
-        positions = torch.arange(qry_size.numel(), device=qry_size.device)
-        offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts
-        qry_idx = (*qry_batch_idx, positions - offsets[*qry_batch_idx])
-        num_query = int(counts.max().item())
-
-        # move the sequence dim to the target position
-        tgt_dim = -1 if self.batch_first else 0
-        return TripletTimeData(
-            # metadata
-            query_size=self.query_size,
-            query_dim=self.query_dim,
-            context_dim=self.context_dim,
-            batch_first=self.batch_first,
-            validate_args=False,  # skip validation since we trust the arguments
-            # data
-            context_times=(
-                T.new_full((*batch_shape, num_context), nan)
-                .index_put(ctx_idx, T[*ctx_batch_idx, ctx_size])
-                .movedim(-1, tgt_dim)
-            ),
-            context_channels=(
-                ctx_dim.new_full((*batch_shape, num_context), -1)
-                .index_put(ctx_idx, ctx_dim)
-                .movedim(-1, tgt_dim)
-            ),
-            context_values=(
-                X.new_full((*batch_shape, num_context), nan)
-                .index_put(ctx_idx, X[*ctx_batch_idx, ctx_size, ctx_dim])
-                .movedim(-1, tgt_dim)
-            ),
-            query_times=(
-                Q.new_full((*batch_shape, num_query), nan)
-                .index_put(qry_idx, Q[*qry_batch_idx, qry_size])
-                .movedim(-1, tgt_dim)
-            ),
-            query_channels=(
-                qry_dim.new_full((*batch_shape, num_query), -1)
-                .index_put(qry_idx, qry_dim)
-                .movedim(-1, tgt_dim)
-            ),
-            target_values=(
-                Y.new_full((*batch_shape, num_query), nan)
-                .index_put(qry_idx, Y[*qry_batch_idx, qry_size, qry_dim])
-                .movedim(-1, tgt_dim)
-                if Y is not None
-                else None
-            ),
-            static_covariates=self.static_covariates,
-        )
-
-    def to_joint_time(self) -> JointTimeData:
-        if not self.batch_first:
-            raise NotImplementedError
-
-        T = self.context_times
-        C = self.context_mask
-        X = self.context_values
-        Q = self.query_times
-        M = self.query_mask
-        Y = self.target_values
-
-        *batch_shape, ctx_size, ctx_dim = X.shape
-        *_, q_size, q_dim = M.shape
-
-        times = torch.cat([T, Q], dim=-1)
-        permutation = torch.argsort(
-            times.nan_to_num(nan=torch.inf), dim=-1, stable=True
-        ).unsqueeze(-1)
-
-        return JointTimeData(
-            # metadata
-            context_size=self.context_size,
-            query_size=self.query_size,
-            validate_args=False,  # skip validation since we trust the arguments
-            batch_first=self.batch_first,
-            # data
-            timestamps=times.take_along_dim(permutation.squeeze(-1), dim=-1),
-            context_values=torch.cat(
-                [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
-                dim=-2,
-            ).take_along_dim(permutation, dim=-2),
-            context_mask=torch.cat(
-                [C, C.new_zeros((*batch_shape, q_size, ctx_dim))],
-                dim=-2,
-            ).take_along_dim(permutation, dim=-2),
-            target_values=(
-                torch.cat(
-                    [Y.new_full((*batch_shape, ctx_size, q_dim), nan), Y],
-                    dim=-2,
-                ).take_along_dim(permutation, dim=-2)
-                if Y is not None
-                else None
-            ),
-            query_mask=torch.cat(
-                [M.new_zeros((*batch_shape, ctx_size, q_dim)), M],
-                dim=-2,
-            ).take_along_dim(permutation, dim=-2),
-            static_covariates=self.static_covariates,
-        )
+    def to_triplet(self) -> TripletTimeData:
+        return split_to_triplet(self)
 
 
 @dataclass(frozen=True)
-class JointTimeData:
+class MergedTimeData:
     r"""Representation with concatenated context and query tensors.
 
     Shapes:
@@ -888,6 +801,20 @@ class JointTimeData:
         qry_valid = self.query_mask.any(dim=-1)
         qry_count = qry_valid.sum(dim=seq_dim)
         return self._split_indices(qry_valid, qry_count, self.query_size)
+
+    def __eq__(self, other: object, /) -> bool:
+        if not isinstance(other, MergedTimeData):
+            return NotImplemented
+        return (
+            _tensor_values_equal(self.timestamps, other.timestamps)
+            and _tensor_values_equal(self.context_values, other.context_values)
+            and _tensor_values_equal(self.context_mask, other.context_mask)
+            and _tensor_values_equal(self.query_mask, other.query_mask)
+            and _optional_tensor_values_equal(self.target_values, other.target_values)
+            and _optional_tensor_values_equal(
+                self.static_covariates, other.static_covariates
+            )
+        )
 
     def __post_init__(self, validate_args: bool) -> None:
         self._normalize()
@@ -1041,20 +968,6 @@ class JointTimeData:
         )
         return (*batch_idx, time_idx) if self.batch_first else (time_idx, *batch_idx)
 
-    def __eq__(self, other: object, /) -> bool:
-        if not isinstance(other, JointTimeData):
-            return NotImplemented
-        return (
-            _tensor_values_equal(self.timestamps, other.timestamps)
-            and _tensor_values_equal(self.context_values, other.context_values)
-            and _tensor_values_equal(self.context_mask, other.context_mask)
-            and _tensor_values_equal(self.query_mask, other.query_mask)
-            and _optional_tensor_values_equal(self.target_values, other.target_values)
-            and _optional_tensor_values_equal(
-                self.static_covariates, other.static_covariates
-            )
-        )
-
     @classmethod
     def from_request(
         cls,
@@ -1069,7 +982,7 @@ class JointTimeData:
         # extra args
         batch_first: bool = True,
         validate: bool = False,
-    ) -> JointTimeData:
+    ) -> MergedTimeData:
         # normalize to batch_last for construction
         seq_dim = -2 if batch_first else 0
         T = context_times.unsqueeze(-1).movedim(seq_dim, 0)
@@ -1102,7 +1015,7 @@ class JointTimeData:
         # )
         # query_idx = (*batch_idx, time_idx) if batch_first else (time_idx, *batch_idx)
 
-        return JointTimeData(
+        return MergedTimeData(
             context_size=ctx_size,
             query_size=q_size,
             batch_first=batch_first,
@@ -1136,148 +1049,41 @@ class JointTimeData:
         )
 
     @classmethod
-    def from_split_time(cls, arg: SplitTimeData, /) -> JointTimeData:
-        return arg.to_joint_time()
+    def from_unbatched(
+        cls, args: Collection[AbstractMergedTimeData], /
+    ) -> MergedTimeData:
+        return batch_merged(args)
 
     @classmethod
-    def from_triplets(cls, arg: TripletTimeData, /) -> JointTimeData:
-        return arg.to_joint_time()
+    def from_split(cls, arg: AbstractSplitTimeData, /) -> MergedTimeData:
+        return split_to_merged(arg)
 
     @classmethod
-    def from_unbatched(cls, args: Collection[JointTimeData], /) -> JointTimeData:
-        if not args:
-            raise ValueError("Expected at least one CombinedArg.")
-
-        if not all(arg.batch_first for arg in args):
-            raise NotImplementedError("Only batch_first is supported.")
-
-        return cls(
-            context_size=max(arg.context_size for arg in args),
-            query_size=max(arg.query_size for arg in args),
-            validate_args=False,  # skip validation since we trust the arguments
-            timestamps=pad_sequence(
-                [arg.timestamps for arg in args],
-                batch_first=True,
-                padding_value=nan,
-            ),
-            context_values=pad_sequence(
-                [arg.context_values for arg in args],
-                batch_first=True,
-                padding_value=nan,
-            ),
-            context_mask=pad_sequence(
-                [arg.context_mask for arg in args],
-                batch_first=True,
-                padding_value=False,
-            ),
-            query_mask=pad_sequence(
-                [arg.query_mask for arg in args],
-                batch_first=True,
-                padding_value=False,
-            ),
-            target_values=(
-                pad_sequence(V, batch_first=True, padding_value=nan)
-                if (V := _all_or_none(arg.target_values for arg in args)) is not None
-                else None
-            ),
-            static_covariates=(
-                torch.stack(S)
-                if (S := _all_or_none(arg.static_covariates for arg in args))
-                is not None
-                else None
-            ),
+    def from_merged(cls, arg: AbstractMergedTimeData, /) -> MergedTimeData:
+        return MergedTimeData(
+            timestamps=arg.timestamps,
+            context_values=arg.context_values,
+            context_mask=arg.context_mask,
+            query_mask=arg.query_mask,
+            target_values=arg.target_values,
+            static_covariates=arg.static_covariates,
         )
 
-    def unbatch(self) -> list[JointTimeData]:
-        if not self.batch_first:
-            raise NotImplementedError
+    @classmethod
+    def from_triplet(cls, arg: AbstractTripletTimeData, /) -> MergedTimeData:
+        return triplet_to_merged(arg)
 
-        T = self.timestamps.unsqueeze(0).flatten(end_dim=-2)
-        C = self.context_mask.unsqueeze(0).flatten(end_dim=-3)
-        X = self.context_values.unsqueeze(0).flatten(end_dim=-3)
-        M = self.query_mask.unsqueeze(0).flatten(end_dim=-3)
-        lengths = T.isfinite().sum(dim=-1)
+    def unbatch(self) -> list[MergedTimeData]:
+        return unbatch_merged(self)
 
-        return [
-            JointTimeData(
-                context_size=self.context_size,
-                query_size=self.query_size,
-                validate_args=False,  # skip validation since we trust the arguments
-                timestamps=time,
-                context_values=c_value,
-                context_mask=c_mask,
-                target_values=q_value,
-                query_mask=q_mask,
-                static_covariates=static_arg,
-            )
-            for time, c_mask, c_value, q_mask, q_value, static_arg in zip(
-                unpad_sequence(T, lengths, batch_first=True),
-                unpad_sequence(C, lengths, batch_first=True),
-                unpad_sequence(X, lengths, batch_first=True),
-                unpad_sequence(M, lengths, batch_first=True),
-                (
-                    unpad_sequence(
-                        self.target_values.unsqueeze(0).flatten(end_dim=-3),
-                        lengths,
-                        batch_first=True,
-                    )
-                    if self.target_values is not None
-                    else [None] * len(T)
-                ),
-                (
-                    self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
-                    if self.static_covariates is not None
-                    else [None] * len(T)
-                ),
-                strict=True,
-            )
-        ]
+    def to_split(self) -> SplitTimeData:
+        return merged_to_split(self)
 
-    def to_split_time(self) -> SplitTimeData:
-        if not self.batch_first:
-            raise NotImplementedError
+    def to_merged(self) -> MergedTimeData:
+        return self
 
-        T = self.timestamps
-        C = self.context_mask
-        X = self.context_values
-        M = self.query_mask
-        Y = self.target_values
-
-        # Gather the selected steps to the front of each batch item: a stable sort
-        # of `~valid` keeps the selected steps (key False) in order ahead of the
-        # rest, so the first `size` columns hold them. The gathered mask/values
-        # tails are already all-False/all-NaN (unselected steps), so only the
-        # gathered times need their padding tail (`~keep`) reset to NaN.
-        ctx_valid = C.any(dim=-1)
-        ctx_count = ctx_valid.sum(dim=-1)
-        ctx_size = self.context_size
-        ctx_perm = torch.argsort(~ctx_valid, dim=-1, stable=True)[..., :ctx_size]
-        ctx_keep = torch.arange(ctx_size, device=T.device) < ctx_count[..., None]
-
-        qry_valid = M.any(dim=-1)
-        qry_count = qry_valid.sum(dim=-1)
-        qry_size = self.query_size
-        qry_perm = torch.argsort(~qry_valid, dim=-1, stable=True)[..., :qry_size]
-        qry_keep = torch.arange(qry_size, device=T.device) < qry_count[..., None]
-
-        return SplitTimeData(
-            validate_args=False,  # skip validation since we trust the arguments
-            batch_first=self.batch_first,
-            context_times=(
-                T.take_along_dim(ctx_perm, dim=-1).masked_fill(~ctx_keep, nan)
-            ),
-            context_mask=C.take_along_dim(ctx_perm[..., None], dim=-2),
-            context_values=X.take_along_dim(ctx_perm[..., None], dim=-2),
-            query_times=T.take_along_dim(qry_perm, dim=-1).masked_fill(~qry_keep, nan),
-            query_mask=M.take_along_dim(qry_perm[..., None], dim=-2),
-            target_values=(
-                Y.take_along_dim(qry_perm[..., None], dim=-2) if Y is not None else None
-            ),
-            static_covariates=self.static_covariates,
-        )
-
-    def to_triplets(self) -> TripletTimeData:
-        return self.to_split_time().to_triplets()
+    def to_triplet(self) -> TripletTimeData:
+        return merged_to_triplet(self)
 
 
 @dataclass(frozen=True)
@@ -1352,6 +1158,21 @@ class TripletTimeData:
 
         if validate_args:
             self.validate()
+
+    def __eq__(self, other: object, /) -> bool:
+        if not isinstance(other, TripletTimeData):
+            return NotImplemented
+        return (
+            _tensor_values_equal(self.context_times, other.context_times)
+            and _tensor_values_equal(self.context_channels, other.context_channels)
+            and _tensor_values_equal(self.context_values, other.context_values)
+            and _tensor_values_equal(self.query_times, other.query_times)
+            and _tensor_values_equal(self.query_channels, other.query_channels)
+            and _optional_tensor_values_equal(self.target_values, other.target_values)
+            and _optional_tensor_values_equal(
+                self.static_covariates, other.static_covariates
+            )
+        )
 
     def _normalize(self) -> None:
         seq_dim = -1 if self.batch_first else 0
@@ -1514,21 +1335,6 @@ class TripletTimeData:
         )
         return (index.movedim(-2, 0), *batch_indices)
 
-    def __eq__(self, other: object, /) -> bool:
-        if not isinstance(other, TripletTimeData):
-            return NotImplemented
-        return (
-            _tensor_values_equal(self.context_times, other.context_times)
-            and _tensor_values_equal(self.context_channels, other.context_channels)
-            and _tensor_values_equal(self.context_values, other.context_values)
-            and _tensor_values_equal(self.query_times, other.query_times)
-            and _tensor_values_equal(self.query_channels, other.query_channels)
-            and _optional_tensor_values_equal(self.target_values, other.target_values)
-            and _optional_tensor_values_equal(
-                self.static_covariates, other.static_covariates
-            )
-        )
-
     @classmethod
     def from_request(
         cls,
@@ -1617,237 +1423,630 @@ class TripletTimeData:
         )
 
     @classmethod
-    def from_merged_timedata(cls, arg: JointTimeData, /) -> TripletTimeData:
-        return arg.to_triplets()
+    def from_unbatched(
+        cls, args: Collection[AbstractTripletTimeData], /
+    ) -> TripletTimeData:
+        return batch_triplet(args)
 
     @classmethod
-    def from_split_timedata(cls, arg: SplitTimeData, /) -> TripletTimeData:
-        return arg.to_triplets()
+    def from_split(cls, arg: AbstractSplitTimeData, /) -> TripletTimeData:
+        return split_to_triplet(arg)
 
     @classmethod
-    def from_unbatched(cls, args: Collection[TripletTimeData], /) -> TripletTimeData:
-        if not all(arg.batch_first for arg in args):
-            raise NotImplementedError("Only batch_first is supported.")
+    def from_merged(cls, arg: AbstractMergedTimeData, /) -> TripletTimeData:
+        return merged_to_triplet(arg)
 
-        if not args:
-            raise ValueError("Expected at least one TripletArg.")
-
-        return cls(
-            context_size=max(arg.context_size for arg in args),
-            query_size=max(arg.query_size for arg in args),
-            context_dim=max(arg.context_dim for arg in args),
-            query_dim=max(arg.query_dim for arg in args),
-            validate_args=False,  # skip validation since we trust the arguments
-            context_times=pad_sequence(
-                [arg.context_times for arg in args],
-                batch_first=True,
-                padding_value=nan,
-            ),
-            context_channels=pad_sequence(
-                [arg.context_channels for arg in args],
-                batch_first=True,
-                padding_value=-1,
-            ),
-            context_values=pad_sequence(
-                [arg.context_values for arg in args],
-                batch_first=True,
-                padding_value=nan,
-            ),
-            query_times=pad_sequence(
-                [arg.query_times for arg in args],
-                batch_first=True,
-                padding_value=nan,
-            ),
-            query_channels=pad_sequence(
-                [arg.query_channels for arg in args],
-                batch_first=True,
-                padding_value=-1,
-            ),
-            target_values=(
-                pad_sequence(V, batch_first=True, padding_value=nan)
-                if (V := _all_or_none(arg.target_values for arg in args)) is not None
-                else None
-            ),
-            static_covariates=(
-                torch.stack(S)
-                if (S := _all_or_none(arg.static_covariates for arg in args))
-                is not None
-                else None
-            ),
+    @classmethod
+    def from_triplet(cls, arg: AbstractTripletTimeData, /) -> TripletTimeData:
+        return TripletTimeData(
+            context_times=arg.context_times,
+            context_channels=arg.context_channels,
+            query_times=arg.query_times,
+            query_channels=arg.query_channels,
+            target_values=arg.target_values,
+            static_covariates=arg.static_covariates,
         )
 
     def unbatch(self) -> list[TripletTimeData]:
-        # normalize to batch_first for conversion & flatten batch dimensions
-        seq_dim = -1 if self.batch_first else 0
-        T = self.context_times.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
-        C = self.context_channels.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
-        X = self.context_values.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
-        Q = self.query_times.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
-        M = self.query_channels.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
+        return unbatch_triplet(self)
 
-        context_lengths = T.isfinite().sum(dim=-1)
-        query_lengths = Q.isfinite().sum(dim=-1)
-
-        return [
-            TripletTimeData(
-                context_size=self.context_size,
-                query_size=self.query_size,
-                context_dim=self.context_dim,
-                query_dim=self.query_dim,
-                validate_args=False,  # skip validation since we trust the arguments
-                context_times=c_time,
-                context_channels=c_channel,
-                context_values=c_value,
-                query_times=q_time,
-                query_channels=q_channel,
-                target_values=q_value,
-                static_covariates=static_arg,
-            )
-            for c_time, c_channel, c_value, q_time, q_channel, q_value, static_arg in zip(
-                unpad_sequence(T, context_lengths, batch_first=True),
-                unpad_sequence(C, context_lengths, batch_first=True),
-                unpad_sequence(X, context_lengths, batch_first=True),
-                unpad_sequence(Q, query_lengths, batch_first=True),
-                unpad_sequence(M, query_lengths, batch_first=True),
-                (
-                    unpad_sequence(
-                        self.target_values.unsqueeze(0).flatten(end_dim=-2),
-                        query_lengths,
-                        batch_first=True,
-                    )
-                    if self.target_values is not None
-                    else [None] * len(Q)
-                ),
-                (
-                    self.static_covariates.unsqueeze(0).flatten(end_dim=-2)
-                    if self.static_covariates is not None
-                    else [None] * len(T)
-                ),
-                strict=True,
-            )
-        ]
-
-    def to_split_time(
-        self,
-        *,
-        context_dim: int | None = None,
-        query_dim: int | None = None,
+    def to_split(
+        self, *, context_dim: int | None = None, query_dim: int | None = None
     ) -> SplitTimeData:
-        # normalize to batch_first for conversion
-        seq_dim = -1 if self.batch_first else 0
-        T = self.context_times.movedim(seq_dim, -1)
-        C = self.context_channels.movedim(seq_dim, -1)
-        X = self.context_values.movedim(seq_dim, -1)
-        Q = self.query_times.movedim(seq_dim, -1)
-        M = self.query_channels.movedim(seq_dim, -1)
-        Y = (
-            self.target_values.movedim(seq_dim, -1)
-            if self.target_values is not None
+        return triplet_to_split(self, context_dim=context_dim, query_dim=query_dim)
+
+    def to_merged(
+        self, *, context_dim: int | None = None, query_dim: int | None = None
+    ) -> MergedTimeData:
+        return triplet_to_merged(self, context_dim=context_dim, query_dim=query_dim)
+
+    def to_triplet(self) -> TripletTimeData:
+        return self
+
+
+def split_to_merged(arg: AbstractSplitTimeData, /) -> MergedTimeData:
+    T = arg.context_times
+    C = arg.context_mask
+    X = arg.context_values
+    Q = arg.query_times
+    M = arg.query_mask
+    Y = arg.target_values
+
+    *batch_shape, ctx_size, ctx_dim = X.shape
+    *_, q_size, q_dim = M.shape
+
+    timestamps = torch.cat([T, Q], dim=-1)
+    permutation = torch.argsort(
+        timestamps.nan_to_num(nan=torch.inf), dim=-1, stable=True
+    ).unsqueeze(-1)
+
+    return MergedTimeData(
+        timestamps=timestamps.take_along_dim(permutation.squeeze(-1), dim=-1),
+        context_values=torch.cat(
+            [X, X.new_full((*batch_shape, q_size, ctx_dim), nan)],
+            dim=-2,
+        ).take_along_dim(permutation, dim=-2),
+        context_mask=torch.cat(
+            [C, C.new_zeros((*batch_shape, q_size, ctx_dim))],
+            dim=-2,
+        ).take_along_dim(permutation, dim=-2),
+        target_values=(
+            torch.cat(
+                [Y.new_full((*batch_shape, ctx_size, q_dim), nan), Y],
+                dim=-2,
+            ).take_along_dim(permutation, dim=-2)
+            if Y is not None
             else None
+        ),
+        query_mask=torch.cat(
+            [M.new_zeros((*batch_shape, ctx_size, q_dim)), M], dim=-2
+        ).take_along_dim(permutation, dim=-2),
+        static_covariates=arg.static_covariates,
+        # metadata
+        context_size=arg.context_size,
+        query_size=arg.query_size,
+        validate_args=False,  # skip validation since we trust the arguments
+        batch_first=arg.batch_first,
+    )
+
+
+def split_to_triplet(arg: AbstractSplitTimeData, /) -> TripletTimeData:
+    seq_dim = -2 if arg.batch_first else 0
+
+    T = arg.context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
+    C = arg.context_mask.movedim(seq_dim, -2)
+    X = arg.context_values.movedim(seq_dim, -2)
+    Q = arg.query_times[..., None].movedim(seq_dim, -2).squeeze(-1)
+    M = arg.query_mask.movedim(seq_dim, -2)
+    Y = (
+        arg.target_values.movedim(seq_dim, -2)
+        if arg.target_values is not None
+        else None
+    )
+
+    *batch_shape, _, _ = X.shape
+
+    # `nonzero` orders entries by batch, then time, then channel. Subtracting
+    # the number of earlier valid entries in the same batch converts the global
+    # nonzero order into a 0-based ragged position for that batch item.
+    *ctx_batch_idx, ctx_size, ctx_dim = C.nonzero(as_tuple=True)
+    counts = C.sum(dim=(-2, -1))  # (...)
+    positions = torch.arange(ctx_size.numel(), device=ctx_size.device)
+    offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts
+    ctx_idx = (*ctx_batch_idx, positions - offsets[*ctx_batch_idx])
+    num_context = int(counts.max().item())
+
+    *qry_batch_idx, qry_size, qry_dim = M.nonzero(as_tuple=True)
+    counts = M.sum(dim=(-2, -1))  # (...)
+    positions = torch.arange(qry_size.numel(), device=qry_size.device)
+    offsets = counts.flatten().cumsum(dim=0).reshape(batch_shape) - counts
+    qry_idx = (*qry_batch_idx, positions - offsets[*qry_batch_idx])
+    num_query = int(counts.max().item())
+
+    # move the sequence dim to the target position
+    tgt_dim = -1 if arg.batch_first else 0
+    return TripletTimeData(
+        context_times=(
+            T.new_full((*batch_shape, num_context), nan)
+            .index_put(ctx_idx, T[*ctx_batch_idx, ctx_size])
+            .movedim(-1, tgt_dim)
+        ),
+        context_channels=(
+            ctx_dim.new_full((*batch_shape, num_context), -1)
+            .index_put(ctx_idx, ctx_dim)
+            .movedim(-1, tgt_dim)
+        ),
+        context_values=(
+            X.new_full((*batch_shape, num_context), nan)
+            .index_put(ctx_idx, X[*ctx_batch_idx, ctx_size, ctx_dim])
+            .movedim(-1, tgt_dim)
+        ),
+        query_times=(
+            Q.new_full((*batch_shape, num_query), nan)
+            .index_put(qry_idx, Q[*qry_batch_idx, qry_size])
+            .movedim(-1, tgt_dim)
+        ),
+        query_channels=(
+            qry_dim.new_full((*batch_shape, num_query), -1)
+            .index_put(qry_idx, qry_dim)
+            .movedim(-1, tgt_dim)
+        ),
+        target_values=(
+            Y.new_full((*batch_shape, num_query), nan)
+            .index_put(qry_idx, Y[*qry_batch_idx, qry_size, qry_dim])
+            .movedim(-1, tgt_dim)
+            if Y is not None
+            else None
+        ),
+        static_covariates=arg.static_covariates,
+        # metadata
+        query_size=arg.query_size,
+        query_dim=arg.query_dim,
+        context_dim=arg.context_dim,
+        batch_first=arg.batch_first,
+        validate_args=False,  # skip validation since we trust the arguments
+    )
+
+
+def merged_to_split(arg: AbstractMergedTimeData, /) -> SplitTimeData:
+    if not arg.batch_first:
+        raise NotImplementedError
+
+    T = arg.timestamps
+    C = arg.context_mask
+    X = arg.context_values
+    M = arg.query_mask
+    Y = arg.target_values
+
+    # Gather the selected steps to the front of each batch item: a stable sort
+    # of `~valid` keeps the selected steps (key False) in order ahead of the
+    # rest, so the first `size` columns hold them. The gathered mask/values
+    # tails are already all-False/all-NaN (unselected steps), so only the
+    # gathered times need their padding tail (`~keep`) reset to NaN.
+    ctx_valid = C.any(dim=-1)
+    ctx_count = ctx_valid.sum(dim=-1)
+    ctx_size = arg.context_size
+    ctx_perm = torch.argsort(~ctx_valid, dim=-1, stable=True)[..., :ctx_size]
+    ctx_keep = torch.arange(ctx_size, device=T.device) < ctx_count[..., None]
+
+    qry_valid = M.any(dim=-1)
+    qry_count = qry_valid.sum(dim=-1)
+    qry_size = arg.query_size
+    qry_perm = torch.argsort(~qry_valid, dim=-1, stable=True)[..., :qry_size]
+    qry_keep = torch.arange(qry_size, device=T.device) < qry_count[..., None]
+
+    return SplitTimeData(
+        context_times=(T.take_along_dim(ctx_perm, dim=-1).masked_fill(~ctx_keep, nan)),
+        context_mask=C.take_along_dim(ctx_perm[..., None], dim=-2),
+        context_values=X.take_along_dim(ctx_perm[..., None], dim=-2),
+        query_times=T.take_along_dim(qry_perm, dim=-1).masked_fill(~qry_keep, nan),
+        query_mask=M.take_along_dim(qry_perm[..., None], dim=-2),
+        target_values=(
+            Y.take_along_dim(qry_perm[..., None], dim=-2) if Y is not None else None
+        ),
+        static_covariates=arg.static_covariates,
+        # metadata
+        validate_args=False,  # skip validation since we trust the arguments
+        batch_first=arg.batch_first,
+    )
+
+
+def merged_to_triplet(arg: AbstractMergedTimeData, /) -> TripletTimeData:
+    return split_to_triplet(merged_to_split(arg))
+
+
+def triplet_to_split(
+    arg: AbstractTripletTimeData,
+    /,
+    *,
+    context_dim: int | None = None,
+    query_dim: int | None = None,
+) -> SplitTimeData:
+    # normalize to batch_first for conversion
+    seq_dim = -1 if arg.batch_first else 0
+    T = arg.context_times.movedim(seq_dim, -1)
+    C = arg.context_channels.movedim(seq_dim, -1)
+    X = arg.context_values.movedim(seq_dim, -1)
+    Q = arg.query_times.movedim(seq_dim, -1)
+    M = arg.query_channels.movedim(seq_dim, -1)
+    Y = (
+        arg.target_values.movedim(seq_dim, -1)
+        if arg.target_values is not None
+        else None
+    )
+
+    ctx_dim = context_dim if context_dim is not None else int(C.max().item()) + 1
+    qry_dim = query_dim if query_dim is not None else int(M.max().item()) + 1
+    if (ctx_dim <= C).any():
+        raise ValueError("Expected context channel indices below context_dim.")
+    if (qry_dim <= M).any():
+        raise ValueError("Expected query channel indices below query_dim.")
+
+    *batch_shape, num_context = T.shape
+    *_, num_query = Q.shape
+    num_batches = math.prod(batch_shape)
+
+    # Collapse arbitrary batch dimensions into one axis for vectorized grouping.
+    T_flat = T.reshape(-1, num_context)
+    C_flat = C.reshape(-1, num_context)
+    X_flat = X.reshape(-1, num_context)
+    Q_flat = Q.reshape(-1, num_query)
+    M_flat = M.reshape(-1, num_query)
+    Y_flat = Y.reshape(-1, num_query) if Y is not None else None
+
+    # Map context triplets to dense row indices by grouping consecutive times.
+    ctx_steps = C_flat.ge(0)
+    ctx_inverse, _ = _consecutive_group_indices(T_flat, ctx_steps)
+    ctx_size = arg.context_size
+    ctx_batch = (
+        torch.arange(num_batches, device=T.device).unsqueeze(-1).expand_as(ctx_steps)
+    )
+    ctx_indices = (ctx_batch[ctx_steps], ctx_inverse[ctx_steps])
+    ctx_channels = C_flat[ctx_steps]
+
+    # Map query triplets to dense row indices by grouping consecutive times.
+    qry_steps = M_flat.ge(0)
+    qry_inverse, _ = _consecutive_group_indices(Q_flat, qry_steps)
+    qry_size = arg.query_size
+    qry_batch = (
+        torch.arange(num_batches, device=Q.device).unsqueeze(-1).expand_as(qry_steps)
+    )
+    qry_indices = (qry_batch[qry_steps], qry_inverse[qry_steps])
+    qry_channels = M_flat[qry_steps]
+
+    seq_dim = -2 if arg.batch_first else 0
+    return SplitTimeData(
+        context_times=(
+            T_flat.new_full((num_batches, ctx_size), nan)
+            .index_put(ctx_indices, T_flat[ctx_steps])
+            .reshape(*batch_shape, ctx_size, 1)
+            .movedim(seq_dim, -2)
+            .squeeze(-1)
+        ),
+        context_values=(
+            X_flat.new_full((num_batches, ctx_size, ctx_dim), nan)
+            .index_put((*ctx_indices, ctx_channels), X_flat[ctx_steps])
+            .reshape(*batch_shape, ctx_size, ctx_dim)
+            .movedim(seq_dim, -2)
+        ),
+        context_mask=(
+            C_flat.new_zeros((num_batches, ctx_size, ctx_dim), dtype=torch.bool)
+            .index_put(
+                (*ctx_indices, ctx_channels),
+                ctx_channels.new_ones((), dtype=torch.bool),
+            )
+            .reshape(*batch_shape, ctx_size, ctx_dim)
+            .movedim(seq_dim, -2)
+        ),
+        query_times=(
+            Q_flat.new_full((num_batches, qry_size), nan)
+            .index_put(qry_indices, Q_flat[qry_steps])
+            .reshape(*batch_shape, qry_size, 1)
+            .movedim(seq_dim, -2)
+            .squeeze(-1)
+        ),
+        query_mask=(
+            M_flat.new_zeros((num_batches, qry_size, qry_dim), dtype=torch.bool)
+            .index_put(
+                (*qry_indices, qry_channels),
+                qry_channels.new_ones((), dtype=torch.bool),
+            )
+            .reshape(*batch_shape, qry_size, qry_dim)
+            .movedim(seq_dim, -2)
+        ),
+        target_values=(
+            Y_flat.new_full((num_batches, qry_size, qry_dim), nan)
+            .index_put((*qry_indices, qry_channels), Y_flat[qry_steps])
+            .reshape(*batch_shape, qry_size, qry_dim)
+            .movedim(seq_dim, -2)
+            if Y_flat is not None
+            else None
+        ),
+        static_covariates=arg.static_covariates,
+        # metadata
+        batch_first=arg.batch_first,
+        validate_args=False,  # skip validate since we trust the arguments
+    )
+
+
+def triplet_to_merged(
+    arg: AbstractTripletTimeData,
+    /,
+    *,
+    context_dim: int | None = None,
+    query_dim: int | None = None,
+) -> MergedTimeData:
+    return split_to_merged(
+        triplet_to_split(arg, context_dim=context_dim, query_dim=query_dim)
+    )
+
+
+def batch_split(args: Collection[AbstractSplitTimeData], /) -> SplitTimeData:
+    if not args:
+        raise ValueError("Expected at least one DenseArg.")
+
+    if not all(arg.batch_first for arg in args):
+        raise NotImplementedError("Only batch_first=True is supported.")
+
+    return SplitTimeData(
+        validate_args=False,  # skip validation since we trust the arguments
+        context_times=pad_sequence(
+            [arg.context_times for arg in args],
+            batch_first=True,
+            padding_value=nan,
+        ),
+        context_values=pad_sequence(
+            [arg.context_values for arg in args],
+            batch_first=True,
+            padding_value=nan,
+        ),
+        context_mask=pad_sequence(
+            [arg.context_mask for arg in args],
+            batch_first=True,
+            padding_value=False,
+        ),
+        query_times=pad_sequence(
+            [arg.query_times for arg in args],
+            batch_first=True,
+            padding_value=nan,
+        ),
+        query_mask=pad_sequence(
+            [arg.query_mask for arg in args],
+            batch_first=True,
+            padding_value=False,
+        ),
+        target_values=(
+            pad_sequence(V, batch_first=True, padding_value=nan)
+            if (V := _all_or_none(arg.target_values for arg in args)) is not None
+            else None
+        ),
+        static_covariates=(
+            torch.stack(S)
+            if (S := _all_or_none(arg.static_covariates for arg in args)) is not None
+            else None
+        ),
+    )
+
+
+def unbatch_split(arg: AbstractSplitTimeData, /) -> list[SplitTimeData]:
+    if not arg.batch_first:
+        raise NotImplementedError
+
+    T = arg.context_times.unsqueeze(0).flatten(end_dim=-2)
+    C = arg.context_mask.unsqueeze(0).flatten(end_dim=-3)
+    X = arg.context_values.unsqueeze(0).flatten(end_dim=-3)
+    Q = arg.query_times.unsqueeze(0).flatten(end_dim=-2)
+    M = arg.query_mask.unsqueeze(0).flatten(end_dim=-3)
+
+    context_lengths = T.isfinite().sum(dim=-1)
+    query_lengths = Q.isfinite().sum(dim=-1)
+    num_samples = T.shape[0]
+
+    return [
+        SplitTimeData(
+            validate_args=False,  # skip validation since we trust the arguments
+            context_times=c_time,
+            context_values=c_value,
+            context_mask=c_mask,
+            query_times=q_time,
+            query_mask=q_mask,
+            target_values=q_value,
+            static_covariates=static_arg,
         )
-
-        ctx_dim = context_dim if context_dim is not None else int(C.max().item()) + 1
-        qry_dim = query_dim if query_dim is not None else int(M.max().item()) + 1
-        if (ctx_dim <= C).any():
-            raise ValueError("Expected context channel indices below context_dim.")
-        if (qry_dim <= M).any():
-            raise ValueError("Expected query channel indices below query_dim.")
-
-        *batch_shape, num_context = T.shape
-        *_, num_query = Q.shape
-        num_batches = math.prod(batch_shape)
-
-        # Collapse arbitrary batch dimensions into one axis for vectorized grouping.
-        T_flat = T.reshape(-1, num_context)
-        C_flat = C.reshape(-1, num_context)
-        X_flat = X.reshape(-1, num_context)
-        Q_flat = Q.reshape(-1, num_query)
-        M_flat = M.reshape(-1, num_query)
-        Y_flat = Y.reshape(-1, num_query) if Y is not None else None
-
-        # Map context triplets to dense row indices by grouping consecutive times.
-        ctx_steps = C_flat.ge(0)
-        ctx_inverse, _ = _consecutive_group_indices(T_flat, ctx_steps)
-        ctx_size = self.context_size
-        ctx_batch = (
-            torch.arange(num_batches, device=T.device)
-            .unsqueeze(-1)
-            .expand_as(ctx_steps)
-        )
-        ctx_indices = (ctx_batch[ctx_steps], ctx_inverse[ctx_steps])
-        ctx_channels = C_flat[ctx_steps]
-
-        # Map query triplets to dense row indices by grouping consecutive times.
-        qry_steps = M_flat.ge(0)
-        qry_inverse, _ = _consecutive_group_indices(Q_flat, qry_steps)
-        qry_size = self.query_size
-        qry_batch = (
-            torch.arange(num_batches, device=Q.device)
-            .unsqueeze(-1)
-            .expand_as(qry_steps)
-        )
-        qry_indices = (qry_batch[qry_steps], qry_inverse[qry_steps])
-        qry_channels = M_flat[qry_steps]
-
-        seq_dim = -2 if self.batch_first else 0
-        return SplitTimeData(
-            validate_args=False,  # skip validate since we trust the arguments
-            batch_first=self.batch_first,
-            context_times=(
-                T_flat.new_full((num_batches, ctx_size), nan)
-                .index_put(ctx_indices, T_flat[ctx_steps])
-                .reshape(*batch_shape, ctx_size, 1)
-                .movedim(seq_dim, -2)
-                .squeeze(-1)
-            ),
-            context_values=(
-                X_flat.new_full((num_batches, ctx_size, ctx_dim), nan)
-                .index_put((*ctx_indices, ctx_channels), X_flat[ctx_steps])
-                .reshape(*batch_shape, ctx_size, ctx_dim)
-                .movedim(seq_dim, -2)
-            ),
-            context_mask=(
-                C_flat.new_zeros((num_batches, ctx_size, ctx_dim), dtype=torch.bool)
-                .index_put(
-                    (*ctx_indices, ctx_channels),
-                    ctx_channels.new_ones((), dtype=torch.bool),
+        for c_time, c_mask, c_value, q_time, q_mask, q_value, static_arg in zip(
+            unpad_sequence(T, context_lengths, batch_first=True),
+            unpad_sequence(C, context_lengths, batch_first=True),
+            unpad_sequence(X, context_lengths, batch_first=True),
+            unpad_sequence(Q, query_lengths, batch_first=True),
+            unpad_sequence(M, query_lengths, batch_first=True),
+            (
+                unpad_sequence(
+                    arg.target_values.unsqueeze(0).flatten(end_dim=-3),
+                    query_lengths,
+                    batch_first=True,
                 )
-                .reshape(*batch_shape, ctx_size, ctx_dim)
-                .movedim(seq_dim, -2)
+                if arg.target_values is not None
+                else [None] * num_samples
             ),
-            query_times=(
-                Q_flat.new_full((num_batches, qry_size), nan)
-                .index_put(qry_indices, Q_flat[qry_steps])
-                .reshape(*batch_shape, qry_size, 1)
-                .movedim(seq_dim, -2)
-                .squeeze(-1)
+            (
+                arg.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+                if arg.static_covariates is not None
+                else [None] * num_samples
             ),
-            query_mask=(
-                M_flat.new_zeros((num_batches, qry_size, qry_dim), dtype=torch.bool)
-                .index_put(
-                    (*qry_indices, qry_channels),
-                    qry_channels.new_ones((), dtype=torch.bool),
-                )
-                .reshape(*batch_shape, qry_size, qry_dim)
-                .movedim(seq_dim, -2)
-            ),
-            target_values=(
-                Y_flat.new_full((num_batches, qry_size, qry_dim), nan)
-                .index_put((*qry_indices, qry_channels), Y_flat[qry_steps])
-                .reshape(*batch_shape, qry_size, qry_dim)
-                .movedim(seq_dim, -2)
-                if Y_flat is not None
-                else None
-            ),
-            static_covariates=self.static_covariates,
+            strict=True,
         )
+    ]
 
-    def to_joint_time(
-        self,
-        *,
-        context_dim: int | None = None,
-        query_dim: int | None = None,
-    ) -> JointTimeData:
-        return self.to_split_time(
-            context_dim=context_dim, query_dim=query_dim
-        ).to_joint_time()
+
+def batch_merged(args: Collection[AbstractMergedTimeData], /) -> MergedTimeData:
+    if not args:
+        raise ValueError("Expected at least one CombinedArg.")
+
+    if not all(arg.batch_first for arg in args):
+        raise NotImplementedError("Only batch_first is supported.")
+
+    return MergedTimeData(
+        context_size=max(arg.context_size for arg in args),
+        query_size=max(arg.query_size for arg in args),
+        validate_args=False,  # skip validation since we trust the arguments
+        timestamps=pad_sequence(
+            [arg.timestamps for arg in args],
+            batch_first=True,
+            padding_value=nan,
+        ),
+        context_values=pad_sequence(
+            [arg.context_values for arg in args],
+            batch_first=True,
+            padding_value=nan,
+        ),
+        context_mask=pad_sequence(
+            [arg.context_mask for arg in args],
+            batch_first=True,
+            padding_value=False,
+        ),
+        query_mask=pad_sequence(
+            [arg.query_mask for arg in args],
+            batch_first=True,
+            padding_value=False,
+        ),
+        target_values=(
+            pad_sequence(V, batch_first=True, padding_value=nan)
+            if (V := _all_or_none(arg.target_values for arg in args)) is not None
+            else None
+        ),
+        static_covariates=(
+            torch.stack(S)
+            if (S := _all_or_none(arg.static_covariates for arg in args)) is not None
+            else None
+        ),
+    )
+
+
+def unbatch_merged(arg: AbstractMergedTimeData, /) -> list[MergedTimeData]:
+    if not arg.batch_first:
+        raise NotImplementedError
+
+    T = arg.timestamps.unsqueeze(0).flatten(end_dim=-2)
+    C = arg.context_mask.unsqueeze(0).flatten(end_dim=-3)
+    X = arg.context_values.unsqueeze(0).flatten(end_dim=-3)
+    M = arg.query_mask.unsqueeze(0).flatten(end_dim=-3)
+    lengths = T.isfinite().sum(dim=-1)
+
+    return [
+        MergedTimeData(
+            context_size=arg.context_size,
+            query_size=arg.query_size,
+            validate_args=False,  # skip validation since we trust the arguments
+            timestamps=time,
+            context_values=c_value,
+            context_mask=c_mask,
+            target_values=q_value,
+            query_mask=q_mask,
+            static_covariates=static_arg,
+        )
+        for time, c_mask, c_value, q_mask, q_value, static_arg in zip(
+            unpad_sequence(T, lengths, batch_first=True),
+            unpad_sequence(C, lengths, batch_first=True),
+            unpad_sequence(X, lengths, batch_first=True),
+            unpad_sequence(M, lengths, batch_first=True),
+            (
+                unpad_sequence(
+                    arg.target_values.unsqueeze(0).flatten(end_dim=-3),
+                    lengths,
+                    batch_first=True,
+                )
+                if arg.target_values is not None
+                else [None] * len(T)
+            ),
+            (
+                arg.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+                if arg.static_covariates is not None
+                else [None] * len(T)
+            ),
+            strict=True,
+        )
+    ]
+
+
+def batch_triplet(args: Collection[AbstractTripletTimeData], /) -> TripletTimeData:
+    if not all(arg.batch_first for arg in args):
+        raise NotImplementedError("Only batch_first is supported.")
+
+    if not args:
+        raise ValueError("Expected at least one TripletArg.")
+
+    return TripletTimeData(
+        context_times=pad_sequence(
+            [arg.context_times for arg in args],
+            batch_first=True,
+            padding_value=nan,
+        ),
+        context_channels=pad_sequence(
+            [arg.context_channels for arg in args],
+            batch_first=True,
+            padding_value=-1,
+        ),
+        context_values=pad_sequence(
+            [arg.context_values for arg in args],
+            batch_first=True,
+            padding_value=nan,
+        ),
+        query_times=pad_sequence(
+            [arg.query_times for arg in args],
+            batch_first=True,
+            padding_value=nan,
+        ),
+        query_channels=pad_sequence(
+            [arg.query_channels for arg in args],
+            batch_first=True,
+            padding_value=-1,
+        ),
+        target_values=(
+            pad_sequence(V, batch_first=True, padding_value=nan)
+            if (V := _all_or_none(arg.target_values for arg in args)) is not None
+            else None
+        ),
+        static_covariates=(
+            torch.stack(S)
+            if (S := _all_or_none(arg.static_covariates for arg in args)) is not None
+            else None
+        ),
+        # Metadata
+        context_size=max(arg.context_size for arg in args),
+        query_size=max(arg.query_size for arg in args),
+        context_dim=max(arg.context_dim for arg in args),
+        query_dim=max(arg.query_dim for arg in args),
+        validate_args=False,  # skip validation since we trust the arguments
+    )
+
+
+def unbatch_triplet(arg: AbstractTripletTimeData, /) -> list[TripletTimeData]:
+    # normalize to batch_first for conversion & flatten batch dimensions
+    seq_dim = -1 if arg.batch_first else 0
+    T = arg.context_times.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
+    C = arg.context_channels.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
+    X = arg.context_values.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
+    Q = arg.query_times.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
+    M = arg.query_channels.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
+
+    context_lengths = T.isfinite().sum(dim=-1)
+    query_lengths = Q.isfinite().sum(dim=-1)
+
+    return [
+        TripletTimeData(
+            context_size=arg.context_size,
+            query_size=arg.query_size,
+            context_dim=arg.context_dim,
+            query_dim=arg.query_dim,
+            validate_args=False,  # skip validation since we trust the arguments
+            context_times=c_time,
+            context_channels=c_channel,
+            context_values=c_value,
+            query_times=q_time,
+            query_channels=q_channel,
+            target_values=q_value,
+            static_covariates=static_arg,
+        )
+        for c_time, c_channel, c_value, q_time, q_channel, q_value, static_arg in zip(
+            unpad_sequence(T, context_lengths, batch_first=True),
+            unpad_sequence(C, context_lengths, batch_first=True),
+            unpad_sequence(X, context_lengths, batch_first=True),
+            unpad_sequence(Q, query_lengths, batch_first=True),
+            unpad_sequence(M, query_lengths, batch_first=True),
+            (
+                unpad_sequence(
+                    arg.target_values.unsqueeze(0).flatten(end_dim=-2),
+                    query_lengths,
+                    batch_first=True,
+                )
+                if arg.target_values is not None
+                else [None] * len(Q)
+            ),
+            (
+                arg.static_covariates.unsqueeze(0).flatten(end_dim=-2)
+                if arg.static_covariates is not None
+                else [None] * len(T)
+            ),
+            strict=True,
+        )
+    ]
