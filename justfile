@@ -15,6 +15,7 @@ setup:
     uv venv
     . .venv/bin/activate
     uv pip install --editable .
+    git submodule update --init --recursive
 
 [doc('Configure git remotes for this repository.')]
 setup-remote:
