@@ -692,6 +692,7 @@ class TraceEstimator(nn.Module):
         raise NotImplementedError
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
+    @abstractmethod
     def powers(
         self, op: Fn[[Tensor], Tensor], x: Tensor, /, max_power: int
     ) -> Iterator[Tensor]:
@@ -700,11 +701,13 @@ class TraceEstimator(nn.Module):
         The default implementation repeatedly composes $f$ with itself and delegates to
         `estimate`. This is mainly a compatibility fallback; specialized estimators can
         usually implement this more efficiently and more accurately.
+
+        Args:
+            op: Function $f$ whose Jacobian power traces should be estimated at $x$.
+            x: Evaluation point. Its shape, dtype, and device define the domain.
+            max_power: Largest Jacobian power to estimate.
         """
-        power_op: Fn[[Tensor], Tensor] = lambda z: z
-        for _ in range(max_power):
-            power_op = lambda z, g=power_op, /: op(g(z))
-            yield self(power_op, x)
+        raise NotImplementedError
 
 
 class ExactTrace(TraceEstimator):
