@@ -1964,7 +1964,7 @@ def unbatch_triplet(
     Q = arg.query_times.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
     M = arg.query_channels.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
     Y = (
-        arg.target_values.unsqueeze(0).flatten(end_dim=-2)
+        arg.target_values.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
         if arg.target_values is not None
         else None
     )

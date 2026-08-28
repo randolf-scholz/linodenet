@@ -2132,7 +2132,7 @@ class TestTripletTimeData:
         original = TEST_DATA["simple", "single", batch_first]["triplet"]
 
         unbatched = original.unbatch()
-        actual = TripletTimeData.from_unbatched(unbatched)
+        actual = TripletTimeData.from_unbatched(unbatched, batch_first=batch_first)
 
         assert all(arg.batch_first is batch_first for arg in unbatched)
         assert actual.batch_shape == original.batch_shape
