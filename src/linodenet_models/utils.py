@@ -659,7 +659,7 @@ class SplitTimeData:
         return self
 
     def to_merged(self) -> MergedTimeData:
-        return split_to_merged(self)
+        return split_to_merged(self, batch_first=self.batch_first)
 
     def to_triplet(self) -> TripletTimeData:
         return split_to_triplet(self, batch_first=self.batch_first)
@@ -1001,13 +1001,13 @@ class MergedTimeData:
         return unbatch_merged(self)
 
     def to_split(self) -> SplitTimeData:
-        return merged_to_split(self)
+        return merged_to_split(self, batch_first=self.batch_first)
 
     def to_merged(self) -> MergedTimeData:
         return self
 
     def to_triplet(self) -> TripletTimeData:
-        return merged_to_triplet(self)
+        return merged_to_triplet(self, batch_first=self.batch_first)
 
 
 @dataclass(frozen=True)
