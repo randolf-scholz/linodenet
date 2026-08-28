@@ -2015,7 +2015,7 @@ def batch_triplet(
 
 
 def unbatch_split(
-    arg: AbstractSplitTimeData, /, *, batch_first: bool = True
+    arg: AbstractSplitTimeData, /, *, batch_first: bool
 ) -> list[SplitTimeData]:
     if not batch_first:
         raise NotImplementedError("Only batch_first=True is supported.")
@@ -2070,7 +2070,7 @@ def unbatch_split(
 
 
 def unbatch_merged(
-    arg: AbstractMergedTimeData, /, *, batch_first: bool = True
+    arg: AbstractMergedTimeData, /, *, batch_first: bool
 ) -> list[MergedTimeData]:
     if not batch_first:
         raise NotImplementedError("Only batch_first=True is supported.")
@@ -2120,7 +2120,7 @@ def unbatch_merged(
 
 
 def unbatch_triplet(
-    arg: AbstractTripletTimeData, /, *, batch_first: bool = True
+    arg: AbstractTripletTimeData, /, *, batch_first: bool
 ) -> list[TripletTimeData]:
     # normalize to batch_first for conversion & flatten batch dimensions
     seq_dim = -1 if batch_first else 0
