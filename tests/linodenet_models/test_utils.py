@@ -1379,7 +1379,7 @@ class TestSplitTimeData:
             for data_type in ("simple", "sparse")
         ]
 
-        batched = SplitTimeData.from_unbatched(originals)
+        batched = SplitTimeData.from_unbatched(originals, batch_first=batch_first)
         actual = batched.unbatch()
 
         assert batched.batch_shape == (len(originals),)
@@ -1869,7 +1869,7 @@ class TestMergedTimeData:
             for data_type in ("simple", "sparse")
         ]
 
-        batched = MergedTimeData.from_unbatched(originals)
+        batched = MergedTimeData.from_unbatched(originals, batch_first=batch_first)
         actual = batched.unbatch()
 
         assert batched.batch_shape == (len(originals),)
@@ -2147,7 +2147,7 @@ class TestTripletTimeData:
             for data_type in ("simple", "sparse")
         ]
 
-        batched = TripletTimeData.from_unbatched(originals)
+        batched = TripletTimeData.from_unbatched(originals, batch_first=batch_first)
         actual = batched.unbatch()
 
         assert batched.batch_shape == (len(originals),)

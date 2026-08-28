@@ -628,9 +628,9 @@ class SplitTimeData:
 
     @classmethod
     def from_unbatched(
-        cls, args: Collection[AbstractSplitTimeData], /
+        cls, args: Collection[AbstractSplitTimeData], /, *, batch_first: bool = True
     ) -> SplitTimeData:
-        return batch_split(args)
+        return batch_split(args, batch_first=batch_first)
 
     @classmethod
     def from_split(cls, arg: AbstractSplitTimeData, /) -> SplitTimeData:
@@ -974,9 +974,9 @@ class MergedTimeData:
 
     @classmethod
     def from_unbatched(
-        cls, args: Collection[AbstractMergedTimeData], /
+        cls, args: Collection[AbstractMergedTimeData], /, *, batch_first: bool = True
     ) -> MergedTimeData:
-        return batch_merged(args)
+        return batch_merged(args, batch_first=batch_first)
 
     @classmethod
     def from_split(cls, arg: AbstractSplitTimeData, /) -> MergedTimeData:
@@ -1313,9 +1313,9 @@ class TripletTimeData:
 
     @classmethod
     def from_unbatched(
-        cls, args: Collection[AbstractTripletTimeData], /
+        cls, args: Collection[AbstractTripletTimeData], /, *, batch_first: bool = True
     ) -> TripletTimeData:
-        return batch_triplet(args)
+        return batch_triplet(args, batch_first=batch_first)
 
     @classmethod
     def from_split(cls, arg: AbstractSplitTimeData, /) -> TripletTimeData:
