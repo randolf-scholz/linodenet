@@ -1096,8 +1096,7 @@ class TestModuleTestData:
         [UNBATCHED_SIMPLE_DATA, BATCHED_SIMPLE_DATA],
     )
     def test_simple_data_has_strictly_increasing_split_timestamps(
-        self,
-        data: TensorViewData,
+        self, data: TensorViewData
     ) -> None:
         split = data["split"]
 
@@ -1114,8 +1113,7 @@ class TestModuleTestData:
         [UNBATCHED_SPARSE_DATA, BATCHED_SPARSE_DATA],
     )
     def test_sparse_data_has_one_observation_per_split_row(
-        self,
-        data: TensorViewData,
+        self, data: TensorViewData
     ) -> None:
         split = data["split"]
 
@@ -1142,8 +1140,7 @@ class TestModuleTestData:
         [UNBATCHED_GENERAL_DATA, BATCHED_GENERAL_DATA],
     )
     def test_general_data_has_duplicate_time_channel_pairs(
-        self,
-        data: TensorViewData,
+        self, data: TensorViewData
     ) -> None:
         triplet = data["triplet"]
 
@@ -1654,10 +1651,7 @@ class TestSplitTimeData:
         assert actual.to_triplet() == triplet
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_to_triplet_roundtrip(
-        self,
-        batch_shape: tuple[int, ...],
-    ) -> None:
+    def test_to_triplet_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
         original = make_continuous_time_request(
             rng=3141,
             batch_shape=batch_shape,
@@ -1678,8 +1672,7 @@ class TestSplitTimeData:
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
     def test_to_combined_roundtrip_distinct_dims(
-        self,
-        batch_shape: tuple[int, ...],
+        self, batch_shape: tuple[int, ...]
     ) -> None:
         original = make_continuous_time_request(
             rng=3141,
