@@ -1159,6 +1159,79 @@ class TestModuleTestData:
             assert self._has_duplicate_time_channel_pair(times, channels)
 
 
+class TestEventBatch:
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
+    def test_query_indices_random(self, batch_shape: tuple[int, ...]) -> None:
+        req = make_continuous_time_request(
+            rng=3141,
+            batch_shape=batch_shape,
+            min_steps=1,
+            max_steps=4,
+            context_shape=(3,),
+            output_shape=(4,),
+            input_missingness=True,
+            target_missingness=True,
+        )
+        assert req.target_values is not None
+        event = EventBatch.from_request(
+            context_times=req.context_times,
+            context_values=req.context_values,
+            context_mask=req.context_mask,
+            query_times=req.query_times,
+            query_mask=req.query_mask,
+            target_values=req.target_values,
+        )
+        assert event.target_values is not None
+        assert_close(
+            event.target_values[event.query_indices],
+            req.target_values,
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
+    def test_query_indices_batch_last(self, batch_shape: tuple[int, ...]) -> None:
+        req = make_continuous_time_request(
+            rng=3141,
+            batch_shape=batch_shape,
+            min_steps=1,
+            max_steps=4,
+            context_shape=(3,),
+            output_shape=(4,),
+            input_missingness=True,
+            target_missingness=True,
+        )
+        assert req.target_values is not None
+
+        # Rearrange to batch_first=False layout: seq dim moves from position -1/-2 to 0.
+        # Shapes: (*batch_shape, N) -> (N, *batch_shape), (*batch_shape, N, D) -> (N, *batch_shape, D)
+        ctx_times = req.context_times.movedim(-1, 0)  # (N, *batch_shape)
+        ctx_values = req.context_values.movedim(-2, 0)  # (N, *batch_shape, D)
+        ctx_mask = req.context_mask.movedim(-2, 0)  # (N, *batch_shape, D)
+        qry_times = req.query_times.movedim(-1, 0)  # (K, *batch_shape)
+        qry_mask = req.query_mask.movedim(-2, 0)  # (K, *batch_shape, F)
+        tgt_values = req.target_values.movedim(-2, 0)  # (K, *batch_shape, F)
+
+        event = EventBatch.from_request(
+            context_times=ctx_times,
+            context_values=ctx_values,
+            context_mask=ctx_mask,
+            query_times=qry_times,
+            query_mask=qry_mask,
+            target_values=tgt_values,
+            batch_first=False,
+        )
+        assert event.target_values is not None
+        assert_close(
+            event.target_values[event.query_indices],
+            tgt_values,
+            atol=0.0,
+            rtol=0.0,
+            equal_nan=True,
+        )
+
+
 class TestSplitTimeData:
     def test_eq_uses_tensor_value_comparison(self) -> None:
         lhs = SplitTimeData(
@@ -1304,7 +1377,7 @@ class TestSplitTimeData:
 
         assert actual == expected
 
-    def test_to_combined_unbatched(self) -> None:
+    def test_to_merged_unbatched(self) -> None:
         original = SplitTimeData(
             context_times=torch.tensor([1.0, 3.0]),
             context_values=torch.tensor([
@@ -1358,96 +1431,6 @@ class TestSplitTimeData:
         )  # fmt: skip
 
         assert actual == expected
-
-    def test_to_combined_roundtrip_unbatched_distinct_dims(self) -> None:
-        original = SplitTimeData(
-            context_times=torch.tensor([1.0, 3.0]),
-            context_values=torch.tensor([
-                [10.0,  nan],
-                [ nan, 30.0],
-            ]),
-            context_mask=torch.tensor([
-                [ True, False],
-                [False,  True],
-            ]),
-            query_times=torch.tensor([2.0, 4.0]),
-            query_mask=torch.tensor([
-                [ True, False,  True],
-                [False,  True,  True],
-            ]),
-            target_values=torch.tensor([
-                [20.0,  nan, 22.0],
-                [ nan, 41.0, 42.0],
-            ]),
-        )  # fmt: skip
-
-        combined = original.to_merged()
-        assert combined.context_values.shape == (4, 2)
-        assert combined.query_mask.shape == (4, 3)
-
-        actual = combined.to_split()
-
-        assert actual == original
-
-    def test_batched_roundtrip(self) -> None:
-        args = [
-            SplitTimeData(
-                context_times=torch.tensor([1.0, 2.0]),
-                context_values=torch.tensor([[1.0, nan], [2.0, 3.0]]),
-                context_mask=torch.tensor([[True, False], [True, True]]),
-                query_times=torch.tensor([5.0]),
-                query_mask=torch.tensor([[True, False]]),
-                target_values=torch.tensor([[9.0, nan]]),
-                static_covariates=torch.tensor([1.0, 2.0]),
-            ),
-            SplitTimeData(
-                context_times=torch.tensor([3.0]),
-                context_values=torch.tensor([[4.0, 5.0]]),
-                context_mask=torch.tensor([[True, True]]),
-                query_times=torch.tensor([6.0, 7.0, 8.0]),
-                query_mask=torch.tensor([[False, True], [True, False], [True, True]]),
-                target_values=torch.tensor([[nan, 6.0], [7.0, nan], [8.0, 9.0]]),
-                static_covariates=torch.tensor([3.0, 4.0]),
-            ),
-        ]
-
-        actual = SplitTimeData.from_unbatched(args)
-        expected = SplitTimeData(
-            context_times=torch.tensor([
-                [1.0, 2.0],
-                [3.0, nan],
-            ]),
-            context_values=torch.tensor([
-                [[1.0, nan], [2.0, 3.0]],
-                [[4.0, 5.0], [nan, nan]],
-            ]),
-            context_mask=torch.tensor([
-                [[ True, False], [ True,  True]],
-                [[ True,  True], [False, False]],
-            ]),
-            query_times=torch.tensor([
-                [5.0, nan, nan],
-                [6.0, 7.0, 8.0],
-            ]),
-            query_mask=torch.tensor([
-                [[ True, False], [False, False], [False, False]],
-                [[False,  True], [ True, False], [ True,  True]],
-            ]),
-            target_values=torch.tensor([
-                [[9.0, nan], [nan, nan], [nan, nan]],
-                [[nan, 6.0], [7.0, nan], [8.0, 9.0]],
-            ]),
-            static_covariates=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
-        )  # fmt: skip
-
-        assert actual == expected
-
-        unbatched = actual.unbatch()
-
-        assert isinstance(unbatched, list)
-        assert len(unbatched) == len(args)
-        for actual, expected in zip(unbatched, args, strict=True):
-            assert actual == expected
 
     def test_to_triplet_batched_with_mask(self) -> None:
         original = SplitTimeData(
@@ -1562,7 +1545,67 @@ class TestSplitTimeData:
 
         assert actual == expected
 
-    def test_to_triplet_roundtrip_batched_duplicates(self) -> None:
+    def test_roundtrip_from_unbatched(self) -> None:
+        args = [
+            SplitTimeData(
+                context_times=torch.tensor([1.0, 2.0]),
+                context_values=torch.tensor([[1.0, nan], [2.0, 3.0]]),
+                context_mask=torch.tensor([[True, False], [True, True]]),
+                query_times=torch.tensor([5.0]),
+                query_mask=torch.tensor([[True, False]]),
+                target_values=torch.tensor([[9.0, nan]]),
+                static_covariates=torch.tensor([1.0, 2.0]),
+            ),
+            SplitTimeData(
+                context_times=torch.tensor([3.0]),
+                context_values=torch.tensor([[4.0, 5.0]]),
+                context_mask=torch.tensor([[True, True]]),
+                query_times=torch.tensor([6.0, 7.0, 8.0]),
+                query_mask=torch.tensor([[False, True], [True, False], [True, True]]),
+                target_values=torch.tensor([[nan, 6.0], [7.0, nan], [8.0, 9.0]]),
+                static_covariates=torch.tensor([3.0, 4.0]),
+            ),
+        ]
+
+        actual = SplitTimeData.from_unbatched(args)
+        expected = SplitTimeData(
+            context_times=torch.tensor([
+                [1.0, 2.0],
+                [3.0, nan],
+            ]),
+            context_values=torch.tensor([
+                [[1.0, nan], [2.0, 3.0]],
+                [[4.0, 5.0], [nan, nan]],
+            ]),
+            context_mask=torch.tensor([
+                [[ True, False], [ True,  True]],
+                [[ True,  True], [False, False]],
+            ]),
+            query_times=torch.tensor([
+                [5.0, nan, nan],
+                [6.0, 7.0, 8.0],
+            ]),
+            query_mask=torch.tensor([
+                [[ True, False], [False, False], [False, False]],
+                [[False,  True], [ True, False], [ True,  True]],
+            ]),
+            target_values=torch.tensor([
+                [[9.0, nan], [nan, nan], [nan, nan]],
+                [[nan, 6.0], [7.0, nan], [8.0, 9.0]],
+            ]),
+            static_covariates=torch.tensor([[1.0, 2.0], [3.0, 4.0]]),
+        )  # fmt: skip
+
+        assert actual == expected
+
+        unbatched = actual.unbatch()
+
+        assert isinstance(unbatched, list)
+        assert len(unbatched) == len(args)
+        for actual, expected in zip(unbatched, args, strict=True):
+            assert actual == expected
+
+    def test_roundtrip_to_triplet_duplicates(self) -> None:
         original = SplitTimeData(
             context_times=torch.tensor([
                 [1.0, 1.0, 2.0],
@@ -1651,7 +1694,7 @@ class TestSplitTimeData:
         assert actual.to_triplet() == triplet
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_to_triplet_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
+    def test_roundtrip_to_triplet(self, batch_shape: tuple[int, ...]) -> None:
         original = make_continuous_time_request(
             rng=3141,
             batch_shape=batch_shape,
@@ -1671,7 +1714,7 @@ class TestSplitTimeData:
         assert actual == original
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_to_combined_roundtrip_distinct_dims(
+    def test_roundtrip_to_merged_distinct_dims(
         self, batch_shape: tuple[int, ...]
     ) -> None:
         original = make_continuous_time_request(
@@ -1688,6 +1731,36 @@ class TestSplitTimeData:
         combined = original.to_merged()
         assert combined.context_values.shape[-1] == 3
         assert combined.query_mask.shape[-1] == 4
+
+        actual = combined.to_split()
+
+        assert actual == original
+
+    def test_roundtrip_to_merged_unbatched_distinct_dims(self) -> None:
+        original = SplitTimeData(
+            context_times=torch.tensor([1.0, 3.0]),
+            context_values=torch.tensor([
+                [10.0,  nan],
+                [ nan, 30.0],
+            ]),
+            context_mask=torch.tensor([
+                [ True, False],
+                [False,  True],
+            ]),
+            query_times=torch.tensor([2.0, 4.0]),
+            query_mask=torch.tensor([
+                [ True, False,  True],
+                [False,  True,  True],
+            ]),
+            target_values=torch.tensor([
+                [20.0,  nan, 22.0],
+                [ nan, 41.0, 42.0],
+            ]),
+        )  # fmt: skip
+
+        combined = original.to_merged()
+        assert combined.context_values.shape == (4, 2)
+        assert combined.query_mask.shape == (4, 3)
 
         actual = combined.to_split()
 
@@ -1934,7 +2007,31 @@ class TestMergedTimeData:
             ),
         ).is_trimmed()
 
-    def test_batched_roundtrip(self) -> None:
+    def test_to_split_unbatched(self) -> None:
+        original = UNBATCHED_TEST_DATA["joint"]
+
+        actual = original.to_split()
+        expected = UNBATCHED_TEST_DATA["split"]
+
+        assert actual == expected
+
+    def test_to_split_unbatched_without_target_values(self) -> None:
+        original = replace(UNBATCHED_TEST_DATA["joint"], target_values=None)
+
+        actual = original.to_split()
+        expected = replace(UNBATCHED_TEST_DATA["split"], target_values=None)
+
+        assert actual == expected
+
+    def test_to_split_batched_without_target_values(self) -> None:
+        original = replace(BATCHED_TEST_DATA["joint"], target_values=None)
+
+        actual = original.to_split()
+        expected = replace(BATCHED_TEST_DATA["split"], target_values=None)
+
+        assert actual == expected
+
+    def test_roundtrip_from_unbatched(self) -> None:
         expected = BATCHED_TEST_DATA["joint"]
         args = expected.unbatch()
 
@@ -1948,32 +2045,8 @@ class TestMergedTimeData:
         for actual, expected in zip(unbatched, args, strict=True):
             assert actual == expected
 
-    def test_to_dense_unbatched(self) -> None:
-        original = UNBATCHED_TEST_DATA["joint"]
-
-        actual = original.to_split()
-        expected = UNBATCHED_TEST_DATA["split"]
-
-        assert actual == expected
-
-    def test_to_dense_unbatched_without_target_values(self) -> None:
-        original = replace(UNBATCHED_TEST_DATA["joint"], target_values=None)
-
-        actual = original.to_split()
-        expected = replace(UNBATCHED_TEST_DATA["split"], target_values=None)
-
-        assert actual == expected
-
-    def test_to_dense_batched_without_target_values(self) -> None:
-        original = replace(BATCHED_TEST_DATA["joint"], target_values=None)
-
-        actual = original.to_split()
-        expected = replace(BATCHED_TEST_DATA["split"], target_values=None)
-
-        assert actual == expected
-
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_to_dense_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
+    def test_roundtrip_to_split(self, batch_shape: tuple[int, ...]) -> None:
         original = make_continuous_time_request(
             rng=3141,
             batch_shape=batch_shape,
@@ -1990,7 +2063,7 @@ class TestMergedTimeData:
         assert actual == original
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_to_triplet_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
+    def test_roundtrip_to_triplet(self, batch_shape: tuple[int, ...]) -> None:
         original = make_continuous_time_request(
             rng=3141,
             batch_shape=batch_shape,
@@ -2174,7 +2247,7 @@ class TestTripletTimeData:
             target_values=torch.tensor([[30.0], [40.0]]),
         ).is_trimmed()
 
-    def test_to_dense_unbatched(self) -> None:
+    def test_to_split_unbatched(self) -> None:
         original = TripletTimeData(
             context_times=torch.tensor([1.0, 1.0, 2.0, 2.0]),
             context_channels=torch.tensor([0, 2, 1, 2]),
@@ -2235,7 +2308,7 @@ class TestTripletTimeData:
         assert actual == expected
         assert actual.to_triplet() == original
 
-    def test_to_dense_unbatched_with_dims(self) -> None:
+    def test_to_split_unbatched_with_dims(self) -> None:
         original = TripletTimeData(
             context_times=torch.tensor([1.0, 2.0]),
             context_channels=torch.tensor([0, 1]),
@@ -2263,119 +2336,7 @@ class TestTripletTimeData:
 
         assert actual == expected
 
-    def test_batched_roundtrip(self) -> None:
-        args = [
-            TripletTimeData(
-                context_times=torch.tensor([1.0, 1.0, 2.0]),
-                context_channels=torch.tensor([0, 2, 1]),
-                context_values=torch.tensor([10.0, 11.0, 20.0]),
-                query_times=torch.tensor([3.0, 4.0]),
-                query_channels=torch.tensor([0, 1]),
-                target_values=torch.tensor([30.0, 40.0]),
-                static_covariates=torch.tensor([1.0, 2.0]),
-            ),
-            TripletTimeData(
-                context_times=torch.tensor([5.0]),
-                context_channels=torch.tensor([1]),
-                context_values=torch.tensor([50.0]),
-                query_times=torch.tensor([6.0, 6.0, 7.0]),
-                query_channels=torch.tensor([0, 2, 1]),
-                target_values=torch.tensor([60.0, 62.0, 71.0]),
-                static_covariates=torch.tensor([3.0, 4.0]),
-            ),
-        ]
-
-        actual = TripletTimeData.from_unbatched(args)
-        expected = TripletTimeData(
-            context_times=torch.tensor([
-                [1.0, 1.0, 2.0],
-                [5.0, nan, nan],
-            ]),
-            context_channels=torch.tensor([
-                [0,  2,  1],
-                [1, -1, -1],
-            ]),
-            context_values=torch.tensor([
-                [10.0, 11.0, 20.0],
-                [50.0,  nan,  nan],
-            ]),
-            query_times=torch.tensor([
-                [3.0, 4.0, nan],
-                [6.0, 6.0, 7.0],
-            ]),
-            query_channels=torch.tensor([
-                [0,  1, -1],
-                [0,  2,  1],
-            ]),
-            target_values=torch.tensor([
-                [30.0, 40.0,  nan],
-                [60.0, 62.0, 71.0],
-            ]),
-            static_covariates=torch.tensor([
-                [1.0, 2.0],
-                [3.0, 4.0],
-            ]),
-        )  # fmt: skip
-
-        assert actual == expected
-
-        unbatched = actual.unbatch()
-        assert isinstance(unbatched, list)
-        assert len(unbatched) == len(args)
-        for actual, expected in zip(unbatched, args, strict=True):
-            assert actual == expected
-
-    def test_batched_roundtrip_without_values(self) -> None:
-        args = [
-            TripletTimeData(
-                context_times=torch.tensor([1.0]),
-                context_channels=torch.tensor([0]),
-                context_values=torch.tensor([10.0]),
-                query_times=torch.tensor([3.0, 4.0]),
-                query_channels=torch.tensor([0, 1]),
-            ),
-            TripletTimeData(
-                context_times=torch.tensor([5.0, 5.0]),
-                context_channels=torch.tensor([0, 1]),
-                context_values=torch.tensor([50.0, 51.0]),
-                query_times=torch.tensor([6.0]),
-                query_channels=torch.tensor([2]),
-            ),
-        ]
-
-        actual = TripletTimeData.from_unbatched(args)
-        expected = TripletTimeData(
-            context_times=torch.tensor([
-                [1.0, nan],
-                [5.0, 5.0],
-            ]),
-            context_channels=torch.tensor([
-                [0, -1],
-                [0,  1],
-            ]),
-            context_values=torch.tensor([
-                [10.0,  nan],
-                [50.0, 51.0],
-            ]),
-            query_times=torch.tensor([
-                [3.0, 4.0],
-                [6.0, nan],
-            ]),
-            query_channels=torch.tensor([
-                [0,  1],
-                [2, -1],
-            ]),
-        )  # fmt: skip
-
-        assert actual == expected
-
-        unbatched = actual.unbatch()
-        assert isinstance(unbatched, list)
-        assert len(unbatched) == len(args)
-        for actual, expected in zip(unbatched, args, strict=True):
-            assert actual == expected
-
-    def test_to_dense_batched(self) -> None:
+    def test_to_split_batched(self) -> None:
         original = TripletTimeData(
             context_times=torch.tensor([
                 [1.0, 1.0, 2.0, nan],
@@ -2441,7 +2402,7 @@ class TestTripletTimeData:
 
         assert actual == expected
 
-    def test_to_dense_batched_without_values(self) -> None:
+    def test_to_split_batched_without_values(self) -> None:
         original = TripletTimeData(
             context_times=torch.tensor([
                 [1.0, nan],
@@ -2491,11 +2452,120 @@ class TestTripletTimeData:
 
         assert actual == expected
 
+    def test_roundtrip_from_unbatched(self) -> None:
+        args = [
+            TripletTimeData(
+                context_times=torch.tensor([1.0, 1.0, 2.0]),
+                context_channels=torch.tensor([0, 2, 1]),
+                context_values=torch.tensor([10.0, 11.0, 20.0]),
+                query_times=torch.tensor([3.0, 4.0]),
+                query_channels=torch.tensor([0, 1]),
+                target_values=torch.tensor([30.0, 40.0]),
+                static_covariates=torch.tensor([1.0, 2.0]),
+            ),
+            TripletTimeData(
+                context_times=torch.tensor([5.0]),
+                context_channels=torch.tensor([1]),
+                context_values=torch.tensor([50.0]),
+                query_times=torch.tensor([6.0, 6.0, 7.0]),
+                query_channels=torch.tensor([0, 2, 1]),
+                target_values=torch.tensor([60.0, 62.0, 71.0]),
+                static_covariates=torch.tensor([3.0, 4.0]),
+            ),
+        ]
+
+        actual = TripletTimeData.from_unbatched(args)
+        expected = TripletTimeData(
+            context_times=torch.tensor([
+                [1.0, 1.0, 2.0],
+                [5.0, nan, nan],
+            ]),
+            context_channels=torch.tensor([
+                [0,  2,  1],
+                [1, -1, -1],
+            ]),
+            context_values=torch.tensor([
+                [10.0, 11.0, 20.0],
+                [50.0,  nan,  nan],
+            ]),
+            query_times=torch.tensor([
+                [3.0, 4.0, nan],
+                [6.0, 6.0, 7.0],
+            ]),
+            query_channels=torch.tensor([
+                [0,  1, -1],
+                [0,  2,  1],
+            ]),
+            target_values=torch.tensor([
+                [30.0, 40.0,  nan],
+                [60.0, 62.0, 71.0],
+            ]),
+            static_covariates=torch.tensor([
+                [1.0, 2.0],
+                [3.0, 4.0],
+            ]),
+        )  # fmt: skip
+
+        assert actual == expected
+
+        unbatched = actual.unbatch()
+        assert isinstance(unbatched, list)
+        assert len(unbatched) == len(args)
+        for actual, expected in zip(unbatched, args, strict=True):
+            assert actual == expected
+
+    def test_roundtrip_from_unbatched_without_target_values(self) -> None:
+        args = [
+            TripletTimeData(
+                context_times=torch.tensor([1.0]),
+                context_channels=torch.tensor([0]),
+                context_values=torch.tensor([10.0]),
+                query_times=torch.tensor([3.0, 4.0]),
+                query_channels=torch.tensor([0, 1]),
+            ),
+            TripletTimeData(
+                context_times=torch.tensor([5.0, 5.0]),
+                context_channels=torch.tensor([0, 1]),
+                context_values=torch.tensor([50.0, 51.0]),
+                query_times=torch.tensor([6.0]),
+                query_channels=torch.tensor([2]),
+            ),
+        ]
+
+        actual = TripletTimeData.from_unbatched(args)
+        expected = TripletTimeData(
+            context_times=torch.tensor([
+                [1.0, nan],
+                [5.0, 5.0],
+            ]),
+            context_channels=torch.tensor([
+                [0, -1],
+                [0,  1],
+            ]),
+            context_values=torch.tensor([
+                [10.0,  nan],
+                [50.0, 51.0],
+            ]),
+            query_times=torch.tensor([
+                [3.0, 4.0],
+                [6.0, nan],
+            ]),
+            query_channels=torch.tensor([
+                [0,  1],
+                [2, -1],
+            ]),
+        )  # fmt: skip
+
+        assert actual == expected
+
+        unbatched = actual.unbatch()
+        assert isinstance(unbatched, list)
+        assert len(unbatched) == len(args)
+        for actual, expected in zip(unbatched, args, strict=True):
+            assert actual == expected
+
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_to_dense_roundtrip(
-        self,
-        batch_shape: tuple[int, ...],
-    ) -> None:
+    def test_roundtrip_to_split(self, batch_shape: tuple[int, ...]) -> None:
         original = _make_random_batched_triplet(batch_shape)
 
         actual = original.to_split(context_dim=3, query_dim=4).to_triplet()
@@ -2503,7 +2573,7 @@ class TestTripletTimeData:
         assert actual == original
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_to_combined_roundtrip(self, batch_shape: tuple[int, ...]) -> None:
+    def test_roundtrip_to_merged(self, batch_shape: tuple[int, ...]) -> None:
         original = _make_random_batched_triplet(batch_shape)
 
         actual = original.to_merged().to_triplet()
@@ -2574,76 +2644,3 @@ class TestTripletTimeData:
         expected.validate()
 
         assert actual == expected
-
-
-class TestEventBatch:
-    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_query_indices_random(self, batch_shape: tuple[int, ...]) -> None:
-        req = make_continuous_time_request(
-            rng=3141,
-            batch_shape=batch_shape,
-            min_steps=1,
-            max_steps=4,
-            context_shape=(3,),
-            output_shape=(4,),
-            input_missingness=True,
-            target_missingness=True,
-        )
-        assert req.target_values is not None
-        event = EventBatch.from_request(
-            context_times=req.context_times,
-            context_values=req.context_values,
-            context_mask=req.context_mask,
-            query_times=req.query_times,
-            query_mask=req.query_mask,
-            target_values=req.target_values,
-        )
-        assert event.target_values is not None
-        assert_close(
-            event.target_values[event.query_indices],
-            req.target_values,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
-
-    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_query_indices_batch_last(self, batch_shape: tuple[int, ...]) -> None:
-        req = make_continuous_time_request(
-            rng=3141,
-            batch_shape=batch_shape,
-            min_steps=1,
-            max_steps=4,
-            context_shape=(3,),
-            output_shape=(4,),
-            input_missingness=True,
-            target_missingness=True,
-        )
-        assert req.target_values is not None
-
-        # Rearrange to batch_first=False layout: seq dim moves from position -1/-2 to 0.
-        # Shapes: (*batch_shape, N) -> (N, *batch_shape), (*batch_shape, N, D) -> (N, *batch_shape, D)
-        ctx_times = req.context_times.movedim(-1, 0)  # (N, *batch_shape)
-        ctx_values = req.context_values.movedim(-2, 0)  # (N, *batch_shape, D)
-        ctx_mask = req.context_mask.movedim(-2, 0)  # (N, *batch_shape, D)
-        qry_times = req.query_times.movedim(-1, 0)  # (K, *batch_shape)
-        qry_mask = req.query_mask.movedim(-2, 0)  # (K, *batch_shape, F)
-        tgt_values = req.target_values.movedim(-2, 0)  # (K, *batch_shape, F)
-
-        event = EventBatch.from_request(
-            context_times=ctx_times,
-            context_values=ctx_values,
-            context_mask=ctx_mask,
-            query_times=qry_times,
-            query_mask=qry_mask,
-            target_values=tgt_values,
-            batch_first=False,
-        )
-        assert event.target_values is not None
-        assert_close(
-            event.target_values[event.query_indices],
-            tgt_values,
-            atol=0.0,
-            rtol=0.0,
-            equal_nan=True,
-        )
