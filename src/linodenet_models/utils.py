@@ -1869,41 +1869,39 @@ def triplet_to_merged(
 
 
 def batch_split(
-    args: Collection[AbstractSplitTimeData], /, *, batch_first: bool = True
+    args: Collection[AbstractSplitTimeData], /, *, batch_first: bool
 ) -> SplitTimeData:
-    if not batch_first:
-        raise NotImplementedError("Only batch_first=True is supported.")
     if len(args) < 1:
         raise ValueError("Expected at least one argument.")
 
     return SplitTimeData(
         context_times=pad_sequence(
             [arg.context_times for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=nan,
         ),
         context_mask=pad_sequence(
             [arg.context_mask for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=False,
         ),
         context_values=pad_sequence(
             [arg.context_values for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=nan,
         ),
         query_times=pad_sequence(
             [arg.query_times for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=nan,
         ),
         query_mask=pad_sequence(
             [arg.query_mask for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=False,
         ),
         target_values=(
-            pad_sequence(V, batch_first=True, padding_value=nan)
+            pad_sequence(V, batch_first=batch_first, padding_value=nan)
             if (V := _all_or_none(arg.target_values for arg in args)) is not None
             else None
         ),
@@ -1919,36 +1917,34 @@ def batch_split(
 
 
 def batch_merged(
-    args: Collection[AbstractMergedTimeData], /, *, batch_first: bool = True
+    args: Collection[AbstractMergedTimeData], /, *, batch_first: bool
 ) -> MergedTimeData:
-    if not batch_first:
-        raise NotImplementedError("Only batch_first=True is supported.")
     if len(args) < 1:
         raise ValueError("Expected at least one argument.")
 
     return MergedTimeData(
         timestamps=pad_sequence(
             [arg.timestamps for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=nan,
         ),
         context_values=pad_sequence(
             [arg.context_values for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=nan,
         ),
         context_mask=pad_sequence(
             [arg.context_mask for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=False,
         ),
         query_mask=pad_sequence(
             [arg.query_mask for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=False,
         ),
         target_values=(
-            pad_sequence(V, batch_first=True, padding_value=nan)
+            pad_sequence(V, batch_first=batch_first, padding_value=nan)
             if (V := _all_or_none(arg.target_values for arg in args)) is not None
             else None
         ),
@@ -1967,43 +1963,41 @@ def batch_triplet(
     args: Collection[AbstractTripletTimeData],
     /,
     *,
-    batch_first: bool = True,
+    batch_first: bool,
     query_dim: int | None = None,
     context_dim: int | None = None,
 ) -> TripletTimeData:
-    if not batch_first:
-        raise NotImplementedError("Only batch_first=True is supported.")
     if len(args) < 1:
         raise ValueError("Expected at least one argument.")
 
     return TripletTimeData(
         context_times=pad_sequence(
             [arg.context_times for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=nan,
         ),
         context_channels=pad_sequence(
             [arg.context_channels for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=-1,
         ),
         context_values=pad_sequence(
             [arg.context_values for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=nan,
         ),
         query_times=pad_sequence(
             [arg.query_times for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=nan,
         ),
         query_channels=pad_sequence(
             [arg.query_channels for arg in args],
-            batch_first=True,
+            batch_first=batch_first,
             padding_value=-1,
         ),
         target_values=(
-            pad_sequence(V, batch_first=True, padding_value=nan)
+            pad_sequence(V, batch_first=batch_first, padding_value=nan)
             if (V := _all_or_none(arg.target_values for arg in args)) is not None
             else None
         ),
