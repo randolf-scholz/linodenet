@@ -59,6 +59,7 @@ class pytest_xfail(AbstractContextManager):
 
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> None:
+            __tracebackhide__ = True
             if (
                 self.condition is None
                 or self.condition is True
