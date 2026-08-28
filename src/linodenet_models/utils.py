@@ -653,7 +653,7 @@ class SplitTimeData:
         return triplet_to_split(arg)
 
     def unbatch(self) -> list[SplitTimeData]:
-        return unbatch_split(self)
+        return unbatch_split(self, batch_first=self.batch_first)
 
     def to_split(self) -> SplitTimeData:
         return self
@@ -998,7 +998,7 @@ class MergedTimeData:
         return triplet_to_merged(arg)
 
     def unbatch(self) -> list[MergedTimeData]:
-        return unbatch_merged(self)
+        return unbatch_merged(self, batch_first=self.batch_first)
 
     def to_split(self) -> SplitTimeData:
         return merged_to_split(self, batch_first=self.batch_first)
@@ -1338,7 +1338,7 @@ class TripletTimeData:
         )
 
     def unbatch(self) -> list[TripletTimeData]:
-        return unbatch_triplet(self)
+        return unbatch_triplet(self, batch_first=self.batch_first)
 
     def to_split(
         self, *, context_dim: int | None = None, query_dim: int | None = None
