@@ -15,6 +15,12 @@ from linodenet_models.utils import (
     MergedTimeData,
     SplitTimeData,
     TripletTimeData,
+    merged_to_split,
+    merged_to_triplet,
+    split_to_merged,
+    split_to_triplet,
+    triplet_to_merged,
+    triplet_to_split,
 )
 from tests.testing import pytest_xfail
 
@@ -1012,10 +1018,13 @@ BATCH_PARAMETERS = pytest.mark.parametrize(
 def _simple_test_data(
     batch_shape: tuple[int, ...], batch_first: bool, /
 ) -> CanonicalTestData:
-    batch_type = next(
-        batch_type
-        for batch_type, candidate_shape in BATCH_SHAPES.items()
-        if candidate_shape == batch_shape
+    batch_type = cast(
+        "BatchType",
+        next(
+            batch_type
+            for batch_type, candidate_shape in BATCH_SHAPES.items()
+            if candidate_shape == batch_shape
+        ),
     )
     return TEST_DATA["simple", batch_type, batch_first]
 
@@ -1356,6 +1365,42 @@ class TestSplitTimeData:
 
         assert actual.batch_shape == batch_shape
         assert actual.batch_first is batch_first
+        assert actual == original
+
+    def test_rejects_batch_first_mismatch(self) -> None:
+        original = TEST_DATA["simple", "single", True]["split"]
+
+        with pytest.raises(ValueError, match=r"arg\.batch_first"):
+            split_to_merged(original, batch_first=False)
+        with pytest.raises(ValueError, match=r"arg\.batch_first"):
+            split_to_triplet(original, batch_first=False)
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
+    def test_roundtrip_batch_first(self, batch_shape: tuple[int, ...]) -> None:
+        original = _simple_test_data(batch_shape, True)["split"]
+
+        batch_last = original.to_batch_last()
+        actual = batch_last.to_batch_first()
+
+        assert batch_last.batch_shape == batch_shape
+        assert not batch_last.batch_first
+        assert batch_last == _simple_test_data(batch_shape, False)["split"]
+        assert actual.batch_shape == batch_shape
+        assert actual.batch_first
+        assert actual == original
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
+    def test_roundtrip_batch_last(self, batch_shape: tuple[int, ...]) -> None:
+        original = _simple_test_data(batch_shape, False)["split"]
+
+        batch_first = original.to_batch_first()
+        actual = batch_first.to_batch_last()
+
+        assert batch_first.batch_shape == batch_shape
+        assert batch_first.batch_first
+        assert batch_first == _simple_test_data(batch_shape, True)["split"]
+        assert actual.batch_shape == batch_shape
+        assert not actual.batch_first
         assert actual == original
 
     @pytest_xfail(raises=NotImplementedError, strict=False)
@@ -1848,6 +1893,42 @@ class TestMergedTimeData:
         assert actual.batch_first is batch_first
         assert actual == original
 
+    def test_rejects_batch_first_mismatch(self) -> None:
+        original = TEST_DATA["simple", "single", True]["merged"]
+
+        with pytest.raises(ValueError, match=r"arg\.batch_first"):
+            merged_to_split(original, batch_first=False)
+        with pytest.raises(ValueError, match=r"arg\.batch_first"):
+            merged_to_triplet(original, batch_first=False)
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
+    def test_roundtrip_batch_first(self, batch_shape: tuple[int, ...]) -> None:
+        original = _simple_test_data(batch_shape, True)["merged"]
+
+        batch_last = original.to_batch_last()
+        actual = batch_last.to_batch_first()
+
+        assert batch_last.batch_shape == batch_shape
+        assert not batch_last.batch_first
+        assert batch_last == _simple_test_data(batch_shape, False)["merged"]
+        assert actual.batch_shape == batch_shape
+        assert actual.batch_first
+        assert actual == original
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
+    def test_roundtrip_batch_last(self, batch_shape: tuple[int, ...]) -> None:
+        original = _simple_test_data(batch_shape, False)["merged"]
+
+        batch_first = original.to_batch_first()
+        actual = batch_first.to_batch_last()
+
+        assert batch_first.batch_shape == batch_shape
+        assert batch_first.batch_first
+        assert batch_first == _simple_test_data(batch_shape, True)["merged"]
+        assert actual.batch_shape == batch_shape
+        assert not actual.batch_first
+        assert actual == original
+
     @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_unbatch(self, batch_first: bool) -> None:
@@ -2124,6 +2205,42 @@ class TestTripletTimeData:
 
         assert actual.batch_shape == batch_shape
         assert actual.batch_first is batch_first
+        assert actual == original
+
+    def test_rejects_batch_first_mismatch(self) -> None:
+        original = TEST_DATA["simple", "single", True]["triplet"]
+
+        with pytest.raises(ValueError, match=r"arg\.batch_first"):
+            triplet_to_split(original, batch_first=False)
+        with pytest.raises(ValueError, match=r"arg\.batch_first"):
+            triplet_to_merged(original, batch_first=False)
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
+    def test_roundtrip_batch_first(self, batch_shape: tuple[int, ...]) -> None:
+        original = _simple_test_data(batch_shape, True)["triplet"]
+
+        batch_last = original.to_batch_last()
+        actual = batch_last.to_batch_first()
+
+        assert batch_last.batch_shape == batch_shape
+        assert not batch_last.batch_first
+        assert batch_last == _simple_test_data(batch_shape, False)["triplet"]
+        assert actual.batch_shape == batch_shape
+        assert actual.batch_first
+        assert actual == original
+
+    @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
+    def test_roundtrip_batch_last(self, batch_shape: tuple[int, ...]) -> None:
+        original = _simple_test_data(batch_shape, False)["triplet"]
+
+        batch_first = original.to_batch_first()
+        actual = batch_first.to_batch_last()
+
+        assert batch_first.batch_shape == batch_shape
+        assert batch_first.batch_first
+        assert batch_first == _simple_test_data(batch_shape, True)["triplet"]
+        assert actual.batch_shape == batch_shape
+        assert not actual.batch_first
         assert actual == original
 
     @pytest_xfail(raises=NotImplementedError, strict=False)

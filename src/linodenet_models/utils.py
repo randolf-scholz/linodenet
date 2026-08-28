@@ -30,7 +30,7 @@ __all__ = [
 
 import math
 from collections.abc import Collection, Iterable
-from dataclasses import InitVar, dataclass, field
+from dataclasses import InitVar, dataclass, field, replace
 from typing import NamedTuple, Protocol
 
 import torch
@@ -633,7 +633,11 @@ class SplitTimeData:
         return batch_split(args, batch_first=batch_first)
 
     @classmethod
-    def from_split(cls, arg: AbstractSplitTimeData, /) -> SplitTimeData:
+    def from_split(
+        cls, arg: AbstractSplitTimeData, /, *, batch_first: bool
+    ) -> SplitTimeData:
+        if isinstance(arg, SplitTimeData) and arg.batch_first != batch_first:
+            raise ValueError("arg.batch_first does not match batch_first.")
         return SplitTimeData(
             context_times=arg.context_times,
             context_mask=arg.context_mask,
@@ -642,15 +646,58 @@ class SplitTimeData:
             query_mask=arg.query_mask,
             target_values=arg.target_values,
             static_covariates=arg.static_covariates,
+            batch_first=batch_first,
         )
 
     @classmethod
-    def from_merged(cls, arg: AbstractMergedTimeData, /) -> SplitTimeData:
-        return merged_to_split(arg)
+    def from_merged(
+        cls, arg: AbstractMergedTimeData, /, *, batch_first: bool
+    ) -> SplitTimeData:
+        return merged_to_split(arg, batch_first=batch_first)
 
     @classmethod
-    def from_triplet(cls, arg: AbstractTripletTimeData, /) -> SplitTimeData:
-        return triplet_to_split(arg)
+    def from_triplet(
+        cls, arg: AbstractTripletTimeData, /, *, batch_first: bool
+    ) -> SplitTimeData:
+        return triplet_to_split(arg, batch_first=batch_first)
+
+    def to_batch_first(self) -> SplitTimeData:
+        if self.batch_first:
+            return self
+        return replace(
+            self,
+            context_times=self.context_times.movedim(0, -1),
+            context_values=self.context_values.movedim(0, -2),
+            context_mask=self.context_mask.movedim(0, -2),
+            query_times=self.query_times.movedim(0, -1),
+            query_mask=self.query_mask.movedim(0, -2),
+            target_values=(
+                self.target_values.movedim(0, -2)
+                if self.target_values is not None
+                else None
+            ),
+            batch_first=True,
+            validate_args=False,
+        )
+
+    def to_batch_last(self) -> SplitTimeData:
+        if not self.batch_first:
+            return self
+        return replace(
+            self,
+            context_times=self.context_times.movedim(-1, 0),
+            context_values=self.context_values.movedim(-2, 0),
+            context_mask=self.context_mask.movedim(-2, 0),
+            query_times=self.query_times.movedim(-1, 0),
+            query_mask=self.query_mask.movedim(-2, 0),
+            target_values=(
+                self.target_values.movedim(-2, 0)
+                if self.target_values is not None
+                else None
+            ),
+            batch_first=False,
+            validate_args=False,
+        )
 
     def unbatch(self) -> list[SplitTimeData]:
         return unbatch_split(self, batch_first=self.batch_first)
@@ -979,11 +1026,17 @@ class MergedTimeData:
         return batch_merged(args, batch_first=batch_first)
 
     @classmethod
-    def from_split(cls, arg: AbstractSplitTimeData, /) -> MergedTimeData:
-        return split_to_merged(arg)
+    def from_split(
+        cls, arg: AbstractSplitTimeData, /, *, batch_first: bool
+    ) -> MergedTimeData:
+        return split_to_merged(arg, batch_first=batch_first)
 
     @classmethod
-    def from_merged(cls, arg: AbstractMergedTimeData, /) -> MergedTimeData:
+    def from_merged(
+        cls, arg: AbstractMergedTimeData, /, *, batch_first: bool
+    ) -> MergedTimeData:
+        if isinstance(arg, MergedTimeData) and arg.batch_first != batch_first:
+            raise ValueError("arg.batch_first does not match batch_first.")
         return MergedTimeData(
             timestamps=arg.timestamps,
             context_mask=arg.context_mask,
@@ -991,11 +1044,50 @@ class MergedTimeData:
             query_mask=arg.query_mask,
             target_values=arg.target_values,
             static_covariates=arg.static_covariates,
+            batch_first=batch_first,
         )
 
     @classmethod
-    def from_triplet(cls, arg: AbstractTripletTimeData, /) -> MergedTimeData:
-        return triplet_to_merged(arg)
+    def from_triplet(
+        cls, arg: AbstractTripletTimeData, /, *, batch_first: bool
+    ) -> MergedTimeData:
+        return triplet_to_merged(arg, batch_first=batch_first)
+
+    def to_batch_first(self) -> MergedTimeData:
+        if self.batch_first:
+            return self
+        return replace(
+            self,
+            timestamps=self.timestamps.movedim(0, -1),
+            context_mask=self.context_mask.movedim(0, -2),
+            context_values=self.context_values.movedim(0, -2),
+            query_mask=self.query_mask.movedim(0, -2),
+            target_values=(
+                self.target_values.movedim(0, -2)
+                if self.target_values is not None
+                else None
+            ),
+            batch_first=True,
+            validate_args=False,
+        )
+
+    def to_batch_last(self) -> MergedTimeData:
+        if not self.batch_first:
+            return self
+        return replace(
+            self,
+            timestamps=self.timestamps.movedim(-1, 0),
+            context_mask=self.context_mask.movedim(-2, 0),
+            context_values=self.context_values.movedim(-2, 0),
+            query_mask=self.query_mask.movedim(-2, 0),
+            target_values=(
+                self.target_values.movedim(-2, 0)
+                if self.target_values is not None
+                else None
+            ),
+            batch_first=False,
+            validate_args=False,
+        )
 
     def unbatch(self) -> list[MergedTimeData]:
         return unbatch_merged(self, batch_first=self.batch_first)
@@ -1318,15 +1410,23 @@ class TripletTimeData:
         return batch_triplet(args, batch_first=batch_first)
 
     @classmethod
-    def from_split(cls, arg: AbstractSplitTimeData, /) -> TripletTimeData:
-        return split_to_triplet(arg)
+    def from_split(
+        cls, arg: AbstractSplitTimeData, /, *, batch_first: bool
+    ) -> TripletTimeData:
+        return split_to_triplet(arg, batch_first=batch_first)
 
     @classmethod
-    def from_merged(cls, arg: AbstractMergedTimeData, /) -> TripletTimeData:
-        return merged_to_triplet(arg)
+    def from_merged(
+        cls, arg: AbstractMergedTimeData, /, *, batch_first: bool
+    ) -> TripletTimeData:
+        return merged_to_triplet(arg, batch_first=batch_first)
 
     @classmethod
-    def from_triplet(cls, arg: AbstractTripletTimeData, /) -> TripletTimeData:
+    def from_triplet(
+        cls, arg: AbstractTripletTimeData, /, *, batch_first: bool
+    ) -> TripletTimeData:
+        if isinstance(arg, TripletTimeData) and arg.batch_first != batch_first:
+            raise ValueError("arg.batch_first does not match batch_first.")
         return TripletTimeData(
             context_times=arg.context_times,
             context_channels=arg.context_channels,
@@ -1335,6 +1435,45 @@ class TripletTimeData:
             query_channels=arg.query_channels,
             target_values=arg.target_values,
             static_covariates=arg.static_covariates,
+            batch_first=batch_first,
+        )
+
+    def to_batch_first(self) -> TripletTimeData:
+        if self.batch_first:
+            return self
+        return replace(
+            self,
+            context_times=self.context_times.movedim(0, -1),
+            context_channels=self.context_channels.movedim(0, -1),
+            context_values=self.context_values.movedim(0, -1),
+            query_times=self.query_times.movedim(0, -1),
+            query_channels=self.query_channels.movedim(0, -1),
+            target_values=(
+                self.target_values.movedim(0, -1)
+                if self.target_values is not None
+                else None
+            ),
+            batch_first=True,
+            validate_args=False,
+        )
+
+    def to_batch_last(self) -> TripletTimeData:
+        if not self.batch_first:
+            return self
+        return replace(
+            self,
+            context_times=self.context_times.movedim(-1, 0),
+            context_channels=self.context_channels.movedim(-1, 0),
+            context_values=self.context_values.movedim(-1, 0),
+            query_times=self.query_times.movedim(-1, 0),
+            query_channels=self.query_channels.movedim(-1, 0),
+            target_values=(
+                self.target_values.movedim(-1, 0)
+                if self.target_values is not None
+                else None
+            ),
+            batch_first=False,
+            validate_args=False,
         )
 
     def unbatch(self) -> list[TripletTimeData]:
@@ -1365,8 +1504,10 @@ class TripletTimeData:
 
 
 def split_to_merged(
-    arg: AbstractSplitTimeData, /, *, batch_first: bool = True
+    arg: AbstractSplitTimeData, /, *, batch_first: bool
 ) -> MergedTimeData:
+    if isinstance(arg, SplitTimeData) and arg.batch_first != batch_first:
+        raise ValueError("arg.batch_first does not match batch_first.")
     if not batch_first:
         raise NotImplementedError("Only batch_first=True is supported.")
 
@@ -1416,8 +1557,11 @@ def split_to_merged(
 
 
 def split_to_triplet(
-    arg: AbstractSplitTimeData, /, *, batch_first: bool = True
+    arg: AbstractSplitTimeData, /, *, batch_first: bool
 ) -> TripletTimeData:
+    if isinstance(arg, SplitTimeData) and arg.batch_first != batch_first:
+        raise ValueError("arg.batch_first does not match batch_first.")
+
     # move the sequence dim to the front for easier indexing
     seq_dim = -2 if batch_first else 0
     T = arg.context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
@@ -1500,10 +1644,12 @@ def merged_to_split(
     arg: AbstractMergedTimeData,
     /,
     *,
-    batch_first: bool = True,
+    batch_first: bool,
     context_size: int | None = None,
     query_size: int | None = None,
 ) -> SplitTimeData:
+    if isinstance(arg, MergedTimeData) and arg.batch_first != batch_first:
+        raise ValueError("arg.batch_first does not match batch_first.")
     if not batch_first:
         raise NotImplementedError("Only batch_first=True is supported.")
 
@@ -1552,8 +1698,10 @@ def merged_to_split(
 
 
 def merged_to_triplet(
-    arg: AbstractMergedTimeData, /, *, batch_first: bool = True
+    arg: AbstractMergedTimeData, /, *, batch_first: bool
 ) -> TripletTimeData:
+    if isinstance(arg, MergedTimeData) and arg.batch_first != batch_first:
+        raise ValueError("arg.batch_first does not match batch_first.")
     return split_to_triplet(
         merged_to_split(arg, batch_first=batch_first),
         batch_first=batch_first,
@@ -1564,10 +1712,13 @@ def triplet_to_split(
     arg: AbstractTripletTimeData,
     /,
     *,
-    batch_first: bool = True,
+    batch_first: bool,
     context_dim: int | None = None,
     query_dim: int | None = None,
 ) -> SplitTimeData:
+    if isinstance(arg, TripletTimeData) and arg.batch_first != batch_first:
+        raise ValueError("arg.batch_first does not match batch_first.")
+
     # normalize to batch_first for conversion
     seq_dim = -1 if batch_first else 0
     T = arg.context_times.movedim(seq_dim, -1)
@@ -1681,10 +1832,12 @@ def triplet_to_merged(
     arg: AbstractTripletTimeData,
     /,
     *,
-    batch_first: bool = True,
+    batch_first: bool,
     context_dim: int | None = None,
     query_dim: int | None = None,
 ) -> MergedTimeData:
+    if isinstance(arg, TripletTimeData) and arg.batch_first != batch_first:
+        raise ValueError("arg.batch_first does not match batch_first.")
     return split_to_merged(
         triplet_to_split(
             arg,
