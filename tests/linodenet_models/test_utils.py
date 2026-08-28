@@ -1701,7 +1701,7 @@ class TestSplitTimeData:
         assert actual == original
 
 
-class TestJointTimeData:
+class TestMergedTimeData:
     def test_eq_uses_tensor_value_comparison(self) -> None:
         lhs = MergedTimeData(
             timestamps=torch.tensor([1.0, 2.0, nan]),
