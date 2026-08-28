@@ -2117,11 +2117,11 @@ class TestTripletTimeData:
         )
 
         assert arg.is_simple()
-        assert not replace(
+        assert replace(
             arg,
             context_channels=torch.tensor([0, 0, 0]),
         ).is_simple()
-        assert not TripletTimeData(
+        assert TripletTimeData(
             context_times=torch.tensor([1.0]),
             context_channels=torch.tensor([0]),
             context_values=torch.tensor([10.0]),
@@ -2203,6 +2203,37 @@ class TestTripletTimeData:
         )  # fmt: skip
 
         assert actual == expected
+
+    def test_to_split_uses_channel_order_for_equal_timestamps(self) -> None:
+        original = TripletTimeData(
+            context_times=torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0]),
+            context_channels=torch.tensor([0, 1, 0, 3, 2]),
+            context_values=torch.tensor([2.0, 2.0, 3.0, 7.0, 6.0]),
+            query_times=torch.tensor([2.0, 2.0]),
+            query_channels=torch.tensor([0, 0]),
+            target_values=torch.tensor([8.0, 9.0]),
+        )
+
+        actual = original.to_split(context_dim=4, query_dim=1)
+        expected = SplitTimeData(
+            context_times=torch.tensor([1.0, 1.0, 1.0]),
+            context_values=torch.tensor([
+                [2.0, 2.0, nan, nan],
+                [3.0, nan, nan, 7.0],
+                [nan, nan, 6.0, nan],
+            ]),
+            context_mask=torch.tensor([
+                [ True,  True, False, False],
+                [ True, False, False,  True],
+                [False, False,  True, False],
+            ]),
+            query_times=torch.tensor([2.0, 2.0]),
+            query_mask=torch.tensor([[True], [True]]),
+            target_values=torch.tensor([[8.0], [9.0]]),
+        )  # fmt: skip
+
+        assert actual == expected
+        assert actual.to_triplet() == original
 
     def test_to_dense_unbatched_with_dims(self) -> None:
         original = TripletTimeData(
@@ -2391,16 +2422,16 @@ class TestTripletTimeData:
                 [[False,  True], [ True,  True], [ True, False]],
             ]),
             query_times=torch.tensor([
-                [3.0, 4.0],
-                [5.0, 6.0],
+                [3.0, 4.0, nan],
+                [5.0, 5.0, 6.0],
             ]),
             query_mask=torch.tensor([
-                [[ True, False], [False,  True]],
-                [[ True,  True], [False,  True]],
+                [[ True, False], [False,  True], [False, False]],
+                [[False,  True], [ True, False], [False,  True]],
             ]),
             target_values=torch.tensor([
-                [[30.0,  nan], [ nan, 40.0]],
-                [[50.0, 51.0], [ nan, 61.0]],
+                [[30.0,  nan], [ nan, 40.0], [ nan,  nan]],
+                [[ nan, 51.0], [50.0,  nan], [ nan, 61.0]],
             ]),
             static_covariates=torch.tensor([
                 [7.0, 8.0],

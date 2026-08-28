@@ -158,107 +158,30 @@ def _optional_tensor_values_equal(lhs: Tensor | None, rhs: Tensor | None, /) -> 
     return _tensor_values_equal(lhs, rhs)
 
 
-def _unique_count(x: Tensor, /) -> Tensor:
-    r"""Count unique non-NaN rows in each batch item."""
-    *batch_shape, num_items, num_dims = x.shape
-    rows = x.reshape(-1, num_items, num_dims)
-    num_batches = rows.shape[0]
+def _triplet_row_indices(times: Tensor, channels: Tensor, /) -> tuple[Tensor, Tensor]:
+    r"""Assign ordered triplets to canonical dense rows.
 
-    batch_ids = torch.arange(num_batches, device=x.device)
-    batch_ids = batch_ids.reshape(-1, 1).expand(-1, num_items)
-
-    if rows.is_complex():
-        valid = ~torch.isnan(rows).any(dim=-1)
-
-        # Promote to complex128 so batch ids are stored in float64 precision.
-        keys = rows.to(torch.complex128)
-        batch_keys = torch.complex(
-            batch_ids.to(torch.float64),
-            torch.zeros_like(batch_ids, dtype=torch.float64),
-        )
-
-    elif rows.is_floating_point():
-        valid = ~torch.isnan(rows).any(dim=-1)
-
-        # Promoting floats is fine and helps standardize dtype.
-        keys = rows.to(torch.float64)
-        batch_keys = batch_ids.to(torch.float64)
-
-    elif rows.dtype == torch.bool:
-        valid = torch.ones_like(batch_ids, dtype=torch.bool)
-
-        keys = rows.to(torch.int64)
-        batch_keys = batch_ids.to(torch.int64)
-
-    else:
-        valid = torch.ones_like(batch_ids, dtype=torch.bool)
-
-        # Preserve integer exactness.
-        # Caveat: uint64 values above int64 max cannot be represented exactly here.
-        keys = rows.to(torch.int64)
-        batch_keys = batch_ids.to(torch.int64)
-
-    if not valid.any():
-        return torch.zeros(batch_shape, dtype=torch.long, device=x.device)
-
-    augmented = torch.cat(
-        [batch_keys[valid].unsqueeze(-1), keys[valid]],
-        dim=-1,
-    )
-
-    unique_rows = torch.unique(augmented, dim=0)
-
-    return torch.bincount(
-        unique_rows[:, 0].real.to(torch.long),
-        minlength=num_batches,
-    ).reshape(batch_shape)
-
-
-def _has_unique_time_channel_pairs(times: Tensor, channels: Tensor, /) -> Tensor:
-    r"""Check whether valid `(time, channel)` pairs are unique per batch item."""
-    valid = times.isfinite()
-    pairs = torch.stack([times, channels.to(times.dtype)], dim=-1)
-    pairs = pairs.masked_fill(~valid.unsqueeze(-1), nan)
-    return _unique_count(pairs).eq(valid.sum(dim=-1))
-
-
-def _consecutive_group_indices(
-    values: Tensor, mask: Tensor, /
-) -> tuple[Tensor, Tensor]:
-    r"""Compute group indices for runs of consecutive equal values.
-
-    The last dimension of `values` is interpreted as a sequence. For each batch
-    item, every valid element starts a new group when it is the first valid
-    element or when its value differs from the previous element. Invalid elements
-    are ignored and get group index `-1`.
-
-    This is similar to `torch.unique_consecutive(..., return_inverse=True)`,
-    but computed for all batch items at once and with explicit masking.
+    A new row begins when the timestamp changes or, within the same timestamp,
+    the channel is non-increasing. Thus each dense row contains strictly
+    increasing channel indices while the original triplet order is preserved.
 
     Args:
-        values: Values with shape `(..., N)`.
-        mask: Boolean mask with shape `(..., N)`.
+        times: Timestamps with shape `(..., N)`, padded with NaN.
+        channels: Channel indices with shape `(..., N)`, padded with `-1`.
 
     Returns:
-        A pair `(inverse, counts)`, where `inverse` has shape `(..., N)` and
-        gives each valid element's consecutive group index, and `counts` has
-        shape `(...)` with the number of valid groups per batch item.
-
-    Example:
-        >>> vals = torch.tensor([[1.0, 1.0, 2.0, float("nan")], [3.0, 4.0, 4.0, 5.0]])
-        >>> m = torch.isfinite(vals)
-        >>> inv, counts = _consecutive_group_indices(vals, m)
-        >>> inv
-        tensor([[ 0,  0,  1, -1],
-                [ 0,  1,  1,  2]])
-        >>> counts
-        tensor([2, 3])
+        A pair `(indices, counts)`. `indices` contains the dense row index of
+        every valid triplet and `-1` at padded positions. `counts` contains the
+        number of canonical dense rows per batch item.
     """
-    is_new = torch.ones_like(mask, dtype=torch.bool)
-    is_new[..., 1:] = values[..., 1:] != values[..., :-1]
-    is_new &= mask
-    inverse = is_new.cumsum(dim=-1) - 1
-    return inverse.masked_fill(~mask, -1), is_new.sum(dim=-1)
+    valid = channels.ge(0)
+    is_new = torch.ones_like(valid)
+    is_new[..., 1:] = (times[..., 1:] != times[..., :-1]) | (
+        channels[..., 1:] <= channels[..., :-1]
+    )
+    is_new &= valid
+    indices = is_new.cumsum(dim=-1) - 1
+    return indices.masked_fill(~valid, -1), is_new.sum(dim=-1)
 
 
 def is_prefix_mask(x: Tensor, /, *, dim: int = -1) -> Tensor:
@@ -739,7 +662,7 @@ class SplitTimeData:
         return split_to_merged(self)
 
     def to_triplet(self) -> TripletTimeData:
-        return split_to_triplet(self)
+        return split_to_triplet(self, batch_first=self.batch_first)
 
 
 @dataclass(frozen=True)
@@ -1102,7 +1025,6 @@ class TripletTimeData:
         - context values are finite
         - query time stamps are finite, non-decreasing
         - query channels are non-negative integers
-        - per sample, (query_time, query_channel) pairs are unique
         - if query values are given, they are finite
     """
 
@@ -1123,10 +1045,6 @@ class TripletTimeData:
     r"""Whether the batch axes come before or after the time axes."""
     batch_shape: tuple[int, ...] = field(init=False)
     r"""The shape of the batch dimension."""
-    context_size: int = -1
-    r"""The maximum context size observed in the batch."""
-    query_size: int = -1
-    r"""The maximum query size observed in the batch."""
     context_dim: int = -1
     r"""The shape of the context dimension."""
     query_dim: int = -1
@@ -1140,7 +1058,6 @@ class TripletTimeData:
         return self._simple_indices(
             self.context_times,
             self.context_channels,
-            size=self.context_size,
             dim=self.context_dim,
         )
 
@@ -1150,7 +1067,6 @@ class TripletTimeData:
         return self._simple_indices(
             self.query_times,
             self.query_channels,
-            size=self.query_size,
             dim=self.query_dim,
         )
 
@@ -1176,25 +1092,10 @@ class TripletTimeData:
         )
 
     def _normalize(self) -> None:
-        seq_dim = -1 if self.batch_first else 0
-        T = self.context_times.movedim(seq_dim, -1)
-        C = self.context_channels.movedim(seq_dim, -1)
-        Q = self.query_times.movedim(seq_dim, -1)
-        M = self.query_channels.movedim(seq_dim, -1)
         batch_shape = (
             self.context_channels.shape[:-1]
             if self.batch_first
             else self.context_channels.shape[1:]
-        )
-        context_size = (
-            self.context_size
-            if self.context_size >= 0
-            else int(_consecutive_group_indices(T, C.ge(0))[1].max().item())
-        )
-        query_size = (
-            self.query_size
-            if self.query_size >= 0
-            else int(_consecutive_group_indices(Q, M.ge(0))[1].max().item())
         )
         context_dim = (
             self.context_dim
@@ -1222,8 +1123,6 @@ class TripletTimeData:
         object.__setattr__(self, "batch_shape", batch_shape)
         object.__setattr__(self, "query_dim", query_dim)
         object.__setattr__(self, "context_dim", context_dim)
-        object.__setattr__(self, "context_size", context_size)
-        object.__setattr__(self, "query_size", query_size)
         object.__setattr__(self, "context_values", context_values)
         object.__setattr__(self, "target_values", target_values)
 
@@ -1280,18 +1179,7 @@ class TripletTimeData:
         )
 
     def is_simple(self) -> bool:
-        seq_dim = -1 if self.batch_first else 0
-        T = self.context_times.movedim(seq_dim, -1)
-        C = self.context_channels.movedim(seq_dim, -1)
-        Q = self.query_times.movedim(seq_dim, -1)
-        M = self.query_channels.movedim(seq_dim, -1)
-        return bool(
-            self.is_trimmed()
-            and (
-                _has_unique_time_channel_pairs(T, C)
-                & _has_unique_time_channel_pairs(Q, M)
-            ).all()
-        )
+        return self.is_trimmed()
 
     def _simple_indices(
         self,
@@ -1299,7 +1187,6 @@ class TripletTimeData:
         channels: Tensor,
         /,
         *,
-        size: int,
         dim: int,
     ) -> tuple[Tensor, ...]:
         if not self.is_simple():
@@ -1309,7 +1196,8 @@ class TripletTimeData:
         T = times.movedim(seq_dim, -1)
         C = channels.movedim(seq_dim, -1)
         valid = C.ge(0)
-        inverse, _ = _consecutive_group_indices(T, valid)
+        inverse, counts = _triplet_row_indices(T, C)
+        size = int(counts.max().item())
         *batch_shape, _ = T.shape
 
         index = torch.zeros(
@@ -1417,7 +1305,6 @@ class TripletTimeData:
             ),
             static_covariates=static_covariates,
             # metadata
-            query_size=query_times.shape[seq_dim],
             context_dim=context_mask.shape[-1],
             query_dim=query_mask.shape[-1],
             batch_first=batch_first,
@@ -1456,12 +1343,22 @@ class TripletTimeData:
     def to_split(
         self, *, context_dim: int | None = None, query_dim: int | None = None
     ) -> SplitTimeData:
-        return triplet_to_split(self, context_dim=context_dim, query_dim=query_dim)
+        return triplet_to_split(
+            self,
+            batch_first=self.batch_first,
+            context_dim=context_dim,
+            query_dim=query_dim,
+        )
 
     def to_merged(
         self, *, context_dim: int | None = None, query_dim: int | None = None
     ) -> MergedTimeData:
-        return triplet_to_merged(self, context_dim=context_dim, query_dim=query_dim)
+        return triplet_to_merged(
+            self,
+            batch_first=self.batch_first,
+            context_dim=context_dim,
+            query_dim=query_dim,
+        )
 
     def to_triplet(self) -> TripletTimeData:
         return self
@@ -1534,8 +1431,8 @@ def split_to_triplet(
         else None
     )
 
-    *batch_shape, ctx_size, ctx_dim = C.shape
-    *_, qry_size, qry_dim = M.shape
+    *batch_shape, _, ctx_dim = C.shape
+    qry_dim = M.shape[-1]
 
     # `nonzero` orders entries by batch, then time, then channel. Subtracting
     # the number of earlier valid entries in the same batch converts the global
@@ -1594,9 +1491,7 @@ def split_to_triplet(
         # metadata
         batch_first=batch_first,
         context_dim=ctx_dim,
-        context_size=ctx_size,
         query_dim=qry_dim,
-        query_size=qry_size,
         validate_args=False,  # skip validation since we trust the arguments
     )
 
@@ -1672,8 +1567,6 @@ def triplet_to_split(
     batch_first: bool = True,
     context_dim: int | None = None,
     query_dim: int | None = None,
-    context_size: int | None = None,
-    query_size: int | None = None,
 ) -> SplitTimeData:
     # normalize to batch_first for conversion
     seq_dim = -1 if batch_first else 0
@@ -1688,10 +1581,12 @@ def triplet_to_split(
         else None
     )
 
-    ctx_size = int(C.sum(dim=-1).max().item() if context_size is None else context_size)
-    qry_size = int(M.sum(dim=-1).max().item() if query_size is None else query_size)
-    ctx_dim = context_dim if context_dim is not None else int(C.max().item()) + 1
-    qry_dim = query_dim if query_dim is not None else int(M.max().item()) + 1
+    ctx_inverse, ctx_counts = _triplet_row_indices(T, C)
+    qry_inverse, qry_counts = _triplet_row_indices(Q, M)
+    ctx_size = int(ctx_counts.max().item())
+    qry_size = int(qry_counts.max().item())
+    ctx_dim = int(C.max().item()) + 1 if context_dim is None else context_dim
+    qry_dim = int(M.max().item()) + 1 if query_dim is None else query_dim
     if (ctx_dim <= C).any():
         raise ValueError("Expected context channel indices below context_dim.")
     if (qry_dim <= M).any():
@@ -1708,32 +1603,32 @@ def triplet_to_split(
     Q_flat = Q.reshape(-1, num_query)
     M_flat = M.reshape(-1, num_query)
     Y_flat = Y.reshape(-1, num_query) if Y is not None else None
+    ctx_inverse = ctx_inverse.reshape(-1, num_context)
+    qry_inverse = qry_inverse.reshape(-1, num_query)
 
-    # Map context triplets to dense row indices by grouping consecutive times.
+    # Map context triplets to canonical dense row indices.
     ctx_steps = C_flat.ge(0)
-    ctx_inverse, _ = _consecutive_group_indices(T_flat, ctx_steps)
     ctx_batch = (
         torch.arange(num_batches, device=T.device).unsqueeze(-1).expand_as(ctx_steps)
     )
     ctx_indices = (ctx_batch[ctx_steps], ctx_inverse[ctx_steps])
     ctx_channels = C_flat[ctx_steps]
 
-    # Map query triplets to dense row indices by grouping consecutive times.
+    # Map query triplets to canonical dense row indices.
     qry_steps = M_flat.ge(0)
-    qry_inverse, _ = _consecutive_group_indices(Q_flat, qry_steps)
     qry_batch = (
         torch.arange(num_batches, device=Q.device).unsqueeze(-1).expand_as(qry_steps)
     )
     qry_indices = (qry_batch[qry_steps], qry_inverse[qry_steps])
     qry_channels = M_flat[qry_steps]
 
-    seq_dim = -2 if batch_first else 0
+    target_dim = -2 if batch_first else 0
     return SplitTimeData(
         context_times=(
             T_flat.new_full((num_batches, ctx_size), nan)
             .index_put(ctx_indices, T_flat[ctx_steps])
             .reshape(*batch_shape, ctx_size, 1)
-            .movedim(seq_dim, -2)
+            .movedim(-2, target_dim)
             .squeeze(-1)
         ),
         context_mask=(
@@ -1743,19 +1638,19 @@ def triplet_to_split(
                 ctx_channels.new_ones((), dtype=torch.bool),
             )
             .reshape(*batch_shape, ctx_size, ctx_dim)
-            .movedim(seq_dim, -2)
+            .movedim(-2, target_dim)
         ),
         context_values=(
             X_flat.new_full((num_batches, ctx_size, ctx_dim), nan)
             .index_put((*ctx_indices, ctx_channels), X_flat[ctx_steps])
             .reshape(*batch_shape, ctx_size, ctx_dim)
-            .movedim(seq_dim, -2)
+            .movedim(-2, target_dim)
         ),
         query_times=(
             Q_flat.new_full((num_batches, qry_size), nan)
             .index_put(qry_indices, Q_flat[qry_steps])
             .reshape(*batch_shape, qry_size, 1)
-            .movedim(seq_dim, -2)
+            .movedim(-2, target_dim)
             .squeeze(-1)
         ),
         query_mask=(
@@ -1765,13 +1660,13 @@ def triplet_to_split(
                 qry_channels.new_ones((), dtype=torch.bool),
             )
             .reshape(*batch_shape, qry_size, qry_dim)
-            .movedim(seq_dim, -2)
+            .movedim(-2, target_dim)
         ),
         target_values=(
             Y_flat.new_full((num_batches, qry_size, qry_dim), nan)
             .index_put((*qry_indices, qry_channels), Y_flat[qry_steps])
             .reshape(*batch_shape, qry_size, qry_dim)
-            .movedim(seq_dim, -2)
+            .movedim(-2, target_dim)
             if Y_flat is not None
             else None
         ),
@@ -1789,8 +1684,6 @@ def triplet_to_merged(
     batch_first: bool = True,
     context_dim: int | None = None,
     query_dim: int | None = None,
-    context_size: int | None = None,
-    query_size: int | None = None,
 ) -> MergedTimeData:
     return split_to_merged(
         triplet_to_split(
@@ -1798,8 +1691,6 @@ def triplet_to_merged(
             batch_first=batch_first,
             context_dim=context_dim,
             query_dim=query_dim,
-            context_size=context_size,
-            query_size=query_size,
         ),
         batch_first=batch_first,
     )
@@ -1951,8 +1842,8 @@ def batch_triplet(
         ),
         # metadata
         batch_first=batch_first,
-        context_dim=context_dim,
-        query_dim=query_dim,
+        context_dim=-1 if context_dim is None else context_dim,
+        query_dim=-1 if query_dim is None else query_dim,
         validate_args=False,  # skip validation since we trust the arguments
     )
 
