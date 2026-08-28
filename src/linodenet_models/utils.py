@@ -1658,45 +1658,56 @@ def merged_to_split(
 ) -> SplitTimeData:
     if isinstance(arg, MergedTimeData) and arg.batch_first != batch_first:
         raise ValueError("arg.batch_first does not match batch_first.")
-    if not batch_first:
-        raise NotImplementedError("Only batch_first=True is supported.")
 
-    T = arg.timestamps
-    C = arg.context_mask
-    X = arg.context_values
-    M = arg.query_mask
-    Y = arg.target_values
-
-    ctx_size = int(
-        C.any(dim=-1).sum(dim=-1).max().item() if context_size is None else context_size
-    )
-    qry_size = int(
-        M.any(dim=-1).sum(dim=-1).max().item() if query_size is None else query_size
-    )
+    # move the sequence dim to the front for easier indexing
+    seq_dim = -2 if batch_first else 0
+    T = arg.timestamps.unsqueeze(-1).movedim(seq_dim, 0).squeeze(-1)
+    C = arg.context_mask.movedim(seq_dim, 0)
+    X = arg.context_values.movedim(seq_dim, 0)
+    M = arg.query_mask.movedim(seq_dim, 0)
+    Y = arg.target_values.movedim(seq_dim, 0) if arg.target_values is not None else None
 
     # Gather the selected steps to the front of each batch item: a stable sort
     # of `~valid` keeps the selected steps (key False) in order ahead of the
     # rest, so the first `size` columns hold them. The gathered mask/values
     # tails are already all-False/all-NaN (unselected steps), so only the
     # gathered times need their padding tail (`~keep`) reset to NaN.
-    ctx_valid = C.any(dim=-1)
-    ctx_count = ctx_valid.sum(dim=-1)
-    ctx_perm = torch.argsort(~ctx_valid, dim=-1, stable=True)[..., :ctx_size]
+    ctx_valid = C.any(dim=-1)  # ($N, ...)
+    ctx_count = ctx_valid.sum(dim=0)  # (...)
+    ctx_size = ctx_count.max().item() if context_size is None else context_size
+    ctx_perm = torch.argsort(~ctx_valid, dim=0, stable=True)[:ctx_size]
     ctx_keep = torch.arange(ctx_size, device=T.device) < ctx_count[..., None]
+    ctx_keep = ctx_keep.movedim(-1, 0)
 
     qry_valid = M.any(dim=-1)
-    qry_count = qry_valid.sum(dim=-1)
-    qry_perm = torch.argsort(~qry_valid, dim=-1, stable=True)[..., :qry_size]
+    qry_count = qry_valid.sum(dim=0)
+    qry_size = qry_count.max().item() if query_size is None else query_size
+    qry_perm = torch.argsort(~qry_valid, dim=0, stable=True)[:qry_size]
     qry_keep = torch.arange(qry_size, device=T.device) < qry_count[..., None]
+    qry_keep = qry_keep.movedim(-1, 0)
 
     return SplitTimeData(
-        context_times=(T.take_along_dim(ctx_perm, dim=-1).masked_fill(~ctx_keep, nan)),
-        context_mask=C.take_along_dim(ctx_perm[..., None], dim=-2),
-        context_values=X.take_along_dim(ctx_perm[..., None], dim=-2),
-        query_times=T.take_along_dim(qry_perm, dim=-1).masked_fill(~qry_keep, nan),
-        query_mask=M.take_along_dim(qry_perm[..., None], dim=-2),
+        context_times=(
+            T.take_along_dim(ctx_perm, dim=0)
+            .masked_fill(~ctx_keep, nan)
+            .unsqueeze(-1)
+            .movedim(0, seq_dim)
+            .squeeze(-1)
+        ),
+        context_mask=C.take_along_dim(ctx_perm[..., None], dim=0).movedim(0, seq_dim),
+        context_values=X.take_along_dim(ctx_perm[..., None], dim=0).movedim(0, seq_dim),
+        query_times=(
+            T.take_along_dim(qry_perm, dim=0)
+            .masked_fill(~qry_keep, nan)
+            .unsqueeze(-1)
+            .movedim(0, seq_dim)
+            .squeeze(-1)
+        ),
+        query_mask=M.take_along_dim(qry_perm[..., None], dim=0).movedim(0, seq_dim),
         target_values=(
-            Y.take_along_dim(qry_perm[..., None], dim=-2) if Y is not None else None
+            Y.take_along_dim(qry_perm[..., None], dim=0).movedim(0, seq_dim)
+            if Y is not None
+            else None
         ),
         static_covariates=arg.static_covariates,
         # metadata
