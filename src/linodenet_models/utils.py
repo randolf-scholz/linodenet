@@ -1968,6 +1968,11 @@ def unbatch_split(
     X = arg.context_values.unsqueeze(0).flatten(end_dim=-3)
     Q = arg.query_times.unsqueeze(0).flatten(end_dim=-2)
     M = arg.query_mask.unsqueeze(0).flatten(end_dim=-3)
+    Y = (
+        arg.target_values.unsqueeze(0).flatten(end_dim=-3)
+        if arg.target_values is not None
+        else None
+    )
 
     context_lengths = T.isfinite().sum(dim=-1)
     query_lengths = Q.isfinite().sum(dim=-1)
@@ -1993,12 +1998,8 @@ def unbatch_split(
             unpad_sequence(Q, query_lengths, batch_first=True),
             unpad_sequence(M, query_lengths, batch_first=True),
             (
-                unpad_sequence(
-                    arg.target_values.unsqueeze(0).flatten(end_dim=-3),
-                    query_lengths,
-                    batch_first=True,
-                )
-                if arg.target_values is not None
+                unpad_sequence(Y, query_lengths, batch_first=True)
+                if Y is not None
                 else [None] * num_samples
             ),
             (
@@ -2021,6 +2022,12 @@ def unbatch_merged(
     C = arg.context_mask.unsqueeze(0).flatten(end_dim=-3)
     X = arg.context_values.unsqueeze(0).flatten(end_dim=-3)
     M = arg.query_mask.unsqueeze(0).flatten(end_dim=-3)
+    Y = (
+        arg.target_values.unsqueeze(0).flatten(end_dim=-3)
+        if arg.target_values is not None
+        else None
+    )
+
     lengths = T.isfinite().sum(dim=-1)
 
     return [
@@ -2041,12 +2048,8 @@ def unbatch_merged(
             unpad_sequence(X, lengths, batch_first=True),
             unpad_sequence(M, lengths, batch_first=True),
             (
-                unpad_sequence(
-                    arg.target_values.unsqueeze(0).flatten(end_dim=-3),
-                    lengths,
-                    batch_first=True,
-                )
-                if arg.target_values is not None
+                unpad_sequence(Y, lengths, batch_first=True)
+                if Y is not None
                 else [None] * len(T)
             ),
             (
@@ -2069,6 +2072,11 @@ def unbatch_triplet(
     X = arg.context_values.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
     Q = arg.query_times.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
     M = arg.query_channels.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
+    Y = (
+        arg.target_values.unsqueeze(0).flatten(end_dim=-2)
+        if arg.target_values is not None
+        else None
+    )
 
     context_lengths = T.isfinite().sum(dim=-1)
     query_lengths = Q.isfinite().sum(dim=-1)
@@ -2093,12 +2101,8 @@ def unbatch_triplet(
             unpad_sequence(Q, query_lengths, batch_first=True),
             unpad_sequence(M, query_lengths, batch_first=True),
             (
-                unpad_sequence(
-                    arg.target_values.unsqueeze(0).flatten(end_dim=-2),
-                    query_lengths,
-                    batch_first=True,
-                )
-                if arg.target_values is not None
+                unpad_sequence(Y, query_lengths, batch_first=True)
+                if Y is not None
                 else [None] * len(Q)
             ),
             (
