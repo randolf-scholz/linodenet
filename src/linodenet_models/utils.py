@@ -1508,42 +1508,50 @@ def split_to_merged(
 ) -> MergedTimeData:
     if isinstance(arg, SplitTimeData) and arg.batch_first != batch_first:
         raise ValueError("arg.batch_first does not match batch_first.")
-    if not batch_first:
-        raise NotImplementedError("Only batch_first=True is supported.")
 
-    T = arg.context_times
-    C = arg.context_mask
-    X = arg.context_values
-    Q = arg.query_times
-    M = arg.query_mask
-    Y = arg.target_values
+    # move the sequence dim to the front for easier indexing
+    seq_dim = -2 if batch_first else 0
+    T = arg.context_times.unsqueeze(-1).movedim(seq_dim, 0).squeeze(-1)
+    C = arg.context_mask.movedim(seq_dim, 0)
+    X = arg.context_values.movedim(seq_dim, 0)
+    Q = arg.query_times.unsqueeze(-1).movedim(seq_dim, 0).squeeze(-1)
+    M = arg.query_mask.movedim(seq_dim, 0)
+    Y = arg.target_values.movedim(seq_dim, 0) if arg.target_values is not None else None
 
     *batch_shape, ctx_size, ctx_dim = X.shape
     *_, qry_size, qry_dim = M.shape
 
-    timestamps = torch.cat([T, Q], dim=-1)
+    timestamps = torch.cat([T, Q], dim=0)
     permutation = torch.argsort(
-        timestamps.nan_to_num(nan=torch.inf), dim=-1, stable=True
+        timestamps.nan_to_num(nan=torch.inf), dim=0, stable=True
     ).unsqueeze(-1)
 
     return MergedTimeData(
-        timestamps=timestamps.take_along_dim(permutation.squeeze(-1), dim=-1),
-        context_mask=torch.cat(
-            [C, C.new_zeros((*batch_shape, qry_size, ctx_dim))],
-            dim=-2,
-        ).take_along_dim(permutation, dim=-2),
-        context_values=torch.cat(
-            [X, X.new_full((*batch_shape, qry_size, ctx_dim), nan)],
-            dim=-2,
-        ).take_along_dim(permutation, dim=-2),
-        query_mask=torch.cat(
-            [M.new_zeros((*batch_shape, ctx_size, qry_dim)), M], dim=-2
-        ).take_along_dim(permutation, dim=-2),
+        timestamps=(
+            timestamps.take_along_dim(permutation.squeeze(-1), dim=0)
+            .unsqueeze(-1)
+            .movedim(0, seq_dim)
+            .squeeze(-1)
+        ),
+        context_mask=(
+            torch.cat([C, C.new_zeros((*batch_shape, qry_size, ctx_dim))])
+            .take_along_dim(permutation, dim=0)
+            .movedim(0, seq_dim)
+        ),
+        context_values=(
+            torch.cat([X, X.new_full((*batch_shape, qry_size, ctx_dim), nan)])
+            .take_along_dim(permutation, dim=0)
+            .movedim(0, seq_dim)
+        ),
+        query_mask=(
+            torch.cat([M.new_zeros((*batch_shape, ctx_size, qry_dim)), M])
+            .take_along_dim(permutation, dim=0)
+            .movedim(0, seq_dim)
+        ),
         target_values=(
-            torch.cat(
-                [Y.new_full((*batch_shape, ctx_size, qry_dim), nan), Y],
-                dim=-2,
-            ).take_along_dim(permutation, dim=-2)
+            torch.cat([Y.new_full((*batch_shape, ctx_size, qry_dim), nan), Y])
+            .take_along_dim(permutation, dim=0)
+            .movedim(0, seq_dim)
             if Y is not None
             else None
         ),
