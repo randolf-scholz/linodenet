@@ -1676,20 +1676,20 @@ def merged_to_split(
     ctx_count = ctx_valid.sum(dim=0)  # (...)
     ctx_size = ctx_count.max().item() if context_size is None else context_size
     ctx_perm = torch.argsort(~ctx_valid, dim=0, stable=True)[:ctx_size]
-    ctx_keep = torch.arange(ctx_size, device=T.device) < ctx_count[..., None]
-    ctx_keep = ctx_keep.movedim(-1, 0)
+    ctx_oob = torch.arange(ctx_size, device=T.device) >= ctx_count[..., None]
+    ctx_oob = ctx_oob.movedim(-1, 0)
 
     qry_valid = M.any(dim=-1)
     qry_count = qry_valid.sum(dim=0)
     qry_size = qry_count.max().item() if query_size is None else query_size
     qry_perm = torch.argsort(~qry_valid, dim=0, stable=True)[:qry_size]
-    qry_keep = torch.arange(qry_size, device=T.device) < qry_count[..., None]
-    qry_keep = qry_keep.movedim(-1, 0)
+    qry_oob = torch.arange(qry_size, device=T.device) >= qry_count[..., None]
+    qry_oob = qry_oob.movedim(-1, 0)
 
     return SplitTimeData(
         context_times=(
             T.take_along_dim(ctx_perm, dim=0)
-            .masked_fill(~ctx_keep, nan)
+            .masked_fill(ctx_oob, nan)
             .unsqueeze(-1)
             .movedim(0, seq_dim)
             .squeeze(-1)
@@ -1698,7 +1698,7 @@ def merged_to_split(
         context_values=X.take_along_dim(ctx_perm[..., None], dim=0).movedim(0, seq_dim),
         query_times=(
             T.take_along_dim(qry_perm, dim=0)
-            .masked_fill(~qry_keep, nan)
+            .masked_fill(qry_oob, nan)
             .unsqueeze(-1)
             .movedim(0, seq_dim)
             .squeeze(-1)
