@@ -1901,8 +1901,8 @@ def batch_split(
             padding_value=False,
         ),
         target_values=(
-            pad_sequence(V, batch_first=batch_first, padding_value=nan)
-            if (V := _all_or_none(arg.target_values for arg in args)) is not None
+            pad_sequence(Y, batch_first=batch_first, padding_value=nan)
+            if (Y := _all_or_none(arg.target_values for arg in args)) is not None
             else None
         ),
         static_covariates=(
@@ -1944,8 +1944,8 @@ def batch_merged(
             padding_value=False,
         ),
         target_values=(
-            pad_sequence(V, batch_first=batch_first, padding_value=nan)
-            if (V := _all_or_none(arg.target_values for arg in args)) is not None
+            pad_sequence(Y, batch_first=batch_first, padding_value=nan)
+            if (Y := _all_or_none(arg.target_values for arg in args)) is not None
             else None
         ),
         static_covariates=(
@@ -1997,8 +1997,8 @@ def batch_triplet(
             padding_value=-1,
         ),
         target_values=(
-            pad_sequence(V, batch_first=batch_first, padding_value=nan)
-            if (V := _all_or_none(arg.target_values for arg in args)) is not None
+            pad_sequence(Y, batch_first=batch_first, padding_value=nan)
+            if (Y := _all_or_none(arg.target_values for arg in args)) is not None
             else None
         ),
         static_covariates=(
@@ -2017,19 +2017,29 @@ def batch_triplet(
 def unbatch_split(
     arg: AbstractSplitTimeData, /, *, batch_first: bool
 ) -> list[SplitTimeData]:
-    if not batch_first:
-        raise NotImplementedError("Only batch_first=True is supported.")
+    if isinstance(arg, SplitTimeData) and arg.batch_first != batch_first:
+        raise ValueError("arg.batch_first does not match batch_first.")
 
-    T = arg.context_times.unsqueeze(0).flatten(end_dim=-2)
-    C = arg.context_mask.unsqueeze(0).flatten(end_dim=-3)
-    X = arg.context_values.unsqueeze(0).flatten(end_dim=-3)
-    Q = arg.query_times.unsqueeze(0).flatten(end_dim=-2)
-    M = arg.query_mask.unsqueeze(0).flatten(end_dim=-3)
+    # convert to batch_first for unpadding
+    seq_dim = -2 if batch_first else 0
+    T = arg.context_times.unsqueeze(-1).movedim(seq_dim, -2).squeeze(-1)
+    C = arg.context_mask.movedim(seq_dim, -2)
+    X = arg.context_values.movedim(seq_dim, -2)
+    Q = arg.query_times.unsqueeze(-1).movedim(seq_dim, -2).squeeze(-1)
+    M = arg.query_mask.movedim(seq_dim, -2)
     Y = (
-        arg.target_values.unsqueeze(0).flatten(end_dim=-3)
+        arg.target_values.movedim(seq_dim, -2)
         if arg.target_values is not None
         else None
     )
+
+    # flatten the batch dimensions to simplify unpadding, then unpad each sample
+    T = T.unsqueeze(0).flatten(end_dim=-2)
+    C = C.unsqueeze(0).flatten(end_dim=-3)
+    X = X.unsqueeze(0).flatten(end_dim=-3)
+    Q = Q.unsqueeze(0).flatten(end_dim=-2)
+    M = M.unsqueeze(0).flatten(end_dim=-3)
+    Y = Y.unsqueeze(0).flatten(end_dim=-3) if Y is not None else None
 
     context_lengths = T.isfinite().sum(dim=-1)
     query_lengths = Q.isfinite().sum(dim=-1)
@@ -2072,20 +2082,29 @@ def unbatch_split(
 def unbatch_merged(
     arg: AbstractMergedTimeData, /, *, batch_first: bool
 ) -> list[MergedTimeData]:
-    if not batch_first:
-        raise NotImplementedError("Only batch_first=True is supported.")
+    if isinstance(arg, MergedTimeData) and arg.batch_first != batch_first:
+        raise ValueError("arg.batch_first does not match batch_first.")
 
-    T = arg.timestamps.unsqueeze(0).flatten(end_dim=-2)
-    C = arg.context_mask.unsqueeze(0).flatten(end_dim=-3)
-    X = arg.context_values.unsqueeze(0).flatten(end_dim=-3)
-    M = arg.query_mask.unsqueeze(0).flatten(end_dim=-3)
+    # convert to batch_first for unpadding
+    seq_dim = -2 if batch_first else 0
+    T = arg.timestamps.unsqueeze(-1).movedim(seq_dim, -2).squeeze(-1)
+    C = arg.context_mask.movedim(seq_dim, -2)
+    X = arg.context_values.movedim(seq_dim, -2)
+    M = arg.query_mask.movedim(seq_dim, -2)
     Y = (
-        arg.target_values.unsqueeze(0).flatten(end_dim=-3)
+        arg.target_values.movedim(seq_dim, -2)
         if arg.target_values is not None
         else None
     )
 
-    lengths = T.isfinite().sum(dim=-1)
+    # flatten the batch dimensions to simplify unpadding, then unpad each sample
+    T_flat = T.unsqueeze(0).flatten(end_dim=-2)
+    C_flat = C.unsqueeze(0).flatten(end_dim=-3)
+    X_flat = X.unsqueeze(0).flatten(end_dim=-3)
+    M_flat = M.unsqueeze(0).flatten(end_dim=-3)
+    Y_flat = Y.unsqueeze(0).flatten(end_dim=-3) if Y is not None else None
+
+    lengths = T_flat.isfinite().sum(dim=-1)
 
     return [
         MergedTimeData(
@@ -2100,19 +2119,19 @@ def unbatch_merged(
             validate_args=False,  # skip validation since we trust the arguments
         )
         for time, c_mask, c_value, q_mask, q_value, static_arg in zip(
-            unpad_sequence(T, lengths, batch_first=True),
-            unpad_sequence(C, lengths, batch_first=True),
-            unpad_sequence(X, lengths, batch_first=True),
-            unpad_sequence(M, lengths, batch_first=True),
+            unpad_sequence(T_flat, lengths, batch_first=True),
+            unpad_sequence(C_flat, lengths, batch_first=True),
+            unpad_sequence(X_flat, lengths, batch_first=True),
+            unpad_sequence(M_flat, lengths, batch_first=True),
             (
-                unpad_sequence(Y, lengths, batch_first=True)
-                if Y is not None
-                else [None] * len(T)
+                unpad_sequence(Y_flat, lengths, batch_first=True)
+                if Y_flat is not None
+                else [None] * len(T_flat)
             ),
             (
                 arg.static_covariates.unsqueeze(0).flatten(end_dim=-2)
                 if arg.static_covariates is not None
-                else [None] * len(T)
+                else [None] * len(T_flat)
             ),
             strict=True,
         )
@@ -2123,20 +2142,32 @@ def unbatch_triplet(
     arg: AbstractTripletTimeData, /, *, batch_first: bool
 ) -> list[TripletTimeData]:
     # normalize to batch_first for conversion & flatten batch dimensions
+    if isinstance(arg, TripletTimeData) and arg.batch_first != batch_first:
+        raise ValueError("arg.batch_first does not match batch_first.")
+
+    # convert to batch_first for unpadding
     seq_dim = -1 if batch_first else 0
-    T = arg.context_times.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
-    C = arg.context_channels.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
-    X = arg.context_values.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
-    Q = arg.query_times.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
-    M = arg.query_channels.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
+    T = arg.context_times.movedim(seq_dim, -1)
+    C = arg.context_channels.movedim(seq_dim, -1)
+    X = arg.context_values.movedim(seq_dim, -1)
+    Q = arg.query_times.movedim(seq_dim, -1)
+    M = arg.query_channels.movedim(seq_dim, -1)
     Y = (
-        arg.target_values.movedim(seq_dim, -1).unsqueeze(0).flatten(end_dim=-2)
+        arg.target_values.movedim(seq_dim, -1)
         if arg.target_values is not None
         else None
     )
 
-    context_lengths = T.isfinite().sum(dim=-1)
-    query_lengths = Q.isfinite().sum(dim=-1)
+    # flatten the batch dimensions to simplify unpadding, then unpad each sample
+    T_flat = T.unsqueeze(0).flatten(end_dim=-2)
+    C_flat = C.unsqueeze(0).flatten(end_dim=-2)
+    X_flat = X.unsqueeze(0).flatten(end_dim=-2)
+    Q_flat = Q.unsqueeze(0).flatten(end_dim=-2)
+    M_flat = M.unsqueeze(0).flatten(end_dim=-2)
+    Y_flat = Y.unsqueeze(0).flatten(end_dim=-2) if Y is not None else None
+
+    context_lengths = T_flat.isfinite().sum(dim=-1)
+    query_lengths = Q_flat.isfinite().sum(dim=-1)
 
     return [
         TripletTimeData(
@@ -2152,20 +2183,20 @@ def unbatch_triplet(
             validate_args=False,  # skip validation since we trust the arguments
         )
         for c_time, c_channel, c_value, q_time, q_channel, q_value, static_arg in zip(
-            unpad_sequence(T, context_lengths, batch_first=True),
-            unpad_sequence(C, context_lengths, batch_first=True),
-            unpad_sequence(X, context_lengths, batch_first=True),
-            unpad_sequence(Q, query_lengths, batch_first=True),
-            unpad_sequence(M, query_lengths, batch_first=True),
+            unpad_sequence(T_flat, context_lengths, batch_first=True),
+            unpad_sequence(C_flat, context_lengths, batch_first=True),
+            unpad_sequence(X_flat, context_lengths, batch_first=True),
+            unpad_sequence(Q_flat, query_lengths, batch_first=True),
+            unpad_sequence(M_flat, query_lengths, batch_first=True),
             (
-                unpad_sequence(Y, query_lengths, batch_first=True)
-                if Y is not None
-                else [None] * len(Q)
+                unpad_sequence(Y_flat, query_lengths, batch_first=True)
+                if Y_flat is not None
+                else [None] * len(Q_flat)
             ),
             (
                 arg.static_covariates.unsqueeze(0).flatten(end_dim=-2)
                 if arg.static_covariates is not None
-                else [None] * len(T)
+                else [None] * len(T_flat)
             ),
             strict=True,
         )
