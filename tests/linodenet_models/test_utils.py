@@ -1401,7 +1401,7 @@ class TestSplitTimeData:
         original = TEST_DATA["simple", "single", batch_first]["split"]
 
         unbatched = original.unbatch()
-        actual = SplitTimeData.from_unbatched(unbatched)
+        actual = SplitTimeData.from_unbatched(unbatched, batch_first=batch_first)
 
         assert all(arg.batch_first is batch_first for arg in unbatched)
         assert actual.batch_shape == original.batch_shape
@@ -1919,7 +1919,7 @@ class TestMergedTimeData:
         original = TEST_DATA["simple", "single", batch_first]["merged"]
 
         unbatched = original.unbatch()
-        actual = MergedTimeData.from_unbatched(unbatched)
+        actual = MergedTimeData.from_unbatched(unbatched, batch_first=batch_first)
 
         assert all(arg.batch_first is batch_first for arg in unbatched)
         assert actual.batch_shape == original.batch_shape
@@ -2373,7 +2373,7 @@ class TestTripletTimeData:
             ),
         ]
 
-        actual = TripletTimeData.from_unbatched(args)
+        actual = TripletTimeData.from_unbatched(args, batch_first=True)
         expected = TripletTimeData(
             context_times=torch.tensor([
                 [1.0, nan],
