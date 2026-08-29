@@ -22,7 +22,6 @@ from linodenet_models.utils import (
     triplet_to_merged,
     triplet_to_split,
 )
-from tests.testing import pytest_xfail
 
 from .base import make_continuous_time_request
 
@@ -1296,7 +1295,6 @@ class TestSplitTimeData:
         ).is_trimmed()
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_split(self, batch_shape: tuple[int, ...], batch_first: bool) -> None:
         data = _simple_test_data(batch_shape, batch_first)
 
@@ -1307,7 +1305,6 @@ class TestSplitTimeData:
         assert actual == data["split"]
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_merged(self, batch_shape: tuple[int, ...], batch_first: bool) -> None:
         data = _simple_test_data(batch_shape, batch_first)
 
@@ -1318,7 +1315,6 @@ class TestSplitTimeData:
         assert actual == data["merged"]
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_triplet(self, batch_shape: tuple[int, ...], batch_first: bool) -> None:
         data = _simple_test_data(batch_shape, batch_first)
 
@@ -1329,7 +1325,6 @@ class TestSplitTimeData:
         assert actual == data["triplet"]
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_roundtrip_split(
         self, batch_shape: tuple[int, ...], batch_first: bool
     ) -> None:
@@ -1341,7 +1336,6 @@ class TestSplitTimeData:
         assert actual.batch_first is batch_first
         assert actual == original
 
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     @BATCH_PARAMETERS
     def test_roundtrip_merged(
         self, batch_shape: tuple[int, ...], batch_first: bool
@@ -1354,7 +1348,6 @@ class TestSplitTimeData:
         assert actual.batch_first is batch_first
         assert actual == original
 
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     @BATCH_PARAMETERS
     def test_roundtrip_triplet(
         self, batch_shape: tuple[int, ...], batch_first: bool
@@ -1403,7 +1396,6 @@ class TestSplitTimeData:
         assert not actual.batch_first
         assert actual == original
 
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_unbatch(self, batch_first: bool) -> None:
         original = TEST_DATA["simple", "single", batch_first]["split"]
@@ -1416,7 +1408,6 @@ class TestSplitTimeData:
         assert actual.batch_first is batch_first
         assert actual == original
 
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_from_unbatched(self, batch_first: bool) -> None:
         originals = [
@@ -1822,7 +1813,6 @@ class TestMergedTimeData:
         ).is_trimmed()
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_split(self, batch_shape: tuple[int, ...], batch_first: bool) -> None:
         data = _simple_test_data(batch_shape, batch_first)
 
@@ -1833,7 +1823,6 @@ class TestMergedTimeData:
         assert actual == data["split"]
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_merged(self, batch_shape: tuple[int, ...], batch_first: bool) -> None:
         data = _simple_test_data(batch_shape, batch_first)
 
@@ -1844,7 +1833,6 @@ class TestMergedTimeData:
         assert actual == data["merged"]
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_triplet(self, batch_shape: tuple[int, ...], batch_first: bool) -> None:
         data = _simple_test_data(batch_shape, batch_first)
 
@@ -1855,7 +1843,6 @@ class TestMergedTimeData:
         assert actual == data["triplet"]
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_roundtrip_split(
         self, batch_shape: tuple[int, ...], batch_first: bool
     ) -> None:
@@ -1868,7 +1855,6 @@ class TestMergedTimeData:
         assert actual == original
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_roundtrip_merged(
         self, batch_shape: tuple[int, ...], batch_first: bool
     ) -> None:
@@ -1880,7 +1866,6 @@ class TestMergedTimeData:
         assert actual.batch_first is batch_first
         assert actual == original
 
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     @BATCH_PARAMETERS
     def test_roundtrip_triplet(
         self, batch_shape: tuple[int, ...], batch_first: bool
@@ -1929,7 +1914,6 @@ class TestMergedTimeData:
         assert not actual.batch_first
         assert actual == original
 
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_unbatch(self, batch_first: bool) -> None:
         original = TEST_DATA["simple", "single", batch_first]["merged"]
@@ -1942,7 +1926,6 @@ class TestMergedTimeData:
         assert actual.batch_first is batch_first
         assert actual == original
 
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_from_unbatched(self, batch_first: bool) -> None:
         originals = [
@@ -1959,7 +1942,6 @@ class TestMergedTimeData:
         assert actual == originals
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_split_without_target_values(
         self, batch_shape: tuple[int, ...], batch_first: bool
     ) -> None:
@@ -2136,7 +2118,6 @@ class TestTripletTimeData:
         ).is_trimmed()
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_split(self, batch_shape: tuple[int, ...], batch_first: bool) -> None:
         data = _simple_test_data(batch_shape, batch_first)
 
@@ -2147,7 +2128,6 @@ class TestTripletTimeData:
         assert actual == data["split"]
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_merged(self, batch_shape: tuple[int, ...], batch_first: bool) -> None:
         data = _simple_test_data(batch_shape, batch_first)
 
@@ -2158,7 +2138,6 @@ class TestTripletTimeData:
         assert actual == data["merged"]
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_to_triplet(self, batch_shape: tuple[int, ...], batch_first: bool) -> None:
         data = _simple_test_data(batch_shape, batch_first)
 
@@ -2169,7 +2148,6 @@ class TestTripletTimeData:
         assert actual == data["triplet"]
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_roundtrip_split(
         self, batch_shape: tuple[int, ...], batch_first: bool
     ) -> None:
@@ -2182,7 +2160,6 @@ class TestTripletTimeData:
         assert actual == original
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_roundtrip_merged(
         self, batch_shape: tuple[int, ...], batch_first: bool
     ) -> None:
@@ -2195,7 +2172,6 @@ class TestTripletTimeData:
         assert actual == original
 
     @BATCH_PARAMETERS
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     def test_roundtrip_triplet(
         self, batch_shape: tuple[int, ...], batch_first: bool
     ) -> None:
@@ -2243,7 +2219,6 @@ class TestTripletTimeData:
         assert not actual.batch_first
         assert actual == original
 
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_unbatch(self, batch_first: bool) -> None:
         original = TEST_DATA["simple", "single", batch_first]["triplet"]
@@ -2256,7 +2231,6 @@ class TestTripletTimeData:
         assert actual.batch_first is batch_first
         assert actual == original
 
-    @pytest_xfail(raises=NotImplementedError, strict=False)
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_from_unbatched(self, batch_first: bool) -> None:
         originals = [
