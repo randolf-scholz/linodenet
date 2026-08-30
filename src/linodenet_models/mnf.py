@@ -2387,10 +2387,15 @@ class Moses(nn.Module):
             query_mask=query_mask,
         )
 
-        samples = self._sample_triplets(size, triplets, rng=rng)  # (*S, ..., $K)
+        samples_flat = self._sample_triplets(size, triplets, rng=rng)  # (*S, ..., $K)
 
         # reshape the samples from (*S, ..., $K) to (*S, ..., $Q, F)
-        return samples[..., *triplets.query_indices].masked_fill(~query_mask, nan)
+        samples = samples_flat[..., *triplets.query_indices]  # (*S, ..., Q′, F)
+        *shape, sample_size, qry_dim = samples.shape
+        *_, qry_size, _ = query_mask.shape
+        padding = samples.new_full((*shape, qry_size - sample_size, qry_dim), nan)
+        samples = torch.cat([samples, padding], dim=-2)  # (*S, ..., Q, F)
+        return samples.masked_fill(~query_mask, nan)
 
     def sample_and_log_prob(
         self,
@@ -2442,13 +2447,13 @@ class Moses(nn.Module):
         )
 
         # select one component along the head axis D: (*S, ..., D, $K) -> (*S, ..., $K)
-        samples = y.take_along_dim(indices[..., None, None], dim=-2).squeeze(-2)
+        samples_flat = y.take_along_dim(indices[..., None, None], dim=-2).squeeze(-2)
 
         # Broadcast the selected samples back across D to evaluate the full mixture log-prob.
         # log p(x) = log ∑ wᵢ pᵢ(x) = logsumexp(log wᵢ + log pᵢ(x))
         # log pᵢ(x) = log qᵢ(f⁻¹(x)) + log |det J(f⁻¹(x))|
         z_selected, logabsdet = self.conditional_flow.encode_and_logabsdet(
-            samples.unsqueeze(-2), h, valid_mask=query_valid
+            samples_flat.unsqueeze(-2), h, valid_mask=query_valid
         )
         base_log_prob = self.base_distribution.log_prob(
             z_selected, h, valid_mask=query_valid
@@ -2461,10 +2466,15 @@ class Moses(nn.Module):
 
         # store buffers
         self.indices = indices  # (*S, ...)
-        self.samples = samples  # (*S, ..., $K)
+        self.samples = samples_flat  # (*S, ..., $K)
         self.log_probs = log_probs  # (*S, ...)
 
         # reshape the samples from (*S, ..., $K) to (*S, ..., $Q, F)
-        samples = samples[..., *triplets.query_indices].masked_fill(~query_mask, nan)
+        samples = samples_flat[..., *triplets.query_indices]  # (*S, ..., Q′, F)
+        *shape, sample_size, qry_dim = samples.shape
+        *_, qry_size, _ = query_mask.shape
+        padding = samples.new_full((*shape, qry_size - sample_size, qry_dim), nan)
+        samples = torch.cat([samples, padding], dim=-2)  # (*S, ..., Q, F)
+        samples = samples.masked_fill(~query_mask, nan)
 
         return samples, log_probs
