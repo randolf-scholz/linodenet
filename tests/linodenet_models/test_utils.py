@@ -1955,7 +1955,7 @@ class TestMergedTimeData:
         assert actual == replace(data["split"], target_values=None)
 
     @pytest.mark.parametrize("batch_shape", BATCH_SHAPES.values())
-    def test_query_and_context_indices_match_split_time(
+    def test_indices_reconstruct_split_data_faithfully(
         self, batch_shape: tuple[int, ...]
     ) -> None:
         original = make_continuous_time_request(
@@ -1978,42 +1978,42 @@ class TestMergedTimeData:
 
         assert_close(
             original.query_times,
-            merged_data.timestamps[query_indices],
+            merged_data.timestamps[..., *query_indices],
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
         )
         assert_close(
             original.query_mask,
-            merged_data.query_mask[query_indices],
+            merged_data.query_mask[..., *query_indices, :],
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
         )
         assert_close(
             original.target_values,
-            merged_data.target_values[query_indices],
+            merged_data.target_values[..., *query_indices, :],
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
         )
         assert_close(
             original.context_times,
-            merged_data.timestamps[context_indices],
+            merged_data.timestamps[..., *context_indices],
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
         )
         assert_close(
             original.context_mask,
-            merged_data.context_mask[context_indices],
+            merged_data.context_mask[..., *context_indices, :],
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
         )
         assert_close(
             original.context_values,
-            merged_data.context_values[context_indices],
+            merged_data.context_values[..., *context_indices, :],
             atol=0.0,
             rtol=0.0,
             equal_nan=True,
