@@ -30,7 +30,7 @@ __all__ = [
 
 import math
 from collections.abc import Collection, Iterable
-from dataclasses import InitVar, dataclass, field, replace
+from dataclasses import InitVar, dataclass, replace
 from typing import NamedTuple, Protocol
 
 import torch
@@ -481,16 +481,6 @@ class SplitTimeData:
     # metadata
     batch_first: bool = True
     r"""Whether the batch axes come before or after the time axes."""
-    batch_shape: tuple[int, ...] = field(init=False)
-    r"""The shape of the batch dimension."""
-    context_size: int = field(init=False)
-    r"""The maximum context size observed in the batch."""
-    query_size: int = field(init=False)
-    r"""The maximum query size observed in the batch."""
-    context_dim: int = field(init=False)
-    r"""The shape of the context dimension."""
-    query_dim: int = field(init=False)
-    r"""The shape of the query dimension."""
 
     # init options
     validate_args: InitVar[bool] = True
@@ -517,17 +507,6 @@ class SplitTimeData:
             self.validate()
 
     def _normalize(self) -> None:
-        seq_dim = -2 if self.batch_first else 0
-        batch_shape = (
-            self.context_times.shape[:-1]
-            if self.batch_first
-            else self.context_times.shape[1:]
-        )
-        context_size = self.context_mask.shape[seq_dim]
-        query_size = self.query_mask.shape[seq_dim]
-        context_dim = self.context_mask.shape[-1]
-        query_dim = self.query_mask.shape[-1]
-
         # sanitize context and target values
         with torch.no_grad():
             context_values = self.context_values.masked_fill_(~self.context_mask, nan)
@@ -537,14 +516,32 @@ class SplitTimeData:
                 else None
             )
 
-        # set metadata
-        object.__setattr__(self, "batch_shape", batch_shape)
-        object.__setattr__(self, "query_dim", query_dim)
-        object.__setattr__(self, "context_dim", context_dim)
-        object.__setattr__(self, "context_size", context_size)
-        object.__setattr__(self, "query_size", query_size)
         object.__setattr__(self, "context_values", context_values)
         object.__setattr__(self, "target_values", target_values)
+
+    @property
+    def batch_shape(self) -> tuple[int, ...]:
+        return (
+            self.context_times.shape[:-1]
+            if self.batch_first
+            else self.context_times.shape[1:]
+        )
+
+    @property
+    def context_size(self) -> int:
+        return self.context_mask.shape[-2 if self.batch_first else 0]
+
+    @property
+    def context_dim(self) -> int:
+        return self.context_mask.shape[-1]
+
+    @property
+    def query_size(self) -> int:
+        return self.query_mask.shape[-2 if self.batch_first else 0]
+
+    @property
+    def query_dim(self) -> int:
+        return self.query_mask.shape[-1]
 
     def validate(self) -> None:
         # normalize to batch_first for validation
@@ -562,8 +559,7 @@ class SplitTimeData:
 
         # check shapes
         *batch_shape, context_size, _ = X.shape
-        *_, query_size = Q.shape
-        *_, query_dim = M.shape
+        *_, query_size, query_dim = M.shape
         assert C.dtype == torch.bool
         assert M.dtype == torch.bool
         assert T.shape == (*batch_shape, context_size)
@@ -744,16 +740,10 @@ class MergedTimeData:
     # metadata
     batch_first: bool = True
     r"""Whether the batch axes come before or after the time axes."""
-    batch_shape: tuple[int, ...] = field(init=False)
-    r"""The shape of the batch dimension."""
     context_size: int = -1
     r"""The maximum context size observed in the batch."""
     query_size: int = -1
     r"""The maximum query size observed in the batch."""
-    context_dim: int = field(init=False)
-    r"""The shape of the context dimension."""
-    query_dim: int = field(init=False)
-    r"""The shape of the query dimension."""
 
     validate_args: InitVar[bool] = True
     r"""Whether to validate the arguments."""
@@ -792,25 +782,6 @@ class MergedTimeData:
             self.validate()
 
     def _normalize(self) -> None:
-        seq_dim = -1 if self.batch_first else 0
-        batch_shape = (
-            self.timestamps.shape[:-1]
-            if self.batch_first
-            else self.timestamps.shape[1:]
-        )
-        context_size = (
-            self.context_size
-            if self.context_size >= 0
-            else int(self.context_mask.any(dim=-1).sum(dim=seq_dim).max().item())
-        )
-        query_size = (
-            self.query_size
-            if self.query_size >= 0
-            else int(self.query_mask.any(dim=-1).sum(dim=seq_dim).max().item())
-        )
-        context_dim = self.context_mask.shape[-1]
-        query_dim = self.query_mask.shape[-1]
-
         # sanitize context and target values
         with torch.no_grad():
             context_values = self.context_values.masked_fill_(~self.context_mask, nan)
@@ -819,15 +790,38 @@ class MergedTimeData:
                 if self.target_values is not None
                 else None
             )
-
+        seq_dim = -1 if self.batch_first else 0
+        context_size = int(
+            self.context_size
+            if self.context_size >= 0
+            else self.context_mask.any(dim=-1).sum(dim=seq_dim).max().item()
+        )
+        query_size = int(
+            self.query_size
+            if self.query_size >= 0
+            else self.query_mask.any(dim=-1).sum(dim=seq_dim).max().item()
+        )
         # set metadata
-        object.__setattr__(self, "batch_shape", batch_shape)
-        object.__setattr__(self, "query_dim", query_dim)
-        object.__setattr__(self, "context_dim", context_dim)
         object.__setattr__(self, "context_size", context_size)
         object.__setattr__(self, "query_size", query_size)
         object.__setattr__(self, "context_values", context_values)
         object.__setattr__(self, "target_values", target_values)
+
+    @property
+    def batch_shape(self) -> tuple[int, ...]:
+        return (
+            self.timestamps.shape[:-1]
+            if self.batch_first
+            else self.timestamps.shape[1:]
+        )
+
+    @property
+    def context_dim(self) -> int:
+        return self.context_mask.shape[-1]
+
+    @property
+    def query_dim(self) -> int:
+        return self.query_mask.shape[-1]
 
     def validate(self) -> None:
         # normalize to batch_first for validation
@@ -1135,8 +1129,6 @@ class TripletTimeData:
     # metadata
     batch_first: bool = True
     r"""Whether the batch axes come before or after the time axes."""
-    batch_shape: tuple[int, ...] = field(init=False)
-    r"""The shape of the batch dimension."""
     context_dim: int = -1
     r"""The shape of the context dimension."""
     query_dim: int = -1
@@ -1184,22 +1176,6 @@ class TripletTimeData:
         )
 
     def _normalize(self) -> None:
-        batch_shape = (
-            self.context_channels.shape[:-1]
-            if self.batch_first
-            else self.context_channels.shape[1:]
-        )
-        context_dim = (
-            self.context_dim
-            if self.context_dim >= 0
-            else int(self.context_channels.max().item()) + 1
-        )
-        query_dim = (
-            self.query_dim
-            if self.query_dim >= 0
-            else int(self.query_channels.max().item()) + 1
-        )
-
         # sanitize context and target values
         with torch.no_grad():
             context_values = self.context_values.masked_fill_(
@@ -1211,12 +1187,30 @@ class TripletTimeData:
                 else None
             )
 
+        context_dim = (
+            self.context_dim
+            if self.context_dim >= 0
+            else int(self.context_channels.max().item()) + 1
+        )
+        query_dim = (
+            self.query_dim
+            if self.query_dim >= 0
+            else int(self.query_channels.max().item()) + 1
+        )
+
         # set metadata
-        object.__setattr__(self, "batch_shape", batch_shape)
-        object.__setattr__(self, "query_dim", query_dim)
         object.__setattr__(self, "context_dim", context_dim)
+        object.__setattr__(self, "query_dim", query_dim)
         object.__setattr__(self, "context_values", context_values)
         object.__setattr__(self, "target_values", target_values)
+
+    @property
+    def batch_shape(self) -> tuple[int, ...]:
+        return (
+            self.context_channels.shape[:-1]
+            if self.batch_first
+            else self.context_channels.shape[1:]
+        )
 
     def validate(self) -> None:
         # normalize to batch_first for validation
@@ -1331,77 +1325,17 @@ class TripletTimeData:
         batch_first: bool = True,
         validate: bool = True,
     ) -> TripletTimeData:
-        # normalize to batch_first for conversion
-        seq_dim = -2 if batch_first else 0
-        context_times = context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
-        context_mask = context_mask.movedim(seq_dim, -2)
-        context_values = context_values.movedim(seq_dim, -2)
-        query_times = query_times[..., None].movedim(seq_dim, -2).squeeze(-1)
-        query_mask = query_mask.movedim(seq_dim, -2)
-        target_values = (
-            target_values.movedim(seq_dim, -2) if target_values is not None else None
-        )
-
-        *batch_shape, _, _ = context_values.shape
-        *ctx_batch_idx, ctx_time, ctx_dim = context_mask.nonzero(as_tuple=True)
-        ctx_counts = context_mask.sum(dim=(-2, -1))
-        ctx_positions = torch.arange(ctx_time.numel(), device=ctx_time.device)
-        ctx_offsets = (
-            ctx_counts.flatten().cumsum(dim=0).reshape(batch_shape) - ctx_counts
-        )
-        ctx_idx = (*ctx_batch_idx, ctx_positions - ctx_offsets[*ctx_batch_idx])
-        num_context = int(ctx_counts.max().item())
-
-        *qry_batch_idx, qry_time, qry_dim = query_mask.nonzero(as_tuple=True)
-        qry_counts = query_mask.sum(dim=(-2, -1))
-        qry_positions = torch.arange(qry_time.numel(), device=qry_time.device)
-        qry_offsets = (
-            qry_counts.flatten().cumsum(dim=0).reshape(batch_shape) - qry_counts
-        )
-        qry_idx = (*qry_batch_idx, qry_positions - qry_offsets[*qry_batch_idx])
-        num_query = int(qry_counts.max().item())
-
-        seq_dim = -1 if batch_first else 0
-        return TripletTimeData(
-            context_times=(
-                context_times.new_full((*batch_shape, num_context), nan)
-                .index_put(ctx_idx, context_times[*ctx_batch_idx, ctx_time])
-                .movedim(-1, seq_dim)
-            ),
-            context_channels=(
-                ctx_dim.new_full((*batch_shape, num_context), -1)
-                .index_put(ctx_idx, ctx_dim)
-                .movedim(-1, seq_dim)
-            ),
-            context_values=(
-                context_values.new_full((*batch_shape, num_context), nan)
-                .index_put(ctx_idx, context_values[*ctx_batch_idx, ctx_time, ctx_dim])
-                .movedim(-1, seq_dim)
-            ),
-            query_times=(
-                query_times.new_full((*batch_shape, num_query), nan)
-                .index_put(qry_idx, query_times[*qry_batch_idx, qry_time])
-                .movedim(-1, seq_dim)
-            ),
-            query_channels=(
-                qry_dim.new_full((*batch_shape, num_query), -1)
-                .index_put(qry_idx, qry_dim)
-                .movedim(-1, seq_dim)
-            ),
-            target_values=(
-                target_values.new_full((*batch_shape, num_query), nan)
-                .index_put(qry_idx, target_values[*qry_batch_idx, qry_time, qry_dim])
-                .movedim(-1, seq_dim)
-                if target_values is not None
-                else None
-            ),
+        return SplitTimeData(
+            context_times=context_times,
+            context_mask=context_mask,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=query_mask,
+            target_values=target_values,
             static_covariates=static_covariates,
-            # metadata
-            context_dim=context_mask.shape[-1],
-            query_dim=query_mask.shape[-1],
             batch_first=batch_first,
             validate_args=validate,
-        )
+        ).to_triplet()
 
     @classmethod
     def from_unbatched(
