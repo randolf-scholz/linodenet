@@ -2339,11 +2339,11 @@ class Moses(nn.Module):
             Joint log-likelihood with shape ``(*S, ...)``.
         """
         sample_shape = values.shape[:-2]
-        context_times = torch.broadcast_to(context_times, (*sample_shape, -1))
-        context_values = torch.broadcast_to(context_values, (*sample_shape, -1, -1))
-        context_mask = torch.broadcast_to(context_mask, (*sample_shape, -1, -1))
-        query_times = torch.broadcast_to(query_times, (*sample_shape, -1))
-        query_mask = torch.broadcast_to(query_mask, (*sample_shape, -1, -1))
+        context_times = context_times.expand(*sample_shape, -1)
+        context_values = context_values.expand(*sample_shape, -1, -1)
+        context_mask = context_mask.expand(*sample_shape, -1, -1)
+        query_times = query_times.expand(*sample_shape, -1)
+        query_mask = query_mask.expand(*sample_shape, -1, -1)
         triplets = TripletTimeData.from_request(
             context_times=context_times,
             context_values=context_values,
@@ -2351,6 +2351,7 @@ class Moses(nn.Module):
             query_times=query_times,
             query_mask=query_mask,
             target_values=values,
+            validate=False,
         )
         return self._log_prob_triplets(triplets)
 
