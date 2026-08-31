@@ -6,12 +6,12 @@ __all__ = [
     "LinodenetProbabilistic",
     "LinearGaussianFlow",
     "KoopmanFilter",
-    "Augment",
     "make_koopman_filter",
     "make_linodenet_prob",
     "make_linodenet",
 ]
 
+import math
 import warnings
 from collections.abc import Callable, Mapping
 from typing import Any, Final, Optional
@@ -612,25 +612,6 @@ def make_linodenet_prob(
     )
 
 
-class Augment(nn.Module):
-    r"""Augment a latent space with additional dimensions."""
-
-    def __init__(
-        self, input_size: int, latent_size: int, *, encoder: nn.Module
-    ) -> None:
-        super().__init__()
-        self.input_size = input_size
-        self.latent_size = latent_size
-        self.encoder = encoder
-
-    def encode_and_logabsdet(self, x: Tensor, /) -> Tensor:
-        e, ldj = self.encoder.sample_and_log_prob(x.shape[:-1])
-        return torch.cat([x, e], dim=self.dim), ldj
-
-    def decode(self, z: Tensor, /) -> Tensor:
-        return z[..., : self.input_size]  # only keep the first n values
-
-
 class KoopmanFilter(nn.Module):
     r"""Working title.
 
@@ -657,6 +638,7 @@ class KoopmanFilter(nn.Module):
     prior_covs: Tensor
     posterior_means: Tensor
     posterior_covs: Tensor
+    mc_noise: Tensor  # monte carlo noise
 
     def __init__(
         self,
@@ -694,7 +676,7 @@ class KoopmanFilter(nn.Module):
         self.initial_cov = nn.Parameter(torch.zeros(self.latent_size, self.latent_size))
         self.initial_cov_parametrization = PositiveDefinite()
         self.observation_log_variance = nn.Parameter(
-            torch.full((input_size,), 2.0 * torch.log(torch.tensor(observation_noise)))
+            torch.full((input_size,), 2.0 * math.log(observation_noise))
         )
 
         # Common random numbers make Monte Carlo bounds reproducible across
@@ -822,7 +804,7 @@ class KoopmanFilter(nn.Module):
         for _ in range(n_iter):
             # Pack the N Cholesky columns as a batch of tangent directions.
             # This computes H L without materializing the full H (..., n, N).
-            h, HL_transposed = torch.func.jvp(
+            h, HL_transposed, *_ = torch.func.jvp(
                 self.observation,
                 (μ.unsqueeze(-2).expand_as(L.mT).clone(),),
                 (L.mT,),
