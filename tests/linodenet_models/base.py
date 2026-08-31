@@ -992,9 +992,7 @@ class TestProbabilisticModel[
         assert_close(log_probs, log_prob_via_sample)
 
 
-class TestPathCTM[
-    M: PathForecastingModel,
-](TestContinuousTimeModel[M]):  # type: ignore[type-var]
+class TestPathModel[M: PathForecastingModel](TestContinuousTimeModel[M]):  # type: ignore[type-var]
     @pytest.mark.parametrize("batch_shape", [(), (1,), (1, 2, 3)], ids=str)
     def test_log_prob_succeeds(
         self,

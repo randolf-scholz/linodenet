@@ -21,7 +21,7 @@ from linodenet_models.mnf import (
 )
 from linodenet_models.utils import SplitTimeData
 
-from .base import TestPathCTM
+from .base import TestPathModel
 
 
 def _manual_mixture_samples(
@@ -285,7 +285,7 @@ class TestMarginalizableNormalizingFlow:
         assert final_loss < initial_loss
 
 
-class TestMoses(TestPathCTM[Moses]):
+class TestMoses(TestPathModel[Moses]):
     r"""Shared forecasting-model and smoke tests for Moses."""
 
     SEED: ClassVar[int] = 0
