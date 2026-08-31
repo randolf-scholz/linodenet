@@ -13,9 +13,15 @@ from linodenet_models import PathForecastingModel, ProbabilisticForecastingModel
 from linodenet_models.utils import SplitTimeData
 
 
-def _as_generator(seed: int | torch.Generator, /) -> torch.Generator:
+def _as_generator(
+    seed: int | torch.Generator, /, *, device: torch.device
+) -> torch.Generator:
     r"""Return a torch generator from an integer seed or existing generator."""
-    return torch.Generator().manual_seed(seed) if isinstance(seed, int) else seed
+    return (
+        torch.Generator(device=device).manual_seed(seed)
+        if isinstance(seed, int)
+        else seed
+    )
 
 
 def assert_probabilistic_self_consistent(
@@ -122,35 +128,49 @@ def make_continuous_time_request(
     input_missingness: bool = False,
     target_missingness: bool = False,
     batch_first: bool = True,
+    device: torch.device | None = None,
 ) -> SplitTimeData:
     r"""Sample random dense forecasting inputs for a forecasting model."""
-    rng = _as_generator(rng)
+    device = torch.device("cpu") if device is None else device
+    rng = _as_generator(rng, device=device)
     batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
     output_shape = output_shape if output_shape is not None else context_shape
 
     ctx_lengths = torch.randint(  # (...)
-        min_steps, max_steps + 1, size=batch_shape, generator=rng
+        min_steps, max_steps + 1, size=batch_shape, device=device, generator=rng
     )
     qry_lengths = torch.randint(  # (...)
-        min_steps, max_steps + 1, size=batch_shape, generator=rng
+        min_steps, max_steps + 1, size=batch_shape, device=device, generator=rng
     )
     ctx_size = max_steps  # int(ctx_lengths.max())
     qry_size = max_steps  # int(qry_lengths.max())
 
     # sample values
-    ctx_values = torch.randn(*batch_shape, ctx_size, *context_shape, generator=rng)
-    tgt_values = torch.randn(*batch_shape, qry_size, *output_shape, generator=rng)
+    ctx_values = torch.randn(
+        *batch_shape, ctx_size, *context_shape, device=device, generator=rng
+    )
+    tgt_values = torch.randn(
+        *batch_shape, qry_size, *output_shape, device=device, generator=rng
+    )
 
     # sample time points
     ctx_seq_shape = (*batch_shape, ctx_size, 1)  # padded with one
     qry_seq_shape = (*batch_shape, qry_size, 1)
-    ctx_times = torch.sort(torch.rand(ctx_seq_shape, generator=rng), dim=-2).values
-    qry_times = torch.sort(torch.rand(qry_seq_shape, generator=rng), dim=-2).values
+    ctx_times = torch.sort(
+        torch.rand(ctx_seq_shape, device=device, generator=rng), dim=-2
+    ).values
+    qry_times = torch.sort(
+        torch.rand(qry_seq_shape, device=device, generator=rng), dim=-2
+    ).values
     qry_times = qry_times + ctx_times[..., [-1], :]  # add last time point
 
     # create valid mask by broadcasting over sequence length.
-    ctx_valid = torch.arange(ctx_size) < ctx_lengths[..., None]  # (..., $N)
-    qry_valid = torch.arange(qry_size) < qry_lengths[..., None]  # (..., $K)
+    ctx_valid = (
+        torch.arange(ctx_size, device=device) < ctx_lengths[..., None]
+    )  # (..., $N)
+    qry_valid = (
+        torch.arange(qry_size, device=device) < qry_lengths[..., None]
+    )  # (..., $K)
     ctx_valid = ctx_valid.unsqueeze(-1)  # (..., $N, 1)
     qry_valid = qry_valid.unsqueeze(-1)  # (..., $K, 1)
     assert ctx_valid.shape == (*batch_shape, ctx_size, 1)
@@ -165,10 +185,10 @@ def make_continuous_time_request(
     # mask by feature missingness
     # sample one value per time stamp that is always observed
     ctx_safe = torch.randint(
-        0, math.prod(context_shape), size=ctx_seq_shape, generator=rng
+        0, math.prod(context_shape), size=ctx_seq_shape, device=device, generator=rng
     )
     qry_safe = torch.randint(
-        0, math.prod(output_shape), size=qry_seq_shape, generator=rng
+        0, math.prod(output_shape), size=qry_seq_shape, device=device, generator=rng
     )
     ctx_mask = ctx_valid & (
         torch.ones_like(ctx_values, dtype=torch.bool)
@@ -207,34 +227,44 @@ def make_discrete_time_request(
     input_missingness: bool = False,
     target_missingness: bool = False,
     batch_first: bool = True,
+    device: torch.device | None = None,
 ) -> SplitTimeData:
     r"""Sample random dense integer-step forecasting inputs."""
-    rng = _as_generator(rng)
+    device = torch.device("cpu") if device is None else device
+    rng = _as_generator(rng, device=device)
     batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
     output_shape = output_shape if output_shape is not None else context_shape
 
     ctx_lengths = torch.randint(  # (...)
-        min_steps, max_steps + 1, size=batch_shape, generator=rng
+        min_steps, max_steps + 1, size=batch_shape, device=device, generator=rng
     )
     qry_lengths = torch.randint(  # (...)
-        min_steps, max_steps + 1, size=batch_shape, generator=rng
+        min_steps, max_steps + 1, size=batch_shape, device=device, generator=rng
     )
     ctx_size = max_steps
     qry_size = max_steps
 
     # sample values
-    ctx_values = torch.randn(*batch_shape, ctx_size, *context_shape, generator=rng)
-    tgt_values = torch.randn(*batch_shape, qry_size, *output_shape, generator=rng)
+    ctx_values = torch.randn(
+        *batch_shape, ctx_size, *context_shape, device=device, generator=rng
+    )
+    tgt_values = torch.randn(
+        *batch_shape, qry_size, *output_shape, device=device, generator=rng
+    )
 
     # sample discrete step indices
     ctx_seq_shape = (*batch_shape, ctx_size, 1)  # padded with one
     qry_seq_shape = (*batch_shape, qry_size, 1)
     ctx_steps = torch.sort(
-        torch.randint(0, 2 * max_steps, size=ctx_seq_shape, generator=rng),
+        torch.randint(
+            0, 2 * max_steps, size=ctx_seq_shape, device=device, generator=rng
+        ),
         dim=-2,
     ).values
     qry_offsets = torch.sort(
-        torch.randint(1, 2 * max_steps + 1, size=qry_seq_shape, generator=rng),
+        torch.randint(
+            1, 2 * max_steps + 1, size=qry_seq_shape, device=device, generator=rng
+        ),
         dim=-2,
     ).values
     last_indices = (ctx_lengths - 1).unsqueeze(-1).unsqueeze(-1)
@@ -242,8 +272,12 @@ def make_discrete_time_request(
     qry_steps = last_ctx_steps + qry_offsets
 
     # create valid mask by broadcasting over sequence length.
-    ctx_valid = torch.arange(ctx_size) < ctx_lengths[..., None]  # (..., $N)
-    qry_valid = torch.arange(qry_size) < qry_lengths[..., None]  # (..., $K)
+    ctx_valid = (
+        torch.arange(ctx_size, device=device) < ctx_lengths[..., None]
+    )  # (..., $N)
+    qry_valid = (
+        torch.arange(qry_size, device=device) < qry_lengths[..., None]
+    )  # (..., $K)
     ctx_valid = ctx_valid.unsqueeze(-1)  # (..., $N, 1)
     qry_valid = qry_valid.unsqueeze(-1)  # (..., $K, 1)
     assert ctx_valid.shape == (*batch_shape, ctx_size, 1)
@@ -258,10 +292,10 @@ def make_discrete_time_request(
     # mask by feature missingness
     # sample one value per time stamp that is always observed
     ctx_safe = torch.randint(
-        0, math.prod(context_shape), size=ctx_seq_shape, generator=rng
+        0, math.prod(context_shape), size=ctx_seq_shape, device=device, generator=rng
     )
     qry_safe = torch.randint(
-        0, math.prod(output_shape), size=qry_seq_shape, generator=rng
+        0, math.prod(output_shape), size=qry_seq_shape, device=device, generator=rng
     )
     ctx_mask = ctx_valid & (
         torch.ones_like(ctx_values, dtype=torch.bool)
@@ -331,6 +365,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         input_missingness: bool = False,
         target_missingness: bool = False,
         batch_first: bool = True,
+        device: torch.device | None = None,
     ) -> SplitTimeData:
         r"""Sample synthetic forecasting inputs for this model family."""
         return make_continuous_time_request(
@@ -343,6 +378,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
             input_missingness=input_missingness,
             target_missingness=target_missingness,
             batch_first=batch_first,
+            device=device,
         )
 
     @pytest.fixture
@@ -388,6 +424,13 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         r"""Whether to randomly mask half of the context values with NaN."""
         return False
 
+    @pytest.fixture(
+        params=("cpu", "cuda") if torch.cuda.is_available() else ("cpu",),
+    )
+    def device(self, request: pytest.FixtureRequest) -> torch.device:
+        r"""Device used by forward and backward tests."""
+        return torch.device(request.param)
+
     def test_forward_unbatched(
         self,
         model_config: object,
@@ -397,6 +440,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
         input_missingness: bool,
+        device: torch.device,
     ) -> None:
         data = self.make_request(
             rng=rng,
@@ -406,9 +450,10 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
             context_shape=context_shape,
             output_shape=output_shape,
             input_missingness=input_missingness,
+            device=device,
         )
         torch.manual_seed(rng)
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).to(device)
         self.forecast(model, data)
 
     def test_forward_batched(
@@ -421,6 +466,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         output_shape: tuple[int, ...],
         batch_shape: tuple[int, ...],
         input_missingness: bool,
+        device: torch.device,
     ) -> None:
         data = self.make_request(
             rng=rng,
@@ -430,9 +476,10 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
             context_shape=context_shape,
             output_shape=output_shape,
             input_missingness=input_missingness,
+            device=device,
         )
         torch.manual_seed(rng)
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).to(device)
         self.forecast(model, data)
 
     def test_forward_batched_matches_forward_unbatched(
@@ -659,6 +706,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         context_shape: tuple[int, ...],
         output_shape: tuple[int, ...],
         input_missingness: bool,
+        device: torch.device,
     ) -> None:
         assert self.GRADIENT_WARMUP_STEPS < self.NUM_STEPS
         torch.manual_seed(rng)
@@ -670,10 +718,11 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
             context_shape=context_shape,
             output_shape=output_shape,
             input_missingness=input_missingness,
+            device=device,
         )
         context_values = data.context_values
         assert data.target_values is not None
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).to(device)
         optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
         initial_parameters = {
             name: parameter.detach().clone()
@@ -725,6 +774,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
         output_shape: tuple[int, ...],
         batch_shape: tuple[int, ...],
         input_missingness: bool,
+        device: torch.device,
     ) -> None:
         assert self.GRADIENT_WARMUP_STEPS < self.NUM_STEPS
         torch.manual_seed(rng)
@@ -736,6 +786,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
             context_shape=context_shape,
             output_shape=output_shape,
             input_missingness=input_missingness,
+            device=device,
         )
         if self.DIFFERENTIABLE_TIMES:
             assert data.context_times.requires_grad
@@ -744,7 +795,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
 
         context_values = data.context_values
 
-        model = self.make_model(model_config)
+        model = self.make_model(model_config).to(device)
         optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
         initial_parameters = {
             name: parameter.detach().clone()
@@ -1110,6 +1161,7 @@ class TestDiscreteTimeModel[M: nn.Module](TestContinuousTimeModel[M], ABC):
         input_missingness: bool = False,
         target_missingness: bool = False,
         batch_first: bool = True,
+        device: torch.device | None = None,
     ) -> SplitTimeData:
         r"""Sample synthetic integer-step forecasting inputs."""
         return make_discrete_time_request(
@@ -1122,6 +1174,7 @@ class TestDiscreteTimeModel[M: nn.Module](TestContinuousTimeModel[M], ABC):
             input_missingness=input_missingness,
             target_missingness=target_missingness,
             batch_first=batch_first,
+            device=device,
         )
 
     def test_forward_batched_matches_forward_unbatched(
