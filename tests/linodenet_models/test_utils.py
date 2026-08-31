@@ -1237,14 +1237,14 @@ class TestSplitTimeData:
             equal_nan=True,
         )
 
-    def test_context_mask_clears_masked_values(self) -> None:
+    def test_normalize_context_mask_clears_masked_values(self) -> None:
         arg = SplitTimeData(
             context_times=torch.tensor([1.0]),
             context_values=torch.tensor([[10.0, 11.0]]),
             context_mask=torch.tensor([[True, False]]),
             query_times=torch.tensor([2.0]),
             query_mask=torch.tensor([[True, False]]),
-        )
+        ).normalize()
 
         assert_close(arg.context_values, torch.tensor([[10.0, nan]]), equal_nan=True)
 
