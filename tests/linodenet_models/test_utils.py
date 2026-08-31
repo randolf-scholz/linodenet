@@ -1256,36 +1256,6 @@ class TestSplitTimeData:
 
         assert_close(arg.context_values, torch.tensor([[10.0, nan]]), equal_nan=True)
 
-    def test_is_simple(self) -> None:
-        arg = SplitTimeData(
-            context_times=torch.tensor([1.0, 3.0]),
-            context_values=torch.tensor(
-                [
-                    [10.0, nan],
-                    [nan, 30.0],
-                ]
-            ),
-            context_mask=torch.tensor(
-                [
-                    [True, False],
-                    [False, True],
-                ]
-            ),
-            query_times=torch.tensor([2.0, 4.0]),
-            query_mask=torch.tensor([[True], [True]]),
-        )
-
-        assert arg.is_simple()
-        assert not replace(arg, context_times=torch.tensor([1.0, 1.0])).is_simple()
-        assert not replace(arg, query_times=torch.tensor([2.0, 2.0])).is_simple()
-        assert not SplitTimeData(
-            context_times=torch.tensor([[1.0, nan], [2.0, nan]]),
-            context_values=torch.tensor([[[10.0], [nan]], [[20.0], [nan]]]),
-            context_mask=torch.tensor([[[True], [False]], [[True], [False]]]),
-            query_times=torch.tensor([[3.0], [4.0]]),
-            query_mask=torch.tensor([[[True]], [[True]]]),
-        ).is_simple()
-
     def test_is_trimmed(self) -> None:
         assert SplitTimeData(
             context_times=torch.tensor([[1.0, 2.0], [3.0, nan]]),
@@ -1753,56 +1723,6 @@ class TestMergedTimeData:
                     [2.0, 3.0],
                 ]),
             )  # fmt: skip
-
-    def test_is_simple(self) -> None:
-        arg = MergedTimeData(
-            timestamps=torch.tensor([1.0, 2.0, 4.0]),
-            context_values=torch.tensor(
-                [
-                    [10.0, nan],
-                    [nan, nan],
-                    [nan, 40.0],
-                ]
-            ),
-            context_mask=torch.tensor(
-                [
-                    [True, False],
-                    [False, False],
-                    [False, True],
-                ]
-            ),
-            query_mask=torch.tensor(
-                [
-                    [False, False],
-                    [True, False],
-                    [False, False],
-                ]
-            ),
-        )
-
-        assert arg.is_simple()
-        assert not replace(arg, timestamps=torch.tensor([1.0, 2.0, 2.0])).is_simple()
-        assert not MergedTimeData(
-            timestamps=torch.tensor([[1.0, nan], [2.0, nan]]),
-            context_values=torch.tensor(
-                [
-                    [[10.0], [nan]],
-                    [[20.0], [nan]],
-                ]
-            ),
-            context_mask=torch.tensor(
-                [
-                    [[True], [False]],
-                    [[True], [False]],
-                ]
-            ),
-            query_mask=torch.tensor(
-                [
-                    [[False], [False]],
-                    [[False], [False]],
-                ]
-            ),
-        ).is_simple()
 
     def test_is_trimmed(self) -> None:
         assert MergedTimeData(

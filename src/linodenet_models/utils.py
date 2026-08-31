@@ -538,31 +538,6 @@ class SplitTimeData:
         if validate_args:
             self.validate()
 
-    def normalize(self) -> SplitTimeData:
-        # sanitize context and target values
-        context_mask = self.context_mask
-        context_times = self.context_times.masked_fill(~self.context_valid, nan)
-        context_values = self.context_values.masked_fill(~context_mask, nan)
-        query_mask = self.query_mask
-        query_times = self.query_times.masked_fill(~self.query_valid, nan)
-        target_values = (
-            self.target_values.masked_fill(~query_mask, nan)
-            if self.target_values is not None
-            else None
-        )
-
-        return SplitTimeData(
-            context_times=context_times,
-            context_mask=context_mask,
-            context_values=context_values,
-            query_times=query_times,
-            query_mask=query_mask,
-            target_values=target_values,
-            static_covariates=self.static_covariates,
-            batch_first=self.batch_first,
-            validate_args=False,  # trust that the original data was valid, normalization does not change validity
-        )
-
     def validate(self) -> None:
         # normalize to batch_first for validation
         seq_dim = -2 if self.batch_first else 0
@@ -615,6 +590,31 @@ class SplitTimeData:
             *_, static_dim = S.shape
             assert S.shape == (*batch_shape, static_dim)
 
+    def normalize(self) -> SplitTimeData:
+        # sanitize context and target values
+        context_mask = self.context_mask
+        context_times = self.context_times.masked_fill(~self.context_valid, nan)
+        context_values = self.context_values.masked_fill(~context_mask, nan)
+        query_mask = self.query_mask
+        query_times = self.query_times.masked_fill(~self.query_valid, nan)
+        target_values = (
+            self.target_values.masked_fill(~query_mask, nan)
+            if self.target_values is not None
+            else None
+        )
+
+        return SplitTimeData(
+            context_times=context_times,
+            context_mask=context_mask,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=query_mask,
+            target_values=target_values,
+            static_covariates=self.static_covariates,
+            batch_first=self.batch_first,
+            validate_args=False,  # trust that the original data was valid, normalization does not change validity
+        )
+
     def is_trimmed(self) -> bool:
         seq_dim = -1 if self.batch_first else 0
         C = self.context_valid.movedim(seq_dim, -1)
@@ -622,24 +622,6 @@ class SplitTimeData:
         return bool(
             C.reshape(-1, C.shape[-1]).any(dim=0).all()
             and M.reshape(-1, M.shape[-1]).any(dim=0).all()
-        )
-
-    def is_simple(self) -> bool:
-        seq_dim = -2 if self.batch_first else 0
-        T = self.context_times[..., None].movedim(seq_dim, -2).squeeze(-1)
-        Q = self.query_times[..., None].movedim(seq_dim, -2).squeeze(-1)
-        T_increasing = T.diff(dim=-1).gt(0.0)
-        Q_increasing = Q.diff(dim=-1).gt(0.0)
-        T_valid = T.isfinite()
-        Q_valid = Q.isfinite()
-        return bool(
-            self.is_trimmed()
-            and (
-                is_prefix_mask(T_increasing)
-                & is_prefix_mask(Q_increasing)
-                & (T_increasing | ~T_valid[..., 1:]).all(dim=-1)
-                & (Q_increasing | ~Q_valid[..., 1:]).all(dim=-1)
-            ).all()
         )
 
     @classmethod
@@ -676,6 +658,18 @@ class SplitTimeData:
         cls, arg: AbstractTripletTimeData, /, *, batch_first: bool
     ) -> SplitTimeData:
         return triplet_to_split(arg, batch_first=batch_first)
+
+    def unbatch(self) -> list[SplitTimeData]:
+        return unbatch_split(self, batch_first=self.batch_first)
+
+    def to_split(self) -> SplitTimeData:
+        return self
+
+    def to_merged(self) -> MergedTimeData:
+        return split_to_merged(self, batch_first=self.batch_first)
+
+    def to_triplet(self) -> TripletTimeData:
+        return split_to_triplet(self, batch_first=self.batch_first)
 
     def to(
         self, *, batch_first: bool | None = None, device: torch.device | None = None
@@ -714,18 +708,6 @@ class SplitTimeData:
             batch_first=batch_first,
             validate_args=False,
         )
-
-    def unbatch(self) -> list[SplitTimeData]:
-        return unbatch_split(self, batch_first=self.batch_first)
-
-    def to_split(self) -> SplitTimeData:
-        return self
-
-    def to_merged(self) -> MergedTimeData:
-        return split_to_merged(self, batch_first=self.batch_first)
-
-    def to_triplet(self) -> TripletTimeData:
-        return split_to_triplet(self, batch_first=self.batch_first)
 
 
 @dataclass(frozen=True)
@@ -833,33 +815,6 @@ class MergedTimeData:
         if validate_args:
             self.validate()
 
-    def normalize(self) -> MergedTimeData:
-        # sanitize context and target values
-        context_mask = self.context_mask
-        query_mask = self.query_mask
-        timestamps = self.timestamps.masked_fill(
-            ~(self.context_valid | self.query_valid), nan
-        )
-        context_values = self.context_values.masked_fill(~context_mask, nan)
-        target_values = (
-            self.target_values.masked_fill(~query_mask, nan)
-            if self.target_values is not None
-            else None
-        )
-
-        return MergedTimeData(
-            timestamps=timestamps,
-            context_mask=context_mask,
-            context_values=context_values,
-            query_mask=query_mask,
-            target_values=target_values,
-            static_covariates=self.static_covariates,
-            batch_first=self.batch_first,
-            context_size=self.context_size,
-            query_size=self.query_size,
-            validate_args=False,  # trust that the original data was valid, normalization does not change validity
-        )
-
     def validate(self) -> None:
         # normalize to batch_first for validation
         seq_dim = -2 if self.batch_first else 0
@@ -907,24 +862,38 @@ class MergedTimeData:
             assert times[context].diff(dim=-1).ge(0.0).all()
             assert times[query].diff(dim=-1).ge(0.0).all()
 
+    def normalize(self) -> MergedTimeData:
+        # sanitize context and target values
+        context_mask = self.context_mask
+        query_mask = self.query_mask
+        timestamps = self.timestamps.masked_fill(
+            ~(self.context_valid | self.query_valid), nan
+        )
+        context_values = self.context_values.masked_fill(~context_mask, nan)
+        target_values = (
+            self.target_values.masked_fill(~query_mask, nan)
+            if self.target_values is not None
+            else None
+        )
+
+        return MergedTimeData(
+            timestamps=timestamps,
+            context_mask=context_mask,
+            context_values=context_values,
+            query_mask=query_mask,
+            target_values=target_values,
+            static_covariates=self.static_covariates,
+            batch_first=self.batch_first,
+            context_size=self.context_size,
+            query_size=self.query_size,
+            validate_args=False,  # trust that the original data was valid, normalization does not change validity
+        )
+
     def is_trimmed(self) -> bool:
         seq_dim = -2 if self.batch_first else 0
         C = self.context_mask.movedim(seq_dim, -2)
         M = self.query_mask.movedim(seq_dim, -2)
         return bool((C | M).any(dim=-1).reshape(-1, C.shape[-2]).any(dim=0).all())
-
-    def is_simple(self) -> bool:
-        seq_dim = -2 if self.batch_first else 0
-        T = self.timestamps[..., None].movedim(seq_dim, -2).squeeze(-1)
-        T_increasing = T.diff(dim=-1).gt(0.0)
-        T_valid = T.isfinite()
-        return bool(
-            self.is_trimmed()
-            and (
-                is_prefix_mask(T_increasing)
-                & (T_increasing | ~T_valid[..., 1:]).all(dim=-1)
-            ).all()
-        )
 
     def _split_indices(self, valid: Tensor, size: int, /) -> tuple[Tensor, ...]:
         if self.batch_first:
@@ -1026,6 +995,18 @@ class MergedTimeData:
     ) -> MergedTimeData:
         return triplet_to_merged(arg, batch_first=batch_first)
 
+    def unbatch(self) -> list[MergedTimeData]:
+        return unbatch_merged(self, batch_first=self.batch_first)
+
+    def to_split(self) -> SplitTimeData:
+        return merged_to_split(self, batch_first=self.batch_first)
+
+    def to_merged(self) -> MergedTimeData:
+        return self
+
+    def to_triplet(self) -> TripletTimeData:
+        return merged_to_triplet(self, batch_first=self.batch_first)
+
     def to(
         self, *, batch_first: bool | None = None, device: torch.device | None = None
     ) -> MergedTimeData:
@@ -1062,18 +1043,6 @@ class MergedTimeData:
             batch_first=batch_first,
             validate_args=False,
         )
-
-    def unbatch(self) -> list[MergedTimeData]:
-        return unbatch_merged(self, batch_first=self.batch_first)
-
-    def to_split(self) -> SplitTimeData:
-        return merged_to_split(self, batch_first=self.batch_first)
-
-    def to_merged(self) -> MergedTimeData:
-        return self
-
-    def to_triplet(self) -> TripletTimeData:
-        return merged_to_triplet(self, batch_first=self.batch_first)
 
 
 @dataclass(frozen=True)
@@ -1185,36 +1154,6 @@ class TripletTimeData:
             and self.batch_first == other.batch_first
         )
 
-    def normalize(self) -> TripletTimeData:
-        # sanitize context and target values
-        context_mask = self.context_valid
-        query_mask = self.query_valid
-
-        context_times = self.context_times.masked_fill(~context_mask, nan)
-        context_values = self.context_values.masked_fill(~context_mask, nan)
-        context_channels = self.context_channels.masked_fill(~context_mask, -1)
-        query_times = self.query_times.masked_fill(~query_mask, nan)
-        query_channels = self.query_channels.masked_fill(~query_mask, -1)
-        target_values = (
-            self.target_values.masked_fill(~query_mask, nan)
-            if self.target_values is not None
-            else None
-        )
-
-        return TripletTimeData(
-            context_times=context_times,
-            context_channels=context_channels,
-            context_values=context_values,
-            query_times=query_times,
-            query_channels=query_channels,
-            target_values=target_values,
-            static_covariates=self.static_covariates,
-            batch_first=self.batch_first,
-            context_dim=self.context_dim,
-            query_dim=self.query_dim,
-            validate_args=False,  # trust that the original data was valid, normalization does not change validity
-        )
-
     def validate(self) -> None:
         # normalize to batch_first for validation
         seq_dim = -1 if self.batch_first else 0
@@ -1258,6 +1197,36 @@ class TripletTimeData:
             assert Y.shape == (*batch_shape, num_query)
             assert not (M_valid & ~Y.isfinite()).any()  # M = True implies Y is finite
 
+    def normalize(self) -> TripletTimeData:
+        # sanitize context and target values
+        context_mask = self.context_valid
+        query_mask = self.query_valid
+
+        context_times = self.context_times.masked_fill(~context_mask, nan)
+        context_values = self.context_values.masked_fill(~context_mask, nan)
+        context_channels = self.context_channels.masked_fill(~context_mask, -1)
+        query_times = self.query_times.masked_fill(~query_mask, nan)
+        query_channels = self.query_channels.masked_fill(~query_mask, -1)
+        target_values = (
+            self.target_values.masked_fill(~query_mask, nan)
+            if self.target_values is not None
+            else None
+        )
+
+        return TripletTimeData(
+            context_times=context_times,
+            context_channels=context_channels,
+            context_values=context_values,
+            query_times=query_times,
+            query_channels=query_channels,
+            target_values=target_values,
+            static_covariates=self.static_covariates,
+            batch_first=self.batch_first,
+            context_dim=self.context_dim,
+            query_dim=self.query_dim,
+            validate_args=False,  # trust that the original data was valid, normalization does not change validity
+        )
+
     def is_trimmed(self) -> bool:
         seq_dim = -1 if self.batch_first else 0
         C = self.context_valid.movedim(seq_dim, -1)
@@ -1266,9 +1235,6 @@ class TripletTimeData:
             C.reshape(-1, C.shape[-1]).any(dim=0).all()
             and M.reshape(-1, M.shape[-1]).any(dim=0).all()
         )
-
-    def is_simple(self) -> bool:
-        return self.is_trimmed()
 
     def _split_indices(
         self,
@@ -1377,6 +1343,32 @@ class TripletTimeData:
             batch_first=batch_first,
         )
 
+    def unbatch(self) -> list[TripletTimeData]:
+        return unbatch_triplet(self, batch_first=self.batch_first)
+
+    def to_split(
+        self, *, context_dim: int | None = None, query_dim: int | None = None
+    ) -> SplitTimeData:
+        return triplet_to_split(
+            self,
+            batch_first=self.batch_first,
+            context_dim=context_dim,
+            query_dim=query_dim,
+        )
+
+    def to_merged(
+        self, *, context_dim: int | None = None, query_dim: int | None = None
+    ) -> MergedTimeData:
+        return triplet_to_merged(
+            self,
+            batch_first=self.batch_first,
+            context_dim=context_dim,
+            query_dim=query_dim,
+        )
+
+    def to_triplet(self) -> TripletTimeData:
+        return self
+
     def to(
         self, *, batch_first: bool | None = None, device: torch.device | None = None
     ) -> TripletTimeData:
@@ -1412,32 +1404,6 @@ class TripletTimeData:
             batch_first=batch_first,
             validate_args=False,
         )
-
-    def unbatch(self) -> list[TripletTimeData]:
-        return unbatch_triplet(self, batch_first=self.batch_first)
-
-    def to_split(
-        self, *, context_dim: int | None = None, query_dim: int | None = None
-    ) -> SplitTimeData:
-        return triplet_to_split(
-            self,
-            batch_first=self.batch_first,
-            context_dim=context_dim,
-            query_dim=query_dim,
-        )
-
-    def to_merged(
-        self, *, context_dim: int | None = None, query_dim: int | None = None
-    ) -> MergedTimeData:
-        return triplet_to_merged(
-            self,
-            batch_first=self.batch_first,
-            context_dim=context_dim,
-            query_dim=query_dim,
-        )
-
-    def to_triplet(self) -> TripletTimeData:
-        return self
 
 
 def split_to_merged(
