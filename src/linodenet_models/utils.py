@@ -502,22 +502,33 @@ class SplitTimeData:
         )
 
     def __post_init__(self, validate_args: bool) -> None:
-        self._normalize()
         if validate_args:
             self.validate()
 
-    def _normalize(self) -> None:
+    def normalize(self) -> SplitTimeData:
         # sanitize context and target values
-        with torch.no_grad():
-            context_values = self.context_values.masked_fill_(~self.context_mask, nan)
-            target_values = (
-                self.target_values.masked_fill_(~self.query_mask, nan)
-                if self.target_values is not None
-                else None
-            )
+        context_mask = self.context_mask
+        context_times = self.context_times.masked_fill(~context_mask.any(dim=-1), nan)
+        context_values = self.context_values.masked_fill(~context_mask, nan)
+        query_mask = self.query_mask
+        query_times = self.query_times.masked_fill(~query_mask.any(dim=-1), nan)
+        target_values = (
+            self.target_values.masked_fill(~query_mask, nan)
+            if self.target_values is not None
+            else None
+        )
 
-        object.__setattr__(self, "context_values", context_values)
-        object.__setattr__(self, "target_values", target_values)
+        return SplitTimeData(
+            context_times=context_times,
+            context_mask=context_mask,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=query_mask,
+            target_values=target_values,
+            static_covariates=self.static_covariates,
+            batch_first=self.batch_first,
+            validate_args=False,  # trust that the original data was valid, normalization does not change validity
+        )
 
     @property
     def batch_shape(self) -> tuple[int, ...]:
@@ -566,7 +577,7 @@ class SplitTimeData:
         assert C.shape == X.shape
         assert Q.shape == (*batch_shape, query_size)
         assert M.shape == (*batch_shape, query_size, query_dim)
-        assert torch.equal(X.isfinite(), C)
+        assert not (C & ~X.isfinite()).any()  # C = True implies X is finite
 
         # check that non-valid values are at the tail
         T_valid = T.isfinite()
@@ -585,11 +596,11 @@ class SplitTimeData:
         assert torch.equal(X_valid.sum(dim=-1), context_lengths)
 
         assert M.shape == (*batch_shape, query_size, query_dim)
-        assert torch.equal(M.any(dim=-1), Q_valid)
+        assert not (M.any(dim=-1) & ~Q_valid).any()  # M = True implies Q is finite
 
         if Y is not None:
             assert Y.shape == (*batch_shape, query_size, query_dim)
-            assert torch.equal(Y.isfinite(), M)
+            assert not (M & ~Y.isfinite()).any()  # M = True implies Y is finite
 
         if (S := self.static_covariates) is not None:
             *_, static_dim = S.shape
@@ -777,19 +788,6 @@ class MergedTimeData:
         )
 
     def __post_init__(self, validate_args: bool) -> None:
-        self._normalize()
-        if validate_args:
-            self.validate()
-
-    def _normalize(self) -> None:
-        # sanitize context and target values
-        with torch.no_grad():
-            context_values = self.context_values.masked_fill_(~self.context_mask, nan)
-            target_values = (
-                self.target_values.masked_fill_(~self.query_mask, nan)
-                if self.target_values is not None
-                else None
-            )
         seq_dim = -1 if self.batch_first else 0
         context_size = int(
             self.context_size
@@ -801,11 +799,38 @@ class MergedTimeData:
             if self.query_size >= 0
             else self.query_mask.any(dim=-1).sum(dim=seq_dim).max().item()
         )
-        # set metadata
         object.__setattr__(self, "context_size", context_size)
         object.__setattr__(self, "query_size", query_size)
-        object.__setattr__(self, "context_values", context_values)
-        object.__setattr__(self, "target_values", target_values)
+
+        if validate_args:
+            self.validate()
+
+    def normalize(self) -> MergedTimeData:
+        # sanitize context and target values
+        context_mask = self.context_mask
+        query_mask = self.query_mask
+        timestamps = self.timestamps.masked_fill(
+            ~(context_mask | query_mask).any(dim=-1), nan
+        )
+        context_values = self.context_values.masked_fill(~context_mask, nan)
+        target_values = (
+            self.target_values.masked_fill(~query_mask, nan)
+            if self.target_values is not None
+            else None
+        )
+
+        return MergedTimeData(
+            timestamps=timestamps,
+            context_mask=context_mask,
+            context_values=context_values,
+            query_mask=query_mask,
+            target_values=target_values,
+            static_covariates=self.static_covariates,
+            batch_first=self.batch_first,
+            context_size=self.context_size,
+            query_size=self.query_size,
+            validate_args=False,  # trust that the original data was valid, normalization does not change validity
+        )
 
     @property
     def batch_shape(self) -> tuple[int, ...]:
@@ -847,7 +872,7 @@ class MergedTimeData:
 
         assert C.dtype == torch.bool
         assert C.shape == (*batch_shape, num_combined, context_dim)
-        assert torch.equal(X.isfinite(), C)
+        assert not (C & ~X.isfinite()).any()  # C = True implies X is finite
 
         ctx_steps = C.any(dim=-1)
         qry_steps = M.any(dim=-1)
@@ -859,7 +884,7 @@ class MergedTimeData:
 
         if Y is not None:
             assert Y.shape == (*batch_shape, num_combined, query_dim)
-            assert torch.equal(Y.isfinite(), M)
+            assert not (M & ~Y.isfinite()).any()  # M = True implies Y is finite
 
         for times, context, query in zip(
             T.reshape(-1, num_combined),
@@ -1155,7 +1180,20 @@ class TripletTimeData:
         )
 
     def __post_init__(self, validate_args: bool) -> None:
-        self._normalize()
+        context_dim = (
+            self.context_dim
+            if self.context_dim >= 0
+            else int(self.context_channels.max().item()) + 1
+        )
+        query_dim = (
+            self.query_dim
+            if self.query_dim >= 0
+            else int(self.query_channels.max().item()) + 1
+        )
+
+        # set metadata
+        object.__setattr__(self, "context_dim", context_dim)
+        object.__setattr__(self, "query_dim", query_dim)
 
         if validate_args:
             self.validate()
@@ -1175,34 +1213,35 @@ class TripletTimeData:
             )
         )
 
-    def _normalize(self) -> None:
+    def normalize(self) -> TripletTimeData:
         # sanitize context and target values
-        with torch.no_grad():
-            context_values = self.context_values.masked_fill_(
-                self.context_times.isnan(), nan
-            )
-            target_values = (
-                self.target_values.masked_fill_(self.query_times.isnan(), nan)
-                if self.target_values is not None
-                else None
-            )
+        context_mask = self.context_times.isfinite() & self.context_channels.ge(0)
+        query_mask = self.query_times.isfinite() & self.query_channels.ge(0)
 
-        context_dim = (
-            self.context_dim
-            if self.context_dim >= 0
-            else int(self.context_channels.max().item()) + 1
-        )
-        query_dim = (
-            self.query_dim
-            if self.query_dim >= 0
-            else int(self.query_channels.max().item()) + 1
+        context_times = self.context_times.masked_fill(~context_mask, nan)
+        context_values = self.context_values.masked_fill(~context_mask, nan)
+        context_channels = self.context_channels.masked_fill(~context_mask, -1)
+        query_times = self.query_times.masked_fill(~query_mask, nan)
+        query_channels = self.query_channels.masked_fill(~query_mask, -1)
+        target_values = (
+            self.target_values.masked_fill(~query_mask, nan)
+            if self.target_values is not None
+            else None
         )
 
-        # set metadata
-        object.__setattr__(self, "context_dim", context_dim)
-        object.__setattr__(self, "query_dim", query_dim)
-        object.__setattr__(self, "context_values", context_values)
-        object.__setattr__(self, "target_values", target_values)
+        return TripletTimeData(
+            context_times=context_times,
+            context_channels=context_channels,
+            context_values=context_values,
+            query_times=query_times,
+            query_channels=query_channels,
+            target_values=target_values,
+            static_covariates=self.static_covariates,
+            batch_first=self.batch_first,
+            context_dim=self.context_dim,
+            query_dim=self.query_dim,
+            validate_args=False,  # trust that the original data was valid, normalization does not change validity
+        )
 
     @property
     def batch_shape(self) -> tuple[int, ...]:
@@ -1235,8 +1274,8 @@ class TripletTimeData:
         assert is_prefix_mask(T.diff(dim=-1).ge(0.0)).all()
         C_valid = C >= 0
         assert is_prefix_mask(C_valid).all()
-        assert torch.equal(C_valid, T.isfinite())
-        assert torch.equal(C_valid, X.isfinite())
+        assert not (C_valid & ~T.isfinite()).any()  # C = True implies T is finite
+        assert not (C_valid & ~X.isfinite()).any()  # C = True implies X is finite
 
         *_, num_query = Q.shape
         assert Q.shape == (*batch_shape, num_query)
@@ -1246,14 +1285,14 @@ class TripletTimeData:
         M_valid = M >= 0
         assert M.shape == (*batch_shape, num_query)
         assert is_prefix_mask(M_valid).all()
-        assert torch.equal(M_valid, Q.isfinite())
+        assert not (M_valid & ~Q.isfinite()).any()  # M = True implies Q is finite
         # query_pairs = torch.stack([Q, M], dim=-1)
         # query_pairs = query_pairs.masked_fill(~M_valid.unsqueeze(-1), nan)
         # assert torch.equal(unique_count(query_pairs), M_valid.sum(dim=-1))
 
         if Y is not None:
             assert Y.shape == (*batch_shape, num_query)
-            assert torch.equal(Y.isfinite(), M_valid)
+            assert not (M_valid & ~Y.isfinite()).any()  # M = True implies Y is finite
 
     def is_trimmed(self) -> bool:
         seq_dim = -1 if self.batch_first else 0
