@@ -1212,7 +1212,7 @@ class TestSplitTimeData:
         assert lhs == rhs
         assert lhs != other
 
-    def test_query_mask_clears_masked_values(self) -> None:
+    def test_normalized_query_mask_clears_masked_values(self) -> None:
         arg = SplitTimeData(
             context_times=torch.tensor([1.0]),
             context_values=torch.tensor([[10.0, 11.0]]),
@@ -1220,7 +1220,7 @@ class TestSplitTimeData:
             query_times=torch.tensor([2.0]),
             query_mask=torch.tensor([[True, False]]),
             target_values=torch.tensor([[20.0, 21.0]]),
-        )
+        ).normalize()
         assert_close(arg.target_values, torch.tensor([[20.0, nan]]), equal_nan=True)
 
         batched = SplitTimeData(
@@ -1230,7 +1230,7 @@ class TestSplitTimeData:
             query_times=torch.tensor([[2.0, nan]]),
             query_mask=torch.tensor([[[True, False], [False, False]]]),
             target_values=torch.tensor([[[20.0, 21.0], [nan, nan]]]),
-        )
+        ).normalize()
         assert_close(
             batched.target_values,
             torch.tensor([[[20.0, nan], [nan, nan]]]),
