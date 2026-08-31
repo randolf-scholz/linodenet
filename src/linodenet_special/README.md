@@ -15,7 +15,8 @@ def fixpoint_iteration_factor(func, cond, encode, decode):
             # update state
             state = func(state)
             # check convergence
-            if cond(state): break
+            if cond(state):
+                break
 
         # return decoded state
         return decode(state)
