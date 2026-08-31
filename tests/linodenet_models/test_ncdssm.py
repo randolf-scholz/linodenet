@@ -4,6 +4,7 @@ from typing import ClassVar
 
 import pytest
 import torch
+from torch import Tensor
 
 from linodenet_models.ncdssm import NCDSSM, NCDSSMConfig
 from linodenet_models.utils import EventBatch, SplitTimeData
@@ -44,18 +45,16 @@ class TestNCDSSM(TestProbabilisticModel[NCDSSM]):
             raise TypeError("model_config must be an NCDSSMConfig.")
         return NCDSSM.from_config(model_config)
 
-    def forecast(
-        self, model: NCDSSM, inputs: SplitTimeData, /
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: NCDSSM, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return NCDSSM output moments and time-marginal likelihoods."""
-        assert inputs.target_values is not None
+        assert args.target_values is not None
         log_prob = model.log_prob(
-            inputs.target_values,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
+            args.target_values,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
         )
         return (
             model.pred_means,
@@ -66,9 +65,9 @@ class TestNCDSSM(TestProbabilisticModel[NCDSSM]):
     def loss(
         self,
         model: NCDSSM,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return negative predictive log-likelihood over observed targets."""
         del model, targets
         _, _, log_prob = predictions

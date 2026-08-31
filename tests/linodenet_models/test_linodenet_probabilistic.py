@@ -2,7 +2,7 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
-from torch import nan
+from torch import Tensor, nan
 
 from linodenet.state_update import GaussianForwardUpdater, GaussianReverseUpdater
 from linodenet_models.decoders import TransformSequence
@@ -62,24 +62,21 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
         )
 
     def forecast(
-        self,
-        model: LinodenetProbabilistic,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+        self, model: LinodenetProbabilistic, args: SplitTimeData
+    ) -> tuple[Tensor, ...]:
         r"""Return marginal log-likelihoods for target values."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
         log_prob = model.log_prob(
-            inputs.target_values,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            args.target_values,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
         ).masked_fill(~query_valid, nan)
 
-        assert log_prob.shape == inputs.query_times.shape
+        assert log_prob.shape == args.query_times.shape
         assert log_prob[query_valid].isfinite().all()
         assert log_prob[~query_valid].isnan().all()
         return (log_prob,)
@@ -87,9 +84,9 @@ class TestLinodenetProbabilistic(TestContinuousTimeModel[LinodenetProbabilistic]
     def loss(
         self,
         model: LinodenetProbabilistic,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return negative mean marginal log-likelihood."""
         del model
         (log_prob,) = predictions
@@ -266,36 +263,28 @@ class TestKoopmanFilter(TestContinuousTimeModel[KoopmanFilter]):
             n_iter=1,
         )
 
-    def forecast(
-        self,
-        model: KoopmanFilter,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: KoopmanFilter, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return estimated per-timestamp ELBOs for target values."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
         bound = model.log_prob(
-            inputs.target_values,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            args.target_values,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
             num_samples=8,
         ).masked_fill(~query_valid, nan)
 
-        assert bound.shape == inputs.query_times.shape
+        assert bound.shape == args.query_times.shape
         assert bound[query_valid].isfinite().all()
         assert bound[~query_valid].isnan().all()
         return (bound,)
 
     def loss(
-        self,
-        model: KoopmanFilter,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        self, model: KoopmanFilter, predictions: tuple[Tensor, ...], targets: Tensor
+    ) -> Tensor:
         r"""Return the negative mean estimated ELBO."""
         del model
         (bound,) = predictions

@@ -4,6 +4,7 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
+from torch import Tensor
 from torch.distributions import MultivariateNormal
 from torch.nn import functional as F
 from torch.testing import assert_close
@@ -193,38 +194,35 @@ class TestKalmanFilter(TestContinuousTimeModel[ContinuousTimeKalmanFilter]):
         )
 
     def forecast(
-        self,
-        model: ContinuousTimeKalmanFilter,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+        self, model: ContinuousTimeKalmanFilter, args: SplitTimeData
+    ) -> tuple[Tensor, ...]:
         r"""Return Kalman filter predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
+        assert args.target_values is not None
         pred_mean, pred_cov = model.predict(
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
         )
 
-        *batch_shape, query_size, query_dim = inputs.target_values.shape
+        *batch_shape, query_size, query_dim = args.target_values.shape
         assert pred_mean.shape == (*batch_shape, query_size, query_dim)
         assert pred_cov.shape == (*batch_shape, query_size, query_dim, query_dim)
-        assert pred_mean[inputs.query_mask].isfinite().all()
-        assert pred_cov[inputs.query_mask].isfinite().all()
+        assert pred_mean[args.query_mask].isfinite().all()
+        assert pred_cov[args.query_mask].isfinite().all()
         # assert posterior_covariance[inputs.query_mask.any(dim=-1)].isfinite().all()
-        assert pred_mean[~inputs.query_mask].isnan().all()
-        assert pred_cov[~inputs.query_mask].isnan().all()
+        assert pred_mean[~args.query_mask].isnan().all()
+        assert pred_cov[~args.query_mask].isnan().all()
 
         return pred_mean, pred_cov
 
     def loss(
         self,
         model: ContinuousTimeKalmanFilter,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return a supervised loss for Kalman filter predictions."""
         del model
         pred_mean, pred_variance = predictions

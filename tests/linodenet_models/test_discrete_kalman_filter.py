@@ -201,28 +201,25 @@ class TestDiscreteKalmanFilter(TestDiscreteTimeModel[DiscreteTimeKalmanFilter]):
         )
 
     def forecast(
-        self,
-        model: DiscreteTimeKalmanFilter,
-        inputs: SplitTimeData,
-        /,
+        self, model: DiscreteTimeKalmanFilter, args: SplitTimeData
     ) -> tuple[torch.Tensor, ...]:
         r"""Return Kalman filter predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
+        assert args.target_values is not None
         pred_mean, pred_cov = model.predict(
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
         )
 
-        *batch_shape, query_size, query_dim = inputs.target_values.shape
+        *batch_shape, query_size, query_dim = args.target_values.shape
         assert pred_mean.shape == (*batch_shape, query_size, query_dim)
         assert pred_cov.shape == (*batch_shape, query_size, query_dim, query_dim)
-        assert pred_mean[inputs.query_mask].isfinite().all()
-        assert pred_cov[inputs.query_mask].isfinite().all()
-        assert pred_mean[~inputs.query_mask].isnan().all()
-        assert pred_cov[~inputs.query_mask].isnan().all()
+        assert pred_mean[args.query_mask].isfinite().all()
+        assert pred_cov[args.query_mask].isfinite().all()
+        assert pred_mean[~args.query_mask].isnan().all()
+        assert pred_cov[~args.query_mask].isnan().all()
 
         return pred_mean, pred_cov
 

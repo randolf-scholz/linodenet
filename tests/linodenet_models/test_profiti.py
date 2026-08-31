@@ -5,7 +5,7 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
-from torch import nn
+from torch import Tensor, nn
 from torch.func import grad, vmap
 from torch.testing import assert_close
 
@@ -42,11 +42,11 @@ class _TargetContext(nn.Module):
     def forward(
         self,
         *,
-        timestamps: torch.Tensor,  # noqa: ARG002
-        context_values: torch.Tensor,
-        context_mask: torch.Tensor,  # noqa: ARG002
-        query_mask: torch.Tensor,
-    ) -> torch.Tensor:
+        timestamps: Tensor,  # noqa: ARG002
+        context_values: Tensor,
+        context_mask: Tensor,  # noqa: ARG002
+        query_mask: Tensor,
+    ) -> Tensor:
         *batch_shape, _, _ = query_mask.shape
         max_targets = int(query_mask.sum(dim=(-2, -1)).max().item())
         return context_values.new_zeros(*batch_shape, max_targets, self.hidden_dim)
@@ -59,19 +59,11 @@ class _ScaleDecodeFlow(nn.Module):
         super().__init__()
         self.scale = scale
 
-    def encode_and_logabsdet(
-        self,
-        x: torch.Tensor,
-        _context: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def encode_and_logabsdet(self, x: Tensor, _ctx: Tensor) -> tuple[Tensor, Tensor]:
         logabsdet = x.new_full(x.shape[:-1], -x.shape[-1] * math.log(self.scale))
         return x / self.scale, logabsdet
 
-    def decode_and_logabsdet(
-        self,
-        y: torch.Tensor,
-        _context: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def decode_and_logabsdet(self, y: Tensor, _ctx: Tensor) -> tuple[Tensor, Tensor]:
         logabsdet = y.new_full(y.shape[:-1], y.shape[-1] * math.log(self.scale))
         return self.scale * y, logabsdet
 
@@ -141,7 +133,7 @@ class TestTriangularAttention:
 
         _, actual = attention.encode_and_logabsdet(context, context, x.unsqueeze(-1))
 
-        def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
+        def encode_flat(z: Tensor, /) -> Tensor:
             y, _ = attention.encode_and_logabsdet(
                 context,
                 context,
@@ -244,7 +236,7 @@ class TestFlowSequence:
 
         _, actual = flow.encode_and_logabsdet(x, context)
 
-        def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
+        def encode_flat(z: Tensor, /) -> Tensor:
             y, _ = flow.encode_and_logabsdet(z.reshape(num_steps), context)
             return y.reshape(-1)
 
@@ -290,7 +282,7 @@ class TestProFITiBlock:
 
         _, actual = block.encode_and_logabsdet(x, context)
 
-        def encode_flat(z: torch.Tensor, /) -> torch.Tensor:
+        def encode_flat(z: Tensor, /) -> Tensor:
             y, _ = block.encode_and_logabsdet(z.reshape(num_steps), context)
             return y.reshape(-1)
 
@@ -378,28 +370,23 @@ class TestProfiti(TestPathModel[ProFITi]):
             )
         )
 
-    def forecast(
-        self,
-        model: ProFITi,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: ProFITi, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return ProFITi target log densities for sequential forecasting inputs."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
-        target_values = inputs.target_values
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
+        target_values = args.target_values
 
         log_prob = model.log_prob(
             target_values,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
-            context_times=inputs.context_times,
-            context_mask=inputs.context_mask,
-            context_values=inputs.context_values,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+            context_times=args.context_times,
+            context_mask=args.context_mask,
+            context_values=args.context_values,
         )
-        event_ndim = target_values.ndim - inputs.query_times.ndim
+        event_ndim = target_values.ndim - args.query_times.ndim
         log_prob = log_prob.reshape(*log_prob.shape, *((1,) * (event_ndim + 1)))
-        predictions = torch.where(inputs.target_values.isfinite(), log_prob, torch.nan)
+        predictions = torch.where(args.target_values.isfinite(), log_prob, torch.nan)
 
         assert predictions.shape == target_values.shape
         assert predictions[query_valid].isfinite().all()
@@ -408,9 +395,9 @@ class TestProfiti(TestPathModel[ProFITi]):
     def loss(
         self,
         model: ProFITi,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return ProFITi negative log likelihood for target values."""
         (log_prob,) = predictions
         regularizer = log_prob.new_zeros(())

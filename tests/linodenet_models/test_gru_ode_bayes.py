@@ -4,7 +4,7 @@ from typing import ClassVar
 
 import pytest
 import torch
-from torch import nan
+from torch import Tensor, nan
 
 from linodenet_models.gru_ode_bayes import (
     GRU_ODE,
@@ -83,39 +83,37 @@ class TestGRU_ODE_Bayes(TestProbabilisticModel[GRU_ODE_Bayes]):
         r"""Instantiate a GRU-ODE-Bayes model from :attr:`STANDARD_CONFIG`."""
         return self.make_model(self.STANDARD_CONFIG)
 
-    def forecast(
-        self, model: GRU_ODE_Bayes, inputs: SplitTimeData, /
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: GRU_ODE_Bayes, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return GRU-ODE-Bayes predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
 
         log_prob = model.log_prob(
-            inputs.target_values,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            args.target_values,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
         )
         posterior_mean = model.pred_means
         posterior_logvar = model.pred_logvars
-        query_steps = inputs.query_mask.any(dim=-1)
+        query_steps = args.query_mask.any(dim=-1)
         query_mean = posterior_mean[query_steps]
         query_logvar = posterior_logvar[query_steps]
         query_log_prob = log_prob[query_steps]
-        query_mean[~inputs.query_mask[query_steps]] = nan
-        query_logvar[~inputs.query_mask[query_steps]] = nan
-        pred_mean = torch.full_like(inputs.target_values, nan)
-        pred_logvar = torch.full_like(inputs.target_values, nan)
-        pred_log_prob = inputs.target_values.new_full(inputs.query_times.shape, nan)
+        query_mean[~args.query_mask[query_steps]] = nan
+        query_logvar[~args.query_mask[query_steps]] = nan
+        pred_mean = torch.full_like(args.target_values, nan)
+        pred_logvar = torch.full_like(args.target_values, nan)
+        pred_log_prob = args.target_values.new_full(args.query_times.shape, nan)
         pred_mean[query_valid] = query_mean
         pred_logvar[query_valid] = query_logvar
         pred_log_prob[query_valid] = query_log_prob
 
-        assert pred_mean.shape == inputs.target_values.shape
-        assert pred_logvar.shape == inputs.target_values.shape
-        assert pred_log_prob.shape == inputs.query_times.shape
+        assert pred_mean.shape == args.target_values.shape
+        assert pred_logvar.shape == args.target_values.shape
+        assert pred_log_prob.shape == args.query_times.shape
         assert pred_mean[query_valid].isfinite().all()
         assert pred_logvar[query_valid].isfinite().all()
         assert pred_log_prob[query_valid].isfinite().all()
@@ -124,9 +122,9 @@ class TestGRU_ODE_Bayes(TestProbabilisticModel[GRU_ODE_Bayes]):
     def loss(
         self,
         model: GRU_ODE_Bayes,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return GRU-ODE-Bayes negative log-likelihood for predictions."""
         del model
         _, _, pred_log_prob = predictions

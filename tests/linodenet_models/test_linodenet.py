@@ -6,7 +6,7 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
-from torch import nan, nn
+from torch import Tensor, nan, nn
 from torch.nn import functional as F
 
 from linodenet_models.linodenet import LinearFlow, LinODEnet, make_linodenet
@@ -124,34 +124,26 @@ class TestLinODEnet(TestContinuousTimeModel[LinODEnet]):
             state_updater=updater,
         )
 
-    def forecast(
-        self,
-        model: LinODEnet,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: LinODEnet, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return LinODEnet predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
         pred = model.predict(
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
-        ).masked_fill(~inputs.query_mask, nan)
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+        ).masked_fill(~args.query_mask, nan)
 
-        assert pred.shape == inputs.target_values.shape
+        assert pred.shape == args.target_values.shape
         assert pred[query_valid].isfinite().all()
         assert pred[~query_valid].isnan().all()
         return (pred,)
 
     def loss(
-        self,
-        model: LinODEnet,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        self, model: LinODEnet, predictions: tuple[Tensor, ...], targets: Tensor
+    ) -> Tensor:
         r"""Return mean squared error for LinODEnet predictions."""
         del model
         (forecast,) = predictions

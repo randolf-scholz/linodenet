@@ -4,7 +4,7 @@ from typing import ClassVar
 
 import pytest
 import torch
-from torch import nan
+from torch import Tensor, nan
 
 from linodenet_models.gru_ode_bayes import GRU_Bayes, GRU_ODE_Bayes
 from linodenet_models.neural_flow import (
@@ -56,40 +56,38 @@ class TestNeuralFlow(TestProbabilisticModel[NeuralFlow]):
             raise TypeError("model_config must be a NeuralFlowConfig.")
         return NeuralFlow.from_config(model_config)
 
-    def forecast(
-        self, model: NeuralFlow, inputs: SplitTimeData, /
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: NeuralFlow, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return NeuralFlow predictions for sequential forecasting inputs."""
         if not isinstance(model, NeuralFlow):
             raise TypeError("model must be a NeuralFlow.")
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
         log_prob = model.log_prob(
-            inputs.target_values,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
-            context_times=inputs.context_times,
-            context_mask=inputs.context_mask,
-            context_values=inputs.context_values,
+            args.target_values,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+            context_times=args.context_times,
+            context_mask=args.context_mask,
+            context_values=args.context_values,
         )
         posterior_mean = model.pred_means
         posterior_logvar = model.pred_logvars
-        query_steps = inputs.query_mask.any(dim=-1)
+        query_steps = args.query_mask.any(dim=-1)
         query_mean = posterior_mean[query_steps]
         query_logvar = posterior_logvar[query_steps]
         query_log_prob = log_prob[query_steps]
-        query_mean[~inputs.query_mask[query_steps]] = nan
-        query_logvar[~inputs.query_mask[query_steps]] = nan
-        pred_mean = torch.full_like(inputs.target_values, nan)
-        pred_logvar = torch.full_like(inputs.target_values, nan)
-        pred_log_prob = inputs.target_values.new_full(inputs.query_times.shape, nan)
+        query_mean[~args.query_mask[query_steps]] = nan
+        query_logvar[~args.query_mask[query_steps]] = nan
+        pred_mean = torch.full_like(args.target_values, nan)
+        pred_logvar = torch.full_like(args.target_values, nan)
+        pred_log_prob = args.target_values.new_full(args.query_times.shape, nan)
         pred_mean[query_valid] = query_mean
         pred_logvar[query_valid] = query_logvar
         pred_log_prob[query_valid] = query_log_prob
 
-        assert pred_mean.shape == inputs.target_values.shape
-        assert pred_logvar.shape == inputs.target_values.shape
-        assert pred_log_prob.shape == inputs.query_times.shape
+        assert pred_mean.shape == args.target_values.shape
+        assert pred_logvar.shape == args.target_values.shape
+        assert pred_log_prob.shape == args.query_times.shape
         assert pred_mean[query_valid].isfinite().all()
         assert pred_logvar[query_valid].isfinite().all()
         assert pred_log_prob[query_valid].isfinite().all()
@@ -98,9 +96,9 @@ class TestNeuralFlow(TestProbabilisticModel[NeuralFlow]):
     def loss(
         self,
         model: NeuralFlow,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return NeuralFlow negative log-likelihood for predictions."""
         del model
         _, _, pred_log_prob = predictions

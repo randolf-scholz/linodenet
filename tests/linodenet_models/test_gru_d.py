@@ -4,7 +4,7 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
-from torch import nan
+from torch import Tensor, nan
 from torch.nn import functional as F
 
 from linodenet_models.gru_d import GRU_D
@@ -53,39 +53,31 @@ class TestGRU_D(TestContinuousTimeModel[GRU_D]):
             output_size=model_config.output_size,
         )
 
-    def forecast(
-        self,
-        model: GRU_D,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: GRU_D, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return GRU-D predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
 
         combined_pred = model.predict(
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
         )  # (..., N+K, F)
 
-        query_steps = inputs.query_mask.any(dim=-1)  # (..., N+K)
-        pred = torch.full_like(inputs.target_values, nan)
+        query_steps = args.query_mask.any(dim=-1)  # (..., N+K)
+        pred = torch.full_like(args.target_values, nan)
         pred[query_valid] = combined_pred[query_steps]
 
-        assert pred.shape == inputs.target_values.shape
+        assert pred.shape == args.target_values.shape
         assert pred[query_valid].isfinite().all()
         assert pred[~query_valid].isnan().all()
         return (pred,)
 
     def loss(
-        self,
-        model: GRU_D,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        self, model: GRU_D, predictions: tuple[Tensor, ...], targets: Tensor
+    ) -> Tensor:
         r"""Return mean squared error for GRU-D predictions."""
         del model
         (forecast,) = predictions

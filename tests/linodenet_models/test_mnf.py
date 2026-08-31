@@ -320,26 +320,21 @@ class TestMoses(TestPathModel[Moses]):
             num_encoder_heads=model_config.num_encoder_heads,
         )
 
-    def forecast(
-        self,
-        model: Moses,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[Tensor, ...]:
+    def forecast(self, model: Moses, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return Moses joint log likelihood broadcast over valid target positions."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
-        target_values = inputs.target_values
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
+        target_values = args.target_values
 
         log_prob = model.log_prob(
             target_values,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
         )
-        event_ndim = target_values.ndim - inputs.query_times.ndim
+        event_ndim = target_values.ndim - args.query_times.ndim
         log_prob = log_prob.reshape(*log_prob.shape, *((1,) * (event_ndim + 1)))
         predictions = torch.where(target_values.isfinite(), log_prob, torch.nan)
 

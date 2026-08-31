@@ -6,6 +6,7 @@ from typing import ClassVar
 import pytest
 import torch
 import yaml
+from torch import Tensor
 
 from linodenet_models.cru import (
     CRU,
@@ -163,7 +164,7 @@ class TestUpdateMasked:
                 super().__init__()
                 self.linear = torch.nn.Linear(4, 3)
 
-            def forward(self, values: torch.Tensor) -> torch.Tensor:
+            def forward(self, values: Tensor) -> Tensor:
                 target = torch.zeros(
                     [values.shape[0], 3],
                     dtype=values.dtype,
@@ -301,45 +302,39 @@ class TestCRU(TestProbabilisticModel[CRU]):
         r"""Instantiate a CRU from :attr:`STANDARD_CONFIG` without ``build_cru``."""
         return self.make_model(self.STANDARD_CONFIG)
 
-    def forecast(
-        self, model: CRU, inputs: SplitTimeData, /
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: CRU, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return CRU predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
-        context_mask = inputs.context_times.isfinite().unsqueeze(-1)
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
+        context_mask = args.context_times.isfinite().unsqueeze(-1)
+        assert torch.equal(args.context_mask, context_mask.expand_as(args.context_mask))
         assert torch.equal(
-            inputs.context_mask, context_mask.expand_as(inputs.context_mask)
-        )
-        assert torch.equal(
-            inputs.query_mask, query_valid.unsqueeze(-1).expand_as(inputs.query_mask)
+            args.query_mask, query_valid.unsqueeze(-1).expand_as(args.query_mask)
         )
 
         log_prob = model.log_prob(
-            inputs.target_values,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
+            args.target_values,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
         )
         all_pred_means = model.pred_means
         all_pred_vars = model.pred_variances
 
         # Extract predictions at query steps and scatter into (*, Q, F) output.
-        has_query = inputs.query_mask.any(dim=-1)
+        has_query = args.query_mask.any(dim=-1)
         query_log_prob = log_prob[has_query]
-        pred_mean = torch.full_like(inputs.target_values, torch.nan)
-        pred_var = torch.full_like(inputs.target_values, torch.nan)
-        pred_log_prob = inputs.target_values.new_full(
-            inputs.query_times.shape, torch.nan
-        )
+        pred_mean = torch.full_like(args.target_values, torch.nan)
+        pred_var = torch.full_like(args.target_values, torch.nan)
+        pred_log_prob = args.target_values.new_full(args.query_times.shape, torch.nan)
         pred_mean[query_valid] = all_pred_means[has_query]
         pred_var[query_valid] = all_pred_vars[has_query]
         pred_log_prob[query_valid] = query_log_prob
 
-        assert pred_mean.shape == inputs.target_values.shape
-        assert pred_var.shape == inputs.target_values.shape
+        assert pred_mean.shape == args.target_values.shape
+        assert pred_var.shape == args.target_values.shape
         assert pred_mean[query_valid].isfinite().all()
         assert pred_var[query_valid].isfinite().all()
         assert pred_log_prob[query_valid].isfinite().all()
@@ -348,9 +343,9 @@ class TestCRU(TestProbabilisticModel[CRU]):
     def loss(
         self,
         model: CRU,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return CRU negative log-likelihood for predictions."""
         del model
         _, _, pred_log_prob = predictions

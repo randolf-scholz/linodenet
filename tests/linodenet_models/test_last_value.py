@@ -6,6 +6,7 @@ from typing import ClassVar
 import matplotlib.pyplot as plt
 import pytest
 import torch
+from torch import Tensor
 from torch.nn import functional as F
 from torch.testing import assert_close
 
@@ -34,40 +35,32 @@ class TestLastValue(TestContinuousTimeModel[LastValue]):
         del model_config
         return LastValue()
 
-    def forecast(
-        self,
-        model: LastValue,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: LastValue, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return LastValue predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
         shape = (
-            *inputs.context_values.shape[:-2],
+            *args.context_values.shape[:-2],
             1,
-            *inputs.context_values.shape[-1:],
+            *args.context_values.shape[-1:],
         )
-        initial_state = inputs.context_values.new_zeros(shape)
+        initial_state = args.context_values.new_zeros(shape)
         pred = model(
-            query_times=inputs.query_times,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
+            query_times=args.query_times,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
             initial_state=initial_state,
         )
 
-        assert pred.shape == inputs.target_values.shape
+        assert pred.shape == args.target_values.shape
         assert pred[query_valid].isfinite().all()
         assert pred[~query_valid].isnan().all()
         return (pred,)
 
     def loss(
-        self,
-        model: LastValue,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        self, model: LastValue, predictions: tuple[Tensor, ...], targets: Tensor
+    ) -> Tensor:
         r"""Return mean squared error for LastValue predictions."""
         del model
         (forecast,) = predictions

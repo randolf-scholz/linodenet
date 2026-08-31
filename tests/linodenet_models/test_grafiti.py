@@ -4,7 +4,7 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
-from torch import nan
+from torch import Tensor, nan
 from torch.nn import functional as F
 from torch.testing import assert_close
 
@@ -51,33 +51,28 @@ class TestGrafiti(TestContinuousTimeModel[Grafiti]):
             num_heads=model_config.num_heads,
         )
 
-    def forecast(
-        self,
-        model: Grafiti,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+    def forecast(self, model: Grafiti, args: SplitTimeData) -> tuple[Tensor, ...]:
         r"""Return GraFITi predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
-        query_valid = inputs.query_mask.any(dim=-1)
-        time_points = torch.cat([inputs.context_times, inputs.query_times], dim=-1)
+        assert args.target_values is not None
+        query_valid = args.query_mask.any(dim=-1)
+        time_points = torch.cat([args.context_times, args.query_times], dim=-1)
         time_points = time_points.nan_to_num(0.0)
-        context_nan = inputs.context_values.new_full(
-            (*inputs.query_times.shape, inputs.context_values.shape[-1]),
+        context_nan = args.context_values.new_full(
+            (*args.query_times.shape, args.context_values.shape[-1]),
             nan,
         )
-        context_values = torch.cat([inputs.context_values, context_nan], dim=-2)
+        context_values = torch.cat([args.context_values, context_nan], dim=-2)
         context_mask = torch.cat(
             [
-                inputs.context_mask,
+                args.context_mask,
                 torch.zeros_like(context_nan, dtype=torch.bool),
             ],
             dim=-2,
         )
         query_mask = torch.cat(
             [
-                torch.zeros_like(inputs.context_values, dtype=torch.bool),
-                inputs.query_mask,
+                torch.zeros_like(args.context_values, dtype=torch.bool),
+                args.query_mask,
             ],
             dim=-2,
         )
@@ -87,18 +82,18 @@ class TestGrafiti(TestContinuousTimeModel[Grafiti]):
             context_mask=context_mask,
             query_mask=query_mask,
         )
-        predictions = forecasts[..., inputs.context_values.shape[-2] :, :]
+        predictions = forecasts[..., args.context_values.shape[-2] :, :]
 
-        assert predictions.shape == inputs.target_values.shape
+        assert predictions.shape == args.target_values.shape
         assert predictions[query_valid].isfinite().all()
         return (predictions,)
 
     def loss(
         self,
         model: Grafiti,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return mean squared error for GraFITi predictions."""
         (forecast,) = predictions
         mask = targets.isfinite()

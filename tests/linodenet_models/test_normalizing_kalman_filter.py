@@ -4,6 +4,7 @@ from typing import ClassVar, NamedTuple
 
 import pytest
 import torch
+from torch import Tensor
 from torch.testing import assert_close
 
 from linodenet.mappings.transforms.scalar import Sinh
@@ -69,38 +70,35 @@ class TestDiscreteTimeNKF(TestDiscreteTimeModel[DiscreteTimeNKF]):
         return model
 
     def forecast(
-        self,
-        model: DiscreteTimeNKF,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+        self, model: DiscreteTimeNKF, args: SplitTimeData
+    ) -> tuple[Tensor, ...]:
         r"""Return NKF predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
+        assert args.target_values is not None
         pred_mean, pred_scale = model.predict_observations(
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
         )
 
-        assert pred_mean.shape == inputs.target_values.shape
-        assert pred_scale.shape == inputs.target_values.shape
-        assert pred_mean[inputs.query_mask].isfinite().all()
-        assert pred_scale[inputs.query_mask].isfinite().all()
-        assert pred_mean[~inputs.query_mask].isnan().all()
-        assert pred_scale[~inputs.query_mask].isnan().all()
+        assert pred_mean.shape == args.target_values.shape
+        assert pred_scale.shape == args.target_values.shape
+        assert pred_mean[args.query_mask].isfinite().all()
+        assert pred_scale[args.query_mask].isfinite().all()
+        assert pred_mean[~args.query_mask].isnan().all()
+        assert pred_scale[~args.query_mask].isnan().all()
 
         log_prob = model.log_prob(
-            inputs.target_values,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            args.target_values,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
         )
-        assert log_prob.shape == inputs.query_times.shape
-        assert log_prob[inputs.query_mask.any(dim=-1)].isfinite().all()
+        assert log_prob.shape == args.query_times.shape
+        assert log_prob[args.query_mask.any(dim=-1)].isfinite().all()
 
         return pred_mean, pred_scale, log_prob
 
@@ -139,9 +137,9 @@ class TestDiscreteTimeNKF(TestDiscreteTimeModel[DiscreteTimeNKF]):
     def loss(
         self,
         model: DiscreteTimeNKF,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return the negative log-likelihood under the discrete NKF."""
         del model
         *_, log_prob = predictions
@@ -264,38 +262,35 @@ class TestContinuousTimeNKF(TestContinuousTimeModel[ContinuousTimeNKF]):
         )
 
     def forecast(
-        self,
-        model: ContinuousTimeNKF,
-        inputs: SplitTimeData,
-        /,
-    ) -> tuple[torch.Tensor, ...]:
+        self, model: ContinuousTimeNKF, args: SplitTimeData
+    ) -> tuple[Tensor, ...]:
         r"""Return continuous NKF predictions for sequential forecasting inputs."""
-        assert inputs.target_values is not None
+        assert args.target_values is not None
         pred_mean, pred_scale = model.predict_observations(
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
         )
 
-        assert pred_mean.shape == inputs.target_values.shape
-        assert pred_scale.shape == inputs.target_values.shape
-        assert pred_mean[inputs.query_mask].isfinite().all()
-        assert pred_scale[inputs.query_mask].isfinite().all()
-        assert pred_mean[~inputs.query_mask].isnan().all()
-        assert pred_scale[~inputs.query_mask].isnan().all()
+        assert pred_mean.shape == args.target_values.shape
+        assert pred_scale.shape == args.target_values.shape
+        assert pred_mean[args.query_mask].isfinite().all()
+        assert pred_scale[args.query_mask].isfinite().all()
+        assert pred_mean[~args.query_mask].isnan().all()
+        assert pred_scale[~args.query_mask].isnan().all()
 
         log_prob = model.log_prob(
-            inputs.target_values,
-            context_times=inputs.context_times,
-            context_values=inputs.context_values,
-            context_mask=inputs.context_mask,
-            query_times=inputs.query_times,
-            query_mask=inputs.query_mask,
+            args.target_values,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
         )
-        assert log_prob.shape == inputs.query_times.shape
-        assert log_prob[inputs.query_mask.any(dim=-1)].isfinite().all()
+        assert log_prob.shape == args.query_times.shape
+        assert log_prob[args.query_mask.any(dim=-1)].isfinite().all()
 
         return pred_mean, pred_scale, log_prob
 
@@ -334,9 +329,9 @@ class TestContinuousTimeNKF(TestContinuousTimeModel[ContinuousTimeNKF]):
     def loss(
         self,
         model: ContinuousTimeNKF,
-        predictions: tuple[torch.Tensor, ...],
-        targets: torch.Tensor,
-    ) -> torch.Tensor:
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
         r"""Return the negative log-likelihood under the continuous NKF."""
         del model
         *_, log_prob = predictions
