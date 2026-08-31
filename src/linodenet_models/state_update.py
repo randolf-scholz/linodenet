@@ -16,7 +16,6 @@ __all__ = [
 ]
 
 
-from collections.abc import Callable
 from functools import partial
 from typing import Protocol
 
@@ -79,8 +78,6 @@ class LpLoss(nn.Module):
         self.p = p
         self.dim = dim
         self.aggregation = aggregation
-
-    __call__: Callable[[Tensor, Tensor], Tensor]
 
     def forward(self, x: Tensor, y: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         return lp_loss(
@@ -186,7 +183,7 @@ class GradientStepUpdater(nn.Module):
         /,
     ) -> Tensor:  # Float[...,]
         # Note: ∇_θ ∑ᵢ ℓ(θᵢ) = (∇_{θ₁} ℓ(θ₁), ..., ∇_{θₙ} ℓ(θₙ))
-        return self.loss(self.decoder(x), y, mask=mask).sum()  # pyright: ignore[reportCallIssue]
+        return self.loss(self.decoder(x), y, mask=mask).sum()
 
     def grad_fn(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Return the gradient while preserving the input batch shape."""
@@ -195,8 +192,6 @@ class GradientStepUpdater(nn.Module):
             if mask is None
             else self._grad_fn_with_mask(y, x, mask)
         )
-
-    __call__: Callable[[Tensor, Tensor], Tensor]
 
     def forward(
         self,
