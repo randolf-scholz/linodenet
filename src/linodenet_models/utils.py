@@ -1126,7 +1126,7 @@ class TripletTimeData:
     @property
     def context_indices(self) -> tuple[Tensor, ...]:
         r"""Advanced indices recovering the simple split context layout."""
-        return self._simple_indices(
+        return self._split_indices(
             self.context_times,
             self.context_channels,
             dim=self.context_dim,
@@ -1139,7 +1139,7 @@ class TripletTimeData:
     @property
     def query_indices(self) -> tuple[Tensor, ...]:
         r"""Advanced indices recovering the simple split query layout."""
-        return self._simple_indices(
+        return self._split_indices(
             self.query_times,
             self.query_channels,
             dim=self.query_dim,
@@ -1269,7 +1269,7 @@ class TripletTimeData:
     def is_simple(self) -> bool:
         return self.is_trimmed()
 
-    def _simple_indices(
+    def _split_indices(
         self,
         times: Tensor,
         channels: Tensor,
@@ -1277,8 +1277,10 @@ class TripletTimeData:
         *,
         dim: int,
     ) -> tuple[Tensor, ...]:
-        if not self.is_simple():
-            raise ValueError("Simple split indices are only available for simple data.")
+        if not self.is_trimmed():
+            raise ValueError(
+                "Simple split indices are only available for trimmed data."
+            )
 
         seq_dim = -1 if self.batch_first else 0
         T = times.movedim(seq_dim, -1)

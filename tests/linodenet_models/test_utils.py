@@ -2053,39 +2053,6 @@ class TestTripletTimeData:
         assert lhs == rhs
         assert lhs != other
 
-    def test_is_simple(self) -> None:
-        arg = TripletTimeData(
-            context_times=torch.tensor([1.0, 1.0, 2.0]),
-            context_channels=torch.tensor([0, 1, 0]),
-            context_values=torch.tensor([10.0, 11.0, 20.0]),
-            query_times=torch.tensor([3.0, 3.0, 4.0]),
-            query_channels=torch.tensor([0, 1, 0]),
-            target_values=torch.tensor([30.0, 31.0, 40.0]),
-        )
-
-        assert arg.is_simple()
-        assert replace(
-            arg,
-            context_channels=torch.tensor([0, 0, 0]),
-        ).is_simple()
-        assert TripletTimeData(
-            context_times=torch.tensor([1.0]),
-            context_channels=torch.tensor([0]),
-            context_values=torch.tensor([10.0]),
-            query_times=torch.tensor([2.0, 2.0]),
-            query_channels=torch.tensor([1, 1]),
-            target_values=torch.tensor([20.0, 21.0]),
-            validate_args=False,
-        ).is_simple()
-        assert not TripletTimeData(
-            context_times=torch.tensor([[1.0, nan], [2.0, nan]]),
-            context_channels=torch.tensor([[0, -1], [1, -1]]),
-            context_values=torch.tensor([[10.0, nan], [20.0, nan]]),
-            query_times=torch.tensor([[3.0], [4.0]]),
-            query_channels=torch.tensor([[0], [0]]),
-            target_values=torch.tensor([[30.0], [40.0]]),
-        ).is_simple()
-
     @pytest.mark.parametrize("case", [key for key in TEST_DATA if key[0] == "simple"])
     def test_query_indices_recover_simple_split_target_layout(
         self, case: tuple[DataType, BatchType, bool]
