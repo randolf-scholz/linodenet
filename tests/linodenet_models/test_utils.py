@@ -1674,10 +1674,10 @@ class TestMergedTimeData:
         assert lhs == rhs
         assert lhs != other
 
-    def test_rejects_non_increasing_query_times(self) -> None:
+    def test_rejects_decreasing_query_times(self) -> None:
         with pytest.raises(AssertionError):
             MergedTimeData(
-                timestamps=torch.tensor([1.0, 1.0]),
+                timestamps=torch.tensor([1.5, 1.0]),
                 context_values=torch.tensor([
                     [1.0, nan],
                     [2.0, 3.0],
