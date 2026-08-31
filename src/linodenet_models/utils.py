@@ -1218,8 +1218,8 @@ class TripletTimeData:
 
     def normalize(self) -> TripletTimeData:
         # sanitize context and target values
-        context_mask = self.context_times.isfinite() & self.context_channels.ge(0)
-        query_mask = self.query_times.isfinite() & self.query_channels.ge(0)
+        context_mask = self.context_channels.ge(0)
+        query_mask = self.query_channels.ge(0)
 
         context_times = self.context_times.masked_fill(~context_mask, nan)
         context_values = self.context_values.masked_fill(~context_mask, nan)
