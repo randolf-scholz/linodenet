@@ -29,7 +29,7 @@ def _symmetrize(matrix: Array, /) -> Array:
 
 
 def _matrix_exp_symmetric(matrix: Array | NDArray[np.complex128], /) -> Array:
-    return _as_real_symmetric(expm(matrix))  # type: ignore[arg-type]
+    return _as_real_symmetric(expm(matrix))
 
 
 def _as_real_symmetric(matrix: Array | NDArray[np.complex128], /) -> Array:
@@ -42,7 +42,7 @@ def _as_real_symmetric(matrix: Array | NDArray[np.complex128], /) -> Array:
 
 def _inverse_spd(matrix: Array, /) -> Array:
     eye = np.eye(matrix.shape[0], dtype=float)
-    return _symmetrize(solve(matrix, eye, assume_a="pos"))  # pyrefly: ignore[bad-argument-type]
+    return _symmetrize(solve(matrix, eye, assume_a="pos"))
 
 
 def _validate_state(y_obs: Array, state: State, /) -> State:
@@ -89,7 +89,9 @@ def _mean_update(
             raise ValueError(msg)
 
 
-def _intrinsic_from_direction(direction: Array, sigma: Array, /) -> Array:
+def _intrinsic_from_direction(
+    direction: NDArray[np.float64], sigma: NDArray[np.float64], /
+) -> NDArray[np.float64]:
     # Take the symmetric principal square root of the covariance.
     sigma_sqrt = _as_real_symmetric(sqrtm(sigma))
     sigma_inv_sqrt = _inverse_spd(sigma_sqrt)
