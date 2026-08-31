@@ -499,6 +499,7 @@ class SplitTimeData:
             and _optional_tensor_values_equal(
                 self.static_covariates, other.static_covariates
             )
+            and self.batch_first == other.batch_first
         )
 
     def __post_init__(self, validate_args: bool) -> None:
@@ -785,6 +786,7 @@ class MergedTimeData:
             and _optional_tensor_values_equal(
                 self.static_covariates, other.static_covariates
             )
+            and self.batch_first == other.batch_first
         )
 
     def __post_init__(self, validate_args: bool) -> None:
@@ -1211,6 +1213,7 @@ class TripletTimeData:
             and _optional_tensor_values_equal(
                 self.static_covariates, other.static_covariates
             )
+            and self.batch_first == other.batch_first
         )
 
     def normalize(self) -> TripletTimeData:
