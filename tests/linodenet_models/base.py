@@ -196,9 +196,6 @@ def make_continuous_time_request(
     )
 
 
-make_forecasting_request = make_continuous_time_request
-
-
 def make_discrete_time_request(
     *,
     rng: int | torch.Generator,
