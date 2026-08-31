@@ -969,7 +969,7 @@ class MergedTimeData:
     def from_request(
         cls,
         *,
-        context_times: Tensor,  # Float[..., $N)], padded NaN, non-decreasing
+        context_times: Tensor,  # Float[..., $N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., $N, D], padded False
         context_values: Tensor,  # Float[..., $N, D], padded NaN, sparse
         query_times: Tensor,  # Float[..., $K], padded NaN, non-decreasing
@@ -980,71 +980,17 @@ class MergedTimeData:
         batch_first: bool = True,
         validate: bool = False,
     ) -> MergedTimeData:
-        # normalize to batch_last for construction
-        seq_dim = -2 if batch_first else 0
-        T = context_times.unsqueeze(-1).movedim(seq_dim, 0)
-        C = context_mask.movedim(seq_dim, 0)
-        X = context_values.movedim(seq_dim, 0)
-        Q = query_times.unsqueeze(-1).movedim(seq_dim, 0)
-        M = query_mask.movedim(seq_dim, 0)
-        Y = target_values.movedim(seq_dim, 0) if target_values is not None else None
-
-        ctx_size, *batch_shape, ctx_dim = X.shape
-        q_size, *_, q_dim = M.shape
-        ctx_pad_shape = (q_size, *batch_shape, ctx_dim)
-        qry_pad_shape = (ctx_size, *batch_shape, q_dim)
-
-        times = torch.cat([T, Q], dim=0)  # (..., $N+$K, 1)
-        permutation = torch.argsort(  # (..., $N+$K, 1)
-            times.nan_to_num(nan=torch.inf),
-            dim=0,
-            stable=True,
-        )
-        # inv_perm = torch.argsort(permutation, dim=0, stable=True)  # (..., $N+$K, 1)
-        # time_idx = inv_perm[ctx_size:].movedim(0, seq_dim).squeeze(-1)
-        # batch_idx = tuple(
-        #     torch.arange(size, device=times.device)
-        #     .reshape(
-        #         *(size if j == i else 1 for j in range(len(batch_shape))),
-        #     )
-        #     .unsqueeze(-1 if batch_first else 0)
-        #     for i, size in enumerate(batch_shape)
-        # )
-        # query_idx = (*batch_idx, time_idx) if batch_first else (time_idx, *batch_idx)
-
-        return MergedTimeData(
-            timestamps=(
-                times.take_along_dim(permutation, dim=0).movedim(0, seq_dim).squeeze(-1)
-            ),
-            context_mask=(
-                torch.cat([C, C.new_zeros(ctx_pad_shape)], dim=0)
-                .take_along_dim(permutation, dim=0)
-                .movedim(0, seq_dim)
-            ),
-            context_values=(
-                torch.cat([X, X.new_full(ctx_pad_shape, nan)], dim=0)
-                .take_along_dim(permutation, dim=0)
-                .movedim(0, seq_dim)
-            ),
-            query_mask=(
-                torch.cat([M.new_zeros(qry_pad_shape), M], dim=0)
-                .take_along_dim(permutation, dim=0)
-                .movedim(0, seq_dim)
-            ),
-            target_values=(
-                torch.cat([Y.new_full(qry_pad_shape, nan), Y], dim=0)
-                .take_along_dim(permutation, dim=0)
-                .movedim(0, seq_dim)
-                if Y is not None
-                else None
-            ),
+        return SplitTimeData(
+            context_times=context_times,
+            context_mask=context_mask,
+            context_values=context_values,
+            query_times=query_times,
+            query_mask=query_mask,
+            target_values=target_values,
             static_covariates=static_covariates,
-            # metadata
-            context_size=ctx_size,
-            query_size=q_size,
             batch_first=batch_first,
             validate_args=validate,
-        )
+        ).to_merged()
 
     @classmethod
     def from_unbatched(
