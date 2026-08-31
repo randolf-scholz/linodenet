@@ -677,41 +677,41 @@ class SplitTimeData:
     ) -> SplitTimeData:
         return triplet_to_split(arg, batch_first=batch_first)
 
-    def to_batch_first(self) -> SplitTimeData:
-        if self.batch_first:
-            return self
-        return replace(
-            self,
-            context_times=self.context_times.movedim(0, -1),
-            context_values=self.context_values.movedim(0, -2),
-            context_mask=self.context_mask.movedim(0, -2),
-            query_times=self.query_times.movedim(0, -1),
-            query_mask=self.query_mask.movedim(0, -2),
-            target_values=(
-                self.target_values.movedim(0, -2)
-                if self.target_values is not None
-                else None
-            ),
-            batch_first=True,
-            validate_args=False,
-        )
+    def to(
+        self, *, batch_first: bool | None = None, device: torch.device | None = None
+    ) -> SplitTimeData:
+        r"""Convert batch layout and optionally move tensors to a device.
 
-    def to_batch_last(self) -> SplitTimeData:
-        if not self.batch_first:
+        Args:
+            batch_first: Target batch layout. Retains the current layout when None.
+            device: Target device. Retains the current device when None.
+        """
+        if batch_first is None and device is None:
             return self
+
+        batch_first = self.batch_first if batch_first is None else batch_first
+        t_dim_in = -1 if self.batch_first else 0
+        t_dim_out = -1 if batch_first else 0
+        seq_dim = -2 if self.batch_first else 0
+        tgt_dim = -2 if batch_first else 0
         return replace(
             self,
-            context_times=self.context_times.movedim(-1, 0),
-            context_values=self.context_values.movedim(-2, 0),
-            context_mask=self.context_mask.movedim(-2, 0),
-            query_times=self.query_times.movedim(-1, 0),
-            query_mask=self.query_mask.movedim(-2, 0),
+            context_times=self.context_times.movedim(t_dim_in, t_dim_out).to(device),
+            context_values=self.context_values.movedim(seq_dim, tgt_dim).to(device),
+            context_mask=self.context_mask.movedim(seq_dim, tgt_dim).to(device),
+            query_times=self.query_times.movedim(t_dim_in, t_dim_out).to(device),
+            query_mask=self.query_mask.movedim(seq_dim, tgt_dim).to(device),
             target_values=(
-                self.target_values.movedim(-2, 0)
+                self.target_values.movedim(seq_dim, tgt_dim).to(device)
                 if self.target_values is not None
                 else None
             ),
-            batch_first=False,
+            static_covariates=(
+                self.static_covariates.to(device)
+                if self.static_covariates is not None
+                else None
+            ),
+            batch_first=batch_first,
             validate_args=False,
         )
 
@@ -1026,39 +1026,40 @@ class MergedTimeData:
     ) -> MergedTimeData:
         return triplet_to_merged(arg, batch_first=batch_first)
 
-    def to_batch_first(self) -> MergedTimeData:
-        if self.batch_first:
-            return self
-        return replace(
-            self,
-            timestamps=self.timestamps.movedim(0, -1),
-            context_mask=self.context_mask.movedim(0, -2),
-            context_values=self.context_values.movedim(0, -2),
-            query_mask=self.query_mask.movedim(0, -2),
-            target_values=(
-                self.target_values.movedim(0, -2)
-                if self.target_values is not None
-                else None
-            ),
-            batch_first=True,
-            validate_args=False,
-        )
+    def to(
+        self, *, batch_first: bool | None = None, device: torch.device | None = None
+    ) -> MergedTimeData:
+        r"""Convert batch layout and optionally move tensors to a device.
 
-    def to_batch_last(self) -> MergedTimeData:
-        if not self.batch_first:
+        Args:
+            batch_first: Target batch layout. Retains the current layout when None.
+            device: Target device. Retains the current device when None.
+        """
+        if batch_first is None and device is None:
             return self
+
+        batch_first = self.batch_first if batch_first is None else batch_first
+        t_dim_in = -1 if self.batch_first else 0
+        t_dim_out = -1 if batch_first else 0
+        seq_dim = -2 if self.batch_first else 0
+        tgt_dim = -2 if batch_first else 0
         return replace(
             self,
-            timestamps=self.timestamps.movedim(-1, 0),
-            context_mask=self.context_mask.movedim(-2, 0),
-            context_values=self.context_values.movedim(-2, 0),
-            query_mask=self.query_mask.movedim(-2, 0),
+            timestamps=self.timestamps.movedim(t_dim_in, t_dim_out).to(device),
+            context_mask=self.context_mask.movedim(seq_dim, tgt_dim).to(device),
+            context_values=self.context_values.movedim(seq_dim, tgt_dim).to(device),
+            query_mask=self.query_mask.movedim(seq_dim, tgt_dim).to(device),
             target_values=(
-                self.target_values.movedim(-2, 0)
+                self.target_values.movedim(seq_dim, tgt_dim).to(device)
                 if self.target_values is not None
                 else None
             ),
-            batch_first=False,
+            static_covariates=(
+                self.static_covariates.to(device)
+                if self.static_covariates is not None
+                else None
+            ),
+            batch_first=batch_first,
             validate_args=False,
         )
 
@@ -1376,41 +1377,39 @@ class TripletTimeData:
             batch_first=batch_first,
         )
 
-    def to_batch_first(self) -> TripletTimeData:
-        if self.batch_first:
-            return self
-        return replace(
-            self,
-            context_times=self.context_times.movedim(0, -1),
-            context_channels=self.context_channels.movedim(0, -1),
-            context_values=self.context_values.movedim(0, -1),
-            query_times=self.query_times.movedim(0, -1),
-            query_channels=self.query_channels.movedim(0, -1),
-            target_values=(
-                self.target_values.movedim(0, -1)
-                if self.target_values is not None
-                else None
-            ),
-            batch_first=True,
-            validate_args=False,
-        )
+    def to(
+        self, *, batch_first: bool | None = None, device: torch.device | None = None
+    ) -> TripletTimeData:
+        r"""Convert batch layout and optionally move tensors to a device.
 
-    def to_batch_last(self) -> TripletTimeData:
-        if not self.batch_first:
+        Args:
+            batch_first: Target batch layout. Retains the current layout when None.
+            device: Target device. Retains the current device when None.
+        """
+        if batch_first is None and device is None:
             return self
+
+        batch_first = self.batch_first if batch_first is None else batch_first
+        seq_dim = -1 if self.batch_first else 0
+        tgt_dim = -1 if batch_first else 0
         return replace(
             self,
-            context_times=self.context_times.movedim(-1, 0),
-            context_channels=self.context_channels.movedim(-1, 0),
-            context_values=self.context_values.movedim(-1, 0),
-            query_times=self.query_times.movedim(-1, 0),
-            query_channels=self.query_channels.movedim(-1, 0),
+            context_times=self.context_times.movedim(seq_dim, tgt_dim).to(device),
+            context_channels=self.context_channels.movedim(seq_dim, tgt_dim).to(device),
+            context_values=self.context_values.movedim(seq_dim, tgt_dim).to(device),
+            query_times=self.query_times.movedim(seq_dim, tgt_dim).to(device),
+            query_channels=self.query_channels.movedim(seq_dim, tgt_dim).to(device),
             target_values=(
-                self.target_values.movedim(-1, 0)
+                self.target_values.movedim(seq_dim, tgt_dim).to(device)
                 if self.target_values is not None
                 else None
             ),
-            batch_first=False,
+            static_covariates=(
+                self.static_covariates.to(device)
+                if self.static_covariates is not None
+                else None
+            ),
+            batch_first=batch_first,
             validate_args=False,
         )
 

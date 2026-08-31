@@ -1012,6 +1012,14 @@ BATCH_PARAMETERS = pytest.mark.parametrize(
         for batch_first in (True, False)
     ],
 )
+DEVICES = [
+    torch.device("cpu"),
+    *(
+        [torch.device("cuda", torch.cuda.current_device())]
+        if torch.cuda.is_available()
+        else []
+    ),
+]
 
 
 def _simple_test_data(
@@ -1372,8 +1380,8 @@ class TestSplitTimeData:
     def test_roundtrip_batch_first(self, batch_shape: tuple[int, ...]) -> None:
         original = _simple_test_data(batch_shape, True)["split"]
 
-        batch_last = original.to_batch_last()
-        actual = batch_last.to_batch_first()
+        batch_last = original.to(batch_first=False)
+        actual = batch_last.to(batch_first=True)
 
         assert batch_last.batch_shape == batch_shape
         assert not batch_last.batch_first
@@ -1386,8 +1394,8 @@ class TestSplitTimeData:
     def test_roundtrip_batch_last(self, batch_shape: tuple[int, ...]) -> None:
         original = _simple_test_data(batch_shape, False)["split"]
 
-        batch_first = original.to_batch_first()
-        actual = batch_first.to_batch_last()
+        batch_first = original.to(batch_first=True)
+        actual = batch_first.to(batch_first=False)
 
         assert batch_first.batch_shape == batch_shape
         assert batch_first.batch_first
@@ -1395,6 +1403,34 @@ class TestSplitTimeData:
         assert actual.batch_shape == batch_shape
         assert not actual.batch_first
         assert actual == original
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @BATCH_PARAMETERS
+    def test_to_device(
+        self,
+        batch_shape: tuple[int, ...],
+        batch_first: bool,
+        device: torch.device,
+    ) -> None:
+        original = _simple_test_data(batch_shape, batch_first)["split"]
+
+        actual = original.to(batch_first=not batch_first, device=device)
+
+        assert original.to() is original
+        assert actual.batch_first is not batch_first
+        assert all(
+            tensor.device == device
+            for tensor in (
+                actual.context_times,
+                actual.context_values,
+                actual.context_mask,
+                actual.query_times,
+                actual.query_mask,
+                actual.target_values,
+                actual.static_covariates,
+            )
+            if tensor is not None
+        )
 
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_unbatch(self, batch_first: bool) -> None:
@@ -1890,8 +1926,8 @@ class TestMergedTimeData:
     def test_roundtrip_batch_first(self, batch_shape: tuple[int, ...]) -> None:
         original = _simple_test_data(batch_shape, True)["merged"]
 
-        batch_last = original.to_batch_last()
-        actual = batch_last.to_batch_first()
+        batch_last = original.to(batch_first=False)
+        actual = batch_last.to(batch_first=True)
 
         assert batch_last.batch_shape == batch_shape
         assert not batch_last.batch_first
@@ -1904,8 +1940,8 @@ class TestMergedTimeData:
     def test_roundtrip_batch_last(self, batch_shape: tuple[int, ...]) -> None:
         original = _simple_test_data(batch_shape, False)["merged"]
 
-        batch_first = original.to_batch_first()
-        actual = batch_first.to_batch_last()
+        batch_first = original.to(batch_first=True)
+        actual = batch_first.to(batch_first=False)
 
         assert batch_first.batch_shape == batch_shape
         assert batch_first.batch_first
@@ -1913,6 +1949,33 @@ class TestMergedTimeData:
         assert actual.batch_shape == batch_shape
         assert not actual.batch_first
         assert actual == original
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @BATCH_PARAMETERS
+    def test_to_device(
+        self,
+        batch_shape: tuple[int, ...],
+        batch_first: bool,
+        device: torch.device,
+    ) -> None:
+        original = _simple_test_data(batch_shape, batch_first)["merged"]
+
+        actual = original.to(batch_first=not batch_first, device=device)
+
+        assert original.to() is original
+        assert actual.batch_first is not batch_first
+        assert all(
+            tensor.device == device
+            for tensor in (
+                actual.timestamps,
+                actual.context_mask,
+                actual.context_values,
+                actual.query_mask,
+                actual.target_values,
+                actual.static_covariates,
+            )
+            if tensor is not None
+        )
 
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_unbatch(self, batch_first: bool) -> None:
@@ -2162,8 +2225,8 @@ class TestTripletTimeData:
     def test_roundtrip_batch_first(self, batch_shape: tuple[int, ...]) -> None:
         original = _simple_test_data(batch_shape, True)["triplet"]
 
-        batch_last = original.to_batch_last()
-        actual = batch_last.to_batch_first()
+        batch_last = original.to(batch_first=False)
+        actual = batch_last.to(batch_first=True)
 
         assert batch_last.batch_shape == batch_shape
         assert not batch_last.batch_first
@@ -2176,8 +2239,8 @@ class TestTripletTimeData:
     def test_roundtrip_batch_last(self, batch_shape: tuple[int, ...]) -> None:
         original = _simple_test_data(batch_shape, False)["triplet"]
 
-        batch_first = original.to_batch_first()
-        actual = batch_first.to_batch_last()
+        batch_first = original.to(batch_first=True)
+        actual = batch_first.to(batch_first=False)
 
         assert batch_first.batch_shape == batch_shape
         assert batch_first.batch_first
@@ -2185,6 +2248,34 @@ class TestTripletTimeData:
         assert actual.batch_shape == batch_shape
         assert not actual.batch_first
         assert actual == original
+
+    @pytest.mark.parametrize("device", DEVICES, ids=str)
+    @BATCH_PARAMETERS
+    def test_to_device(
+        self,
+        batch_shape: tuple[int, ...],
+        batch_first: bool,
+        device: torch.device,
+    ) -> None:
+        original = _simple_test_data(batch_shape, batch_first)["triplet"]
+
+        actual = original.to(batch_first=not batch_first, device=device)
+
+        assert original.to() is original
+        assert actual.batch_first is not batch_first
+        assert all(
+            tensor.device == device
+            for tensor in (
+                actual.context_times,
+                actual.context_channels,
+                actual.context_values,
+                actual.query_times,
+                actual.query_channels,
+                actual.target_values,
+                actual.static_covariates,
+            )
+            if tensor is not None
+        )
 
     @pytest.mark.parametrize("batch_first", [True, False])
     def test_roundtrip_unbatch(self, batch_first: bool) -> None:
