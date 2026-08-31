@@ -769,20 +769,36 @@ class MergedTimeData:
     r"""Whether to validate the arguments."""
 
     @property
-    def context_indices(self) -> tuple[Tensor, ...]:
-        return self._split_indices(self.context_valid, self.context_size)
+    def batch_shape(self) -> tuple[int, ...]:
+        return (
+            self.timestamps.shape[:-1]
+            if self.batch_first
+            else self.timestamps.shape[1:]
+        )
+
+    @property
+    def context_dim(self) -> int:
+        return self.context_mask.shape[-1]
 
     @property
     def context_valid(self) -> Tensor:
         return self.context_mask.any(dim=-1)
 
     @property
-    def query_indices(self) -> tuple[Tensor, ...]:
-        return self._split_indices(self.query_valid, self.query_size)
+    def context_indices(self) -> tuple[Tensor, ...]:
+        return self._split_indices(self.context_valid, self.context_size)
+
+    @property
+    def query_dim(self) -> int:
+        return self.query_mask.shape[-1]
 
     @property
     def query_valid(self) -> Tensor:
         return self.query_mask.any(dim=-1)
+
+    @property
+    def query_indices(self) -> tuple[Tensor, ...]:
+        return self._split_indices(self.query_valid, self.query_size)
 
     def __eq__(self, other: object, /) -> bool:
         if not isinstance(other, MergedTimeData):
@@ -843,22 +859,6 @@ class MergedTimeData:
             query_size=self.query_size,
             validate_args=False,  # trust that the original data was valid, normalization does not change validity
         )
-
-    @property
-    def batch_shape(self) -> tuple[int, ...]:
-        return (
-            self.timestamps.shape[:-1]
-            if self.batch_first
-            else self.timestamps.shape[1:]
-        )
-
-    @property
-    def context_dim(self) -> int:
-        return self.context_mask.shape[-1]
-
-    @property
-    def query_dim(self) -> int:
-        return self.query_mask.shape[-1]
 
     def validate(self) -> None:
         # normalize to batch_first for validation
@@ -1170,6 +1170,14 @@ class TripletTimeData:
     validate_args: InitVar[bool] = True
 
     @property
+    def batch_shape(self) -> tuple[int, ...]:
+        return (
+            self.context_channels.shape[:-1]
+            if self.batch_first
+            else self.context_channels.shape[1:]
+        )
+
+    @property
     def context_indices(self) -> tuple[Tensor, ...]:
         r"""Advanced indices recovering the simple split context layout."""
         return self._simple_indices(
@@ -1179,6 +1187,10 @@ class TripletTimeData:
         )
 
     @property
+    def context_valid(self) -> Tensor:
+        return self.context_channels.ge(0)
+
+    @property
     def query_indices(self) -> tuple[Tensor, ...]:
         r"""Advanced indices recovering the simple split query layout."""
         return self._simple_indices(
@@ -1186,6 +1198,10 @@ class TripletTimeData:
             self.query_channels,
             dim=self.query_dim,
         )
+
+    @property
+    def query_valid(self) -> Tensor:
+        return self.query_channels.ge(0)
 
     def __post_init__(self, validate_args: bool) -> None:
         context_dim = (
@@ -1224,8 +1240,8 @@ class TripletTimeData:
 
     def normalize(self) -> TripletTimeData:
         # sanitize context and target values
-        context_mask = self.context_channels.ge(0)
-        query_mask = self.query_channels.ge(0)
+        context_mask = self.context_valid
+        query_mask = self.query_valid
 
         context_times = self.context_times.masked_fill(~context_mask, nan)
         context_values = self.context_values.masked_fill(~context_mask, nan)
@@ -1250,14 +1266,6 @@ class TripletTimeData:
             context_dim=self.context_dim,
             query_dim=self.query_dim,
             validate_args=False,  # trust that the original data was valid, normalization does not change validity
-        )
-
-    @property
-    def batch_shape(self) -> tuple[int, ...]:
-        return (
-            self.context_channels.shape[:-1]
-            if self.batch_first
-            else self.context_channels.shape[1:]
         )
 
     def validate(self) -> None:
@@ -1305,11 +1313,11 @@ class TripletTimeData:
 
     def is_trimmed(self) -> bool:
         seq_dim = -1 if self.batch_first else 0
-        C = self.context_channels.movedim(seq_dim, -1)
-        M = self.query_channels.movedim(seq_dim, -1)
+        C = self.context_valid.movedim(seq_dim, -1)
+        M = self.query_valid.movedim(seq_dim, -1)
         return bool(
-            C.ge(0).reshape(-1, C.shape[-1]).any(dim=0).all()
-            and M.ge(0).reshape(-1, M.shape[-1]).any(dim=0).all()
+            C.reshape(-1, C.shape[-1]).any(dim=0).all()
+            and M.reshape(-1, M.shape[-1]).any(dim=0).all()
         )
 
     def is_simple(self) -> bool:
