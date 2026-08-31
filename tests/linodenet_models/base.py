@@ -13,17 +13,6 @@ from linodenet_models import PathForecastingModel, ProbabilisticForecastingModel
 from linodenet_models.utils import SplitTimeData
 
 
-def _as_generator(
-    seed: int | torch.Generator, /, *, device: torch.device
-) -> torch.Generator:
-    r"""Return a torch generator from an integer seed or existing generator."""
-    return (
-        torch.Generator(device=device).manual_seed(seed)
-        if isinstance(seed, int)
-        else seed
-    )
-
-
 def assert_probabilistic_self_consistent(
     model: ProbabilisticForecastingModel,
     data: SplitTimeData,
@@ -132,7 +121,9 @@ def make_continuous_time_request(
 ) -> SplitTimeData:
     r"""Sample random dense forecasting inputs for a forecasting model."""
     device = torch.device("cpu") if device is None else device
-    rng = _as_generator(rng, device=device)
+    rng = (
+        torch.Generator(device=device).manual_seed(rng) if isinstance(rng, int) else rng
+    )
     batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
     output_shape = output_shape if output_shape is not None else context_shape
 
@@ -231,7 +222,9 @@ def make_discrete_time_request(
 ) -> SplitTimeData:
     r"""Sample random dense integer-step forecasting inputs."""
     device = torch.device("cpu") if device is None else device
-    rng = _as_generator(rng, device=device)
+    rng = (
+        torch.Generator(device=device).manual_seed(rng) if isinstance(rng, int) else rng
+    )
     batch_shape = (batch_shape,) if isinstance(batch_shape, int) else batch_shape
     output_shape = output_shape if output_shape is not None else context_shape
 
