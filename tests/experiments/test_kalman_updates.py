@@ -93,7 +93,7 @@ def _intrinsic_from_direction(
     direction: NDArray[np.float64], sigma: NDArray[np.float64], /
 ) -> NDArray[np.float64]:
     # Take the symmetric principal square root of the covariance.
-    sigma_sqrt = _as_real_symmetric(sqrtm(sigma))
+    sigma_sqrt = _as_real_symmetric(sqrtm(sigma))  # type: ignore[arg-type]
     sigma_inv_sqrt = _inverse_spd(sigma_sqrt)
     tangent = sigma_inv_sqrt @ direction @ sigma_inv_sqrt
     return _symmetrize(sigma_sqrt @ _matrix_exp_symmetric(tangent) @ sigma_sqrt)
@@ -125,7 +125,7 @@ def _cholesky_from_direction(direction: Array, sigma: Array, /) -> Array:
 
 def _log_from_direction(direction: Array, sigma: Array, /) -> Array:
     # Work in the symmetric matrix-log coordinates of the covariance.
-    sigma_log = _as_real_symmetric(logm(sigma))
+    sigma_log = _as_real_symmetric(logm(sigma))  # type: ignore[arg-type]
     # Apply the Fréchet derivative of log at the covariance to the update direction.
     eigvals, eigvecs = np.linalg.eigh(sigma)
     rotated = eigvecs.T @ direction @ eigvecs
