@@ -486,6 +486,38 @@ class SplitTimeData:
     validate_args: InitVar[bool] = True
     r"""Whether to validate the data."""
 
+    @property
+    def batch_shape(self) -> tuple[int, ...]:
+        return (
+            self.context_times.shape[:-1]
+            if self.batch_first
+            else self.context_times.shape[1:]
+        )
+
+    @property
+    def context_size(self) -> int:
+        return self.context_mask.shape[-2 if self.batch_first else 0]
+
+    @property
+    def context_dim(self) -> int:
+        return self.context_mask.shape[-1]
+
+    @property
+    def context_valid(self) -> Tensor:
+        return self.context_mask.any(dim=-1)
+
+    @property
+    def query_size(self) -> int:
+        return self.query_mask.shape[-2 if self.batch_first else 0]
+
+    @property
+    def query_dim(self) -> int:
+        return self.query_mask.shape[-1]
+
+    @property
+    def query_valid(self) -> Tensor:
+        return self.query_mask.any(dim=-1)
+
     def __eq__(self, other: object, /) -> bool:
         if not isinstance(other, SplitTimeData):
             return NotImplemented
@@ -509,10 +541,10 @@ class SplitTimeData:
     def normalize(self) -> SplitTimeData:
         # sanitize context and target values
         context_mask = self.context_mask
-        context_times = self.context_times.masked_fill(~context_mask.any(dim=-1), nan)
+        context_times = self.context_times.masked_fill(~self.context_valid, nan)
         context_values = self.context_values.masked_fill(~context_mask, nan)
         query_mask = self.query_mask
-        query_times = self.query_times.masked_fill(~query_mask.any(dim=-1), nan)
+        query_times = self.query_times.masked_fill(~self.query_valid, nan)
         target_values = (
             self.target_values.masked_fill(~query_mask, nan)
             if self.target_values is not None
@@ -530,30 +562,6 @@ class SplitTimeData:
             batch_first=self.batch_first,
             validate_args=False,  # trust that the original data was valid, normalization does not change validity
         )
-
-    @property
-    def batch_shape(self) -> tuple[int, ...]:
-        return (
-            self.context_times.shape[:-1]
-            if self.batch_first
-            else self.context_times.shape[1:]
-        )
-
-    @property
-    def context_size(self) -> int:
-        return self.context_mask.shape[-2 if self.batch_first else 0]
-
-    @property
-    def context_dim(self) -> int:
-        return self.context_mask.shape[-1]
-
-    @property
-    def query_size(self) -> int:
-        return self.query_mask.shape[-2 if self.batch_first else 0]
-
-    @property
-    def query_dim(self) -> int:
-        return self.query_mask.shape[-1]
 
     def validate(self) -> None:
         # normalize to batch_first for validation
@@ -608,12 +616,12 @@ class SplitTimeData:
             assert S.shape == (*batch_shape, static_dim)
 
     def is_trimmed(self) -> bool:
-        seq_dim = -2 if self.batch_first else 0
-        C = self.context_mask.movedim(seq_dim, -2)
-        M = self.query_mask.movedim(seq_dim, -2)
+        seq_dim = -1 if self.batch_first else 0
+        C = self.context_valid.movedim(seq_dim, -1)
+        M = self.query_valid.movedim(seq_dim, -1)
         return bool(
-            C.any(dim=-1).reshape(-1, C.shape[-2]).any(dim=0).all()
-            and M.any(dim=-1).reshape(-1, M.shape[-2]).any(dim=0).all()
+            C.reshape(-1, C.shape[-1]).any(dim=0).all()
+            and M.reshape(-1, M.shape[-1]).any(dim=0).all()
         )
 
     def is_simple(self) -> bool:
@@ -762,17 +770,19 @@ class MergedTimeData:
 
     @property
     def context_indices(self) -> tuple[Tensor, ...]:
-        seq_dim = -1 if self.batch_first else 0
-        ctx_valid = self.context_mask.any(dim=-1)
-        ctx_count = ctx_valid.sum(dim=seq_dim)
-        return self._split_indices(ctx_valid, ctx_count, self.context_size)
+        return self._split_indices(self.context_valid, self.context_size)
+
+    @property
+    def context_valid(self) -> Tensor:
+        return self.context_mask.any(dim=-1)
 
     @property
     def query_indices(self) -> tuple[Tensor, ...]:
-        seq_dim = -1 if self.batch_first else 0
-        qry_valid = self.query_mask.any(dim=-1)
-        qry_count = qry_valid.sum(dim=seq_dim)
-        return self._split_indices(qry_valid, qry_count, self.query_size)
+        return self._split_indices(self.query_valid, self.query_size)
+
+    @property
+    def query_valid(self) -> Tensor:
+        return self.query_mask.any(dim=-1)
 
     def __eq__(self, other: object, /) -> bool:
         if not isinstance(other, MergedTimeData):
@@ -794,12 +804,12 @@ class MergedTimeData:
         context_size = int(
             self.context_size
             if self.context_size >= 0
-            else self.context_mask.any(dim=-1).sum(dim=seq_dim).max().item()
+            else self.context_valid.sum(dim=seq_dim).max().item()
         )
         query_size = int(
             self.query_size
             if self.query_size >= 0
-            else self.query_mask.any(dim=-1).sum(dim=seq_dim).max().item()
+            else self.query_valid.sum(dim=seq_dim).max().item()
         )
         object.__setattr__(self, "context_size", context_size)
         object.__setattr__(self, "query_size", query_size)
@@ -812,7 +822,7 @@ class MergedTimeData:
         context_mask = self.context_mask
         query_mask = self.query_mask
         timestamps = self.timestamps.masked_fill(
-            ~(context_mask | query_mask).any(dim=-1), nan
+            ~(self.context_valid | self.query_valid), nan
         )
         context_values = self.context_values.masked_fill(~context_mask, nan)
         target_values = (
@@ -916,16 +926,12 @@ class MergedTimeData:
             ).all()
         )
 
-    def _split_indices(
-        self,
-        valid: Tensor,
-        count: Tensor,
-        size: int,
-        /,
-    ) -> tuple[Tensor, ...]:
+    def _split_indices(self, valid: Tensor, size: int, /) -> tuple[Tensor, ...]:
         if self.batch_first:
+            count = valid.sum(dim=-1)
             *batch_shape, num_combined = self.timestamps.shape
         else:
+            count = valid.sum(dim=0)
             num_combined, *batch_shape = self.timestamps.shape
 
         device = self.timestamps.device
