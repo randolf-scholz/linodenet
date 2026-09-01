@@ -132,7 +132,7 @@ class Meet[D: DomainLike](Domain):
         for arg in args:
             match arg:
                 case Meet():
-                    nodes.update(arg)
+                    nodes.update(arg)  # pyright: ignore[reportArgumentType]
                 case _:
                     nodes.add(arg)
 
@@ -247,7 +247,7 @@ class Join[D: DomainLike](Domain):
         for arg in args:
             match arg:
                 case Join():
-                    nodes.update(arg)
+                    nodes.update(arg)  # pyright: ignore[reportArgumentType]
                 case _:
                     nodes.add(arg)
 
