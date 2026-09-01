@@ -11,14 +11,20 @@ readme = "README.md"
 license-files = ["LICENSE"]
 authors = [{ name = "Randolf Scholz", email = "randolf.scholz@gmail.com" }]
 urls = { repository = "https://github.com/randolf-scholz/linodenet.git" }
-import-names = ["blueprint", "linodenet", "linodenet_special", "signatures"]
+import-names = [
+    "blueprint",
+    "linodenet",
+    "linodenet_models",
+    "linodenet_special",
+    "signatures",
+]
 
 # meta-information
 keywords = ["kalman-filter", "machine-learning", "neural-ode", "time-series"]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Intended Audience :: Science/Research",
     "Environment :: GPU :: NVIDIA CUDA",
+    "Intended Audience :: Science/Research",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3.14",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -28,7 +34,6 @@ classifiers = [
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "numpy>=2.5.2",
-    "scipy>=1.18.1",
     "torch>=2.13.0",
     "torchode>=1.0.1",
     "typing_extensions>=4.16.0",
@@ -45,18 +50,18 @@ dev = [
     { include-group = "tests" },
     { include-group = "typing" },
 ]
-devtools = [
-    "cmake>=4.4.3",
-    "ninja>=1.13.2",
-    "prek>=0.5.0",
-    "pybadges>=3.0.1",
-]
 debug = [
     "ipympl>=0.10.0",
     "ipywidgets>=8.1.9",
-    "jupyterlab-execute-time>=3.3.0",
     "jupyterlab>=4.6.3",
+    "jupyterlab-execute-time>=3.3.0",
     "psutil>=7.2.2",
+]
+devtools = [
+    "cmake>=4.4.3",
+    "ninja>=1.13.2",
+    "prek>=0.5.1",
+    "pybadges>=3.0.1",
 ]
 docs = [
     "docutils>=0.22.4",
@@ -65,6 +70,7 @@ docs = [
     "piccolo-theme>=0.24.0",
     "pydata-sphinx-theme>=0.21.0",
     "pygments>=2.21.0",
+    "sphinx>=9.1.0",
     "sphinx-autoapi>=3.8.1",
     "sphinx-autodoc2>=0.5.0",
     "sphinx-automodapi>=0.22.0",
@@ -72,10 +78,9 @@ docs = [
     "sphinx-math-dollar>=1.3",
     "sphinx-togglebutton>=0.4.5",
     "sphinx-typo3-theme>=4.9.0",
-    "sphinx>=9.1.0",
 ]
 linters = [
-    "prek>=0.5.0",
+    "prek>=0.5.1",
     "ruff>=0.16.5",
     "tach>=0.35.0",
 ]
@@ -86,13 +91,14 @@ tests = [
     "optuna>=4.9.0",
     "psutil>=7.2.2",
     "pygal>=3.1.3",
+    "pytest>=9.1.1",
     "pytest-benchmark[histogram]>=5.3.0",
     "pytest-cov>=7.1.0",
     "pytest-repeat>=0.9.4",
     "pytest-rerunfailures>=16.6",
     "pytest-xdist>=3.8.0",
-    "pytest>=9.1.1",
     "pyyaml>=6.0.3",
+    "scipy>=1.18.1",
     "torchdiffeq>=0.2.5",
     "torchinfo>=1.8.0",
     "tqdm>=4.70.0",
@@ -102,7 +108,7 @@ typing = [
     "pyrefly>=1.2.0",
     "pyright>=1.1.411",
     "scipy-stubs>=1.18.1.0",
-    "ty>=0.0.75",
+    "ty>=0.0.77",
     "types-colorama>=0.4.15.20260508",
     "types-defusedxml>=0.7.0.20260504",
     "types-jsonschema>=4.26.0.20260518",
@@ -145,25 +151,10 @@ docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.per-file-ignores]
-"**/test*" = [
-    "D100",
-    "D101",
-    "D104",
-    "D106",
-    "S101",
-    "SIM300",
-    "T20",
-    "UP018",
-    "RUF046"
-]
+"**/test*" = ["D100", "D101", "D104", "D106", "S101", "SIM300", "T20", "UP018", "RUF046"]
 
 [tool.ruff.lint.pylint]
-allow-dunder-method-names = [
-    "__array__",
-    "__array_ufunc__",
-    "__dataframe__",
-    "_repr_html_"
-]
+allow-dunder-method-names = ["__array__", "__array_ufunc__", "__dataframe__", "_repr_html_"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -324,7 +315,6 @@ invalid-overload = false
 unused-ignore = true
 # endregion pyrefly configuration ------------------------------------------------------
 
-
 # region mypy configuration ------------------------------------------------------------
 [tool.mypy]
 # SEE: https://mypy.readthedocs.io/en/stable/config_file.html
@@ -394,7 +384,6 @@ module = [
 ]
 ignore_missing_imports = true
 # endregion mypy configuration ---------------------------------------------------------
-
 
 # region pyright configuration ---------------------------------------------------------
 [tool.pyright]
@@ -515,7 +504,6 @@ reportUnusedImport = "error"  # default: "none"
 reportUnusedVariable = "error"  # default: "none"
 reportWildcardImportFromLibrary = "error"  # default: "warning"
 # endregion pyright configuration ------------------------------------------------------
-
 
 # region pytest configuration ----------------------------------------------------------
 [tool.pytest]
