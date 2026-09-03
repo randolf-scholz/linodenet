@@ -1,13 +1,15 @@
 #include "ndtri_exp.h"
 
+#include <ATen/ATen.h>
 #include <array>
 #include <limits>
 #include <mutex>
 #include <vector>
+#include <utility>  // std::pair
 
 namespace linodenet_special {
 namespace {
-    constexpr double UPPER_CUTOFF = -0.14541345786885906; // log(1-e^-2)
+    constexpr double UPPER_CUTOFF = -0.14541345786885906; // log(1-e⁻²)
     constexpr double LOWER_CUTOFF = -2.0;
     constexpr double NEG_INFINITY = -std::numeric_limits<double>::infinity();
 
