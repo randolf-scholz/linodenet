@@ -46,6 +46,7 @@ dependencies = [
 
 [tool.scikit-build]
 cmake.source-dir = "src/linodenet_special"
+cmake.build-type = "Release"
 wheel.packages = [
     "src/blueprint",
     "src/linodenet",
