@@ -3,6 +3,22 @@
   <component name="JsonSchemaMappingsProjectConfiguration">
     <state>
       <map>
+        <entry key="clang-tidy">
+          <value>
+            <SchemaInfo>
+              <option name="name" value="clang-tidy" />
+              <option name="relativePathToSchema" value="https://www.schemastore.org/clang-tidy.json" />
+              <option name="applicationDefined" value="true" />
+              <option name="patterns">
+                <list>
+                  <Item>
+                    <option name="path" value=".clang-tidy" />
+                  </Item>
+                </list>
+              </option>
+            </SchemaInfo>
+          </value>
+        </entry>
         <entry key="prek">
           <value>
             <SchemaInfo>
