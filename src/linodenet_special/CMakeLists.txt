@@ -70,6 +70,13 @@ add_library(linodenet_special SHARED ${linodenet_special_sources})
 # Section: apply target-local language, tooling, and linkage settings.
 target_compile_features(linodenet_special PRIVATE cxx_std_20)
 
+# GCC 13 falsely reports an overflow in PyTorch's Function::apply vector<bool> bookkeeping.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13
+    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14)
+    target_compile_options(linodenet_special PRIVATE -Wno-stringop-overflow)
+endif ()
+
 if (NOT LINODENET_SPECIAL_TORCH_CXX11_ABI STREQUAL "")
     if (NOT LINODENET_SPECIAL_TORCH_CXX11_ABI MATCHES "^[01]$")
         message(FATAL_ERROR "LINODENET_SPECIAL_TORCH_CXX11_ABI must be 0 or 1.")
