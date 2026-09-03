@@ -72,8 +72,8 @@ target_compile_features(linodenet_special PRIVATE cxx_std_20)
 
 # GCC 13 falsely reports an overflow in PyTorch's Function::apply vector<bool> bookkeeping.
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
-    AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13
-    AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14)
+        AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 13
+        AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 14)
     target_compile_options(linodenet_special PRIVATE -Wno-stringop-overflow)
 endif ()
 
@@ -88,11 +88,8 @@ if (NOT LINODENET_SPECIAL_TORCH_CXX11_ABI STREQUAL "")
 endif ()
 
 if (LINODENET_SPECIAL_ENABLE_CLANG_TIDY)
-    set_target_properties(
-            linodenet_special
-            PROPERTIES
-            CXX_CLANG_TIDY "clang-tidy"
-    )
+    find_program(CLANG_TIDY NAMES clang-tidy-20 clang-tidy REQUIRED)
+    set_property(TARGET linodenet_special PROPERTY CXX_CLANG_TIDY "${CLANG_TIDY}")
 endif ()
 
 target_link_libraries(linodenet_special PRIVATE torch)
