@@ -83,7 +83,9 @@ namespace {
         static std::vector<std::pair<CoeffCacheKey, CoeffTensors> > cache;
 
         const auto device = options.device();
-        const CoeffCacheKey key{device.type(), device.index(), options.dtype().toScalarType()}; {
+        const CoeffCacheKey key{
+            .device_type = device.type(), .device_index = device.index(), .scalar_type = options.dtype().toScalarType()
+        }; {
             // Fast path: return immediately when this device/dtype combination was
             // already materialized by an earlier call.
             const std::lock_guard lock(cache_mutex);
@@ -98,10 +100,10 @@ namespace {
         // be relatively expensive, so we do not want unrelated cache lookups to
         // block on this work.
         CoeffTensors coeffs{
-            torch::tensor(std::vector(P1.begin(), P1.end()), options),
-            torch::tensor(std::vector(Q1.begin(), Q1.end()), options),
-            torch::tensor(std::vector(P2.begin(), P2.end()), options),
-            torch::tensor(std::vector(Q2.begin(), Q2.end()), options),
+            .p1 = torch::tensor(std::vector(P1.begin(), P1.end()), options),
+            .q1 = torch::tensor(std::vector(Q1.begin(), Q1.end()), options),
+            .p2 = torch::tensor(std::vector(P2.begin(), P2.end()), options),
+            .q2 = torch::tensor(std::vector(Q2.begin(), Q2.end()), options),
         };
 
         const std::lock_guard lock(cache_mutex);
