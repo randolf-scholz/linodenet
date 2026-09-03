@@ -1,7 +1,10 @@
 #include "gaussian_transport.h"
 
+#include <ATen/ATen.h>
 #include <numbers>
 #include <vector>
+#include <tuple>
+#include <cstdint>
 
 #include "hard_bend.h"
 #include "ndtri_exp.h"
@@ -361,7 +364,7 @@ auto gaussian_to_mixture_value_and_grad(
 struct BimodalToGaussian : Function<BimodalToGaussian> {
     [[maybe_unused]] static auto forward(AutogradContext *ctx, const Tensor &x, const Tensor &mu,
         const Tensor &sigma) -> Tensor {
-        torch::NoGradGuard guard;
+        torch::NoGradGuard const guard;
         const Tensor y = std::get<0>(bimodal_value_and_stats(x, mu, sigma));
         ctx->save_for_backward({x, mu, sigma, y});
         return y;
@@ -392,7 +395,7 @@ struct BimodalToGaussianValueAndGrad : Function<BimodalToGaussianValueAndGrad> {
         const Tensor &mu,
         const Tensor &sigma
     ) -> variable_list {
-        torch::NoGradGuard guard;
+        torch::NoGradGuard const guard;
         const auto [y, d_x] = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
         ctx->save_for_backward({x, mu, sigma, y});
         return {y, d_x};
@@ -431,7 +434,7 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
         const Tensor &sigma,
         const int64_t maxiter
     ) -> Tensor {
-        torch::NoGradGuard guard;
+        torch::NoGradGuard const guard;
         const auto [x, _] = gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter);
         ctx->save_for_backward({x, mu, sigma, y});
         return x;
@@ -471,7 +474,7 @@ struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
         const Tensor &sigma,
         const int64_t maxiter
     ) -> variable_list {
-        torch::NoGradGuard guard;
+        torch::NoGradGuard const guard;
         const auto [x, d_fx] = gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter);
         ctx->save_for_backward({x, mu, sigma, y});
         return {x, d_fx};
@@ -528,7 +531,7 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
         const Tensor &mus,
         const Tensor &sigmas
     ) -> Tensor {
-        torch::NoGradGuard guard;
+        torch::NoGradGuard const guard;
         const Tensor y = std::get<0>(mixture_value_and_stats(x, weights, mus, sigmas));
         ctx->save_for_backward({x, weights, mus, sigmas, y});
         return y;
@@ -566,7 +569,7 @@ struct MixtureToGaussianValueAndGrad : Function<MixtureToGaussianValueAndGrad> {
         const Tensor &mus,
         const Tensor &sigmas
     ) -> variable_list {
-        torch::NoGradGuard guard;
+        torch::NoGradGuard const guard;
         const auto [y, d_x] = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
         ctx->save_for_backward({x, weights, mus, sigmas, y});
         return {y, d_x};
@@ -608,7 +611,7 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         const Tensor &sigmas,
         const int64_t maxiter
     ) -> Tensor {
-        torch::NoGradGuard guard;
+        torch::NoGradGuard const guard;
         const auto [x, _] = gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter);
         ctx->save_for_backward({x, weights, mus, sigmas, y});
         return x;
@@ -652,7 +655,7 @@ struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
         const Tensor &sigmas,
         const int64_t maxiter
     ) -> variable_list {
-        torch::NoGradGuard guard;
+        torch::NoGradGuard const guard;
         const auto [x, d_fx] = gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter);
         ctx->save_for_backward({x, weights, mus, sigmas, y});
         return {x, d_fx};
