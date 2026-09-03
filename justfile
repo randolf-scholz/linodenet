@@ -6,6 +6,21 @@ mod docs
 help:
     @just --justfile {{ justfile() }} --list
 
+[doc('Build release source and wheel distributions.')]
+build-release:
+    uv build -Ccmake.build-type=Release
+
+[doc('Build release source and wheel distributions.')]
+build: build-release
+
+[doc('Build a debug wheel.')]
+build-debug:
+    uv build --wheel -Ccmake.build-type=Debug
+
+[doc('Install the project in editable mode.')]
+install:
+    uv pip install --editable .
+
 [doc('Clean the workspace, create a uv virtualenv, and install the project editable.')]
 setup:
     #!/usr/bin/env bash
