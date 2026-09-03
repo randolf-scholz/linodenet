@@ -272,7 +272,7 @@ auto spectral_norm_meta(
     TORCH_CHECK(maxiter > 0, "maxiter must be a positive integer.");
     TORCH_CHECK(atol > 0.0, "atol must be a positive number.");
     TORCH_CHECK(rtol > 0.0, "rtol must be a positive number.");
-    return torch::empty({}, A.options());
+    return A.new_empty({});
 }
 
 

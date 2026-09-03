@@ -362,7 +362,14 @@ namespace {
             // compute the VJP
             const Tensor g_u = outer(p - at::linalg_vecdot(u, p) * u, v);
             const Tensor g_v = outer(u, q - at::linalg_vecdot(v, q) * v);
-            return {g_sigma + g_u + g_v, zero_u, zero_v, Tensor(), Tensor(), Tensor()};
+            return {
+                g_sigma + g_u + g_v,
+                zero_u,
+                zero_v,
+                Tensor(),
+                Tensor(),
+                Tensor(),
+            };
         }
     };
 } // namespace
@@ -391,9 +398,9 @@ auto singular_triplet_meta(
     TORCH_CHECK(atol > 0.0, "atol must be a positive number.");
     TORCH_CHECK(rtol > 0.0, "rtol must be a positive number.");
     return {
-        torch::empty({}, A.options()),  // sigma
-        torch::empty({M}, A.options()), // u
-        torch::empty({N}, A.options())  // v
+        A.new_empty({}),  // sigma
+        A.new_empty({M}), // u
+        A.new_empty({N})  // v
     };
 }
 
