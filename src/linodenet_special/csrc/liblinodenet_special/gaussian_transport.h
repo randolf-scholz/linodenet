@@ -5,107 +5,107 @@
 namespace linodenet_special {
 using torch::Tensor;
 
-Tensor bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor &sigma);
+auto bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor &sigma) -> Tensor;
 
-Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma);
+auto bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) -> Tensor;
 
-std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad_meta(
+auto bimodal_to_gaussian_value_and_grad_meta(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma
-);
+) -> std::tuple<Tensor, Tensor>;
 
-std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad(
+auto bimodal_to_gaussian_value_and_grad(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma
-);
+) -> std::tuple<Tensor, Tensor>;
 
-Tensor mixture_to_gaussian_meta(
+auto mixture_to_gaussian_meta(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-);
+) -> Tensor;
 
-Tensor mixture_to_gaussian(
+auto mixture_to_gaussian(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-);
+) -> Tensor;
 
-std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad_meta(
+auto mixture_to_gaussian_value_and_grad_meta(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-);
+) -> std::tuple<Tensor, Tensor>;
 
-std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad(
+auto mixture_to_gaussian_value_and_grad(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-);
+) -> std::tuple<Tensor, Tensor>;
 
-Tensor gaussian_to_bimodal_meta(
+auto gaussian_to_bimodal_meta(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     int64_t maxiter
-);
+) -> Tensor;
 
-Tensor gaussian_to_bimodal(
+auto gaussian_to_bimodal(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     int64_t maxiter
-);
+) -> Tensor;
 
-std::tuple<Tensor, Tensor> gaussian_to_bimodal_value_and_grad_meta(
+auto gaussian_to_bimodal_value_and_grad_meta(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     int64_t maxiter
-);
+) -> std::tuple<Tensor, Tensor>;
 
-std::tuple<Tensor, Tensor> gaussian_to_bimodal_value_and_grad(
+auto gaussian_to_bimodal_value_and_grad(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     int64_t maxiter
-);
+) -> std::tuple<Tensor, Tensor>;
 
-Tensor gaussian_to_mixture_meta(
+auto gaussian_to_mixture_meta(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     int64_t maxiter
-);
+) -> Tensor;
 
-Tensor gaussian_to_mixture(
+auto gaussian_to_mixture(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     int64_t maxiter
-);
+) -> Tensor;
 
-std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad_meta(
+auto gaussian_to_mixture_value_and_grad_meta(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     int64_t maxiter
-);
+) -> std::tuple<Tensor, Tensor>;
 
-std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad(
+auto gaussian_to_mixture_value_and_grad(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     int64_t maxiter
-);
+) -> std::tuple<Tensor, Tensor>;
 } // namespace linodenet_special

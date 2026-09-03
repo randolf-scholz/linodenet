@@ -5,5 +5,5 @@
 namespace linodenet_special {
 using torch::Tensor;
 
-Tensor ndtri_exp(const Tensor &log_p);
+autodtri_exp(const Tensor &log_p) - -> Tensor> Tensor;
 } // namespace linodenet_special

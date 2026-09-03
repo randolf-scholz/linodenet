@@ -1,6 +1,13 @@
 #include "hard_bend.h"
 
 namespace linodenet_special {
+
+// Temporary clang-tidy probe: clang-analyzer-core.NullDereference must flag this.
+[[maybe_unused]] void clang_tidy_probe() {
+    int *const null_pointer = nullptr;
+    *null_pointer = 42;
+}
+
 /**
  * Piecewise linear function (3 regions), close the origin: a*x, outside: mx±c.
  *
@@ -18,7 +25,7 @@ namespace linodenet_special {
  *
  * Inversion formula: y = f(x, a, c, m) ⟺ x = f(y, 1/a, c, 1/m)
  */
-Tensor hard_bend(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor &m) {
+auto hard_bend(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor &m) -> Tensor {
     const Tensor c_abs = c.abs();
     const Tensor m_signed = torch::copysign(m, a);
     const Tensor z = (a - m_signed) * x;
@@ -29,7 +36,7 @@ Tensor hard_bend(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor
     );
 }
 
-Tensor hard_bend_meta(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor &m) {
+auto hard_bend_meta(const Tensor &x, const Tensor &a, const Tensor &c, const Tensor &m) -> Tensor {
     TORCH_CHECK(x.is_floating_point(), "hard_bend: x must be a floating point tensor.");
     TORCH_CHECK(a.is_floating_point(), "hard_bend: a must be a floating point tensor.");
     TORCH_CHECK(c.is_floating_point(), "hard_bend: c must be a floating point tensor.");

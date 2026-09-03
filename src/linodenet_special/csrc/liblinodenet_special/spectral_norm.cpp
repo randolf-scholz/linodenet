@@ -127,7 +127,7 @@ struct SpectralNorm : Function<SpectralNorm> {
      * @param rtol: relative tolerance
      * @returns sigma: singular value
      */
-    static Tensor forward(
+    static auto forward(
         AutogradContext *ctx,
         const Tensor &A_in,
         const Tensor &u0,
@@ -135,7 +135,7 @@ struct SpectralNorm : Function<SpectralNorm> {
         const int64_t maxiter,
         const double atol = 1e-6,
         const double rtol = 1e-6
-    ) {
+    ) -> Tensor {
         torch::NoGradGuard guard;
 
         // Sec: Option parsing
@@ -227,10 +227,10 @@ struct SpectralNorm : Function<SpectralNorm> {
      * @param grad_output: outer gradients
      * @returns g: gradient with respect to inputs
      */
-    static variable_list backward(
+    static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &u = saved[0];
         const Tensor &v = saved[1];
@@ -246,14 +246,14 @@ struct SpectralNorm : Function<SpectralNorm> {
 };
 
 
-Tensor spectral_norm_meta(
+auto spectral_norm_meta(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     const int64_t maxiter,
     const double atol,
     const double rtol
-) {
+) -> Tensor {
     TORCH_CHECK(A.dim() == 2, "Input must be a 2D matrix.");
     TORCH_CHECK(A.is_floating_point(), "Input must be a floating point tensor.");
     const auto M = A.size(0);
@@ -273,14 +273,14 @@ Tensor spectral_norm_meta(
 }
 
 
-Tensor spectral_norm(
+auto spectral_norm(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     const int64_t maxiter,
     const double atol,
     const double rtol
-) {
+) -> Tensor {
     Tensor u = u0.has_value()
                ? u0.value().detach().clone()
                : torch::randn({A.size(0)}, A.options());

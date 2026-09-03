@@ -45,11 +45,11 @@ void check_mixture_args(
     );
 }
 
-std::tuple<Tensor, Tensor, Tensor> bimodal_value_and_stats(
+auto bimodal_value_and_stats(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma
-) {
+) -> std::tuple<Tensor, Tensor, Tensor> {
     const Tensor mu_abs = mu.abs();
     const Tensor z_plus = (x + mu_abs) / sigma;
     const Tensor z_minus = (x - mu_abs) / sigma;
@@ -64,11 +64,11 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_value_and_stats(
     return {y.clamp_(z_minus, z_plus), z_plus, z_minus};
 }
 
-std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad(
+auto bimodal_to_gaussian_value_and_grad(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma
-) {
+) -> std::tuple<Tensor, Tensor> {
     const auto [fx, z_plus, z_minus] = bimodal_value_and_stats(x, mu, sigma);
     const Tensor log_sigma = sigma.log();
     const Tensor lower_bound = exp(-0.5 * (mu / sigma).square()) / sigma;
@@ -87,12 +87,12 @@ std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad(
  * \dv{y}{μ} &= ½σ⁻¹(ℯ^{½(y²-z₊²)} - ℯ^{½(y²-z₋²)}) \\
  * \dv{y}{σ} &= -½σ⁻¹(z₊ℯ^{½(y²-z₊²)} + z₋ℯ^{½(y²-z₋²)})
  */
-std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives(
+auto bimodal_to_gaussian_derivatives(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma,
     const Tensor &y
-) {
+) -> std::tuple<Tensor, Tensor, Tensor> {
     const Tensor mu_abs = mu.abs();
     const Tensor z_plus = (x + mu_abs) / sigma;
     const Tensor z_minus = (x - mu_abs) / sigma;
@@ -118,12 +118,12 @@ std::tuple<Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives(
     return {d_x, d_mu, d_sigma};
 }
 
-std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> bimodal_to_gaussian_derivatives2(
+auto bimodal_to_gaussian_derivatives2(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma,
     const Tensor &y
-) {
+) -> std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> {
     const Tensor mu_abs = mu.abs();
     const Tensor z_plus = (x + mu_abs) / sigma;
     const Tensor z_minus = (x - mu_abs) / sigma;
@@ -162,19 +162,19 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> bimodal_to_gaussian_d
     return {d_x, d_mu, d_sigma_exact, d2_x, d2_mu, d2_sigma};
 }
 
-Tensor gaussian_to_bimodal_guess(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+auto gaussian_to_bimodal_guess(const Tensor &x, const Tensor &mu, const Tensor &sigma) -> Tensor {
     // Match the slope at the origin with the hard-bend surrogate to get a cheap
     // initial guess for the safeguarded Newton iteration.
     const Tensor lambda = exp(-0.5 * (mu / sigma).square()) / sigma;
     return linodenet_special::hard_bend(x, lambda, mu, sigma.reciprocal());
 }
 
-std::tuple<Tensor, Tensor> gaussian_to_bimodal_value_and_grad(
+auto gaussian_to_bimodal_value_and_grad(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     const int64_t maxiter
-) {
+) -> std::tuple<Tensor, Tensor> {
     const Tensor m = mu.abs();
     Tensor lower = sigma * y - m;
     Tensor upper = sigma * y + m;
@@ -202,12 +202,12 @@ std::tuple<Tensor, Tensor> gaussian_to_bimodal_value_and_grad(
     return {x, d_fx.reciprocal()};
 }
 
-std::tuple<Tensor, Tensor, Tensor> mixture_value_and_stats(
+auto mixture_value_and_stats(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-) {
+) -> std::tuple<Tensor, Tensor, Tensor> {
     const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
     const Tensor log_w = weights.log();
     const Tensor log_p = logsumexp(log_w + log_ndtr(z), -1);
@@ -230,13 +230,13 @@ std::tuple<Tensor, Tensor, Tensor> mixture_value_and_stats(
  * ∂y/∂μₖ &= -(ωₖ/σₖ) ℯ^{½(y²-zₖ²)}, \\
  * ∂y/∂σₖ &= -(ωₖ zₖ/σₖ) ℯ^{½(y²-zₖ²)}.
  */
-std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_to_gaussian_derivatives(
+auto mixture_to_gaussian_derivatives(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     const Tensor &y
-) {
+) -> std::tuple<Tensor, Tensor, Tensor, Tensor> {
     const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
     const Tensor log_w = weights.log();
     const Tensor log_sigmas = sigmas.log();
@@ -262,14 +262,14 @@ std::tuple<Tensor, Tensor, Tensor, Tensor> mixture_to_gaussian_derivatives(
     return {d_x, d_weights, d_mus, d_sigmas};
 }
 
-std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor>
+auto
 mixture_to_gaussian_derivatives2(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     const Tensor &y
-) {
+) -> std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> {
     const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
     const Tensor log_w = weights.log();
     const Tensor log_sigmas = sigmas.log();
@@ -305,12 +305,12 @@ mixture_to_gaussian_derivatives2(
     return {d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas};
 }
 
-std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad(
+auto mixture_to_gaussian_value_and_grad(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-) {
+) -> std::tuple<Tensor, Tensor> {
     const auto [fx, z, log_w] = mixture_value_and_stats(x, weights, mus, sigmas);
     const Tensor log_sigmas = sigmas.log();
     const Tensor log_ratio = 0.5 * (fx.square().unsqueeze(-1) - z.square());
@@ -318,13 +318,13 @@ std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad(
     return {fx, d_fx};
 }
 
-std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad(
+auto gaussian_to_mixture_value_and_grad(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     const int64_t maxiter
-) {
+) -> std::tuple<Tensor, Tensor> {
     // Each component alone would invert y to xₖ = μₖ + σₖy. The mixture inverse
     // must lie between the smallest and largest of these affine tail candidates,
     // so we use their pointwise min/max as a safe bracket and their weighted mean
@@ -358,18 +358,18 @@ std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad(
 
 
 struct BimodalToGaussian : Function<BimodalToGaussian> {
-    [[maybe_unused]] static Tensor forward(AutogradContext *ctx, const Tensor &x, const Tensor &mu,
-        const Tensor &sigma) {
+    [[maybe_unused]] static auto forward(AutogradContext *ctx, const Tensor &x, const Tensor &mu,
+        const Tensor &sigma) -> Tensor {
         torch::NoGradGuard guard;
         const Tensor y = std::get<0>(bimodal_value_and_stats(x, mu, sigma));
         ctx->save_for_backward({x, mu, sigma, y});
         return y;
     }
 
-    [[maybe_unused]] static variable_list backward(
+    [[maybe_unused]] static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
         const Tensor &mu = saved[1];
@@ -385,22 +385,22 @@ struct BimodalToGaussian : Function<BimodalToGaussian> {
 };
 
 struct BimodalToGaussianValueAndGrad : Function<BimodalToGaussianValueAndGrad> {
-    [[maybe_unused]] static variable_list forward(
+    [[maybe_unused]] static auto forward(
         AutogradContext *ctx,
         const Tensor &x,
         const Tensor &mu,
         const Tensor &sigma
-    ) {
+    ) -> variable_list {
         torch::NoGradGuard guard;
         const auto [y, d_x] = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
         ctx->save_for_backward({x, mu, sigma, y});
         return {y, d_x};
     }
 
-    [[maybe_unused]] static variable_list backward(
+    [[maybe_unused]] static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
         const Tensor &mu = saved[1];
@@ -423,23 +423,23 @@ struct BimodalToGaussianValueAndGrad : Function<BimodalToGaussianValueAndGrad> {
 };
 
 struct GaussianToBimodal : Function<GaussianToBimodal> {
-    [[maybe_unused]] static Tensor forward(
+    [[maybe_unused]] static auto forward(
         AutogradContext *ctx,
         const Tensor &y,
         const Tensor &mu,
         const Tensor &sigma,
         const int64_t maxiter
-    ) {
+    ) -> Tensor {
         torch::NoGradGuard guard;
         const auto [x, _] = gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter);
         ctx->save_for_backward({x, mu, sigma, y});
         return x;
     }
 
-    [[maybe_unused]] static variable_list backward(
+    [[maybe_unused]] static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
         const Tensor &mu = saved[1];
@@ -463,23 +463,23 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
 };
 
 struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
-    [[maybe_unused]] static variable_list forward(
+    [[maybe_unused]] static auto forward(
         AutogradContext *ctx,
         const Tensor &y,
         const Tensor &mu,
         const Tensor &sigma,
         const int64_t maxiter
-    ) {
+    ) -> variable_list {
         torch::NoGradGuard guard;
         const auto [x, d_fx] = gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter);
         ctx->save_for_backward({x, mu, sigma, y});
         return {x, d_fx};
     }
 
-    [[maybe_unused]] static variable_list backward(
+    [[maybe_unused]] static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
         const Tensor &mu = saved[1];
@@ -520,23 +520,23 @@ struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
 };
 
 struct MixtureToGaussian : Function<MixtureToGaussian> {
-    [[maybe_unused]] static Tensor forward(
+    [[maybe_unused]] static auto forward(
         AutogradContext *ctx,
         const Tensor &x,
         const Tensor &weights,
         const Tensor &mus,
         const Tensor &sigmas
-    ) {
+    ) -> Tensor {
         torch::NoGradGuard guard;
         const Tensor y = std::get<0>(mixture_value_and_stats(x, weights, mus, sigmas));
         ctx->save_for_backward({x, weights, mus, sigmas, y});
         return y;
     }
 
-    [[maybe_unused]] static variable_list backward(
+    [[maybe_unused]] static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
         const Tensor &weights = saved[1];
@@ -558,23 +558,23 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
 };
 
 struct MixtureToGaussianValueAndGrad : Function<MixtureToGaussianValueAndGrad> {
-    [[maybe_unused]] static variable_list forward(
+    [[maybe_unused]] static auto forward(
         AutogradContext *ctx,
         const Tensor &x,
         const Tensor &weights,
         const Tensor &mus,
         const Tensor &sigmas
-    ) {
+    ) -> variable_list {
         torch::NoGradGuard guard;
         const auto [y, d_x] = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
         ctx->save_for_backward({x, weights, mus, sigmas, y});
         return {y, d_x};
     }
 
-    [[maybe_unused]] static variable_list backward(
+    [[maybe_unused]] static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
         const Tensor &weights = saved[1];
@@ -599,24 +599,24 @@ struct MixtureToGaussianValueAndGrad : Function<MixtureToGaussianValueAndGrad> {
 };
 
 struct GaussianToMixture : Function<GaussianToMixture> {
-    [[maybe_unused]] static Tensor forward(
+    [[maybe_unused]] static auto forward(
         AutogradContext *ctx,
         const Tensor &y,
         const Tensor &weights,
         const Tensor &mus,
         const Tensor &sigmas,
         const int64_t maxiter
-    ) {
+    ) -> Tensor {
         torch::NoGradGuard guard;
         const auto [x, _] = gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter);
         ctx->save_for_backward({x, weights, mus, sigmas, y});
         return x;
     }
 
-    [[maybe_unused]] static variable_list backward(
+    [[maybe_unused]] static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
         const Tensor &weights = saved[1];
@@ -643,24 +643,24 @@ struct GaussianToMixture : Function<GaussianToMixture> {
 };
 
 struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
-    [[maybe_unused]] static variable_list forward(
+    [[maybe_unused]] static auto forward(
         AutogradContext *ctx,
         const Tensor &y,
         const Tensor &weights,
         const Tensor &mus,
         const Tensor &sigmas,
         const int64_t maxiter
-    ) {
+    ) -> variable_list {
         torch::NoGradGuard guard;
         const auto [x, d_fx] = gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter);
         ctx->save_for_backward({x, weights, mus, sigmas, y});
         return {x, d_fx};
     }
 
-    [[maybe_unused]] static variable_list backward(
+    [[maybe_unused]] static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &x = saved[0];
         const Tensor &weights = saved[1];
@@ -708,154 +708,154 @@ struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
 } // namespace
 
 namespace linodenet_special {
-Tensor bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+auto bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor &sigma) -> Tensor {
     check_bimodal_args(x, mu, sigma);
     const auto tensors = torch::broadcast_tensors({x, mu, sigma});
     return torch::empty_like(tensors[0]);
 }
 
-std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad_meta(
+auto bimodal_to_gaussian_value_and_grad_meta(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma
-) {
+) -> std::tuple<Tensor, Tensor> {
     const Tensor y = bimodal_to_gaussian_meta(x, mu, sigma);
     return {y, torch::empty_like(y)};
 }
 
-Tensor gaussian_to_bimodal_meta(
+auto gaussian_to_bimodal_meta(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     const int64_t maxiter
-) {
+) -> Tensor {
     check_bimodal_args(y, mu, sigma);
     TORCH_CHECK(maxiter >= 0, "maxiter must be a non-negative integer.");
     const auto tensors = torch::broadcast_tensors({y, mu, sigma});
     return torch::empty_like(tensors[0]);
 }
 
-std::tuple<Tensor, Tensor> gaussian_to_bimodal_value_and_grad_meta(
+auto gaussian_to_bimodal_value_and_grad_meta(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     const int64_t maxiter
-) {
+) -> std::tuple<Tensor, Tensor> {
     const Tensor x = gaussian_to_bimodal_meta(y, mu, sigma, maxiter);
     return {x, torch::empty_like(x)};
 }
 
-Tensor bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+auto bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) -> Tensor {
     return BimodalToGaussian::apply(x, mu, sigma);
 }
 
-std::tuple<Tensor, Tensor> bimodal_to_gaussian_value_and_grad(
+auto bimodal_to_gaussian_value_and_grad(
     const Tensor &x,
     const Tensor &mu,
     const Tensor &sigma
-) {
+) -> std::tuple<Tensor, Tensor> {
     auto output = BimodalToGaussianValueAndGrad::apply(x, mu, sigma);
     return {output[0], output[1]};
 }
 
-Tensor gaussian_to_bimodal(
+auto gaussian_to_bimodal(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     const int64_t maxiter
-) {
+) -> Tensor {
     return GaussianToBimodal::apply(y, mu, sigma, maxiter);
 }
 
-std::tuple<Tensor, Tensor> gaussian_to_bimodal_value_and_grad(
+auto gaussian_to_bimodal_value_and_grad(
     const Tensor &y,
     const Tensor &mu,
     const Tensor &sigma,
     const int64_t maxiter
-) {
+) -> std::tuple<Tensor, Tensor> {
     auto output = GaussianToBimodalValueAndGrad::apply(y, mu, sigma, maxiter);
     return {output[0], output[1]};
 }
 
-Tensor mixture_to_gaussian_meta(
+auto mixture_to_gaussian_meta(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-) {
+) -> Tensor {
     check_mixture_args(x, weights, mus, sigmas);
     return torch::empty_like(x);
 }
 
-std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad_meta(
+auto mixture_to_gaussian_value_and_grad_meta(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-) {
+) -> std::tuple<Tensor, Tensor> {
     const Tensor y = mixture_to_gaussian_meta(x, weights, mus, sigmas);
     return {y, torch::empty_like(y)};
 }
 
-Tensor gaussian_to_mixture_meta(
+auto gaussian_to_mixture_meta(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     const int64_t maxiter
-) {
+) -> Tensor {
     check_mixture_args(y, weights, mus, sigmas);
     TORCH_CHECK(maxiter >= 0, "maxiter must be a non-negative integer.");
     return torch::empty_like(y);
 }
 
-std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad_meta(
+auto gaussian_to_mixture_value_and_grad_meta(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     const int64_t maxiter
-) {
+) -> std::tuple<Tensor, Tensor> {
     const Tensor x = gaussian_to_mixture_meta(y, weights, mus, sigmas, maxiter);
     return {x, torch::empty_like(x)};
 }
 
-Tensor mixture_to_gaussian(
+auto mixture_to_gaussian(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-) {
+) -> Tensor {
     return MixtureToGaussian::apply(x, weights, mus, sigmas);
 }
 
-std::tuple<Tensor, Tensor> mixture_to_gaussian_value_and_grad(
+auto mixture_to_gaussian_value_and_grad(
     const Tensor &x,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas
-) {
+) -> std::tuple<Tensor, Tensor> {
     auto output = MixtureToGaussianValueAndGrad::apply(x, weights, mus, sigmas);
     return {output[0], output[1]};
 }
 
-Tensor gaussian_to_mixture(
+auto gaussian_to_mixture(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     const int64_t maxiter
-) {
+) -> Tensor {
     return GaussianToMixture::apply(y, weights, mus, sigmas, maxiter);
 }
 
-std::tuple<Tensor, Tensor> gaussian_to_mixture_value_and_grad(
+auto gaussian_to_mixture_value_and_grad(
     const Tensor &y,
     const Tensor &weights,
     const Tensor &mus,
     const Tensor &sigmas,
     const int64_t maxiter
-) {
+) -> std::tuple<Tensor, Tensor> {
     auto output = GaussianToMixtureValueAndGrad::apply(y, weights, mus, sigmas, maxiter);
     return {output[0], output[1]};
 }

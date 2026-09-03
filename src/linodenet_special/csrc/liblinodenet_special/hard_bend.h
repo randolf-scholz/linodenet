@@ -5,10 +5,10 @@
 namespace linodenet_special {
 using torch::Tensor;
 
-Tensor hard_bend(
+autoard_bend(
     const Tensor &x,
     const Tensor &a,
     const Tensor &c,
     const Tensor &m
-);
+) - -> Tensor> Tensor;
 } // namespace linodenet_special

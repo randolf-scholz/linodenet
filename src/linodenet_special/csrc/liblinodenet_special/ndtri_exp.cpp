@@ -62,7 +62,7 @@ namespace {
         const Tensor q2;
     };
 
-    CoeffTensors get_coeffs(const torch::TensorOptions &options) {
+    auto get_coeffs(const torch::TensorOptions &options) -> CoeffTensors {
         return CoeffTensors{
             .p1 = torch::tensor({
                 4.05544892305962419923,
@@ -118,7 +118,7 @@ namespace {
         c10::DeviceIndex device_index;
         at::ScalarType scalar_type;
 
-        friend bool operator==(const CoeffCacheKey &lhs, const CoeffCacheKey &rhs) {
+        friend auto operator==(const CoeffCacheKey &lhs, const CoeffCacheKey &rhs) -> bool {
             return (
                 lhs.device_type == rhs.device_type &&
                 lhs.device_index == rhs.device_index &&
@@ -127,7 +127,7 @@ namespace {
         }
     };
 
-    CoeffTensors get_cached_coeffs(const torch::TensorOptions &options) {
+    auto get_cached_coeffs(const torch::TensorOptions &options) -> CoeffTensors {
         static std::mutex cache_mutex;
         static std::vector<std::pair<CoeffCacheKey, CoeffTensors> > cache;
 
@@ -165,7 +165,7 @@ namespace {
         return coeffs;
     }
 
-    Tensor polyeval8(const Tensor &x, const Tensor &coeffs) {
+    auto polyeval8(const Tensor &x, const Tensor &coeffs) -> Tensor {
         Tensor y = torch::zeros_like(x);
         y = at::addcmul(coeffs[0], x, y);
         y = at::addcmul(coeffs[1], x, y);
@@ -179,7 +179,7 @@ namespace {
         return y;
     }
 
-    Tensor poly1eval8(const Tensor &x, const Tensor &coeffs) {
+    auto poly1eval8(const Tensor &x, const Tensor &coeffs) -> Tensor {
         Tensor y = torch::ones_like(x);
         y = at::addcmul(coeffs[0], x, y);
         y = at::addcmul(coeffs[1], x, y);
@@ -192,7 +192,7 @@ namespace {
         return y;
     }
 
-    Tensor ndtri_exp_small(const Tensor &log_p) {
+    auto ndtri_exp_small(const Tensor &log_p) -> Tensor {
         const auto options = log_p.options();
         const auto [p1, q1, p2, q2] = get_coeffs(options);
 
@@ -205,7 +205,7 @@ namespace {
         return x1 - x0;
     }
 
-    double finfo_min(const at::ScalarType &scalar_type) {
+    auto finfo_min(const at::ScalarType &scalar_type) -> double {
         return AT_DISPATCH_FLOATING_TYPES_AND2(
                 at::kHalf, at::kBFloat16, scalar_type, "finfo_min",
                 [&] {
@@ -216,7 +216,7 @@ namespace {
 } // namespace
 
 
-Tensor ndtri_exp(const Tensor &log_p) {
+auto ndtri_exp(const Tensor &log_p) -> Tensor {
     const Tensor invalid_mask = log_p.isnan() | (log_p > 0.0);
     const Tensor neginf_mask = log_p.isneginf();
     const Tensor small_mask = (log_p < LOWER_CUTOFF) & ~(invalid_mask | neginf_mask);

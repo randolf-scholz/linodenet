@@ -207,7 +207,7 @@ struct SingularTriplet : Function<SingularTriplet> {
      * @param rtol: relative tolerance
      * @returns singular value, left singular vector, right singular vector
      */
-    static std::vector<Tensor> forward(
+    static auto forward(
         AutogradContext *ctx,
         const Tensor &A_in,
         const Tensor &u0,
@@ -215,7 +215,7 @@ struct SingularTriplet : Function<SingularTriplet> {
         const int64_t maxiter,
         const double atol = 1e-6,
         const double rtol = 1e-6
-    ) {
+    ) -> std::vector<Tensor> {
         torch::NoGradGuard guard;
 
         // Sec: Option parsing
@@ -314,10 +314,10 @@ struct SingularTriplet : Function<SingularTriplet> {
      * K = [ σ𝕀ₘ, -A  , u, 0 ]
      *     [ -Aᵀ , σ𝕀ₙ, 0, v ]
      */
-    static variable_list backward(
+    static auto backward(
         const AutogradContext *ctx,
         const variable_list &grad_output
-    ) {
+    ) -> variable_list {
         const auto saved = ctx->get_saved_variables();
         const Tensor &u = saved[0];
         const Tensor &v = saved[1];
@@ -364,14 +364,14 @@ struct SingularTriplet : Function<SingularTriplet> {
     }
 };
 
-std::tuple<Tensor, Tensor, Tensor> singular_triplet_meta(
+auto singular_triplet_meta(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     const int64_t maxiter,
     const double atol,
     const double rtol
-) {
+) -> std::tuple<Tensor, Tensor, Tensor> {
     TORCH_CHECK(A.dim() == 2, "Input must be a 2D matrix.");
     TORCH_CHECK(A.is_floating_point(), "Input must be a floating point tensor.");
     const auto M = A.size(0);
@@ -394,14 +394,14 @@ std::tuple<Tensor, Tensor, Tensor> singular_triplet_meta(
     };
 }
 
-std::tuple<Tensor, Tensor, Tensor> singular_triplet(
+auto singular_triplet(
     const Tensor &A,
     const optional<Tensor> &u0,
     const optional<Tensor> &v0,
     const int64_t maxiter,
     const double atol,
     const double rtol
-) {
+) -> std::tuple<Tensor, Tensor, Tensor> {
     Tensor u = u0.has_value()
                ? u0.value().detach().clone()
                : torch::randn({A.size(0)}, A.options());
