@@ -1,0 +1,23 @@
+---
+# Keep the default policy focused on correctness and maintainability.  Style
+# rules are intentionally omitted until the C++ portion of the project adopts
+# a shared naming and formatting convention.
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  performance-*,
+  portability-*,
+  readability-container-size-empty,
+  readability-redundant-control-flow,
+  readability-redundant-member-init,
+  readability-redundant-string-cstr,
+  readability-simplify-boolean-expr
+
+# Do not make existing diagnostics build-breaking until the enabled checks are
+# established in CI.
+WarningsAsErrors: ''
+
+# Limit diagnostics from headers to the project's C++ extension, rather than
+# third-party headers brought in by PyTorch and CUDA.
+HeaderFilterRegex: '(^|.*/)src/linodenet_special/csrc/.*'
