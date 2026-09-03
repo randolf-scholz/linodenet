@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.27 FATAL_ERROR)
 project(linodenet_special VERSION 0.4.2 LANGUAGES CXX)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 # Section: configure user-facing build options.
 option(LINODENET_SPECIAL_USE_CUDA "Enable CUDA-dependent build configuration" ON)
 option(LINODENET_SPECIAL_ENABLE_CLANG_TIDY "Run clang-tidy during builds" ON)
@@ -8,6 +12,30 @@ option(LINODENET_SPECIAL_USE_CUDNN "Enable cuDNN support" ON)
 option(LINODENET_SPECIAL_USE_CUSPARSELT "Enable cuSPARSELt support" OFF)
 option(LINODENET_SPECIAL_USE_CUDSS "Enable cuDSS support" OFF)
 option(LINODENET_SPECIAL_USE_CUFILE "Enable cuFile support" OFF)
+set(
+        LINODENET_SPECIAL_TORCH_CXX11_ABI
+        ""
+        CACHE STRING
+        "Value of torch.compiled_with_cxx11_abi() (0 or 1)"
+)
+
+find_package(Python REQUIRED COMPONENTS Interpreter)
+execute_process(
+        COMMAND "${Python_EXECUTABLE}" -c "import torch; print(torch.utils.cmake_prefix_path)"
+        OUTPUT_VARIABLE LINODENET_SPECIAL_TORCH_CMAKE_PREFIX
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        COMMAND_ERROR_IS_FATAL ANY
+)
+list(PREPEND CMAKE_PREFIX_PATH "${LINODENET_SPECIAL_TORCH_CMAKE_PREFIX}")
+
+if (LINODENET_SPECIAL_TORCH_CXX11_ABI STREQUAL "")
+    execute_process(
+            COMMAND "${Python_EXECUTABLE}" -c "import torch; print(int(torch.compiled_with_cxx11_abi()))"
+            OUTPUT_VARIABLE LINODENET_SPECIAL_TORCH_CXX11_ABI
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            COMMAND_ERROR_IS_FATAL ANY
+    )
+endif ()
 
 # Section: declare the source files for the shared extension target.
 set(linodenet_special_sources
@@ -18,8 +46,9 @@ set(linodenet_special_sources
         csrc/liblinodenet_special/gaussian_transport.cpp
 )
 
-# Section: discover third-party dependencies, preferring the vendored LibTorch package.
-list(PREPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/libtorch/share/cmake")
+# Section: discover third-party dependencies from the PyTorch build requirement.
+unset(Caffe2_DIR CACHE)
+unset(Torch_DIR CACHE)
 
 if (LINODENET_SPECIAL_USE_CUDA)
     if (NOT DEFINED TORCH_CUDA_ARCH_LIST)
@@ -39,12 +68,17 @@ find_package(Torch REQUIRED)
 add_library(linodenet_special SHARED ${linodenet_special_sources})
 
 # Section: apply target-local language, tooling, and linkage settings.
-target_compile_features(linodenet_special PRIVATE cxx_std_17)
-set_target_properties(
-        linodenet_special
-        PROPERTIES
-        CXX_EXTENSIONS OFF
-)
+target_compile_features(linodenet_special PRIVATE cxx_std_20)
+
+if (NOT LINODENET_SPECIAL_TORCH_CXX11_ABI STREQUAL "")
+    if (NOT LINODENET_SPECIAL_TORCH_CXX11_ABI MATCHES "^[01]$")
+        message(FATAL_ERROR "LINODENET_SPECIAL_TORCH_CXX11_ABI must be 0 or 1.")
+    endif ()
+    target_compile_definitions(
+            linodenet_special
+            PRIVATE "_GLIBCXX_USE_CXX11_ABI=${LINODENET_SPECIAL_TORCH_CXX11_ABI}"
+    )
+endif ()
 
 if (LINODENET_SPECIAL_ENABLE_CLANG_TIDY)
     set_target_properties(
@@ -54,4 +88,6 @@ if (LINODENET_SPECIAL_ENABLE_CLANG_TIDY)
     )
 endif ()
 
-target_link_libraries(linodenet_special PRIVATE "${TORCH_LIBRARIES}")
+target_link_libraries(linodenet_special PRIVATE torch)
+
+install(TARGETS linodenet_special LIBRARY DESTINATION linodenet_special)

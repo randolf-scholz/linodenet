@@ -1,11 +1,15 @@
 [build-system]
-requires = ["uv_build>=0.11.0,<0.12"]
-build-backend = "uv_build"
+requires = [
+    "scikit-build-core>=0.11.0",
+    "numpy>=2.5.2",
+    "torch>=2.14.0",
+]
+build-backend = "scikit_build_core.build"
 
 # region project configuration ---------------------------------------------------------
 [project]
 name = "linodenet"
-version = "0.4.2"
+version = "0.5.0"
 description = "Linear ODE Network for Time-Series Forecasting"
 readme = "README.md"
 license-files = ["LICENSE"]
@@ -34,11 +38,39 @@ classifiers = [
 requires-python = ">=3.14,<3.15"
 dependencies = [
     "numpy>=2.5.2",
-    "torch>=2.13.0",
+    "torch>=2.14.0",
     "torchode>=1.0.1",
     "typing_extensions>=4.16.0",
 ]
 # endregion project configuration ------------------------------------------------------
+
+[tool.scikit-build]
+cmake.source-dir = "src/linodenet_special"
+wheel.packages = [
+    "src/blueprint",
+    "src/linodenet",
+    "src/linodenet_models",
+    "src/linodenet_special",
+    "src/signatures",
+]
+sdist.inclusion-mode = "explicit"
+sdist.include = [
+    "LICENSE",
+    "README.md",
+    "pyproject.toml",
+    "src/blueprint/**",
+    "src/linodenet/**",
+    "src/linodenet_models/**",
+    "src/linodenet_special/CMakeLists.txt",
+    "src/linodenet_special/csrc/**",
+    "src/linodenet_special/*.py",
+    "src/signatures/**",
+]
+sdist.exclude = [
+    "third_party/",
+    "**/_*/",
+    "**/.*/",
+]
 
 # region development dependencies ------------------------------------------------------
 [dependency-groups]
@@ -60,7 +92,7 @@ debug = [
 devtools = [
     "cmake>=4.4.3",
     "ninja>=1.13.2",
-    "prek>=0.5.1",
+    "prek>=0.5.2",
     "pybadges>=3.0.1",
 ]
 docs = [
@@ -80,7 +112,7 @@ docs = [
     "sphinx-typo3-theme>=4.9.0",
 ]
 linters = [
-    "prek>=0.5.1",
+    "prek>=0.5.2",
     "ruff>=0.16.5",
     "tach>=0.35.0",
 ]
@@ -95,7 +127,7 @@ tests = [
     "pytest-benchmark[histogram]>=5.3.0",
     "pytest-cov>=7.1.0",
     "pytest-repeat>=0.9.4",
-    "pytest-rerunfailures>=16.6",
+    "pytest-rerunfailures>=16.6.1",
     "pytest-xdist>=3.8.0",
     "pyyaml>=6.0.3",
     "scipy>=1.18.1",
@@ -108,11 +140,11 @@ typing = [
     "pyrefly>=1.2.0",
     "pyright>=1.1.411",
     "scipy-stubs>=1.18.1.0",
-    "ty>=0.0.77",
+    "ty>=0.0.78",
     "types-colorama>=0.4.15.20260508",
     "types-defusedxml>=0.7.0.20260504",
     "types-jsonschema>=4.26.0.20260518",
-    "types-networkx>=3.6.1.20260728",
+    "types-networkx>=3.6.1.20260903",
     "types-pexpect>=4.9.0.20260518",
     "types-protobuf>=7.35.1.20260827",
     "types-psutil>=7.2.2.20260827",
