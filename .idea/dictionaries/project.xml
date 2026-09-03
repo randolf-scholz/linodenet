@@ -7,6 +7,8 @@
       <w>Horner</w>
       <w>Marchenko</w>
       <w>NCDSSM</w>
+      <w>NOLINTBEGIN</w>
+      <w>NOLINTEND</w>
       <w>Pastur</w>
       <w>Shiesh</w>
       <w>arglist</w>
