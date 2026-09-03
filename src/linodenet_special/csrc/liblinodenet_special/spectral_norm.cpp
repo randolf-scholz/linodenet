@@ -1,12 +1,13 @@
 #include "spectral_norm.h"
 
+#include <ATen/ATen.h>
+#include <cstdint>
+
 // import someLib as sl      ⟶  namespace sl = someLib;
 // from someLib import func  ⟶  using someLib::func;
 // from someLib import *     ⟶  using namespace someLib;
-using torch::optional;
 using torch::Tensor;
 using torch::outer;
-using torch::dot;
 using torch::autograd::variable_list;
 using torch::autograd::AutogradContext;
 using torch::autograd::Function;
@@ -115,138 +116,138 @@ namespace linodenet_special {
  * The disadvantage here is that if σ is that ‖v‖ = 𝓞(σ²).
  *
  **/
-struct SpectralNorm : Function<SpectralNorm> {
-    /** @brief Forward pass.
-     *
-     * @param ctx: context object
-     * @param A_in: m x n matrix
-     * @param u0: initial guess for left singular vector
-     * @param v0: initial guess for right singular vector
-     * @param maxiter: maximum number of iterations
-     * @param atol: absolute tolerance
-     * @param rtol: relative tolerance
-     * @returns sigma: singular value
-     */
-    static constexpr auto INLINE_LOOP_COUNT = 7;
+namespace {
+    struct SpectralNorm : Function<SpectralNorm> {
+        /** @brief Forward pass.
+         *
+         * @param ctx: context object
+         * @param A_in: m x n matrix
+         * @param u0: initial guess for left singular vector
+         * @param v0: initial guess for right singular vector
+         * @param maxiter: maximum number of iterations
+         * @param atol: absolute tolerance
+         * @param rtol: relative tolerance
+         * @returns sigma: singular value
+         */
+        static constexpr auto INLINE_LOOP_COUNT = 7;
 
-    static auto forward(
-        AutogradContext *ctx,
-        const Tensor &A_in,
-        const Tensor &u0,
-        const Tensor &v0,
-        const int64_t maxiter,
-        const double atol = 1e-6,
-        const double rtol = 1e-6
-    ) -> Tensor {
-        torch::NoGradGuard guard;
+        static auto forward(
+            AutogradContext *ctx,
+            const Tensor &A_in,
+            const Tensor &u0,
+            const Tensor &v0,
+            const int64_t maxiter,
+            const double atol = 1e-6,
+            const double rtol = 1e-6
+        ) -> Tensor {
+            torch::NoGradGuard const guard;
 
-        // Sec: Option parsing
-        const auto OPTIONS = A_in.options();
-        bool converged = false;
-        const Tensor ATOL = torch::scalar_tensor(atol, OPTIONS);
-        const Tensor RTOL = torch::scalar_tensor(rtol, OPTIONS);
+            // Sec: Option parsing
+            const auto OPTIONS = A_in.options();
+            bool converged = false;
+            const Tensor ATOL = torch::scalar_tensor(atol, OPTIONS);
+            const Tensor RTOL = torch::scalar_tensor(rtol, OPTIONS);
 
-        // Preconditioning: normalize A by its infinity norm
-        const Tensor SCALE = A_in.abs().max();
-        const Tensor A = A_in / SCALE;
-        const Tensor A_t = A.mH();
+            // Preconditioning: normalize A by its infinity norm
+            const Tensor SCALE = A_in.abs().max();
+            const Tensor A = A_in / SCALE;
+            const Tensor A_t = A.mH();
 
-        Tensor sigma = torch::zeros({}, OPTIONS);
-        Tensor u = u0;
-        Tensor v = v0;
-        Tensor grad_u = torch::empty_like(u);
-        Tensor grad_v = torch::empty_like(v);
-        Tensor sigma_u = torch::empty({}, OPTIONS);
-        Tensor sigma_v = torch::empty({}, OPTIONS);
+            Tensor sigma = torch::zeros({}, OPTIONS);
+            Tensor u = u0;
+            Tensor v = v0;
+            Tensor grad_u = torch::empty_like(u);
+            Tensor grad_v = torch::empty_like(v);
+            Tensor sigma_u = torch::empty({}, OPTIONS);
+            Tensor sigma_v = torch::empty({}, OPTIONS);
 
-        // special case: if SCALE == 0, then A is the zero matrix,
-        // and the spectral norm is 0. We can return early to avoid NaNs in the iteration.
-        if (SCALE.item<double>() == 0) {
-            ctx->save_for_backward({u, v});
-            return sigma;
-        }
-
-        // Perform power-iteration for maxiter times or until convergence.
-        // NOTE: performing at least 2 iterations before the first convergence check is crucial,
-        //   since only after two iterations one can guarantee that ⟨u∣Av⟩ > 0 and ⟨v∣Aᵀu⟩ > 0
-        for (int64_t i = 0; i < maxiter; i++) {
-            // NOTE: Perform multiple iterations per loop to increase performance.
-            //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
-            //   The compiler cannot do this optimization on it's own because it would change behavior.
-            #pragma unroll
-            for (auto j = 0; j < INLINE_LOOP_COUNT; j++) {
-                // update u
-                at::mv_out(grad_u, A, v);                           // gᵤ ← Av
-                at::div_out(u, grad_u, linalg_vector_norm(grad_u)); // u ← gᵤ/‖gᵤ‖
-                // update v
-                at::mv_out(grad_v, A_t, u);                         // gᵥ ← Aᵀu
-                at::div_out(v, grad_v, linalg_vector_norm(grad_v)); // v ← gᵥ/‖gᵥ‖
+            // special case: if SCALE == 0, then A is the zero matrix,
+            // and the spectral norm is 0. We can return early to avoid NaNs in the iteration.
+            if (SCALE.item<double>() == 0) {
+                ctx->save_for_backward({u, v});
+                return sigma;
             }
-            // convergence check
-            at::mv_out(grad_u, A, v);                   // gᵤ ← Av
-            at::mv_out(grad_v, A_t, u);                 // gᵥ ← Aᵀu
-            at::dot_out(sigma_u, grad_u, u);            // σᵤ ← ⟨u∣gᵤ⟩
-            at::dot_out(sigma_v, grad_v, v);            // σᵥ ← ⟨v∣gᵥ⟩
-            grad_u = grad_u.addcmul_(sigma_u, u, -1.0); // gᵤ ← gᵤ - σᵤu
-            grad_v = grad_v.addcmul_(sigma_v, v, -1.0); // gᵥ ← gᵥ - σᵥv
-            converged = (
-                (linalg_vector_norm(grad_u) < (ATOL + RTOL * sigma_u))
-                & (linalg_vector_norm(grad_v) < (ATOL + RTOL * sigma_v))
-            ).item<bool>();
-            if (converged) { break; }
-        }
 
-        // Emit warning if no convergence within maxiter iterations.
-        if (!converged) {
-            TORCH_WARN("No convergence in ", maxiter, " iterations for input of shape ", A.sizes());
-        }
+            // Perform power-iteration for maxiter times or until convergence.
+            // NOTE: performing at least 2 iterations before the first convergence check is crucial,
+            //   since only after two iterations one can guarantee that ⟨u∣Av⟩ > 0 and ⟨v∣Aᵀu⟩ > 0
+            for (int64_t i = 0; i < maxiter; i++) {
+                // NOTE: Perform multiple iterations per loop to increase performance.
+                //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
+                //   The compiler cannot do this optimization on it's own because it would change behavior.
+                #pragma unroll
+                for (auto j = 0; j < INLINE_LOOP_COUNT; j++) {
+                    // update u
+                    at::mv_out(grad_u, A, v);                           // gᵤ ← Av
+                    at::div_out(u, grad_u, linalg_vector_norm(grad_u)); // u ← gᵤ/‖gᵤ‖
+                    // update v
+                    at::mv_out(grad_v, A_t, u);                         // gᵥ ← Aᵀu
+                    at::div_out(v, grad_v, linalg_vector_norm(grad_v)); // v ← gᵥ/‖gᵥ‖
+                }
+                // convergence check
+                at::mv_out(grad_u, A, v);                   // gᵤ ← Av
+                at::mv_out(grad_v, A_t, u);                 // gᵥ ← Aᵀu
+                at::dot_out(sigma_u, grad_u, u);            // σᵤ ← ⟨u∣gᵤ⟩
+                at::dot_out(sigma_v, grad_v, v);            // σᵥ ← ⟨v∣gᵥ⟩
+                grad_u = grad_u.addcmul_(sigma_u, u, -1.0); // gᵤ ← gᵤ - σᵤu
+                grad_v = grad_v.addcmul_(sigma_v, v, -1.0); // gᵥ ← gᵥ - σᵥv
+                converged = (
+                    (linalg_vector_norm(grad_u) < (ATOL + RTOL * sigma_u))
+                    & (linalg_vector_norm(grad_v) < (ATOL + RTOL * sigma_v))
+                ).item<bool>();
+                if (converged) { break; }
+            }
 
-        // compute pre-conditioned sigma
-        sigma = SCALE * A.mv(v).dot(u);
+            // Emit warning if no convergence within maxiter iterations.
+            if (!converged) {
+                TORCH_WARN("No convergence in ", maxiter, " iterations for input of shape ", A.sizes());
+            }
 
-        // check for NaNs, infinities and non-positive values
-        if ((~sigma.isfinite() | (sigma <= 0)).item<bool>()) {
-            throw std::runtime_error(at::str(
+            // compute pre-conditioned sigma
+            sigma = SCALE * A.mv(v).dot(u);
+
+            // check for NaNs, infinities and non-positive values
+            TORCH_CHECK(
+                (sigma.isfinite() & (sigma > 0)).all().item<bool>(),
                 "Computation resulted in invalid singular value σ=", sigma,
                 " for input of shape ", A.sizes(), ". ",
                 "Try increasing the number of iterations or the tolerance. ",
                 "Currently maxiter=", maxiter, ", atol=", atol, ", rtol=", rtol, "."
-            ));
+            );
+
+            // store pre-conditioned tensors for backward
+            ctx->save_for_backward({u, v});
+
+            return sigma;
         }
 
-        // store pre-conditioned tensors for backward
-        ctx->save_for_backward({u, v});
 
-        return sigma;
-    }
-
-
-    /** @brief Backward Pass.
-     *
-     * Analytically, the VJP is ξ ↦ ξ⋅uvᵀ
-     *
-     * @param ctx: context object
-     * @param grad_output: outer gradients
-     * @returns g: gradient with respect to inputs
-     */
-    static auto backward(
-        const AutogradContext *ctx,
-        const variable_list &grad_output
-    ) -> variable_list {
-        const auto saved = ctx->get_saved_variables();
-        const Tensor &u = saved[0];
-        const Tensor &v = saved[1];
-        return {
-            grad_output[0] * outer(u, v),
-            torch::zeros_like(u),
-            torch::zeros_like(v),
-            Tensor(),
-            Tensor(),
-            Tensor()
-        };
-    }
-};
-
+        /** @brief Backward Pass.
+         *
+         * Analytically, the VJP is ξ ↦ ξ⋅uvᵀ
+         *
+         * @param ctx: context object
+         * @param grad_output: outer gradients
+         * @returns g: gradient with respect to inputs
+         */
+        static auto backward(
+            const AutogradContext *ctx,
+            const variable_list &grad_output
+        ) -> variable_list {
+            const auto saved = ctx->get_saved_variables();
+            const Tensor &u = saved[0];
+            const Tensor &v = saved[1];
+            return {
+                grad_output[0] * outer(u, v),
+                torch::zeros_like(u),
+                torch::zeros_like(v),
+                Tensor(),
+                Tensor(),
+                Tensor()
+            };
+        }
+    };
+} // namespace
 
 auto spectral_norm_meta(
     const Tensor &A,
