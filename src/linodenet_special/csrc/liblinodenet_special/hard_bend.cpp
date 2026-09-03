@@ -1,5 +1,7 @@
 #include "hard_bend.h"
 
+#include <ATen/ATen.h>
+
 namespace linodenet_special {
 /**
  * Piecewise linear function (3 regions), close the origin: a*x, outside: mx±c.
@@ -45,5 +47,9 @@ TORCH_LIBRARY_FRAGMENT(linodenet_special, m) {
 
 TORCH_LIBRARY_IMPL(linodenet_special, CompositeImplicitAutograd, m) {
     m.impl("hard_bend", &hard_bend);
+}
+
+TORCH_LIBRARY_IMPL(linodenet_special, Meta, m) {
+    m.impl("hard_bend", &hard_bend_meta);
 }
 } // namespace linodenet_special
