@@ -1,13 +1,6 @@
 #include "hard_bend.h"
 
 namespace linodenet_special {
-
-// Temporary clang-tidy probe: clang-analyzer-core.NullDereference must flag this.
-[[maybe_unused]] void clang_tidy_probe() {
-    int *const null_pointer = nullptr;
-    *null_pointer = 42;
-}
-
 /**
  * Piecewise linear function (3 regions), close the origin: a*x, outside: mx±c.
  *
