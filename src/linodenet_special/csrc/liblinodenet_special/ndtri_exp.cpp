@@ -58,10 +58,10 @@ namespace {
     // NOLINTEND(cppcoreguidelines-avoid-magic-numbers)
 
     struct CoeffTensors {
-        const Tensor p1;
-        const Tensor q1;
-        const Tensor p2;
-        const Tensor q2;
+        Tensor p1;
+        Tensor q1;
+        Tensor p2;
+        Tensor q2;
     };
 
     struct CoeffCacheKey {
