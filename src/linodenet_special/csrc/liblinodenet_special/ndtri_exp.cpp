@@ -11,6 +11,8 @@ namespace {
     constexpr double LOWER_CUTOFF = -2.0;
     constexpr double NEG_INFINITY = -std::numeric_limits<double>::infinity();
 
+    // Polynomial coefficients for the ndtri_exp tail approximation.
+    // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers)
     constexpr std::array<double, 9> P1 = {
         4.05544892305962419923,
         3.15251094599893866154e1,
@@ -53,6 +55,7 @@ namespace {
         2.89247864745380683936e-6,
         6.79019408009981274425e-9,
     };
+    // NOLINTEND(cppcoreguidelines-avoid-magic-numbers)
 
     struct CoeffTensors {
         const Tensor p1;
@@ -60,57 +63,6 @@ namespace {
         const Tensor p2;
         const Tensor q2;
     };
-
-    auto get_coeffs(const torch::TensorOptions &options) -> CoeffTensors {
-        return CoeffTensors{
-            .p1 = torch::tensor({
-                4.05544892305962419923,
-                3.15251094599893866154e1,
-                5.71628192246421288162e1,
-                4.40805073893200834700e1,
-                1.46849561928858024014e1,
-                2.18663306850790267539,
-                -1.40256079171354495875e-1,
-                -3.50424626827848203418e-2,
-                -8.57456785154685413611e-4,
-            }, options),
-
-            .q1 = torch::tensor({
-                1.57799883256466749731e1,
-                4.53907635128879210584e1,
-                4.13172038254672030440e1,
-                1.50425385692907503408e1,
-                2.50464946208309415979,
-                -1.42182922854787788574e-1,
-                -3.80806407691578277194e-2,
-                -9.33259480895457427372e-4,
-            }, options),
-
-            .p2 = torch::tensor({
-                3.23774891776946035970,
-                6.91522889068984211695,
-                3.93881025292474443415,
-                1.33303460815807542389,
-                2.01485389549179081538e-1,
-                1.23716634817820021358e-2,
-                3.01581553508235416007e-4,
-                2.65806974686737550832e-6,
-                6.23974539184983293730e-9,
-            }, options),
-
-            .q2 = torch::tensor({
-                6.02427039364742014255,
-                3.67983563856160859403,
-                1.37702099489081330271,
-                2.16236993594496635890e-1,
-                1.34204006088543189037e-2,
-                3.28014464682127739104e-4,
-                2.89247864745380683936e-6,
-                6.79019408009981274425e-9,
-            }, options),
-        };
-    }
-
 
     struct CoeffCacheKey {
         c10::DeviceType device_type;
@@ -164,6 +116,8 @@ namespace {
         return coeffs;
     }
 
+    // Coefficient indices are intrinsic to Horner evaluation.
+    // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers, cppcoreguidelines-pro-bounds-constant-array-index)
     auto polyeval8(const Tensor &x, const Tensor &coeffs) -> Tensor {
         Tensor y = torch::zeros_like(x);
         y = at::addcmul(coeffs[0], x, y);
@@ -191,9 +145,11 @@ namespace {
         return y;
     }
 
+    // NOLINTEND(cppcoreguidelines-avoid-magic-numbers, cppcoreguidelines-pro-bounds-constant-array-index)
+
     auto ndtri_exp_small(const Tensor &log_p) -> Tensor {
         const auto options = log_p.options();
-        const auto [p1, q1, p2, q2] = get_coeffs(options);
+        const auto [p1, q1, p2, q2] = get_cached_coeffs(options);
 
         const Tensor x = torch::sqrt(-2.0 * log_p);
         const Tensor z = x.reciprocal();
