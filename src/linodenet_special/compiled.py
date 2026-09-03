@@ -24,6 +24,7 @@ import math
 import os
 import traceback
 from collections.abc import Callable as Fn
+from importlib.resources import as_file, files
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Final, Optional, cast
@@ -42,12 +43,12 @@ _LIB_NAME: Final[str] = "liblinodenet_special"
 r"""The name of the custom library."""
 _LIB: Final[ModuleType] = torch.ops.linodenet_special
 r"""The custom library."""
-_BUILD_DIR: Final[Path] = Path(__file__).parent / "build"
-r"""The build directory."""
 _SOURCE_DIR: Final[Path] = Path(__file__).parent / "csrc" / f"{_LIB_NAME}"
 r"""The source directory."""
-_LIB_FILE: Final[Path] = _BUILD_DIR / f"{_LIB_NAME}.so"
-r"""The name of the custom library."""
+_DEV_LIB_FILE: Final[Path] = Path(__file__).parent / "build" / f"{_LIB_NAME}.so"
+r"""The custom library built in the source tree for local development."""
+_COMPILE_ENV_VAR: Final[str] = "LINODENET_SPECIAL_COMPILE"
+r"""Environment variable that enables JIT compilation as a development fallback."""
 _OPERATOR_SOURCE_FILES: Final[dict[str, str]] = {
     "singular_triplet": "singular_triplet.cpp",
     "spectral_norm": "spectral_norm.cpp",
@@ -139,38 +140,53 @@ def _compile_fns() -> KnownFunctions:
     )
 
 
-def _load_prebuilts() -> KnownFunctions:
-    r"""Load prebuilt binaries and return registered operators."""
-    try:  # load pre-compiled binaries
-        torch.ops.load_library(_LIB_FILE)
-    except Exception as exc:
-        raise RuntimeError(
-            f"Could not load custom binaries from {_LIB_FILE!s}."
-        ) from exc
-
+def _loaded_functions() -> KnownFunctions:
+    r"""Return the operators registered by a loaded custom library."""
     return cast(
         "KnownFunctions",
         {key: getattr(_LIB, key, None) for key in KnownFunctions.__required_keys__},
     )
 
 
+def _load_prebuilt() -> KnownFunctions:
+    r"""Load the packaged custom library and return its registered operators."""
+    resource = files("linodenet_special").joinpath(f"{_LIB_NAME}.so")
+    try:  # load pre-compiled binaries
+        with as_file(resource) as lib_file:
+            torch.ops.load_library(lib_file)
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not load custom binaries from package resource {resource!s}."
+        ) from exc
+
+    return _loaded_functions()
+
+
 def _compile_liblinodenet() -> KnownFunctions:
-    if _LIB_FILE.exists():
+    try:
+        return _load_prebuilt()
+    except Exception as exc:
+        __logger__.warning("Could not load packaged custom binaries: %r", exc)
+
+    if _DEV_LIB_FILE.is_file():
         try:
-            return _load_prebuilts()
+            torch.ops.load_library(_DEV_LIB_FILE)
         except Exception as exc:
             __logger__.warning(
-                f"\n\tCould not load custom binaries! ({_LIB_FILE!s})"
-                "\n\tConsider recompiling the linodenet_special extension."
+                "Could not load development custom binaries from %s: %r",
+                _DEV_LIB_FILE,
+                exc,
             )
-            __logger__.warning(f"\n\t{exc!r}")
-    else:
-        __logger__.warning(
-            f"\n\tCustom binaries not found! ({_LIB_FILE!s})"
-            "\n\tConsider compiling the linodenet_special extension."
-        )
+        else:
+            return _loaded_functions()
 
-    return _compile_fns()
+    if os.environ.get(_COMPILE_ENV_VAR) == "1":
+        return _compile_fns()
+
+    raise RuntimeError(
+        "Could not load custom binaries. Reinstall linodenet_special or set "
+        f"{_COMPILE_ENV_VAR}=1 to compile them at runtime."
+    )
 
 
 # region wrappers ----------------------------------------------------------------------
