@@ -207,6 +207,8 @@ struct SingularTriplet : Function<SingularTriplet> {
      * @param rtol: relative tolerance
      * @returns singular value, left singular vector, right singular vector
      */
+    static constexpr auto INLINE_LOOP_COUNT = 7;
+
     static auto forward(
         AutogradContext *ctx,
         const Tensor &A_in,
@@ -252,7 +254,7 @@ struct SingularTriplet : Function<SingularTriplet> {
             //  Checking convergence is expensive, since `.item<bool>()` requires sync with CPU.
             //   The compiler cannot do this optimization on it's own because it would change behavior.
             #pragma unroll
-            for (auto j = 0; j < 7; j++) {
+            for (auto j = 0; j < INLINE_LOOP_COUNT; j++) {
                 // update u
                 at::mv_out(grad_u, A, v);                           // gᵤ ← Av
                 at::div_out(u, grad_u, linalg_vector_norm(grad_u)); // u ← gᵤ/‖gᵤ‖
@@ -267,11 +269,11 @@ struct SingularTriplet : Function<SingularTriplet> {
             at::dot_out(sigma_v, grad_v, v);            // σᵥ ← ⟨v∣gᵥ⟩
             grad_u = grad_u.addcmul_(sigma_u, u, -1.0); // gᵤ ← gᵤ - σᵤu
             grad_v = grad_v.addcmul_(sigma_v, v, -1.0); // gᵥ ← gᵥ - σᵥv
-            if ((converged = (
-                    (linalg_vector_norm(grad_u) < (ATOL + RTOL * sigma_u))
-                    & (linalg_vector_norm(grad_v) < (ATOL + RTOL * sigma_v))
-                ).item<bool>())
-            ) { break; }
+            converged = (
+                (linalg_vector_norm(grad_u) < (ATOL + RTOL * sigma_u))
+                & (linalg_vector_norm(grad_v) < (ATOL + RTOL * sigma_v))
+            ).item<bool>();
+            if (converged) { break; }
         }
 
         // Emit warning if no convergence within maxiter iterations.
