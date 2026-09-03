@@ -60,12 +60,12 @@ auto bimodal_value_and_stats(
     const Tensor log_p = LOG_HALF + at::logaddexp(log_ndtr(z_plus), log_ndtr(z_minus));
     const Tensor log_q = LOG_HALF + at::logaddexp(log_ndtr(-z_plus), log_ndtr(-z_minus));
     // Switch between lower-tail and upper-tail evaluations to avoid cancellation near 0 and 1.
-    Tensor y = torch::where(
+    const Tensor y = torch::where(
         log_p < LOG_HALF,
         linodenet_special::ndtri_exp(log_p),
         -linodenet_special::ndtri_exp(log_q)
-    );
-    return {y.clamp_(z_minus, z_plus), z_plus, z_minus};
+    ).clamp_(z_minus, z_plus);
+    return {y, z_plus, z_minus};
 }
 
 auto bimodal_to_gaussian_value_and_grad(
@@ -109,15 +109,14 @@ auto bimodal_to_gaussian_derivatives(
     const Tensor hi = maximum(log_phi_plus, log_phi_minus);
     const Tensor lo = minimum(log_phi_plus, log_phi_minus);
 
-    Tensor d_x = exp(logaddexp(log_phi_plus, log_phi_minus));
-    Tensor d_mu_abs = sign(log_phi_plus - log_phi_minus) * exp(hi + log1p(-exp(lo - hi)));
-    Tensor d_sigma = -(x * d_x + mu_abs * d_mu_abs) / sigma;
-
     // The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
     const Tensor lower_bound = exp(-0.5 * (mu_abs / sigma).square()) / sigma;
     const Tensor upper_bound = sigma.reciprocal();
-    d_x = d_x.clamp_(lower_bound, upper_bound);
-    Tensor d_mu = mu_sign * d_mu_abs.clamp_(-upper_bound, upper_bound);
+
+    const Tensor d_x = exp(logaddexp(log_phi_plus, log_phi_minus)).clamp_(lower_bound, upper_bound);
+    const Tensor d_mu_abs = sign(log_phi_plus - log_phi_minus) * exp(hi + log1p(-exp(lo - hi)));
+    const Tensor d_mu = mu_sign * d_mu_abs.clamp_(-upper_bound, upper_bound);
+    const Tensor d_sigma = -(x * d_x + mu_abs * d_mu_abs) / sigma;
 
     return {d_x, d_mu, d_sigma};
 }
@@ -141,12 +140,13 @@ auto bimodal_to_gaussian_derivatives2(
     Tensor d_x = log_norm.exp();
     const Tensor w_plus = (log_phi_plus - log_norm).exp();
     const Tensor w_minus = (log_phi_minus - log_norm).exp();
-    Tensor d_mu_abs = d_x * (w_plus - w_minus);
+    const Tensor d_mu_abs = d_x * (w_plus - w_minus);
     const Tensor d_sigma_exact =
         -(0.5 * (z_plus + z_minus) * d_x + (mu_abs / sigma) * d_mu_abs);
 
     const Tensor lower_bound = (-0.5 * (mu_abs / sigma).square()).exp() / sigma;
     const Tensor upper_bound = sigma.reciprocal();
+    // TODO: shouldn't this clamp be applied immediately?
     d_x = d_x.clamp_(lower_bound, upper_bound);
     const Tensor d_mu = mu_sign * d_mu_abs.clamp_(-upper_bound, upper_bound);
 
@@ -219,7 +219,7 @@ auto mixture_value_and_stats(
     const Tensor lower = std::get<0>(z.min(-1));
     const Tensor upper = std::get<0>(z.max(-1));
     // Switch between lower-tail and upper-tail evaluations to avoid cancellation near 0 and 1.
-    Tensor y = where(
+    const Tensor y = where(
         log_p < LOG_HALF,
         linodenet_special::ndtri_exp(log_p),
         -linodenet_special::ndtri_exp(log_q)
@@ -381,10 +381,13 @@ struct BimodalToGaussian : Function<BimodalToGaussian> {
         const Tensor &y = saved[3];
 
         const Tensor &g = grad_output[0];
+        const auto [d_x, d_mu, d_sigma] = bimodal_to_gaussian_derivatives(x, mu, sigma, y);
 
-        const auto [d_x, d_mu, d_sigma] =
-            bimodal_to_gaussian_derivatives(x, mu, sigma, y);
-        return {g * d_x, g * d_mu, g * d_sigma};
+        return {
+            g * d_x,
+            g * d_mu,
+            g * d_sigma,
+        };
     }
 };
 
@@ -418,10 +421,13 @@ struct BimodalToGaussianValueAndGrad : Function<BimodalToGaussianValueAndGrad> {
             d_x, d_mu, d_sigma,
             d2_x, d2_mu, d2_sigma
         ] = bimodal_to_gaussian_derivatives2(x, mu, sigma, y);
+
         return {
-            grad_y * d_x + grad_dy * d2_x,
-            grad_y * d_mu + grad_dy * d2_mu,
+            // clang-format off
+            grad_y * d_x     + grad_dy * d2_x    ,
+            grad_y * d_mu    + grad_dy * d2_mu   ,
             grad_y * d_sigma + grad_dy * d2_sigma,
+            // clang-format on
         };
     }
 };
@@ -454,15 +460,18 @@ struct GaussianToBimodal : Function<GaussianToBimodal> {
         const auto [d_x, d_mu, d_sigma] =
             bimodal_to_gaussian_derivatives(x, mu, sigma, y);
 
-        Tensor d_y = d_x.reciprocal();
-        Tensor grad_mu = -d_mu * d_y;
-        Tensor grad_sigma = -d_sigma * d_y;
-
         const Tensor upper_bound = sigma * exp(0.5 * (mu / sigma).square());
-        d_y = d_y.clamp_(sigma, upper_bound);
-        grad_mu = grad_mu.clamp_(-1, +1);
 
-        return {g * d_y, g * grad_mu, g * grad_sigma, Tensor()};
+        const Tensor grad_y = torch::clamp(d_x.reciprocal(), sigma, upper_bound);
+        const Tensor grad_mu = torch::clamp(-d_mu * grad_y, -1, +1);
+        const Tensor grad_sigma = -d_sigma * grad_y;
+
+        return {
+            g * grad_y,
+            g * grad_mu,
+            g * grad_sigma,
+            Tensor(),
+        };
     }
 };
 
@@ -499,13 +508,11 @@ struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
         ] = bimodal_to_gaussian_derivatives2(x, mu, sigma, fx);
         const Tensor dx_inv = d_x.reciprocal();
 
-        Tensor d_y = dx_inv;
-        Tensor d_mu_inv = -d_mu * dx_inv;
-        const Tensor d_sigma_inv = -d_sigma * dx_inv;
 
         const Tensor upper_bound = sigma * (0.5 * (mu / sigma).square()).exp();
-        d_y = d_y.clamp_(sigma, upper_bound);
-        d_mu_inv = d_mu_inv.clamp_(-1, 1);
+        const Tensor d_y = torch::clamp(dx_inv, sigma, upper_bound);
+        const Tensor d_mu_inv = torch::clamp(-d_mu * dx_inv, -1, +1);
+        const Tensor d_sigma_inv = -d_sigma * dx_inv;
 
         // j = ∂x/∂y = (∂T/∂x)⁻¹, so differentiating the inverse map once more
         // introduces the cubic power of dx_inv in these Jacobian-output terms.
@@ -515,10 +522,12 @@ struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
         const Tensor j_sigma = (d2_x * d_sigma - d2_sigma * d_x) * dx_inv3;
 
         return {
-            grad_x * d_y + grad_dx * j_y,
-            grad_x * d_mu_inv + grad_dx * j_mu,
+            // clang-format off
+            grad_x * d_y         + grad_dx * j_y    ,
+            grad_x * d_mu_inv    + grad_dx * j_mu   ,
             grad_x * d_sigma_inv + grad_dx * j_sigma,
             Tensor()
+            // clang-format on
         };
     }
 };
@@ -553,10 +562,12 @@ struct MixtureToGaussian : Function<MixtureToGaussian> {
         const auto [d_values, d_weights, d_mus, d_sigmas] =
             mixture_to_gaussian_derivatives(x, weights, mus, sigmas, y);
         return {
-            g * d_values,
-            g.unsqueeze(-1) * d_weights,
-            g.unsqueeze(-1) * d_mus,
-            g.unsqueeze(-1) * d_sigmas,
+            // clang-format off
+            g               * d_values  ,
+            g.unsqueeze(-1) * d_weights ,
+            g.unsqueeze(-1) * d_mus     ,
+            g.unsqueeze(-1) * d_sigmas  ,
+            // clang-format on
         };
     }
 };
@@ -594,10 +605,12 @@ struct MixtureToGaussianValueAndGrad : Function<MixtureToGaussianValueAndGrad> {
             d2_x, d2_weights, d2_mus, d2_sigmas
         ] = mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y);
         return {
-            grad_y * d_x + grad_dy * d2_x,
+            // clang-format off
+            grad_y               * d_x       + grad_dy               * d2_x,
             grad_y.unsqueeze(-1) * d_weights + grad_dy.unsqueeze(-1) * d2_weights,
-            grad_y.unsqueeze(-1) * d_mus + grad_dy.unsqueeze(-1) * d2_mus,
-            grad_y.unsqueeze(-1) * d_sigmas + grad_dy.unsqueeze(-1) * d2_sigmas,
+            grad_y.unsqueeze(-1) * d_mus     + grad_dy.unsqueeze(-1) * d2_mus,
+            grad_y.unsqueeze(-1) * d_sigmas  + grad_dy.unsqueeze(-1) * d2_sigmas,
+            // clang-format on
         };
     }
 };
@@ -637,11 +650,13 @@ struct GaussianToMixture : Function<GaussianToMixture> {
         const Tensor outer_grad = -grad_y.unsqueeze(-1);
 
         return {
+            // clang-format off
             grad_y,
             outer_grad * d_weights,
-            outer_grad * d_mus,
-            outer_grad * d_sigmas,
+            outer_grad * d_mus    ,
+            outer_grad * d_sigmas ,
             Tensor()
+            // clang-format on
         };
     }
 };
@@ -699,13 +714,14 @@ struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
         const Tensor j_sigmas =
             (d2_x.unsqueeze(-1) * d_sigmas - d2_sigmas * d_x.unsqueeze(-1))
             * dx_inv3.unsqueeze(-1);
-
         return {
-            grad_x * d_y + grad_dx * j_y,
+            // clang-format off
+            grad_x               * d_y           + grad_dx               * j_y      ,
             grad_x.unsqueeze(-1) * d_weights_inv + grad_dx.unsqueeze(-1) * j_weights,
-            grad_x.unsqueeze(-1) * d_mus_inv + grad_dx.unsqueeze(-1) * j_mus,
-            grad_x.unsqueeze(-1) * d_sigmas_inv + grad_dx.unsqueeze(-1) * j_sigmas,
+            grad_x.unsqueeze(-1) * d_mus_inv     + grad_dx.unsqueeze(-1) * j_mus    ,
+            grad_x.unsqueeze(-1) * d_sigmas_inv  + grad_dx.unsqueeze(-1) * j_sigmas ,
             Tensor()
+            // clang-format on
         };
     }
 };
