@@ -9,7 +9,6 @@ namespace linodenet_special {
 namespace {
     constexpr double UPPER_CUTOFF = -0.14541345786885906; // log(1-e^-2)
     constexpr double LOWER_CUTOFF = -2.0;
-    constexpr double SQRT_2 = 1.4142135623730951;
     constexpr double NEG_INFINITY = -std::numeric_limits<double>::infinity();
 
     constexpr std::array<double, 9> P1 = {

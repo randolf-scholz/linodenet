@@ -1,5 +1,6 @@
 #include "gaussian_transport.h"
 
+#include <numbers>
 #include <vector>
 
 #include "hard_bend.h"
@@ -12,7 +13,7 @@ using torch::autograd::variable_list;
 using torch::special::log_ndtr;
 
 namespace {
-constexpr double LOG_HALF = -0.6931471805599453;
+constexpr double LOG_HALF = -std::numbers::ln2;
 constexpr double LOG_2PI = 1.8378770664093453;
 
 void check_bimodal_args(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
