@@ -2,7 +2,7 @@
 # hidden/private directories
 _*/
 .*/
-.*.log
+*.log
 *.local.*
 
 # exceptions
