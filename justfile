@@ -1,10 +1,19 @@
-# Sphinx documentation commands.
+#!/usr/bin/env just --justfile
 mod docs
+mod tests
+
+export GIT_ROOT := `git rev-parse --show-toplevel`
+export GIT_PREFIX := `git rev-parse --show-prefix`
+export TEST_DIR := GIT_ROOT / "tests"
 
 [default]
-[doc('Show available recipes.')]
+[doc('List available commands.')]
 help:
-    @just --justfile {{ justfile() }} --list
+    @just --justfile {{ justfile() }} --list --list-submodules --unsorted
+
+[doc('Remove generated Python cache and build artifacts.')]
+clean:
+    uv run pyclean {{ GIT_ROOT }} --debris
 
 [doc('Build release source and wheel distributions.')]
 build-release:
