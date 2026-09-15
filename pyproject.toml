@@ -1,10 +1,48 @@
 [build-system]
 requires = [
-    "scikit-build-core>=0.11.0",
-    "numpy>=2.5.2",
+    "numpy>=2.5.3",
+    "scikit-build-core>=1.0.3",
     "torch>=2.14.0",
 ]
 build-backend = "scikit_build_core.build"
+
+[tool.scikit-build]
+build-dir = "build/{wheel_tag}"
+minimum-version = "build-system.requires"
+
+[tool.scikit-build.editable]
+mode = "redirect"
+rebuild = false
+
+[tool.scikit-build.cmake]
+source-dir = "src/linodenet_special"
+build-type = "Release"
+define = { LINODENET_SPECIAL_ENABLE_CLANG_TIDY = true }
+
+[[tool.scikit-build.overrides]]
+if.from-sdist = true
+cmake.define.LINODENET_SPECIAL_ENABLE_CLANG_TIDY = false
+
+[tool.scikit-build.sdist]
+inclusion-mode = "explicit"
+include = [
+    "LICENSE",
+    "README.md",
+    "pyproject.toml",
+    "src/**",
+]
+exclude = ["**/_*/", "**/.*/"]
+
+[tool.scikit-build.wheel]
+packages = [
+    "src/blueprint",
+    "src/linodenet",
+    "src/linodenet_models",
+    "src/linodenet_special",
+    "src/signatures",
+]
+
+
 
 # region project configuration ---------------------------------------------------------
 [project]
@@ -37,71 +75,34 @@ classifiers = [
 
 requires-python = ">=3.14,<3.15"
 dependencies = [
-    "numpy>=2.5.2",
+    "numpy>=2.5.3",
     "torch>=2.14.0",
     "torchode>=1.0.1",
     "typing_extensions>=4.16.0",
 ]
 # endregion project configuration ------------------------------------------------------
 
-[tool.scikit-build]
-cmake.source-dir = "src/linodenet_special"
-cmake.build-type = "Release"
-wheel.packages = [
-    "src/blueprint",
-    "src/linodenet",
-    "src/linodenet_models",
-    "src/linodenet_special",
-    "src/signatures",
-]
-sdist.inclusion-mode = "explicit"
-sdist.include = [
-    ".clang-tidy", # needed since uv build compiles from sdist
-    "LICENSE",
-    "README.md",
-    "pyproject.toml",
-    "src/blueprint/**",
-    "src/linodenet/**",
-    "src/linodenet_models/**",
-    "src/linodenet_special/CMakeLists.txt",
-    "src/linodenet_special/csrc/**",
-    "src/linodenet_special/*.py",
-    "src/signatures/**",
-]
-sdist.exclude = [
-    "third_party/",
-    "**/_*/",
-    "**/.*/",
-]
-
 # region development dependencies ------------------------------------------------------
 [dependency-groups]
 dev = [
-    { include-group = "debug" },
-    { include-group = "devtools" },
+    { include-group = "build" },
     { include-group = "docs" },
     { include-group = "linters" },
+    { include-group = "misc" },
     { include-group = "tests" },
     { include-group = "typing" },
 ]
-debug = [
-    "ipympl>=0.10.0",
-    "ipywidgets>=8.1.9",
-    "jupyterlab>=4.6.3",
-    "jupyterlab-execute-time>=3.3.0",
-    "psutil>=7.2.2",
-]
-devtools = [
+build = [
     "cmake>=4.4.3",
     "ninja>=1.13.2",
-    "prek>=0.5.2",
-    "pybadges>=3.0.1",
+    "scikit-build-core>=1.0.3",
 ]
 docs = [
     "docutils>=0.22.4",
     "myst-parser>=5.1.0",
     "nbsphinx>=0.9.8",
     "piccolo-theme>=0.24.0",
+    "pybadges>=3.0.1",
     "pydata-sphinx-theme>=0.21.0",
     "pygments>=2.21.0",
     "sphinx>=9.1.0",
@@ -114,15 +115,22 @@ docs = [
     "sphinx-typo3-theme>=4.9.0",
 ]
 linters = [
-    "prek>=0.5.2",
-    "ruff>=0.16.5",
-    "tach>=0.35.0",
+    "prek>=0.5.3",
+    "ruff>=0.16.7",
+    "tach>=0.35.1",
+]
+misc = [
+    "ipympl>=0.10.0",
+    "ipywidgets>=8.1.9",
+    "jupyterlab>=4.6.3",
+    "jupyterlab-execute-time>=3.3.0",
+    "psutil>=7.2.2",
 ]
 tests = [
-    "coverage>=7.16.0",
-    "hypothesis[numpy,pytest]>=6.167.1",
-    "matplotlib>=3.11.1",
-    "optuna>=4.9.0",
+    "coverage>=7.16.1",
+    "hypothesis[numpy,pytest]>=6.168.0",
+    "matplotlib>=3.11.2",
+    "optuna>=5.0.0",
     "psutil>=7.2.2",
     "pygal>=3.1.3",
     "pytest>=9.1.1",
@@ -135,27 +143,27 @@ tests = [
     "scipy>=1.18.1",
     "torchdiffeq>=0.2.5",
     "torchinfo>=1.8.0",
-    "tqdm>=4.70.0",
+    "tqdm>=4.70.1",
 ]
 typing = [
     "mypy>=2.3.1",
-    "pyrefly>=1.2.0",
-    "pyright>=1.1.411",
+    "pyrefly>=1.3.1",
+    "pyright>=1.1.414",
     "scipy-stubs>=1.18.1.0",
-    "ty>=0.0.78",
+    "ty>=0.0.81",
     "types-colorama>=0.4.15.20260508",
     "types-defusedxml>=0.7.0.20260504",
     "types-jsonschema>=4.26.0.20260518",
-    "types-networkx>=3.6.1.20260903",
+    "types-networkx>=3.6.1.20260911",
     "types-pexpect>=4.9.0.20260518",
-    "types-protobuf>=7.35.1.20260827",
-    "types-psutil>=7.2.2.20260827",
+    "types-protobuf>=7.35.1.20260906",
+    "types-psutil>=7.2.2.20260906",
     "types-pygments>=2.21.0.20260819",
     "types-pywin32>=312.0.0.20260827",
-    "types-pyyaml>=6.0.12.20260815",
+    "types-pyyaml>=6.0.12.20260906",
     "types-setuptools>=84.0.0.20260812",
     "types-tabulate>=0.10.0.20260508",
-    "types-tqdm>=4.70.0.20260827",
+    "types-tqdm>=4.70.0.20260906",
     "typing-extensions>=4.16.0",
 ]
 # endregion development dependencies ---------------------------------------------------

@@ -7,7 +7,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Section: configure user-facing build options.
 option(LINODENET_SPECIAL_USE_CUDA "Enable CUDA-dependent build configuration" ON)
-option(LINODENET_SPECIAL_ENABLE_CLANG_TIDY "Run clang-tidy during builds" ON)
+option(LINODENET_SPECIAL_ENABLE_CLANG_TIDY "Run clang-tidy during builds" OFF)
 option(LINODENET_SPECIAL_USE_CUDNN "Enable cuDNN support" ON)
 option(LINODENET_SPECIAL_USE_CUSPARSELT "Enable cuSPARSELt support" OFF)
 option(LINODENET_SPECIAL_USE_CUDSS "Enable cuDSS support" OFF)
