@@ -1,6 +1,10 @@
 #!/usr/bin/env just --justfile
 export PYTORCH_JIT := "0"
-BUILD_DIR := "./_build"
+BUILD_DIR := "./build/latest"
+PREVIOUS_BUILD := "./build/previous"
+AUTOSUMMARY_DIR := "_autosummary"
+AUTOAPI_DIR := "autoapi"
+APIDOC_DIR := "apidoc"
 
 [default]
 [doc('Show documentation commands.')]
@@ -13,20 +17,19 @@ clean:
     set -eu
 
     mkdir -p "{{ BUILD_DIR }}"
-    rm -rf _previous_build
-    mv "{{ BUILD_DIR }}" _previous_build
+    rm -rf {{ PREVIOUS_BUILD }}
+    mv "{{ BUILD_DIR }}" {{ PREVIOUS_BUILD }}
 
     rm -rf "{{ BUILD_DIR }}"
-    rm -rf _autosummary
-    rm -rf autoapi
-    rm -rf apidoc
-    rm -rf api
+    rm -rf {{ AUTOSUMMARY_DIR }}
+    rm -rf {{ AUTOAPI_DIR }}
+    rm -rf {{ APIDOC_DIR }}
 
 [doc('Rebuild the Sphinx API docs and HTML output.')]
 make *sphinx_args: clean
     #!/usr/bin/env bash
     set -eu
 
-    sphinx_opts=(-w .sphinx/warnings.txt)
-    uv run sphinx-apidoc --separate -o apidoc/ ../src/
+    sphinx_opts=(-w {{ BUILD_DIR }}/warnings.txt)
+    uv run sphinx-apidoc --separate -o {{ APIDOC_DIR }} ../src/
     uv run sphinx-build -M html . "{{ BUILD_DIR }}" "${sphinx_opts[@]}" {{ sphinx_args }}

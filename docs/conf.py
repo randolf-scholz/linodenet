@@ -9,12 +9,12 @@ Useful links:
 - https://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html
 - https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html
 """
-# ruff: line-length=100
 
 import datetime
 import os
 import sys
 from importlib import metadata
+from pathlib import Path
 
 # setup path
 os.environ["GENERATING_DOCS"] = "true"
@@ -334,18 +334,6 @@ viewcode_line_numbers = True  # print inline line numbers
 # endregion sphinx.ext.viewcode configuration ------------------------------------------
 
 
-# region sphinx_math_dollar configuration ----------------------------------------------
-# SEE: https://www.sympy.org/sphinx-math-dollar/#configuration
-# math_dollar_debug = True
-# math_dollar_node_blacklist = NODE_BLACKLIST + (header, pending_xref_condition)
-
-# from sphinx.addnodes import pending_xref_condition
-# from sphinx.util.docutils import register_node
-#
-# register_node(pending_xref_condition)
-# endregion sphinx_math_dollar configuration -------------------------------------------
-
-
 # region MyST Configuration ------------------------------------------------------------
 myst_enable_extensions = [
     "colon_fence",
@@ -362,8 +350,8 @@ myst_enable_extensions = [
 # math_dollar_debug = True
 # math_dollar_node_blacklist = NODE_BLACKLIST + (header, pending_xref_condition)
 
-from sphinx.addnodes import pending_xref_condition  # noqa: E402
-from sphinx.util.docutils import register_node  # noqa: E402
+from sphinx.addnodes import pending_xref_condition  # ruff: ignore[E402]
+from sphinx.util.docutils import register_node  # ruff: ignore[E402]
 
 register_node(pending_xref_condition)
 # endregion sphinx_math_dollar configuration -------------------------------------------

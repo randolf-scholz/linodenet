@@ -118,7 +118,6 @@
       <excludeFolder url="file://$MODULE_DIR$/.benchmarks (copy)" />
       <excludeFolder url="file://$MODULE_DIR$/tests/.benchmarks_bak" />
       <excludeFolder url="file://$MODULE_DIR$/tests/results" />
-      <excludeFolder url="file://$MODULE_DIR$/.vscode" />
       <excludeFolder url="file://$MODULE_DIR$/src/.benchmarks" />
       <excludeFolder url="file://$MODULE_DIR$/src/reports" />
       <excludeFolder url="file://$MODULE_DIR$/tests/liblinodenet/.benchmarks" />

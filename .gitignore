@@ -1,17 +1,18 @@
 # region custom ------------------------------------------------------------------------
 # hidden/private directories
-_*/
+__*/
 .*/
-*.log
-*.local.*
-
-# exceptions
 !/**/.idea/
 !/**/.vscode/
-!docs/_static/
-!docs/_templates/
 
+# local files
+*.local.*
+# tensorboard
+*events.out.tfevents*
+# temporary files
 tmp*.py
+# logfiles
+*.log
 # zip files
 *.zip
 # pickle files
@@ -21,25 +22,15 @@ tmp*.py
 *.pt
 *.torch
 *.pt.trace.json
-# tensorboard files
-*events.out.tfevents*
-
-.coverage
-.codex
 
 # libtorch
 **/libtorch/
 **/build/
-# documentation
-**/apidoc/
-**/autoapi/
-**/tests/**/reports/
 
-# Project related Files
-dev/**/*.parquet
-dev/**/*.pdf
-dev/**/*.png
-experiments/**/*.parquet
-experiments/**/*.pdf
-experiments/**/*.png
+# documentation
+docs/**/apidoc/
+docs/**/autoapi/
+
+# testing
+**/tests/**/reports/
 # endregion custom ---------------------------------------------------------------------

@@ -1,6 +1,5 @@
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from linodenet_special.fallbacks.fixpoint_iteration import (
     fixpoint_solve,
