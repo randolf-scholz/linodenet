@@ -184,7 +184,7 @@ def check_forward(
     r"""Test a forward pass.
 
     Raises:
-        `AssertionError`: if the forward pass fails, or if the outputs do not match the
+        AssertionError: if the forward pass fails, or if the outputs do not match the
             reference values / shapes.
     """
     try:
@@ -218,7 +218,7 @@ def check_backward(
     r"""Test a backward pass.
 
     Raises:
-        `AssertionError`: if the backward pass fails, or if the gradients do not match
+        AssertionError: if the backward pass fails, or if the gradients do not match
             the reference values / shapes.
     """
     params: list[Tensor] = (
@@ -278,7 +278,7 @@ def check_jit_scriptable(
     r"""Test JIT compilation.
 
     Raises:
-        `AssertionError`: if JIT compilation fails.
+        AssertionError: if JIT compilation fails.
     """
     try:
         scripted = jit.script(arg)
@@ -291,7 +291,7 @@ def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
     r"""Test saving and loading of JIT compiled model.
 
     Raises:
-        `AssertionError`: if saving or loading fails.
+        AssertionError: if saving or loading fails.
     """
     scripted = (
         arg
@@ -333,7 +333,7 @@ def assert_is_trainable(
     r"""Check if the model can be optimized.
 
     Raises:
-        `AssertionError`: if the model has no trainable parameters, or if the loss does
+        AssertionError: if the model has no trainable parameters, or if the loss does
             not decrease after optimization.
     """
     if not any(p.requires_grad for p in module.parameters()):

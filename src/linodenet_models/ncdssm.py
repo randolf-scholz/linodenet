@@ -149,7 +149,7 @@ class ContinuousLinearSDE(nn.Module):
 
     @property
     def process_covariance(self) -> Tensor:
-        r"""Return $Q=LLᵀ$, constrained to be positive diagonal."""
+        r"""Covariance matrix $Q=LLᵀ$, constrained to be positive diagonal."""
         σ = softplus(self.process_log_stdv) + self.min_stdv
         return torch.diag(σ.square())
 

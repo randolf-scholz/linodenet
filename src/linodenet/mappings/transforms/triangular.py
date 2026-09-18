@@ -73,7 +73,7 @@ class TriangularTransform(nn.Module, Transform):
 
     @property
     def weight(self) -> Tensor:
-        r"""Return the unit lower-triangular weight matrix."""
+        r"""The unit lower-triangular weight matrix."""
         return torch.eye(
             self.input_size,
             device=self.lower.device,

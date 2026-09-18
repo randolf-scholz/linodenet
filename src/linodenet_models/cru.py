@@ -472,7 +472,7 @@ class CRU(nn.Module):
 
     @property
     def config(self) -> dict[str, object]:
-        r"""Return constructor-relevant configuration."""
+        r"""Constructor-relevant configuration."""
         return {
             "input_size": self.input_size,
             "output_size": self.output_size,

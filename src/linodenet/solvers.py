@@ -34,7 +34,7 @@ class ODESolver(StrEnum):
 
     @property
     def step_fn(self) -> Callable[..., Tensor]:
-        r"""Return the one-step update function."""
+        r"""The one-step update function."""
         match self:
             case ODESolver.EULER:
                 return euler_step

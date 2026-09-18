@@ -514,7 +514,7 @@ class BlueprintRegistry:
     def register_serializer[T](
         self, predicate: BlueprintPredicate[T], serializer: BlueprintSerializer[T], /
     ) -> None:
-        if any(existing is predicate for existing, _ in self._serializers.items()):
+        if any(existing is predicate for existing in self._serializers):
             raise ValueError("Blueprint predicate is already registered.")
         self._serializers[predicate] = serializer
 

@@ -420,11 +420,9 @@ def register_parametrization(
         case ModuleMapping() as parametrizations:  # pyright: ignore[reportAssignmentType]
             pass
 
-        case nn.ModuleDict() as _parametrizations:
+        case nn.ModuleDict() as params:
             warnings.warn("Got nn.ModuleDict()", stacklevel=2)
-            parametrizations = cast(
-                "ModuleMapping[ParametrizationList]", _parametrizations
-            )
+            parametrizations = cast("ModuleMapping[ParametrizationList]", params)
 
         case other:
             raise TypeError(f"Expected a {ModuleMapping!s}, but got {type(other)}!")

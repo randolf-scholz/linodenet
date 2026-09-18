@@ -214,7 +214,7 @@ def serialize_model[M: nn.Module | ExportedProgram](
     r"""Serialize a model to a file and return its blueprint spec."""
     # ensure path ends with .pt or .zip
     path = Path(filepath)
-    if path.suffix not in (".pt", ".zip"):
+    if path.suffix not in {".pt", ".zip"}:
         raise ValueError("Model file extension must be .pt or .zip")
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -279,7 +279,7 @@ def deserialize_model(path: FilePath, /) -> nn.Module:
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(f"Model file not found: {path}")
-    if path.suffix not in (".pt", ".zip"):
+    if path.suffix not in {".pt", ".zip"}:
         raise ValueError("Model file extension must be .pt or .zip")
 
     with (
@@ -303,7 +303,7 @@ def deserialize_model_from_blueprint[M: nn.Module | ExportedProgram](
 
     if not path.is_file():
         raise FileNotFoundError(f"Model file not found: {path}")
-    if path.suffix not in (".pt", ".zip"):
+    if path.suffix not in {".pt", ".zip"}:
         raise ValueError("Model file extension must be .pt or .zip")
 
     with (

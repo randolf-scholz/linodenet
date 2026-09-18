@@ -203,7 +203,7 @@ class ScalarContraction(StrEnum):
 
     @property
     def spec(self) -> NonlinearContractionSpec:
-        r"""Return the certified metadata for this scalar contraction."""
+        r"""Certified metadata for this scalar contraction."""
         return _SCALAR_CONTRACTION_SPECS[self.value]
 
     @classmethod
@@ -256,7 +256,7 @@ class NonExpansiveMapping(StrEnum):
 
     @property
     def spec(self) -> NonlinearContractionSpec:
-        r"""Return the certified metadata for this non-expansive mapping."""
+        r"""Certified metadata for this non-expansive mapping."""
         return _NON_EXPANSIVE_MAPPING_SPECS[self.value]
 
     @classmethod

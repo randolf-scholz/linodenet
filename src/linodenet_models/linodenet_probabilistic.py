@@ -694,7 +694,7 @@ class KoopmanFilter(nn.Module):
 
     @property
     def observation_covariance(self) -> Tensor:
-        r"""Return the diagonal observation-noise covariance."""
+        r"""The diagonal observation-noise covariance."""
         return (
             self.observation_log_variance.exp()
             + torch.finfo(self.initial_mean.dtype).eps

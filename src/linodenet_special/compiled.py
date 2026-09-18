@@ -106,9 +106,9 @@ def _compile_fns() -> KnownFunctions:
                 verbose=False,
                 with_cuda=torch.cuda.is_available(),
             )
-        except Exception as _exc:
-            _exc.add_note(f"Could not compile {name}!")
-            exceptions[name] = _exc
+        except Exception as exc:
+            exc.add_note(f"Could not compile {name}!")
+            exceptions[name] = exc
         else:
             compiled_fns[name] = getattr(_LIB, name)
 

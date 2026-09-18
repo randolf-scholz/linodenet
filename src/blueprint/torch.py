@@ -117,7 +117,7 @@ def _model_blueprint_to_json[T: nn.Module](spec: Blueprint[T], /) -> JSON:
         **{
             key: _naive_serializer(value)
             for key, value in spec.items()
-            if key not in ("__args__", "__kwargs__")
+            if key not in {"__args__", "__kwargs__"}
         },
     }
 
