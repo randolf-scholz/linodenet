@@ -90,7 +90,7 @@ class Activations(StrEnum):
     @staticmethod
     def _to_kebab_case(value: str, /) -> str:
         r"""Normalize a name to lowercase kebab-case."""
-        normalized = re.sub(r"_", "-", value.strip())
+        normalized = value.strip().replace(r"_", "-")
         normalized = re.sub(r"([a-z0-9])([A-Z][a-z])", r"\1-\2", normalized)
         return normalized.lower()
 
