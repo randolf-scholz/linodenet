@@ -300,7 +300,7 @@ def test_linode_error(
 
 
 @pytest.mark.slow
-def test_make_error_plot(num_samples: int = 100) -> None:  # noqa: PT028
+def test_make_error_plot(num_samples: int = 100) -> None:  # ruff: ignore[PT028]
     logger = logging.getLogger(f"{__name__}/{LinearFlow.__name__}")
     logger.info("Testing %s.", LinearFlow)
 

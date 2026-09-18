@@ -132,7 +132,7 @@ class TestModuleMapping:
 
             for key in m:
                 assert_type(key, str)
-            for key in m.keys():  # noqa: SIM118
+            for key in m.keys():  # ruff: ignore[SIM118]
                 assert_type(key, str)
             for module in m.values():
                 assert_type(module, nn.Linear)
@@ -158,7 +158,7 @@ class TestModuleMapping:
 
             for key in m:
                 assert type(key) is str
-            for key in m.keys():  # noqa: SIM118
+            for key in m.keys():  # ruff: ignore[SIM118]
                 assert type(key) is str
             for module in m.values():
                 assert type(module) is nn.Linear
@@ -171,7 +171,7 @@ class TestModuleMapping:
             def forward(self, x: Tensor) -> Tensor:
                 outputs: list[Tensor] = []
                 for module in self.values():
-                    outputs.append(module(x))  # noqa: PERF401
+                    outputs.append(module(x))  # ruff: ignore[PERF401]
                 # average the outputs
                 return torch.stack(outputs, dim=-1).mean(dim=-1)
 

@@ -31,8 +31,8 @@ def is_general_matrix(
     /,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     shape = x.shape[: dim[0]]
     return torch.ones(shape, dtype=torch.bool, device=x.device)
@@ -79,7 +79,7 @@ class TestParametrization(TestSuite):
 
     def get_parametrized_layer(self, model: nn.Module) -> nn.Linear:
         if isinstance(model, OptimizedModule):
-            model = model._orig_mod  # noqa: SLF001
+            model = model._orig_mod  # ruff: ignore[SLF001]
             assert isinstance(model, nn.Sequential)
             layer = model[2]
             assert isinstance(layer, nn.Linear)

@@ -344,7 +344,7 @@ class TestMoses(TestPathModel[Moses]):
 
     def loss(
         self,
-        model: Moses,  # noqa: ARG002
+        model: Moses,  # ruff: ignore[ARG002]
         predictions: tuple[Tensor, ...],
         targets: Tensor,
     ) -> Tensor:

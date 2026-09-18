@@ -77,7 +77,7 @@ def test_multiple_inheritance_fails_with_bad_order() -> None:
 
     with pytest.raises(TypeError, match="Cannot create a consistent method resolution"):
 
-        class _(ModuleSequence[nn.Module], FilterModule): ...  # type: ignore  # noqa: PGH003
+        class _(ModuleSequence[nn.Module], FilterModule): ...  # type: ignore  # ruff: ignore[PGH003]
 
 
 def test_multiple_inheritance() -> None:

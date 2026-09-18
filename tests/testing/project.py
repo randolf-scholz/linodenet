@@ -1,5 +1,5 @@
 r"""LinODE-Net Configuration."""
-# ruff: noqa: N802
+# ruff: file-ignore[N802]
 
 __all__ = [
     # Constants

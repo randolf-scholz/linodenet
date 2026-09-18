@@ -38,9 +38,9 @@ VECTOR_MANIFOLDS = [
 )
 def test_matrix_manifolds_implement_protocol(
     manifold_cls: type[ManifoldBase],
-    domain: MatrixDomains,  # noqa: ARG001
-    shape: tuple[int, int],  # noqa: ARG001
-    scale: float,  # noqa: ARG001
+    domain: MatrixDomains,  # ruff: ignore[ARG001]
+    shape: tuple[int, int],  # ruff: ignore[ARG001]
+    scale: float,  # ruff: ignore[ARG001]
 ) -> None:
     assert isinstance(manifold_cls(), ManifoldBase)
 
@@ -52,9 +52,9 @@ def test_matrix_manifolds_implement_protocol(
 )
 def test_vector_manifolds_implement_protocol(
     manifold_cls: type[ManifoldBase],
-    domain: VectorDomains,  # noqa: ARG001
-    size: int,  # noqa: ARG001
-    scale: float,  # noqa: ARG001
+    domain: VectorDomains,  # ruff: ignore[ARG001]
+    size: int,  # ruff: ignore[ARG001]
+    scale: float,  # ruff: ignore[ARG001]
 ) -> None:
     assert isinstance(manifold_cls(), ManifoldBase)
 
@@ -100,7 +100,7 @@ def test_project_lands_in_expected_manifold(
 @pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
 def test_project_tangent_lands_in_expected_tangent_space(
     manifold_cls: type[ManifoldBase],
-    domain: MatrixDomains,  # noqa: ARG001
+    domain: MatrixDomains,  # ruff: ignore[ARG001]
     shape: tuple[int, int],
     scale: float,
     seed: int,
@@ -210,7 +210,7 @@ def test_project_lands_in_expected_vector_manifold(
 @pytest.mark.parametrize("seed", SEEDS_10, ids="seed={}".format)
 def test_project_tangent_lands_in_expected_vector_tangent_space(
     manifold_cls: type[ManifoldBase],
-    domain: VectorDomains,  # noqa: ARG001
+    domain: VectorDomains,  # ruff: ignore[ARG001]
     size: int,
     scale: float,
     seed: int,

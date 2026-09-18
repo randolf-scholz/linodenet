@@ -42,9 +42,9 @@ class _TargetContext(nn.Module):
     def forward(
         self,
         *,
-        timestamps: Tensor,  # noqa: ARG002
+        timestamps: Tensor,  # ruff: ignore[ARG002]
         context_values: Tensor,
-        context_mask: Tensor,  # noqa: ARG002
+        context_mask: Tensor,  # ruff: ignore[ARG002]
         query_mask: Tensor,
     ) -> Tensor:
         *batch_shape, _, _ = query_mask.shape

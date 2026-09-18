@@ -45,7 +45,7 @@ class TestParametrization(TestSuite):
 
     def get_parametrized_layer(self, model: nn.Module) -> nn.Linear:
         if isinstance(model, OptimizedModule):
-            model = model._orig_mod  # noqa: SLF001
+            model = model._orig_mod  # ruff: ignore[SLF001]
             assert isinstance(model, nn.Sequential)
             layer = model[2]
             assert isinstance(layer, nn.Linear)

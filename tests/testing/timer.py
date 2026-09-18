@@ -54,7 +54,7 @@ class timer(ContextDecorator):
         self._tick_thread: threading.Thread | None = None
         self._tick_stop: threading.Event | None = None
 
-    def _timeout_handler(self, signum: int, frame: FrameType | None) -> Never:  # noqa: ARG002
+    def _timeout_handler(self, signum: int, frame: FrameType | None) -> Never:  # ruff: ignore[ARG002]
         self.exc = TimeoutError(f"Timed out after {self.timeout} seconds.")
         raise self.exc
 

@@ -5,7 +5,7 @@ import argparse
 import pytest
 
 
-def pytest_collection_modifyitems(config, items):  # noqa: ARG001
+def pytest_collection_modifyitems(config, items):  # ruff: ignore[ARG001]
     interactive = []
     non_interactive = []
     for item in items:
