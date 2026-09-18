@@ -11,8 +11,8 @@ from torch.special import log_ndtr
 
 from linodenet_special.compiled import ndtri_exp as ndtri_exp_cpp
 from linodenet_special.fallbacks.ndtri_exp import (
-    _LOWER_CUTOFF,
-    _UPPER_CUTOFF,
+    LOWER_CUTOFF,
+    UPPER_CUTOFF,
     ndtri_exp as ndtri_exp_py,
 )
 from tests.testing import DEVICES, DTYPES, TestSuite
@@ -64,9 +64,9 @@ def test_torch_log_ndtr_matches_scipy(dtype: torch.dtype) -> None:
 class TestCorrectness(TestSuite):
     N = 256
     RANGES = [
-        (-80.0, _LOWER_CUTOFF - 1e-3),
-        (_LOWER_CUTOFF, _UPPER_CUTOFF),
-        (_UPPER_CUTOFF + 1e-6, -1e-6),
+        (-80.0, LOWER_CUTOFF - 1e-3),
+        (LOWER_CUTOFF, UPPER_CUTOFF),
+        (UPPER_CUTOFF + 1e-6, -1e-6),
     ]
 
     TOL = {
@@ -203,8 +203,8 @@ class TestCorrectness(TestSuite):
     def test_gradcheck(self, name: str, dtype: torch.dtype, device: str) -> None:
         impl = IMPLS[name]
         log_p = torch.linspace(
-            _LOWER_CUTOFF,
-            _UPPER_CUTOFF,
+            LOWER_CUTOFF,
+            UPPER_CUTOFF,
             steps=100,
             dtype=dtype,
             device=device,

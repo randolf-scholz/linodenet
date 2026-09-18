@@ -35,6 +35,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 __all__ = [
+    # Constants
+    "LOWER_CUTOFF",
+    "UPPER_CUTOFF",
     # functions
     "ndtri_exp",
     "ndtri_exp_naive",
@@ -48,8 +51,8 @@ from torch import Tensor
 from torch.special import ndtri
 
 # constants
-_UPPER_CUTOFF: Final[float] = -0.14541345786885906  # log(1-e⁻²)
-_LOWER_CUTOFF: Final[float] = -2.0
+UPPER_CUTOFF: Final[float] = -0.14541345786885906  # log(1-e⁻²)
+LOWER_CUTOFF: Final[float] = -2.0
 _SQRT_2: Final[float] = math.sqrt(2.0)
 _P1: Final[list[float]] = [
     4.05544892305962419923,
@@ -187,9 +190,9 @@ def ndtri_exp(log_p: Tensor) -> Tensor:
     """
     invalid_mask = log_p.isnan() | (log_p > 0)
     neginf_mask = log_p.isneginf()
-    small_mask = (log_p < _LOWER_CUTOFF) & ~(invalid_mask | neginf_mask)
-    medium_mask = (log_p >= _LOWER_CUTOFF) & (log_p <= _UPPER_CUTOFF)
-    large_mask = (log_p > _UPPER_CUTOFF) & ~invalid_mask
+    small_mask = (log_p < LOWER_CUTOFF) & ~(invalid_mask | neginf_mask)
+    medium_mask = (log_p >= LOWER_CUTOFF) & (log_p <= UPPER_CUTOFF)
+    large_mask = (log_p > UPPER_CUTOFF) & ~invalid_mask
 
     # mask the unused part of the test with constant dummy value.
     # this prevents propagation of spurious NANs.

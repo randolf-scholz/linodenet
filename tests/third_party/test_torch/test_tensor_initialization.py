@@ -13,7 +13,7 @@ def test_benchmark_initialization(benchmark, method: str) -> None:
     CPU = torch.device("cpu")
     TARGET_DTYPE = torch.float64
 
-    _P1 = torch.tensor(
+    P1 = torch.tensor(
         [
             4.05544892305962419923,
             3.15251094599893866154e1,
@@ -29,7 +29,7 @@ def test_benchmark_initialization(benchmark, method: str) -> None:
         device=CPU,
         pin_memory=True,
     )
-    _Q1 = torch.tensor(
+    Q1 = torch.tensor(
         [
             1.57799883256466749731e1,
             4.53907635128879210584e1,
@@ -44,7 +44,7 @@ def test_benchmark_initialization(benchmark, method: str) -> None:
         device=CPU,
         pin_memory=True,
     )
-    _P2 = torch.tensor(
+    P2 = torch.tensor(
         [
             3.23774891776946035970,
             6.91522889068984211695,
@@ -60,7 +60,7 @@ def test_benchmark_initialization(benchmark, method: str) -> None:
         device=CPU,
         pin_memory=True,
     )
-    _Q2 = torch.tensor(
+    Q2 = torch.tensor(
         [
             6.02427039364742014255,
             3.67983563856160859403,
@@ -76,7 +76,7 @@ def test_benchmark_initialization(benchmark, method: str) -> None:
         pin_memory=True,
     )
 
-    _COEFF_CACHE: dict[
+    COEF_CACHE: dict[
         tuple[torch.device, torch.dtype],
         tuple[Tensor, Tensor, Tensor, Tensor],
     ] = {}
@@ -85,15 +85,15 @@ def test_benchmark_initialization(benchmark, method: str) -> None:
         device: torch.device, dtype: torch.dtype
     ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
         key = (device, dtype)
-        coeffs = _COEFF_CACHE.get(key)
+        coeffs = COEF_CACHE.get(key)
         if coeffs is None:
             coeffs = (
-                _P1.detach().clone().to(device=device, dtype=dtype),
-                _Q1.detach().clone().to(device=device, dtype=dtype),
-                _P2.detach().clone().to(device=device, dtype=dtype),
-                _Q2.detach().clone().to(device=device, dtype=dtype),
+                P1.detach().clone().to(device=device, dtype=dtype),
+                Q1.detach().clone().to(device=device, dtype=dtype),
+                P2.detach().clone().to(device=device, dtype=dtype),
+                Q2.detach().clone().to(device=device, dtype=dtype),
             )
-            _COEFF_CACHE[key] = coeffs
+            COEF_CACHE[key] = coeffs
         return coeffs
 
     def initialize_on_gpu() -> None:
@@ -158,10 +158,10 @@ def test_benchmark_initialization(benchmark, method: str) -> None:
         torch.cuda.synchronize()
 
     def initialize_from_cpu() -> None:
-        _p1 = _P1.to(dtype=TARGET_DTYPE, device=GPU)
-        _p2 = _P2.to(dtype=TARGET_DTYPE, device=GPU)
-        _q1 = _Q1.to(dtype=TARGET_DTYPE, device=GPU)
-        _q2 = _Q2.to(dtype=TARGET_DTYPE, device=GPU)
+        _p1 = P1.to(dtype=TARGET_DTYPE, device=GPU)
+        _p2 = P2.to(dtype=TARGET_DTYPE, device=GPU)
+        _q1 = Q1.to(dtype=TARGET_DTYPE, device=GPU)
+        _q2 = Q2.to(dtype=TARGET_DTYPE, device=GPU)
         torch.cuda.synchronize()
 
     def initialize_from_cache() -> None:

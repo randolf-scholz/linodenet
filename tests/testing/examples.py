@@ -45,12 +45,12 @@ class ExampleWithKnownSVD:
 
     @property
     def spectral_norm(self) -> Tensor:
-        r"""Return the spectral norm of the matrix."""
+        r"""Spectral norm of the matrix."""
         return self.S.max(dim=-1).values  # (...,)
 
     @property
     def spectral_norm_gradient(self):
-        r"""Return the gradient of the spectral norm of the matrix.
+        r"""Gradient of the spectral norm of the matrix.
 
         The gradient is analytically given as:
 
@@ -61,7 +61,7 @@ class ExampleWithKnownSVD:
 
     @property
     def singular_triplet(self) -> tuple[Tensor, Tensor, Tensor]:
-        r"""Return the maximum singular value and its vectors."""
+        r"""Maximum singular value and its vectors."""
         U, S, V = self.U, self.S, self.V
         idx_star = S.argmax(dim=-1, keepdim=True)  # (..., 1)
         s = S.gather(dim=-1, index=idx_star)  # (..., 1)

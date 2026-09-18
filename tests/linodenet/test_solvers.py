@@ -19,7 +19,7 @@ class UnivariateLinearSystem(NamedTuple):
 
     @property
     def args(self) -> tuple[Tensor]:
-        r"""Return explicit tensor arguments for the custom autograd operator."""
+        r"""Explicit tensor arguments for the custom autograd operator."""
         return (self.rate,)
 
     def vector_field(
@@ -47,7 +47,7 @@ class MultivariateLinearSystem(NamedTuple):
 
     @property
     def args(self) -> tuple[Tensor]:
-        r"""Return explicit tensor arguments for the custom autograd operator."""
+        r"""Explicit tensor arguments for the custom autograd operator."""
         return (self.matrix,)
 
     def vector_field(
@@ -80,7 +80,7 @@ class HarmonicOscillator(NamedTuple):
 
     @property
     def args(self) -> tuple[Tensor]:
-        r"""Return explicit tensor arguments for the custom autograd operator."""
+        r"""Explicit tensor arguments for the custom autograd operator."""
         return (self.frequency,)
 
     def matrix(self, frequency: Tensor) -> Tensor:

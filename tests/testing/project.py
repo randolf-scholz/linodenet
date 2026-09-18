@@ -118,7 +118,7 @@ class Project:
 
     @cached_property
     def ROOT_PATH(self) -> Path:
-        r"""Return the root directory."""
+        r"""The root directory."""
         start = Path(__file__).resolve().parent
         for candidate in (start, *start.parents):
             if (candidate / "pyproject.toml").is_file():
@@ -129,7 +129,7 @@ class Project:
 
     @cached_property
     def DOCS_PATH(self) -> Path:
-        r"""Return the `docs` directory."""
+        r"""The `docs` directory."""
         docs_path = self.ROOT_PATH / "docs"
         if not docs_path.is_dir():
             raise FileNotFoundError(f"Docs directory {docs_path} does not exist!")
@@ -137,7 +137,7 @@ class Project:
 
     @cached_property
     def SOURCE_PATH(self) -> Path:
-        r"""Return the source directory."""
+        r"""The source directory."""
         source_path = self.ROOT_PATH / "src"
         if not source_path.is_dir():
             raise FileNotFoundError(f"Source directory {source_path} does not exist!")
@@ -145,7 +145,7 @@ class Project:
 
     @cached_property
     def TESTS_PATH(self) -> Path:
-        r"""Return the test directory."""
+        r"""The test directory."""
         tests_path = self.ROOT_PATH / "tests"
         if not tests_path.is_dir():
             raise FileNotFoundError(f"Tests directory {tests_path} does not exist!")
@@ -153,7 +153,7 @@ class Project:
 
     @cached_property
     def PROJECT_FILE(self) -> dict[str, Any]:
-        r"""Return `pyproject.toml` as a dictionary."""
+        r"""The `pyproject.toml` as a dictionary."""
         project_file = self.ROOT_PATH / "pyproject.toml"
         if not project_file.is_file():
             raise FileNotFoundError(f"Project file {project_file} does not exist!")
@@ -162,7 +162,7 @@ class Project:
 
     @cached_property
     def NAME(self) -> str:
-        r"""Get project name."""
+        r"""The project's name."""
         project = self.PROJECT_FILE.get("project")
         match project:
             case {"name": str(name)}:
@@ -172,17 +172,17 @@ class Project:
 
     @cached_property
     def ROOT_PACKAGES(self) -> list[ModuleType]:
-        r"""Get project root packages under `src`."""
+        r"""The project root packages under `src`."""
         return _discover_root_packages(self.SOURCE_PATH)
 
     @cached_property
     def TEST_RESULTS_PATH(self) -> Path:
-        r"""Return the test `results` directory."""
+        r"""The test `results` directory."""
         return self.TESTS_PATH / ".results"
 
     @cached_property
     def RESULTS_DIR(self) -> _DirGetter:
-        r"""Return the `results` directory."""
+        r"""The `results` directory."""
         return _DirGetter(self.TEST_RESULTS_PATH)
 
     def generate_test_folders(self, *, dry_run: bool = True) -> None:
