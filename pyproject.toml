@@ -42,12 +42,16 @@ packages = [
     "src/signatures",
 ]
 
-
+[tool.uv]
+no-build-isolation = true
+required-environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 
 # region project configuration ---------------------------------------------------------
 [project]
 name = "linodenet"
-version = "0.5.0"
+version = "0.5.1"
 description = "Linear ODE Network for Time-Series Forecasting"
 readme = "README.md"
 license-files = ["LICENSE"]
@@ -324,11 +328,6 @@ ignore = [
     "UP045", # Use `X | Y` for type annotations
 ]
 # endregion ruff configuration ---------------------------------------------------------
-
-[tool.uv]
-required-environments = [
-    "sys_platform == 'linux' and platform_machine == 'x86_64'",
-]
 
 [tool.ty]
 [tool.ty.environment]
