@@ -156,8 +156,8 @@ def is_sparse(
     sparsity: float | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given matrix contains sufficiently many exact zeros."""
     zero_fraction = (x == 0).to(dtype=torch.float32).mean(dim=dim)
@@ -263,8 +263,8 @@ def is_square(
     shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor is square along the given dimensions."""
     if shape is not None and not _has_shape(x, shape, dim):
@@ -283,8 +283,8 @@ def is_tall(
     shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor is tall along the given dimensions."""
     if shape is not None and not _has_shape(x, shape, dim):
@@ -303,8 +303,8 @@ def is_wide(
     shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor is wide along the given dimensions."""
     if shape is not None and not _has_shape(x, shape, dim):
@@ -348,8 +348,8 @@ def is_boolean(
     shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains only zeros and ones."""
     if shape is not None and not _has_shape(x, shape, dim):
@@ -364,8 +364,8 @@ def is_zero(
     shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains only zeros."""
     if shape is not None and not _has_shape(x, shape, dim):
@@ -380,8 +380,8 @@ def is_ones(
     shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains only ones."""
     if shape is not None and not _has_shape(x, shape, dim):
@@ -396,8 +396,8 @@ def is_one_hot(
     shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor has exactly one 1 entry and zeros elsewhere."""
     if shape is not None and not _has_shape(x, shape, dim):

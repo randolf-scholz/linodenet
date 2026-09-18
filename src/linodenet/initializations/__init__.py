@@ -6,7 +6,7 @@ Notes:
     - See `linodenet.initializations.functional` for functional implementations.
     - See `linodenet.initializations.modules` for all module-based initializations.
 """
-# ruff: noqa: F403
+# ruff: file-ignore[F403]
 
 __all__ = [
     # Sub-Modules

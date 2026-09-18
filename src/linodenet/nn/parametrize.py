@@ -644,7 +644,7 @@ def update_parametrizations(module: nn.Module, /) -> None:
 def register_optimizer_hook(optim: Optimizer, /, *modules: nn.Module) -> None:
     r"""Automatically adds a hook to `optimizer.step()` which refreshes the cache after each step."""
 
-    def hook(opt: Optimizer, /, *args: Any, **kwargs: Any) -> None:  # noqa: ARG001
+    def hook(opt: Optimizer, /, *args: Any, **kwargs: Any) -> None:  # ruff: ignore[ARG001]
         r"""Hook to update the parametrization after each optimizer step."""
         for module in modules:
             update_parametrizations(module)

@@ -3,7 +3,7 @@ r"""Neural Network subpackage of LinodeNet.
 This contains general-purpose building blocks for neural networks, such as layers, activations, and containers.
 This does not contain timeseries-specific layers and forecasting models.
 """
-# ruff: noqa: E402, F403
+# ruff: file-ignore[E402, F403]
 
 __all__ = [
     # submodules/packages
@@ -31,7 +31,7 @@ from .rezero import ReZero
 
 # blocker statement to prevent formatter from changing import order.
 # activations must be imported last.
-pass  # noqa: PIE790
+pass  # ruff: ignore[PIE790]
 
 from .activations import *
 

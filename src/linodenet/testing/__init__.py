@@ -1,5 +1,5 @@
 r"""Utility functions for testing."""
-# ruff: noqa: F403
+# ruff: file-ignore[F403]
 
 __all__ = [
     "assertions",

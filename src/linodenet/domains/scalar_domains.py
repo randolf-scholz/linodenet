@@ -731,7 +731,7 @@ class ScalarDomains(ScalarDomain, PosetEnum):
     OPEN_UNIT_BALL = Interval("(-1, 1)")
 
     @classmethod
-    def Interval(cls, arg) -> Interval:  # noqa: N802
+    def Interval(cls, arg) -> Interval:  # ruff: ignore[N802]
         return Interval(arg)
 
     @classmethod

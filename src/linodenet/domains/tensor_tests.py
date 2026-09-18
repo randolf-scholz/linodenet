@@ -77,8 +77,8 @@ def is_tensor(
     /,
     *,
     shape: tuple[int, ...] | None = None,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor matches the requested trailing shape."""
     batch_shape = _tensor_batch_shape(x, shape)
@@ -91,8 +91,8 @@ def is_real_tensor(
     /,
     *,
     shape: tuple[int, ...] | None = None,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor has a real dtype."""
     return is_tensor(x, shape=shape) & x.new_full(
@@ -108,8 +108,8 @@ def is_complex_tensor(
     /,
     *,
     shape: tuple[int, ...] | None = None,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor can be interpreted as complex-valued."""
     return is_tensor(x, shape=shape)
@@ -121,8 +121,8 @@ def is_boolean_tensor(
     /,
     *,
     shape: tuple[int, ...] | None = None,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains only zeros and ones."""
     shape_ok = is_tensor(x, shape=shape)
@@ -142,8 +142,8 @@ def is_zero_tensor(
     /,
     *,
     shape: tuple[int, ...] | None = None,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains only zeros."""
     shape_ok = is_tensor(x, shape=shape)
@@ -163,8 +163,8 @@ def is_one_tensor(
     /,
     *,
     shape: tuple[int, ...] | None = None,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains only ones."""
     shape_ok = is_tensor(x, shape=shape)
@@ -212,8 +212,8 @@ def is_sparse_tensor(
     sparsity: float | None = None,
     *,
     shape: tuple[int, ...] | None = None,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains sufficiently many exact zeros."""
     shape_ok = is_tensor(x, shape=shape)

@@ -4,7 +4,7 @@ Notes:
     - See `linodenet.mappings.functional` for functional implementations.
     - See `linodenet.mappings.projections` for module-based implementations.
 """
-# ruff: noqa: F403, F405
+# ruff: file-ignore[F403, F405]
 
 __all__ = [
     # Sub-Modules

@@ -1,5 +1,5 @@
 r"""Blueprints for PyTorch models and tensors."""
-# ruff: noqa: SIM103
+# ruff: file-ignore[SIM103]
 
 __all__ = [
     # constants

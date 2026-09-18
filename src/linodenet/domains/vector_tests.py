@@ -68,8 +68,8 @@ def is_real_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor has a real dtype."""
     return x.new_full(_vector_batch_shape(x, dim), not x.is_complex(), dtype=torch.bool)
@@ -81,8 +81,8 @@ def is_discrete_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor has integer or boolean dtype."""
     return x.new_full(
@@ -106,8 +106,8 @@ def is_complex_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor can be interpreted as complex-valued."""
     return x.new_full(_vector_batch_shape(x, dim), True, dtype=torch.bool)
@@ -119,8 +119,8 @@ def is_boolean_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains only zeros and ones."""
     return ((x == 0) | (x == 1)).all(dim=dim)
@@ -150,8 +150,8 @@ def is_positive_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor is strictly positive."""
     return (x > 0).all(dim=dim)
@@ -163,8 +163,8 @@ def is_negative_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor is strictly negative."""
     return (x < 0).all(dim=dim)
@@ -176,8 +176,8 @@ def is_nonnegative_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor is entrywise nonnegative."""
     return (x >= 0).all(dim=dim)
@@ -189,8 +189,8 @@ def is_nonpositive_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor is entrywise nonpositive."""
     return (x <= 0).all(dim=dim)
@@ -220,8 +220,8 @@ def is_zero_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains only zeros."""
     return (x == 0).all(dim=dim)
@@ -233,8 +233,8 @@ def is_one_vector(
     /,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains only ones."""
     return (x == 1).all(dim=dim)
@@ -272,8 +272,8 @@ def is_sparse_vector(
     sparsity: float | None = None,
     *,
     dim: int = -1,
-    rtol: float = 0.0,  # noqa: ARG001
-    atol: float = 0.0,  # noqa: ARG001
+    rtol: float = 0.0,  # ruff: ignore[ARG001]
+    atol: float = 0.0,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Check whether the given tensor contains sufficiently many exact zeros."""
     zero_fraction = (x == 0).to(dtype=torch.float32).mean(dim=dim)

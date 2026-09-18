@@ -133,7 +133,7 @@ class LinODEnet(nn.Module):
         system: nn.Module | Blueprint[nn.Module] = _DEFAULT_SYSTEM_BLUEPRINT,
         decoder: nn.Module | Blueprint[nn.Module] = _DEFAULT_DECODER_BLUEPRINT,
         projection: nn.Module | Blueprint[nn.Module] = _DEFAULT_PROJECTION_BLUEPRINT,
-        filter: nn.Module | Blueprint[nn.Module] = _DEFAULT_FILTER_BLUEPRINT,  # noqa: A002
+        filter: nn.Module | Blueprint[nn.Module] = _DEFAULT_FILTER_BLUEPRINT,  # ruff: ignore[A002]
         validate_inputs: bool = False,
     ) -> None:
         super().__init__()
@@ -451,7 +451,7 @@ class LatentLinODECell(nn.Module):
         system: nn.Module | Blueprint[nn.Module] = _DEFAULT_SYSTEM_BLUEPRINT,
         decoder: nn.Module | Blueprint[nn.Module] = _DEFAULT_DECODER_BLUEPRINT,
         projection: nn.Module | Blueprint[nn.Module] = _DEFAULT_PROJECTION_BLUEPRINT,
-        filter: nn.Module | Blueprint[nn.Module] = _DEFAULT_FILTER_BLUEPRINT,  # noqa: A002
+        filter: nn.Module | Blueprint[nn.Module] = _DEFAULT_FILTER_BLUEPRINT,  # ruff: ignore[A002]
         validate_inputs: bool = False,
     ) -> None:
         super().__init__()

@@ -3,7 +3,7 @@ r"""State propagation interfaces and implementations.
 This package exposes the common propagation abstractions together with the
 available flow-based implementations.
 """
-# ruff: noqa: F403, F405
+# ruff: file-ignore[F403, F405]
 
 __all__ = [
     # submodules

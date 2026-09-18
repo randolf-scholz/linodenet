@@ -220,11 +220,11 @@ def spectral_norm_native(
     A: Tensor,
     /,
     *,
-    u0: Optional[Tensor] = None,  # noqa: ARG001
-    v0: Optional[Tensor] = None,  # noqa: ARG001
-    maxiter: int | None = None,  # noqa: ARG001
-    atol: float = 1e-6,  # noqa: ARG001
-    rtol: float = 1e-6,  # noqa: ARG001
+    u0: Optional[Tensor] = None,  # ruff: ignore[ARG001]
+    v0: Optional[Tensor] = None,  # ruff: ignore[ARG001]
+    maxiter: int | None = None,  # ruff: ignore[ARG001]
+    atol: float = 1e-6,  # ruff: ignore[ARG001]
+    rtol: float = 1e-6,  # ruff: ignore[ARG001]
 ) -> Tensor:
     r"""Computes the spectral norm."""
     return torch.linalg.matrix_norm(A, ord=2)

@@ -6,7 +6,7 @@ Domains should allow:
 2. checking subset relations between domains
 3. performing some basic operations (e.g. product of domains, union, intersection)
 """
-# ruff: noqa: F403, F405
+# ruff: file-ignore[F403, F405]
 
 __all__ = [
     # Constants

@@ -1,5 +1,5 @@
 r"""Parametrizations for torch."""
-# ruff: noqa: F403, F405
+# ruff: file-ignore[F403, F405]
 
 __all__ = [
     # submodules

@@ -1,5 +1,5 @@
 r"""Core types and functions for blueprint initialization and inference."""
-# ruff: noqa: SIM103
+# ruff: file-ignore[SIM103]
 
 __all__ = [
     # Constants

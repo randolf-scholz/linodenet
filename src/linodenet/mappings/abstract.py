@@ -243,7 +243,7 @@ class ConditionalProjection[T = Tensor, Z = Tensor](
     def __call__(self, x: T, context: Z, /) -> T: ...
 
     @signature("(..., *ys) -> (..., *xs)")
-    def right_inverse(self, y: T, context: Z, /) -> T:  # noqa: ARG002
+    def right_inverse(self, y: T, context: Z, /) -> T:  # ruff: ignore[ARG002]
         r"""Right inverse of the conditional projection for a fixed context."""
         return y
 

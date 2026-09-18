@@ -1,5 +1,5 @@
 r"""C++ Extensions used by LinODEnet."""
-# ruff: noqa: F403
+# ruff: file-ignore[F403]
 
 __all__ = [
     # submodules

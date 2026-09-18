@@ -1,5 +1,5 @@
 r"""Functions for serializing and deserializing PyTorch models and tensors."""
-# ruff: noqa: SIM103
+# ruff: file-ignore[SIM103]
 
 __all__ = [
     # CONSTANTS

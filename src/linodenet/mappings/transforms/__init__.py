@@ -46,7 +46,7 @@ Note that `torch.distributions.Transform` has some differences:
 ...         else:
 ...             y = self.encode(x)
 """
-# ruff: noqa: F403
+# ruff: file-ignore[F403]
 
 __all__ = [
     # submodules

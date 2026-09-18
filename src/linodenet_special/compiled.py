@@ -72,7 +72,7 @@ __logger__ = logging.getLogger(__package__)
 
 
 def _cache_dir_warning() -> str:
-    from torch.utils import cpp_extension  # noqa: PLC0415
+    from torch.utils import cpp_extension  # ruff: ignore[PLC0415]
 
     cache_dir = Path(
         os.environ.get(
@@ -86,7 +86,7 @@ def _cache_dir_warning() -> str:
 
 def _compile_fns() -> KnownFunctions:
     r"""Compile the available custom operators."""
-    from torch.utils import cpp_extension  # noqa: PLC0415
+    from torch.utils import cpp_extension  # ruff: ignore[PLC0415]
 
     cpp_extension.verify_ninja_availability()
     print("\nCompiling custom operators!" + _cache_dir_warning(), flush=True)

@@ -819,7 +819,7 @@ class ContinuousTimeKalmanFilter(nn.Module):
             # so, solve Gᵀ = solve_triangular(L, HP, lower=True)
             # then K = solve_triangular(L.T, G, lower=False).T
             raise NotImplementedError
-        else:  # noqa: RET506
+        else:  # ruff: ignore[RET506]
             # KS = PHᵀ ⟹ SᵀKᵀ = HP
             # NOTE: we can't use tensor.T for batched tensors.
             Kt = torch.linalg.solve(S.mT, H @ P)  # (*B, m, n)
@@ -1448,7 +1448,7 @@ class DiscreteTimeKalmanFilter(nn.Module):
             # ⟹ LᵀKᵀ = (L⁻¹HP)ᵀ = G ⟹ L Gᵀ = solve_triangular(L, HP, lower=True)
             # then K = solve_triangular(L.T, G, lower=False).T
             raise NotImplementedError
-        else:  # noqa: RET506
+        else:  # ruff: ignore[RET506]
             # KS = PHᵀ ⟹ SᵀKᵀ = HP
             # NOTE: we can't use tensor.T for batched tensors.
             Kt = torch.linalg.solve(S.mT, H @ P)  # (*B, m, n)

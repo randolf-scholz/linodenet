@@ -4,7 +4,7 @@ Notes:
     - See `linodenet.regularizations.functional` for functional implementations.
     - See `linodenet.regularizations.modules` for module-based implementations.
 """
-# ruff: noqa: F403, F405
+# ruff: file-ignore[F403, F405]
 
 __all__ = [
     # Sub-Modules
