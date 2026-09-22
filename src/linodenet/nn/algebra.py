@@ -161,19 +161,25 @@ class FunctionalMixin(Fn, Protocol):
     def __rshift__[N: Fn](self, other: N | Sequence[N], /) -> Series[Self | N]:
         r"""Execute modules in series (`>>`).
 
-        x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
+        .. code-block::
+
+            x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
         """
         return series(self, other)
 
     def __rrshift__[N: Fn](self, other: N | Sequence[N], /) -> Series[Self | N]:
         r"""Execute modules in series (`>>`).
 
-        x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
+        .. code-block::
+
+            x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
         """
         return series(other, self)
 
     def __pow__(self, n: int, /) -> Series[Self]:
         r"""Repeat a module `n` times (`**`).
+
+        .. code-block::
 
             x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
 
@@ -187,20 +193,24 @@ class FunctionalMixin(Fn, Protocol):
     def __xor__[N: Fn](self: Self, other: N | Sequence[N], /) -> Parallel[Self | N]:
         r"""Execute modules in parallel (`|`).
 
-        x₁ ───▶ f₁(x₁)
-        x₂ ───▶ f₂(x₂)
-            ⋮
-        xₙ ───▶ fₙ(xₙ)
+        .. code-block::
+
+            x₁ ───▶ f₁(x₁)
+            x₂ ───▶ f₂(x₂)
+                ⋮
+            xₙ ───▶ fₙ(xₙ)
         """
         return parallel(self, other)
 
     def __rxor__[N: Fn](self, other: N | Sequence[N], /) -> Parallel[Self | N]:
         r"""Execute modules in parallel (`|`).
 
-        x₁ ───▶ f₁(x₁)
-        x₂ ───▶ f₂(x₂)
-            ⋮
-        xₙ ───▶ fₙ(xₙ)
+        .. code-block::
+
+            x₁ ───▶ f₁(x₁)
+            x₂ ───▶ f₂(x₂)
+                ⋮
+            xₙ ───▶ fₙ(xₙ)
         """
         return parallel(other, self)
 
@@ -210,6 +220,8 @@ class FunctionalMixin(Fn, Protocol):
     def __floordiv__(self, num: None = ..., /) -> Map[Self]: ...
     def __floordiv__(self, num: int | None = None, /) -> Replicate[Self] | Map[Self]:
         r"""Repeat a single module in parallel (`//`).
+
+        .. code-block::
 
             x₁ ─────▶ f(x₁)
             x₂ ─────▶ f(x₂)
@@ -227,6 +239,8 @@ class FunctionalMixin(Fn, Protocol):
     # region meet ----------------------------------------------------------------------
     def __and__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
         r"""Execute multiple modules with the same input (`&`).
+
+        .. code-block::
 
                   ┌────▶ f₁(x)
             x ────┼────▶ f₂(x)
@@ -246,6 +260,8 @@ class FunctionalMixin(Fn, Protocol):
     def __rand__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
         r"""Execute multiple modules with the same input (`&`).
 
+        .. code-block::
+
                   ┌────▶ f₁(x)
             x ────┼────▶ f₂(x)
                   │       ⋮
@@ -264,10 +280,12 @@ class FunctionalMixin(Fn, Protocol):
     def __mod__(self, n: int, /) -> Duplicate[Self]:
         r"""Execute multiple copies of the same module with the same input (`%`).
 
-              ┌────▶ f(x)
-        x ────┼────▶ f(x)
-              │       ⋮
-              └────▶ f(x)
+        .. code-block::
+
+                  ┌────▶ f(x)
+            x ────┼────▶ f(x)
+                  │       ⋮
+                  └────▶ f(x)
         """
         return duplicate(self, n)
 
@@ -276,6 +294,8 @@ class FunctionalMixin(Fn, Protocol):
     # region join ----------------------------------------------------------------------
     def __or__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
         r"""Join multiple outputs into a single output (`|`).
+
+        .. code-block::
 
                   ┌────▶ f₁(x) or None
             x ────┼────▶ f₂(x) or None
@@ -294,6 +314,8 @@ class FunctionalMixin(Fn, Protocol):
 
     def __ror__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
         r"""Join multiple outputs into a single output (`|`).
+
+        .. code-block::
 
                 ┌────▶ f₁(x) or None
             x ──┼────▶ f₂(x) or None
@@ -346,11 +368,13 @@ class WrappedFn[T: Fn](Fn):
 class Series[M: Fn](FnSequence[M]):
     r"""Execute modules in series (`>>`).
 
+    .. code-block::
+
         x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
 
-    .. math:: series(f₁, ..., fₙ):
-        X₁ ⟶ X₂ ⟶ ... ⟶ Xₙ ⟶ Y
-        x ⟼ f₁(x) ⟼ f₂(f₁(x)) ⟼ ... ⟼ fₙ(fₙ₋₁(...f₁(x)...)) ⟼ y
+    .. math:: \op{series}(f₁，…，fₙ)：
+            X₁ ⟶ Y
+        \\  x & ⟼ fₙ(fₙ₋₁(…f₁(x)…))
     """
 
     def __invert__(self) -> Series:
@@ -373,11 +397,13 @@ def series[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Series[M | N]: ..
 def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M | N]:
     r"""Execute modules in series (`>>`).
 
+    .. code-block::
+
         x ───▶ f₁ ───▶ f₂ ───▶ ... ───▶ fₙ ───▶ y
 
-    .. math:: series(f₁, ..., fₙ):
-        X₁ ⟶ X₂ ⟶ ... ⟶ Xₙ ⟶ Y
-        x ⟼ f₁(x) ⟼ f₂(f₁(x)) ⟼ ... ⟼ fₙ(fₙ₋₁(...f₁(x)...)) ⟼ y
+    .. math:: \op{series}(f₁，…，fₙ)：
+            X₁ ⟶ Y
+        \\  x & ⟼ fₙ(fₙ₋₁(…f₁(x)…))
     """
     match x, y:
         case Fn(), Fn():
@@ -394,6 +420,8 @@ def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M 
 
 class Repeat[M: Fn](Series[M]):
     r"""Repeat a module `n` times (`**`).
+
+    .. code-block::
 
         x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
 
@@ -414,6 +442,8 @@ class Repeat[M: Fn](Series[M]):
 def repeat[M: Fn](module: M, num: int, /) -> Repeat[M]:
     r"""Repeat a module `n` times in series (`**`).
 
+    .. code-block::
+
         x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
 
     NOTE: Equivalent to `f >> f >> ... >> f` (n times).
@@ -424,14 +454,16 @@ def repeat[M: Fn](module: M, num: int, /) -> Repeat[M]:
 class Parallel[M: Fn](FnSequence[M]):
     r"""Execute modules in parallel (`|`).
 
+    .. code-block::
+
         x₁ ────▶ f₁(x₁)
         x₂ ────▶ f₂(x₂)
              ⋮
         xₙ ────▶ fₙ(xₙ)
 
-    .. math::
-        parallel(f₁, ..., fₙ): X₁×…×Xₙ &⟶ Y₁×…×Yₙ
-        \\  (x₁, ..., xₙ) &⟼ (f₁(x₁), ..., fₙ(xₙ))
+    .. math:: \op{parallel}(f₁，…，fₙ)：
+            X₁×…×Xₙ &⟶ Y₁×…×Yₙ
+        \\  (x₁，…，xₙ) &⟼ (f₁(x₁)，…，fₙ(xₙ))
     """
 
     def __invert__(self) -> Parallel:
@@ -454,14 +486,16 @@ def parallel[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Parallel[M | N]
 def parallel[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Parallel[M | N]:  # fmt: skip
     r"""Execute modules in parallel (`^`).
 
+    .. code-block::
+
         x₁ ────▶ f₁(x₁)
         x₂ ────▶ f₂(x₂)
              ⋮
         xₙ ────▶ fₙ(xₙ)
 
-    .. math:: parallel(f₁, ..., fₙ):
-        X₁×…×Xₙ ⟶ Y₁×…×Yₙ
-        (x₁, ..., xₙ) ⟼ (f₁(x₁), ..., fₙ(xₙ))
+    .. math:: \op{parallel}(f₁，…，fₙ)：
+            X₁×…×Xₙ &⟶ Y₁×…×Yₙ
+        \\  (x₁，…，xₙ) &⟼ (f₁(x₁)，…，fₙ(xₙ))
     """
     match x, y:
         case Fn(), Fn():
@@ -479,14 +513,16 @@ def parallel[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Paralle
 class Replicate[M: Fn](Fn):
     r"""Apply copies of single module in parallel to multiple inputs (MIMO).
 
+    .. code-block::
+
         x₁ ────▶ f(x₁)
         x₂ ────▶ f(x₂)
              ⋮
         xₙ ────▶ f(xₙ)
 
-    .. math:: concurrent(f, n):
-        X×…×X ⟶ Y×…×Y
-        (x, ..., x) ⟼ (f(x), ..., f(x))
+    .. math:: \op{replicate}(f，n)：
+            X × … × X &⟶ Y × … × Y
+        \\  (x，…，x) &⟼ (f(x)，…，f(x))
     """
 
     def __init__(self, module: M, num: int, /) -> None:
@@ -503,10 +539,16 @@ class Replicate[M: Fn](Fn):
 def replicate[M: Fn](module: M, num: int, /) -> Replicate[M]:
     r"""Apply copies of a single module in parallel (`//`).
 
+    .. code-block::
+
         x₁ ────▶ f(x₁)
         x₂ ────▶ f(x₂)
              ⋮
         xₙ ────▶ f(xₙ)
+
+    .. math:: \op{replicate}(f，n)：
+            X × … × X &⟶ Y × … × Y
+        \\  (x，…，x) &⟼ (f(x)，…，f(x))
 
     Note: If `num` is `None`, the module will be executed for each input.
     """
@@ -526,6 +568,8 @@ class Map[M: Fn]:
 class Fork[M: Fn](FnSequence[M]):
     r"""Execute multiple modules with the same input (`&`).
 
+    .. code-block::
+
               ┌────▶ f₁(x)
         x ────┼────▶ f₂(x)
               │        ⋮
@@ -535,9 +579,9 @@ class Fork[M: Fn](FnSequence[M]):
         Fun(X₁，Y₁) × … × Fun(Xₙ，Yₙ) ⟶ Fun(X₁∩…∩Xₙ，Y₁×…×Yₙ)  \\
         (f₁，…，fₙ) ⟼ fork(f₁，…，fₙ)
 
-        fork(f₁，…，fₙ):
-            X₁∩…∩Xₙ ⟶ Y₁×…×Yₙ   \\
-            x ⟼ (f₁(x), ..., fₙ(x))
+    .. math:: \op{fork}(f₁，…，fₙ)：
+            X₁∩…∩Xₙ &⟶ Y₁ × … × Yₙ
+        \\  x &⟼ (f₁(x), ..., fₙ(x))
 
     Note:
         This is a "weak" meet, rather than the actual meet with respect to subtyping relationship.
@@ -562,10 +606,16 @@ def fork[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Fork[M | N]: ...
 def fork[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Fork[M | N]:
     r"""Execute multiple modules with the same input (`&`).
 
+    .. code-block::
+
               ┌────▶ f₁(x)
         x ────┼────▶ f₂(x)
               │        ⋮
               └────▶ fₙ(x)
+
+    .. math:: \op{fork}(f₁，…，fₙ)：
+            X₁∩…∩Xₙ &⟶ Y₁ × … × Yₙ
+        \\  x &⟼ (f₁(x), ..., fₙ(x))
 
     Note: equivalent to diagonal(num) >> parallel(m1, m2, ..., mn)
     """
@@ -585,14 +635,16 @@ def fork[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Fork[M | N]
 class Duplicate[M: Fn](Fn):
     r"""Duplicate a single input into multiple outputs.
 
+    .. code-block::
+
               ┌────▶ f(x)
         x ────┼────▶ f(x)
               │        ⋮
               └────▶ f(x)
 
-    .. math:: fork(f, n):
-        X ⟶ Y×…×Y
-        x ⟼ (f(x), ..., f(x))
+    .. math:: \op{duplicate}(f，n)：
+            X &⟶ Y×…×Y
+        \\  x ⟼ (f(x)，…，f(x))
     """
 
     def __init__(self, module: M, num: int, /) -> None:
@@ -609,10 +661,16 @@ class Duplicate[M: Fn](Fn):
 def duplicate[M: Fn](module: M, num: int, /) -> Duplicate[M]:
     r"""Execute multiple copies of the same module with the same input (`%`).
 
+    .. code-block::
+
               ┌────▶ f(x)
         x ────┼────▶ f(x)
               │        ⋮
               └────▶ f(x)
+
+    .. math:: \op{duplicate}(f，n)：
+            X &⟶ Y×…×Y
+        \\  x ⟼ (f(x)，…，f(x))
 
     Note: equivalent to diagonal(num) >> replicate(module, num)
     """
@@ -622,10 +680,16 @@ def duplicate[M: Fn](module: M, num: int, /) -> Duplicate[M]:
 class Diagonal(Duplicate[Identity]):
     r"""Duplicate a single input into multiple outputs.
 
+    .. code-block::
+
               ┌────▶ x
         x ────┼────▶ x
               │      ⋮
               └────▶ x
+
+    .. math:: \op{diagonal}(f，n)：
+            X &⟶ X×…×X
+        \\  x ⟼ (x，…，x)
 
     Note: equivalent to fork(Identity, num)
     """
@@ -643,10 +707,16 @@ class Diagonal(Duplicate[Identity]):
 def diagonal(num: int, /) -> Diagonal:
     r"""Duplicate a single input into multiple outputs.
 
+    .. code-block::
+
               ┌────▶ x
         x ────┼────▶ x
               │      ⋮
               └────▶ x
+
+    .. math:: \op{diagonal}(f，n)：
+            X &⟶ X×…×X
+        \\  x ⟼ (x，…，x)
 
     Note: equivalent to fork(Identity, num)
     """
@@ -655,6 +725,8 @@ def diagonal(num: int, /) -> Diagonal:
 
 class Reduce[X = Any](Fn):
     r"""Reduce the inputs from multiple arguments.
+
+    .. code-block::
 
         x₁ ────┐
         x₂ ────┼────▶ aggregate(x₁, x₂, ..., xₙ)
@@ -681,10 +753,12 @@ class Reduce[X = Any](Fn):
 def reduce(reducer: Callable, /) -> Reduce:
     r"""Reduce the inputs from multiple arguments.
 
-    x₁ ────┐
-    x₂ ────┼────▶ aggregate(x₁, x₂, ..., xₙ)
-    ⋮      │
-    xₙ ────┘
+    .. code-block::
+
+        x₁ ────┐
+        x₂ ────┼────▶ aggregate(x₁, x₂, ..., xₙ)
+        ⋮      │
+        xₙ ────┘
     """
     return Reduce(reducer)
 
@@ -692,10 +766,12 @@ def reduce(reducer: Callable, /) -> Reduce:
 class Choice[X = Any](Reduce[X]):
     r"""Randomly choose one of the inputs.
 
-    x₁ ────┐
-    x₂ ────┼────▶ choice(x₁, x₂, ..., xₙ)
-    ⋮      │
-    xₙ ────┘
+    .. code-block::
+
+        x₁ ────┐
+        x₂ ────┼────▶ choice(x₁, x₂, ..., xₙ)
+        ⋮      │
+        xₙ ────┘
     """
 
     def __init__(self, num: Optional[int] = None) -> None:
@@ -711,10 +787,12 @@ class Choice[X = Any](Reduce[X]):
 def choice(num: Optional[int] = None) -> Choice:
     r"""Randomly choose one of the inputs.
 
-    x₁ ────┐
-    x₂ ────┼────▶ choice(x₁, x₂, ..., xₙ)
-    ⋮      │
-    xₙ ────┘
+    .. code-block::
+
+        x₁ ────┐
+        x₂ ────┼────▶ choice(x₁, x₂, ..., xₙ)
+        ⋮      │
+        xₙ ────┘
 
     Note: If `num` is `None`, the number of inputs is dynamic.
     """
@@ -724,10 +802,12 @@ def choice(num: Optional[int] = None) -> Choice:
 class Sum(Reduce):
     r"""Sum the outputs of multiple modules (`+`).
 
-    x₁ ────┐
-    x₂ ────┼───▶ x₁ + x₂ + ... + xₙ
-    ⋮      │
-    xₙ ────┘
+    .. code-block::
+
+        x₁ ────┐
+        x₂ ────┼───▶ x₁ + x₂ + ... + xₙ
+        ⋮      │
+        xₙ ────┘
     """
 
     def __init__(self) -> None:

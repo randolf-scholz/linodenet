@@ -213,6 +213,7 @@ MathJax = {
             tuple: ["\\left( #1 \\right)", 1],
             floor: ["\\left\\lfloor #1 \\right\\rfloor", 1],
             ceil: ["\\left\\lceil #1 \\right\\rceil", 1],
+            op: ["\\operatorname{#1}", 1],
         },
 
     },
