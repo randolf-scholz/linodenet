@@ -194,9 +194,9 @@ def is_basic_blueprint(obj: object, /) -> TypeIs[BasicBlueprint]:
 
     A configuration is mapping with the following keys:
 
-    - `__module__` (`str`): The module name.
-    - `__name__` (`str`): The class name.
-    - `__args__` (`Sequence`, optional): The positional arguments for the class.
+    - ``__module__`` (`str`): The module name.
+    - ``__name__`` (`str`): The class name.
+    - ``__args__`` (`Sequence`, optional): The positional arguments for the class.
     - any extra keys that are valid, non-private identifiers.
 
     """
