@@ -36,7 +36,7 @@ class Empirical(DistributionBase):
         Args:
             values: `(N, *D)` or `(*Bs, N, *D)`: The dataset that defines the empirical distribution.
             ndim: The number of dimensions of each data point. If not given,
-            it is assumed that unbatched data is given, i.e., `ndim=values.ndim - 1`.
+                it is assumed that unbatched data is given, i.e., ``ndim=values.ndim - 1``.
         """
         assert values.ndim >= 1, "The data must have at least one dimension."
         n = values.ndim - 1 if ndim is None else ndim
