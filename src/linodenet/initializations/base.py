@@ -51,7 +51,7 @@ def resolve_kernel_initialization(
                     f"Kernel has bad shape! {tensor.shape} but should be"
                     f" {(input_size, input_size)}"
                 )
-            return modules.Constant(tensor)
+            return modules.Fixed(tensor)
 
         case str(key):
             assert __package__ is not None

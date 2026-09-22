@@ -2,7 +2,7 @@ r"""Tests for module-based initializations."""
 
 import torch
 
-from linodenet.initializations import INITIALIZATIONS, Constant
+from linodenet.initializations import INITIALIZATIONS, Fixed
 
 
 class TestConstant:
@@ -10,12 +10,12 @@ class TestConstant:
 
     def test_exported(self) -> None:
         r"""The class is exported through the initialization registry."""
-        assert INITIALIZATIONS["Constant"] is Constant
+        assert INITIALIZATIONS["Constant"] is Fixed
 
     def test_size_empty_tuple_preserves_shape(self) -> None:
         r"""Sampling without batch shape returns the stored tensor shape."""
         value = torch.arange(6, dtype=torch.float32).reshape(2, 3)
-        initialization = Constant(value)
+        initialization = Fixed(value)
 
         result = initialization(())
 
@@ -25,7 +25,7 @@ class TestConstant:
     def test_sampling_duplicates_stored_tensor(self) -> None:
         r"""Sampling with batch shape duplicates the stored tensor."""
         value = torch.arange(6, dtype=torch.float32).reshape(2, 3)
-        initialization = Constant(value)
+        initialization = Fixed(value)
 
         result = initialization((4,))
 

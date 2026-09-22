@@ -7,7 +7,7 @@ Notes:
 """
 
 __all__ = [
-    "Constant",
+    "Fixed",
     "DiagonallyDominant",
     "Gaussian",
     "LowRank",
@@ -29,7 +29,7 @@ from linodenet.domains import MatrixDomains
 from . import functional
 
 
-class Constant(nn.Module):
+class Fixed(nn.Module):
     r"""Module wrapper for a constant tensor."""
 
     value: Tensor

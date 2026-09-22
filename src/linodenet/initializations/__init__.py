@@ -48,7 +48,7 @@ r"""Dictionary containing all available initializations (functions)."""
 
 
 INITIALIZATIONS: dict[str, type[Initialization]] = {
-    "Constant"           : modules.Constant,
+    "Fixed"              : modules.Fixed,
     "DiagonallyDominant" : modules.DiagonallyDominant,
     "Gaussian"           : modules.Gaussian,
     "LowRank"            : modules.LowRank,
