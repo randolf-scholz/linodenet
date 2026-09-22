@@ -76,8 +76,8 @@ from typing import Any, ClassVar, Final, Self, overload
 import torch
 from torch import Tensor
 
-from . import MatrixDomain, matrix_tests as tests
-from .base import Indeterminate, PosetEnum
+from . import matrix_tests as tests
+from .base import Indeterminate, MatrixDomain, PosetEnum
 
 
 @dataclass(frozen=True)
