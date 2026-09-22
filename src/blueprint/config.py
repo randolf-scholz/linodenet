@@ -25,10 +25,7 @@ class SupportsConfig[K: Key, V](Protocol):
     r"""Models that support a hyperparameter dictionary.
 
     A hyperparameter dictionary should be such that
-
-    type(model)(**model.config)
-
-    recovers the model.
+    ``type(model)(**model.config)`` recovers the model.
     """
 
     @property

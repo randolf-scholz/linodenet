@@ -153,11 +153,11 @@ class Tanh(nn.Module, Transform):
 
 
 class Softsign(nn.Module, Transform):
-    r"""Maps tensor elementwise via $x ↦ x/(1 + |x|)$.
+    r"""Maps tensor elementwise via $x ↦ x/(1 + \abs{x})$.
 
-    The inverse is $y ↦ y/(1 - |y|)$.
+    The inverse is $y ↦ y/(1 - \abs{y})$.
 
-    The derivative is: $\frac{d}{dx}\frac{x}{1+|x|} = \frac{1}{(1+|x|)²}$.
+    The derivative is: $\frac{d}{dx}\frac{x}{1+\abs{x}} = \frac{1}{(1+\abs{x})²}$.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE

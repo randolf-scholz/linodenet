@@ -128,7 +128,7 @@ def wide_angle_sphere_init(
 
     We wrap the hypersphere into a hypercube.
     Each face of the hypercube is itself a full (d-1) - hypercube
-    We put a grid G=Lᵈ⁻¹ with |L|=k points on each face,
+    We put a grid $G=Lᵈ⁻¹$ with $k$ points on each face,
     sample points from this grid, and project them radially.
 
     Since there are 2d faces, there are p=2dkᵈ⁻¹ points to pick from.

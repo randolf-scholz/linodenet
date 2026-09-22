@@ -79,9 +79,9 @@ class MixtureSameFamily[D: DistributionBase](DistributionBase):
     """
 
     mixture_distribution: Categorical
-    r"""Distribution: The mixing distribution."""
+    r"""The mixing distribution."""
     component_distribution: D
-    r"""Distribution: The (multi-head) component distribution."""
+    r"""The multi-head component distribution."""
 
     indices: Tensor
     r"""Buffer: the most recent sample indices."""

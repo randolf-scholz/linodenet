@@ -189,12 +189,12 @@ def fixpoint_solve_functional(
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:
-    r"""Solve $x = f(x, *ys)$ by fixed point iteration.
+    r"""Solve ``x = f(x, *ys)`` by fixed point iteration.
 
     Args:
         fn: Mapping defining the fixed point equation $x = f(x, θ)$.
-            The callable must accept `x` as its first argument and any tensor
-            parameters passed through `*params` afterwards.
+            The callable must accept $x$ as its first argument.
+            and any additional tensor parameters afterwards.
         x0: Starting point of the iteration.
         args: Tensor parameters passed through to `fn`.
         maxiter: Maximum number of fixed point iterations used in both forward
@@ -217,12 +217,12 @@ def fixpoint_solve(
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:
-    r"""Solve $x = f(x, *ys)$ by fixed point iteration.
+    r"""Solve $x = f(x, \\ast ys)$ by fixed point iteration.
 
     Args:
         fn: Mapping defining the fixed point equation $x = f(x, θ)$.
-            The callable must accept `x` as its first argument and any tensor
-            parameters passed through `*params` afterwards.
+            The callable must accept $x$ as its first argument,
+            and any additional tensor parameters afterwards.
         x0: Starting point of the iteration.
         args: Tensor parameters passed through to `fn`.
         maxiter: Maximum number of fixed point iterations used in both forward

@@ -201,11 +201,12 @@ class ContinuousTimeKalmanFilter(nn.Module):
     r"""Continuous time, time-invariant Kalman Filter.
 
     .. math::
-        ∂ₜxₜ &= Fxₜ + wₜ  &  wₜ &~ N(0, Qₜ)  \\
-          yₜ &= Hxₜ + vₜ  &  vₜ &~ N(0, Rₜ)
+        ∂ₜxₜ &= Fxₜ + wₜ  &  wₜ &∼ 𝓝(0, Qₜ)  \\
+        yₜ &= Hxₜ + vₜ  &  vₜ &∼ 𝓝(0, Rₜ)
 
     ------------------ older docstring content ---------------
-        .. math::
+
+    .. math::
         x̂ₜ₊₁ &= x̂ₜ + Pₜ Hₜᵀ(Hₜ Pₜ   Hₜᵀ + Rₜ)⁻¹ (yₜ - Hₜ x̂ₜ) \\
         Pₜ₊₁ &= Pₜ - Pₜ Hₜᵀ(Hₜ Pₜ⁻¹ Hₜᵀ + Rₜ)⁻¹ Hₜ Pₜ⁻¹
 

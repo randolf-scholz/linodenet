@@ -258,22 +258,23 @@ def linear_gaussian_flow(
         Σₜ &= φ₀(tℒ_A)(Σ₀) + φ₁(tℒ_A)(Qt)
 
     The $φ₁(tℒ_A)(Q)$ term is evaluated with Van Loan's block-matrix
-    exponential. For `b is None`, the implementation computes
+    exponential. When $b$ is absent, the implementation computes
 
     .. math:: \exp(\bmat{ A & Q \\ 0 & -Aᵀ }t) = \bmat{ F & C \\ 0 & F⁻ᵀ }
 
     and returns $Σₜ = FΣ₀Fᵀ + CFᵀ$.
 
     Args:
-        delta_t: Evaluation time deltas, with shape `(..., n)`.
-        z0: Initial Gaussian state `(μ₀, Σ₀)`, with shapes `(..., d)` and `(..., d, d)`.
-        A: Linear drift matrix, with shape `(d, d)`.
-        Q: Diffusion covariance matrix $LLᵀ$, with shape `(d, d)`.
-        b: Optional affine drift vector, with shape `(d,)`.
+        delta_t: Evaluation time deltas, with shape $(..., n)$.
+        z0: Initial Gaussian state $(μ₀, Σ₀)$, with shapes $(..., d)$ and
+            $(..., d, d)$.
+        A: Linear drift matrix, with shape $(d, d)$.
+        Q: Diffusion covariance matrix $LLᵀ$, with shape $(d, d)$.
+        b: Optional affine drift vector, with shape $(d,)$.
 
     Returns:
-        Pair `(μₜ, Σₜ)` containing propagated means and covariances, with
-        shapes `(..., n, d)` and `(..., n, d, d)`.
+        Pair $(μₜ, Σₜ)$ containing propagated means and covariances, with
+        shapes $(..., n, d)$ and $(..., n, d, d)$.
     """
     mu_0, sigma_0 = z0
     n = A.shape[-1]
@@ -398,11 +399,12 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
         r"""Evaluate the Gaussian flow at one or more time deltas.
 
         Args:
-            delta_t: Evaluation time deltas, with shape `(..., n)`.
-            z_0: Initial Gaussian state `(μ₀, Σ₀)` with shapes `(..., d)` and `(..., d, d)`.
+            delta_t: Evaluation time deltas, with shape $(..., n)$.
+            z_0: Initial Gaussian state $(μ₀, Σ₀)$ with shapes $(..., d)$ and
+                $(..., d, d)$.
 
         Returns:
-            Pair `(μₜ, Σₜ)` containing propagated means and covariances,
-            with shapes `(..., n, d)` and `(..., n, d, d)`.
+            Pair $(μₜ, Σₜ)$ containing propagated means and covariances,
+            with shapes $(..., n, d)$ and $(..., n, d, d)$.
         """
         return linear_gaussian_flow(delta_t, z_0, self.A, self.Q, self.b)

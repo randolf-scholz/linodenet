@@ -70,7 +70,7 @@ class Projection[T = Tensor](Surjection[T, T], Protocol):
     Projections are a stronger form of surjections: we additionally require
 
     - The domain is a subset of the codomain
-    -`right_inverse` is the identity map.
+    - `right_inverse` is the identity map.
 
     That is, a projection is a mapping $φ:X→X$ such that $φ∘φ=φ$. In particular,
     $φ=i∘π$ for the embedding $i:\Im(φ)→X$ where $π:X→\Im(φ)$ is $φ$ viewed as a surjection onto its image.

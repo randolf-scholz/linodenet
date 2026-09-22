@@ -503,7 +503,7 @@ class LearnableLRS(nn.Module, Transform):
     def marginalize(self, kept: list[int] | Tensor) -> LearnableLRS:
         """Marginalize out the specified variables.
 
-        Assumes that n_heads = (*heads, dims),
+        Assumes that ``n_heads = (*heads, dims)``,
         and that the last dimension corresponds to the features.
         """
         device = self.widths.device

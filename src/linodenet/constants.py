@@ -62,15 +62,15 @@ class FLOAT(float, Enum):
 
 # region collection constants ----------------------------------------------------------
 EMPTY_MAP: Final[Mapping[Any, Never]] = MappingProxyType({})  # FIXME: PEP 603
-r"""Constant: Immutable empty `Mapping`, use as default in function signatures."""
+r"""Immutable empty `Mapping`, used as a default in function signatures."""
 EMPTY_SET: Final[frozenset[Any]] = frozenset()
-r"""Constant: Immutable empty `Set`, use as default in function signatures."""
+r"""Immutable empty `Set`, used as a default in function signatures."""
 EMPTY_SIZE: Final[torch.Size] = torch.Size([])
-r"""Constant: Empty shape."""
+r"""Empty shape."""
 EMPTY_FN: Final[Callable[..., None]] = lambda *_, **__: None
 r"""Constant: Empty function, use as default in function signatures."""
 UNDEFINED: Final[Any] = object()
-r"""Constant: Sentinel value for unspecified arguments."""
+r"""Sentinel value for unspecified arguments."""
 # endregion collection constants -------------------------------------------------------
 
 
