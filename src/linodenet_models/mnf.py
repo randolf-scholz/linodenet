@@ -2119,7 +2119,7 @@ class Moses(nn.Module):
     maps Gaussian latents to the data space.
 
     Since the spline flows have context-independent parameters, the analytical
-    marginalisation property of :class:`MarginalizableNormalizingFlow` is
+    marginalisation property of `MarginalizableNormalizingFlow` is
     preserved (though not yet exposed on this class).
 
     Args:
@@ -2328,7 +2328,7 @@ class Moses(nn.Module):
         and sums across query positions (joint under independence).
 
         Args:
-            values: Observed target values; finite at every ``True`` position in ``query_mask``.
+            values: Observed target values; finite at every `True` position in ``query_mask``.
             query_times: Sorted time stamps for all query time steps.
             query_mask: Boolean mask selecting query (target) positions.
             context_times: Sorted time stamps for all context time steps.
