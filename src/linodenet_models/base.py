@@ -218,10 +218,12 @@ class ProbabilisticLSSM(Protocol):
 
     Latent distribution at time t: $p(x∣θₜ)$
     Predictive distribution at time t:
+
         a. $q(y∣ωₜ=ϕ(θₜ))$  (decoder in parameter space)
         b. $q(y)=p(ϕ⁻¹(y)∣θₜ)|det 𝐃ϕ⁻¹(y)|$ (decoder in data space)
 
     State update:
+
         a. $ωₜ' = f(ωₜ, y_obs)$, $θₜ' = ϕ⁻¹(ωₜ')$ (update in observation space)
         b. $θₜ' = g(θₜ, ϕ, y_obs)$ (update in latent space)
 
