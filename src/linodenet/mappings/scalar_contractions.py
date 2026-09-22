@@ -40,19 +40,16 @@ class LipschitzAttainment(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class NonlinearContractionSpec:
-    r"""Metadata for a non-linear contraction map.
-
-    Attributes:
-        factory: Zero-argument constructor returning the module instance.
-        lipschitz_bound: A certified global Lipschitz bound.
-        attainment: Qualitative description of where the optimal bound is attained.
-        note: Short qualification about the bound or intended usage.
-    """
+    r"""Metadata for a non-linear contraction map."""
 
     factory: ModuleFactory
+    r"""Zero-argument constructor returning the module instance."""
     lipschitz_bound: float
+    r"""A certified global Lipschitz bound."""
     attainment: LipschitzAttainment
+    r"""Qualitative description of where the optimal bound is attained."""
     note: str
+    r"""Short qualification about the bound or intended usage."""
 
 
 _SCALAR_CONTRACTION_SPECS: dict[str, NonlinearContractionSpec] = {
