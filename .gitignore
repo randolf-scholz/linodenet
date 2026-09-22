@@ -28,8 +28,8 @@ tmp*.py
 **/build/
 
 # documentation
-docs/**/apidoc/
-docs/**/autoapi/
+docs/apidoc/
+docs/autoapi/
 
 # testing
 **/tests/**/reports/

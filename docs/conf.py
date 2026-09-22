@@ -11,19 +11,21 @@ Useful links:
 """
 
 import datetime
-import os
+import logging
+import re
 import sys
 from importlib import metadata
 from pathlib import Path
 
-# setup path
-os.environ["GENERATING_DOCS"] = "true"
-sys.path.insert(0, os.path.abspath("./extensions"))
-sys.path.insert(1, os.path.abspath("../src"))  # Source code dir relative to this file
-
 AUTHOR = "Randolf Scholz"
 MODULE = "linodenet"
-MODULE_DIR = "src/linodenet/"
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SOURCE_DIR = ROOT_DIR / "src"
+DOCS_DIR = ROOT_DIR / "docs"
+BUILD_DIR = DOCS_DIR / "build"
+sys.path.insert(0, str(DOCS_DIR / "extensions"))
+sys.path.insert(1, str(SOURCE_DIR))
+URL = f"https://github.com/randolf-scholz/{MODULE}"
 VERSION = metadata.version(MODULE)
 YEAR = datetime.datetime.now().year
 
@@ -43,7 +45,7 @@ release = version  # full project version, e.g. '2.6.0rc1' or '2.6+git@abcdef'
 extensions = [
     # Sphinx builtin extensions
     "sphinx.ext.autodoc",
-    "sphinx.ext.autosectionlabel",
+    # "sphinx.ext.autosectionlabel",
     "sphinx.ext.autosummary",
     "sphinx.ext.coverage",
     "sphinx.ext.doctest",
@@ -55,11 +57,13 @@ extensions = [
     "sphinx.ext.viewcode",
     # 1st party extensions
     "details",
+    "isolated_python_domain",
     "signature_directive",
     # 3rd party extensions
-    # "autoapi.extension",
+    "autoapi.extension",
     # "myst_parser",
-    "sphinx_copybutton",
+    "sphinx_immaterial",
+    # "sphinx_copybutton",
     "sphinx_math_dollar",
     "sphinx_togglebutton",
     # "sphinx_autodoc_typehints",
@@ -113,32 +117,48 @@ trim_doctest_flags = True  # remove common whitespace from doctest blocks
 
 # region HTML Configuration ------------------------------------------------------------
 # SEE: https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
-html_theme_path = ["theme"]  # paths that contain custom themes
 # piccolo_theme, karma_sphinx_theme, sphinx_rtd_theme, pydata_sphinx_theme, sphinx_typo3_theme
-html_theme = "pydata_sphinx_theme"  # select the theme
+html_theme = "sphinx_immaterial"  # select the theme
+html_theme_path = ["theme"]  # paths that contain custom themes
 html_theme_options = {
-    # faster builds?  SEE: https://stackoverflow.com/a/52175461
-    "collapse_navigation": False,
-    "navigation_depth": 2,
-    "header_links_before_dropdown": 7,
-    "icon_links": [
-        {
-            "name": "GitHub",
-            "url": f"https://github.com/randolf-scholz/{MODULE}",
-            "icon": "fa-brands fa-github",
-        },
-        # {
-        #     "name": "PyPI",
-        #     "url": "https://pypi.org/project/pydata-sphinx-theme",
-        #     "icon": "fa-custom fa-pypi",
-        # },
+    "features": [
+        "content.action.view",
+        "content.code.copy",
+        "navigation.sections",
+        "navigation.top",
+        "navigation.tabs",
+        "search.highlight",
+        "search.suggest",
+        "toc.follow",
     ],
-    # "external_links": [
-    #     {"url": "https://pydata.org", "name": "PyData"},
-    #     {"url": "https://numfocus.org/", "name": "NumFocus"},
-    #     {"url": "https://numfocus.org/donate", "name": "Donate to NumFocus"},
-    # ],
+    "palette": {"scheme": "default"},
+    "repo_url": f"https://github.com/randolf-scholz/{MODULE}",
 }
+
+
+# html_theme_options = {
+#     # faster builds?  SEE: https://stackoverflow.com/a/52175461
+#     "collapse_navigation": False,
+#     "navigation_depth": 2,
+#     "header_links_before_dropdown": 7,
+#     "icon_links": [
+#         {
+#             "name": "GitHub",
+#             "url": f"https://github.com/randolf-scholz/{MODULE}",
+#             "icon": "fa-brands fa-github",
+#         },
+#         # {
+#         #     "name": "PyPI",
+#         #     "url": "https://pypi.org/project/pydata-sphinx-theme",
+#         #     "icon": "fa-custom fa-pypi",
+#         # },
+#     ],
+#     # "external_links": [
+#     #     {"url": "https://pydata.org", "name": "PyData"},
+#     #     {"url": "https://numfocus.org/", "name": "NumFocus"},
+#     #     {"url": "https://numfocus.org/donate", "name": "Donate to NumFocus"},
+#     # ],
+# }
 
 html_style = []  # style sheets to use for HTML pages
 html_title = f"{MODULE} {VERSION}"  # <title> tag
@@ -186,22 +206,22 @@ autoclass_content = "class"  # docstring to insert in classes: "class", "both", 
 autodoc_class_signature = "separated"  # display class signatures: "separated", "mixed"
 autodoc_member_order = "groupwise"  # order "alphabetical", "groupwise", "bysource"
 autodoc_default_options = {  # default options for autodoc directives
-    # 'members'           : True,
-    # 'undoc-members'     : True,
-    # 'private-members'   : True,
-    # 'special-members'   : True,
-    # 'inherited-members' : True,
-    # 'imported-members'  : True,
-    # 'exclude-members'   : True,
-    # 'ignore-module-all' : True,
-    # 'member-order'      : True,
-    # 'show-inheritance'  : True,
-    # 'class-doc-from'    : True,
-    # 'no-value'          : True,
+    "members"           : True,
+    "undoc-members"     : True,
+    # "private-members"   : True,
+    "special-members"   : True,
+    # "inherited-members" : True,
+    # "imported-members"  : True,
+    # "exclude-members"   : True,
+    # "ignore-module-all" : True,
+    # "member-order"      : True,
+    # "show-inheritance"  : True,
+    # "class-doc-from"    : True,
+    # "no-value"          : True,
 }  # fmt: skip
 autodoc_docstring_signature = True  # handling function signatures of C-extensions
 autodoc_mock_imports = []  # list of modules to mock
-autodoc_typehints = "both"  # show typehints: "signature", "description", "none", "both"
+autodoc_typehints = "signature"  # "signature", "description", "none", "both"
 autodoc_typehints_description_target = "all"  # "all", "documented"
 autodoc_type_aliases = {  # type aliases (requires PEP 563)
     "Protocol": "typing.Protocol",
@@ -217,8 +237,8 @@ autodoc_inherit_docstrings = True  # inherit docstrings from parent classes
 # SEE: https://sphinx-autoapi.readthedocs.io/en/latest/reference/config.html
 
 # configuration options
-autoapi_dirs = [f"../{MODULE_DIR}"]  # Paths (relative or absolute) to the source code
-autoapi_template_dir = "_templates/autoapi"  # directory containing custom templates
+autoapi_dirs = [f"{SOURCE_DIR}"]  # Paths (relative or absolute) to the source code
+autoapi_template_dir = "_templates/autoapi"  # custom AutoAPI templates
 autoapi_type = "python"  # Set the type of files you are documenting.
 autoapi_file_patterns = ["*.py", "*.pyi"]  # glob patterns for finding files
 autoapi_generate_api_docs = True  # Whether to generate API docs.
@@ -226,7 +246,7 @@ autoapi_generate_api_docs = True  # Whether to generate API docs.
 # customization options
 autoapi_options = [  # SEE: autodoc_default_options
     "members",
-    # "undoc-members",
+    "undoc-members",
     # "private-members",
     "show-inheritance",
     "show-module-summary",
@@ -247,7 +267,7 @@ autoapi_keep_files = True  # Keep the AutoAPI generated files on the filesystem.
 
 # region sphinx.ext.autosectionlabel configuration -------------------------------------
 # SEE: https://www.sphinx-doc.org/en/master/usage/extensions/autosectionlabel.html
-autosectionlabel_prefix_document = False  # prefix label with document name
+autosectionlabel_prefix_document = True  # prefix label with document name
 autosectionlabel_maxdepth = None  # how many section levels to label
 # endregion sphinx.ext.autosectionlabel configuration ----------------------------------
 
@@ -357,3 +377,57 @@ register_node(pending_xref_condition)
 # endregion sphinx_math_dollar configuration -------------------------------------------
 
 # -- end of configuration --------------------------------------------------------------
+
+
+class _AutoAPIWarningFilter(logging.Filter):
+    r"""Suppress known non-actionable warnings from generated API pages."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        return not (
+            message.startswith("duplicate object description")
+            or re.match(
+                r"more than one target found for cross-reference '([A-Z]|Fn|Cls)':",
+                message,
+            )
+        )
+
+
+logging.getLogger("sphinx.sphinx.domains.python").addFilter(_AutoAPIWarningFilter())
+
+
+AUTOAPI_EXCLUDED_MEMBERS = {
+    "__delattr__",
+    "__dir__",
+    "__format__",
+    "__getattribute__",
+    "__getstate__",
+    "__hash__",
+    "__init_subclass__",
+    "__post_init__",
+    "__reduce__",
+    "__reduce_ex__",
+    "__repr__",
+    "__setattr__",
+    "__sizeof__",
+    "__str__",
+    "__subclasshook__",
+}
+
+
+def _skip_repr_and_str(
+    _app: object,
+    _what: str,
+    name: str,
+    _obj: object,
+    _skip: bool,
+    _options: object,
+) -> bool | None:
+    r"""Exclude unhelpful representation methods from AutoAPI output."""
+    return True if name.rsplit(".", 1)[-1] in AUTOAPI_EXCLUDED_MEMBERS else None
+
+
+def setup(app: object) -> None:
+    r"""Register documentation-generation hooks."""
+    app.connect("autoapi-skip-member", _skip_repr_and_str)  # type: ignore[attr-defined]
+    app.connect("autodoc-skip-member", _skip_repr_and_str)  # type: ignore[attr-defined]
