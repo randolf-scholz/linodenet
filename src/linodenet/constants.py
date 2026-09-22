@@ -39,10 +39,10 @@ from torch import Tensor
 
 try:  # single-source version
     __version__ = metadata.version(__package__ or __name__)
-    r"""The version number of the `tsdm` package."""
+    r"""The version number of the package."""
 except metadata.PackageNotFoundError:
     __version__ = "unknown"
-    r"""The version number of the `tsdm` package."""
+    r"""The version number of the package."""
 
 
 class FLOAT(float, Enum):
