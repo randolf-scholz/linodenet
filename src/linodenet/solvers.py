@@ -1,7 +1,7 @@
 r"""Experimental ODE solvers for PyTorch.
 
 The implementation in this module is intentionally small and conservative. The
-forward pass runs under ``torch.no_grad`` and the backward pass implements a
+forward pass runs under `torch.no_grad` and the backward pass implements a
 discrete adjoint by recomputing one-step vector-Jacobian products from the
 stored no-grad trajectory.
 """
