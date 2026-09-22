@@ -1,2 +1,2 @@
 .. include:: ../../CONTRIBUTING.md
-   :parser: markdown
+    :parser: markdown

@@ -2,22 +2,26 @@ LinODEnet - 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁
 ===========================================================
 
 .. image:: lssm.png
-   :width: 100%
-   :alt: LinODEnet-sketch
+    :width: 100%
+    :alt: LinODEnet-sketch
 
 .. toctree::
-   :titlesonly:
-   :maxdepth: 2
-   :name: mastertoc
+    :titlesonly:
+    :maxdepth: 2
+    :name: mastertoc
 
-   AUTOAPI <autoapi/linodenet/index>
-   APIDOC <apidoc/modules>
-   CHANGELOG <content/CHANGELOG>
-   CONTRIBUTING <content/CONTRIBUTING>
-   ISSUES <content/ISSUES>
-   LICENSE <content/LICENSE>
-   README <content/README>
+    autoapi/linodenet/index
+    autoapi/linodenet_special/index
+    autoapi/linodenet_models/index
+    autoapi/signatures/index
+    autoapi/blueprint/index
 
+    CHANGELOG <content/CHANGELOG>
+    CONTRIBUTING <content/CONTRIBUTING>
+    LICENSE <content/LICENSE>
+    README <content/README>
+
+.. APIDOC <apidoc/modules>
 
 Installation
 ============
@@ -26,7 +30,7 @@ Install the linodenet package using ``pip`` by
 
 .. code-block:: bash
 
-   pip install -e .
+    pip install -e .
 
 Here we assume that you want to install the package in editable mode, because
 you would like to contribute to it. This package is not available on PyPI, it
@@ -42,9 +46,8 @@ looks like this:
 
 .. code-block:: python
 
-   import linodenet
-
-   model = linodenet.model.LinearContraction
+    import linodenet
+    model = linodenet.model.LinearContraction
 
 Contribute
 ==========
@@ -56,7 +59,6 @@ Support
 =======
 
 If you encounter issues, please let us know.
-
 
 Indices and tables
 ==================
