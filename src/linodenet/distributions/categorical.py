@@ -16,8 +16,8 @@ class Categorical(DistributionBase):
 
     Args:
         weights (..., D): The weights of the distribution. Requires $θ∈Δⁿ$.
-        ndim: The number of dimensions of the distribution.
-            If not given, `event_shape=weights.shape`, else `event_shape=weights.shape[-ndim:]`.
+        ndim: The number of dimensions of the distribution. If not given,
+            ``event_shape=weights.shape``, else ``event_shape=weights.shape[-ndim:]``.
     """
 
     weights: Tensor

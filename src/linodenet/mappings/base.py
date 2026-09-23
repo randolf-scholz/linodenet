@@ -25,7 +25,7 @@ from .abstract import (
 )
 
 
-# TODO: use intersection type for upper bound `Bijection & nn.Module`
+# TODO: use intersection type for upper bound ``Bijection & nn.Module``
 class BijectionSequence[
     B: Bijection,
 ](ModuleSequence[B], Bijection):  # type: ignore[type-var]
@@ -64,7 +64,7 @@ class BijectionSequence[
         return y
 
 
-# TODO: use intersection type for upper bound `Transform & nn.Module`
+# TODO: use intersection type for upper bound ``Transform & nn.Module``
 class TransformSequence[
     T: Transform,
 ](ModuleSequence[T], Transform):  # type: ignore[type-var]
@@ -129,7 +129,7 @@ class TransformSequence[
         return y, logabsdet
 
 
-# TODO: use intersection type for upper bound `ConditionalBijection & nn.Module`
+# TODO: use intersection type for upper bound ``ConditionalBijection & nn.Module``
 class ConditionalBijectionSequence[
     B: ConditionalBijection,
 ](ModuleSequence[B], ConditionalBijection):  # type: ignore[type-var]
@@ -171,7 +171,7 @@ class ConditionalBijectionSequence[
         return y
 
 
-# TODO: use intersection type for upper bound `ConditionalTransform & nn.Module`
+# TODO: use intersection type for upper bound ``ConditionalTransform & nn.Module``
 class ConditionalTransformSequence[
     T: ConditionalTransform,
 ](ModuleSequence[T], ConditionalTransform):  # type: ignore[type-var]

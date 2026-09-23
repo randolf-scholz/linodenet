@@ -143,8 +143,8 @@ def is_backward_stable(
     i.e. the function $v↦vᵀ(∂f/∂x)$ is forward stable (at a given point $x$).
 
     To test backward stability, we randomly sample $x∼𝓝(0,1)$ and $v∼𝓝(0,1)$
-    with the same shape as $f(x)$. Then we call `.backward()` on the scalar value `⟨v, f(x)⟩`.
-    We then check whether `x.grad` has zero mean and unit variance.
+    with the same shape as $f(x)$. Then we call ``.backward()`` on the scalar value $⟨v, f(x)⟩$.
+    We then check whether ``x.grad`` has zero mean and unit variance.
     """
     # generate random N(0,1) inputs
     inputs = [

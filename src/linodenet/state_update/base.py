@@ -1,7 +1,7 @@
 r"""Different state-update models to be used in conjunction with LinODENet.
 
 A state update is a map of the form $x' = F(y, x)$.
-The square case `input_size == hidden_size` is common, but not universal.
+The square case ``input_size == hidden_size`` is common, but not universal.
 
 A state updater takes two positional inputs:
 
@@ -237,8 +237,8 @@ class MissingValueCell[F: VectorStateUpdate](nn.Module, SparseVectorStateUpdate)
     4. "decoder": Replace missing values with the output of the decoder: $s = h(x)$.
     5. Tensor: replaces missing values with a fixed tensor. (for example, the mean of the data)
 
-    Here `m=True` marks the coordinates that should be imputed. If `m=None`,
-    the imputation mask defaults to `y.isnan()`.
+    Here ``m=True`` marks the coordinates that should be imputed. If ``m=None``,
+    the imputation mask defaults to ``y.isnan()``.
 
     Optionally, the imputation mask can be concatenated to the input.
 

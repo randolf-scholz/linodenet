@@ -101,7 +101,7 @@ class TestGradientStepUpdater:
         torch.testing.assert_close(actual, expected)
 
     def test_compile_fullgraph(self) -> None:
-        r"""The updater should compile under `torch.compile(fullgraph=True)`."""
+        r"""The updater should compile under ``torch.compile(fullgraph=True)``."""
         updater = GradientStepUpdater(
             decoder=ScaleDecoder(weight=1.3),
             loss="l2",

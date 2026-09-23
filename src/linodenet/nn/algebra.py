@@ -3,13 +3,13 @@ r"""Functional Algebra.
 +----------+----------+------------+------------+
 | operator | meaning  | i-operator | iterated   |
 +==========+==========+============+============+
-| `>>`     | series   | `**`       | repeat     |
+| ``>>``   | series   | ``**``     | repeat     |
 +----------+----------+------------+------------+
-| `^`      | parallel | `//`       | concurrent |
+| ``^``    | parallel | ``//``     | concurrent |
 +----------+----------+------------+------------+
-| `&`      | meet     | `%`        | fork       |
+| ``&``    | meet     | ``%``      | fork       |
 +----------+----------+------------+------------+
-| `|`      | join     | `%`        | fork       |
+| ``|``    | join     | ``%``      | fork       |
 +----------+----------+------------+------------+
 
 - ``@``: tensor product?
@@ -84,7 +84,7 @@ class Seq[T](Collection[T], Reversible[T], Protocol):  # +T
     r"""Protocol version of `collections.abc.Sequence`.
 
     Note:
-        Only compatible with `tuple[T, ...]`, not `tuple[*Ts]` when using pyright.
+        Only compatible with ``tuple[T, ...]``, not ``tuple[*Ts]`` when using pyright.
 
     References:
         - https://github.com/python/typeshed/blob/main/stdlib/typing.pyi
@@ -159,7 +159,7 @@ class FunctionalMixin(Fn, Protocol):
 
     # region series --------------------------------------------------------------------
     def __rshift__[N: Fn](self, other: N | Sequence[N], /) -> Series[Self | N]:
-        r"""Execute modules in series (`>>`).
+        r"""Execute modules in series (``>>``).
 
         .. code-block::
 
@@ -168,7 +168,7 @@ class FunctionalMixin(Fn, Protocol):
         return series(self, other)
 
     def __rrshift__[N: Fn](self, other: N | Sequence[N], /) -> Series[Self | N]:
-        r"""Execute modules in series (`>>`).
+        r"""Execute modules in series (``>>``).
 
         .. code-block::
 
@@ -177,13 +177,13 @@ class FunctionalMixin(Fn, Protocol):
         return series(other, self)
 
     def __pow__(self, n: int, /) -> Series[Self]:
-        r"""Repeat a module `n` times (`**`).
+        r"""Repeat a module ``n`` times (``**``).
 
         .. code-block::
 
             x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
 
-        Equivalent to `f >> f >> ... >> f` (n times).
+        Equivalent to ``f >> f >> ... >> f`` (n times).
         """
         return repeat(self, n)
 
@@ -191,7 +191,7 @@ class FunctionalMixin(Fn, Protocol):
 
     # region parallel ------------------------------------------------------------------
     def __xor__[N: Fn](self: Self, other: N | Sequence[N], /) -> Parallel[Self | N]:
-        r"""Execute modules in parallel (`|`).
+        r"""Execute modules in parallel (``|``).
 
         .. code-block::
 
@@ -203,7 +203,7 @@ class FunctionalMixin(Fn, Protocol):
         return parallel(self, other)
 
     def __rxor__[N: Fn](self, other: N | Sequence[N], /) -> Parallel[Self | N]:
-        r"""Execute modules in parallel (`|`).
+        r"""Execute modules in parallel (``|``).
 
         .. code-block::
 
@@ -219,7 +219,7 @@ class FunctionalMixin(Fn, Protocol):
     @overload
     def __floordiv__(self, num: None = ..., /) -> Map[Self]: ...
     def __floordiv__(self, num: int | None = None, /) -> Replicate[Self] | Map[Self]:
-        r"""Repeat a single module in parallel (`//`).
+        r"""Repeat a single module in parallel (``//``).
 
         .. code-block::
 
@@ -238,7 +238,7 @@ class FunctionalMixin(Fn, Protocol):
 
     # region meet ----------------------------------------------------------------------
     def __and__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
-        r"""Execute multiple modules with the same input (`&`).
+        r"""Execute multiple modules with the same input (``&``).
 
         .. code-block::
 
@@ -258,7 +258,7 @@ class FunctionalMixin(Fn, Protocol):
         return fork(self, other)
 
     def __rand__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
-        r"""Execute multiple modules with the same input (`&`).
+        r"""Execute multiple modules with the same input (``&``).
 
         .. code-block::
 
@@ -278,7 +278,7 @@ class FunctionalMixin(Fn, Protocol):
         return fork(other, self)
 
     def __mod__(self, n: int, /) -> Duplicate[Self]:
-        r"""Execute multiple copies of the same module with the same input (`%`).
+        r"""Execute multiple copies of the same module with the same input (``%``).
 
         .. code-block::
 
@@ -293,7 +293,7 @@ class FunctionalMixin(Fn, Protocol):
 
     # region join ----------------------------------------------------------------------
     def __or__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
-        r"""Join multiple outputs into a single output (`|`).
+        r"""Join multiple outputs into a single output (``|``).
 
         .. code-block::
 
@@ -313,7 +313,7 @@ class FunctionalMixin(Fn, Protocol):
         return fork(self, other)
 
     def __ror__[N: Fn](self, other: N | Sequence[N], /) -> Fork[Self | N]:
-        r"""Join multiple outputs into a single output (`|`).
+        r"""Join multiple outputs into a single output (``|``).
 
         .. code-block::
 
@@ -366,7 +366,7 @@ class WrappedFn[T: Fn](Fn):
 
 
 class Series[M: Fn](FnSequence[M]):
-    r"""Execute modules in series (`>>`).
+    r"""Execute modules in series (``>>``).
 
     .. code-block::
 
@@ -395,7 +395,7 @@ def series[M: Fn, N: Fn](x: Sequence[M], y: N, /) -> Series[M | N]: ...
 @overload
 def series[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Series[M | N]: ...
 def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M | N]:
-    r"""Execute modules in series (`>>`).
+    r"""Execute modules in series (``>>``).
 
     .. code-block::
 
@@ -419,13 +419,13 @@ def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M 
 
 
 class Repeat[M: Fn](Series[M]):
-    r"""Repeat a module `n` times (`**`).
+    r"""Repeat a module ``n`` times (``**``).
 
     .. code-block::
 
         x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
 
-    NOTE: Equivalent to `f >> f >> ... >> f` (n times).
+    NOTE: Equivalent to ``f >> f >> ... >> f`` (n times).
     """
 
     def __invert__(self) -> Repeat:
@@ -440,19 +440,19 @@ class Repeat[M: Fn](Series[M]):
 
 
 def repeat[M: Fn](module: M, num: int, /) -> Repeat[M]:
-    r"""Repeat a module `n` times in series (`**`).
+    r"""Repeat a module ``n`` times in series (``**``).
 
     .. code-block::
 
         x ───▶ f ──▶ f(x) ──▶ f(f(x)) ──▶ ... ──▶ fⁿ(x)
 
-    NOTE: Equivalent to `f >> f >> ... >> f` (n times).
+    NOTE: Equivalent to ``f >> f >> ... >> f`` (n times).
     """
     return Repeat(module, num)
 
 
 class Parallel[M: Fn](FnSequence[M]):
-    r"""Execute modules in parallel (`|`).
+    r"""Execute modules in parallel (``|``).
 
     .. code-block::
 
@@ -484,7 +484,7 @@ def parallel[M: Fn, N: Fn](x: Sequence[M], y: N, /) -> Parallel[M | N]: ...
 @overload
 def parallel[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Parallel[M | N]: ...
 def parallel[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Parallel[M | N]:  # fmt: skip
-    r"""Execute modules in parallel (`^`).
+    r"""Execute modules in parallel (``^``).
 
     .. code-block::
 
@@ -537,7 +537,7 @@ class Replicate[M: Fn](Fn):
 
 
 def replicate[M: Fn](module: M, num: int, /) -> Replicate[M]:
-    r"""Apply copies of a single module in parallel (`//`).
+    r"""Apply copies of a single module in parallel (``//``).
 
     .. code-block::
 
@@ -566,7 +566,7 @@ class Map[M: Fn]:
 
 
 class Fork[M: Fn](FnSequence[M]):
-    r"""Execute multiple modules with the same input (`&`).
+    r"""Execute multiple modules with the same input (``&``).
 
     .. code-block::
 
@@ -604,7 +604,7 @@ def fork[M: Fn, N: Fn](x: Sequence[M], y: N, /) -> Fork[M | N]: ...
 @overload
 def fork[M: Fn, N: Fn](x: Sequence[M], y: Sequence[N], /) -> Fork[M | N]: ...
 def fork[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Fork[M | N]:
-    r"""Execute multiple modules with the same input (`&`).
+    r"""Execute multiple modules with the same input (``&``).
 
     .. code-block::
 
@@ -659,7 +659,7 @@ class Duplicate[M: Fn](Fn):
 
 
 def duplicate[M: Fn](module: M, num: int, /) -> Duplicate[M]:
-    r"""Execute multiple copies of the same module with the same input (`%`).
+    r"""Execute multiple copies of the same module with the same input (``%``).
 
     .. code-block::
 
@@ -800,7 +800,7 @@ def choice(num: Optional[int] = None) -> Choice:
 
 
 class Sum(Reduce):
-    r"""Sum the outputs of multiple modules (`+`).
+    r"""Sum the outputs of multiple modules (``+``).
 
     .. code-block::
 

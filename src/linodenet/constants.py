@@ -100,13 +100,13 @@ r"""A constant tensor representing the boolean value `True`."""
 FALSE: Final[Tensor] = torch.tensor(False, dtype=torch.bool)
 r"""A constant tensor representing the boolean value `False`."""
 ZERO: Final[Tensor] = torch.tensor(0.0, dtype=torch.float32)
-r"""A constant tensor representing the number `0`."""
+r"""A constant tensor representing the number ``0``."""
 ONE: Final[Tensor] = torch.tensor(1.0, dtype=torch.float32)
-r"""A constant tensor representing the number `1`."""
+r"""A constant tensor representing the number ``1``."""
 NAN: Final[Tensor] = torch.tensor(float("nan"), dtype=torch.float32)
-r"""A constant tensor representing the number `NaN`."""
+r"""A constant tensor representing the number ``NaN``."""
 POS_INF: Final[Tensor] = torch.tensor(float("inf"), dtype=torch.float32)
-r"""A constant tensor representing the number `+∞`."""
+r"""A constant tensor representing the number ``+∞``."""
 NEG_INF: Final[Tensor] = torch.tensor(float("-inf"), dtype=torch.float32)
-r"""A constant tensor representing the number `-∞`."""
+r"""A constant tensor representing the number ``-∞``."""
 # endregion tensor constants -----------------------------------------------------------

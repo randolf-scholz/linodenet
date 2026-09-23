@@ -268,7 +268,7 @@ class OrthSampler(nn.Module):
 def _make_batched_op(
     op: Fn[[Tensor], Tensor], x: Tensor, /, mode: str
 ) -> tuple[Tensor, Fn[[Tensor], Tensor]]:
-    r"""Construct `op(x)` together with a batched Jacobian action $V ↦ AV$ or $V ↦ AᵀV$."""
+    r"""Construct ``op(x)`` together with a batched Jacobian action $V ↦ AV$ or $V ↦ AᵀV$."""
     match mode:
         case "forward":
             y, jvp_fn = linearize(op, x)
@@ -515,7 +515,7 @@ def xtrace_estimator(
         op: Function $f$ whose Jacobian trace should be estimated at $x$.
         x: Evaluation point. Its shape, dtype, and device define the domain.
         num_matvecs: Total matrix-vector product budget. XTrace uses
-            `num_matvecs // 2` probe vectors internally.
+            ``num_matvecs // 2`` probe vectors internally.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
         mode: Whether to apply forward or reverse Jacobian actions.
         renormalize: Whether to apply the XTrace renormalization correction.
@@ -899,7 +899,7 @@ class HutchPP_Estimator(TraceEstimator):
 
     Args:
         num_matvecs: Total matrix-vector product budget. The estimator uses
-            `num_matvecs // 3` probe vectors for the sketch and the same number for
+            ``num_matvecs // 3`` probe vectors for the sketch and the same number for
             the residual term.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
         mode: Whether to use forward Jacobian-vector products, reverse vector-Jacobian
@@ -1085,10 +1085,10 @@ class XTraceEstimator(TraceEstimator):
 
     Args:
         num_matvecs: Total matrix-vector product budget. XTrace uses
-            `num_matvecs // 2` probe vectors internally.
+            ``num_matvecs // 2`` probe vectors internally.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
         renormalize: Whether to apply the paper's renormalization.
-        mode: Jacobian action mode. Must be `"forward"` or `"reverse"`.
+        mode: Jacobian action mode. Must be ``"forward"`` or ``"reverse"``.
 
     Cost: $mN² + 𝓞(m³)$
         m is the number of matvecs (=2x`num_samples`),
@@ -1263,7 +1263,7 @@ class LogabsdetSeriesEstimator(nn.Module):
 
     @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
     def forward(self, fn: Fn[[Tensor], Tensor], x: Tensor) -> tuple[Tensor, Tensor]:
-        r"""Return `fn(x)` together with an estimate of $\log|\det(𝕀 + 𝐃f(x))|$.
+        r"""Return ``fn(x)`` together with an estimate of $\log|\det(𝕀 + 𝐃f(x))|$.
 
         Args:
             fn: Function $f$ whose Jacobian log-absolute-determinant should be
@@ -1271,7 +1271,7 @@ class LogabsdetSeriesEstimator(nn.Module):
             x: Evaluation point. Its shape, dtype, and device define the domain.
 
         Returns:
-            A pair `(y, logabsdet)` with `y = fn(x)` and the corresponding
+            A pair ``(y, logabsdet)`` with $y = f(x)$ and the corresponding
             log-absolute-determinant estimate.
         """
         return logabsdet_series(fn, x, self.num_terms, estimator=self.estimator)

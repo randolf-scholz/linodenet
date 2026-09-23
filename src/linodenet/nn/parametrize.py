@@ -3,7 +3,7 @@ r"""Alternative to builtin parametrizations of torch.
 Goals
 -----
 
-- Support for JIT. In particular, we do not use `@property`.
+- Support for JIT. In particular, we do not use ``@property``.
 - Class-based parametrizations that allow more complex parametrizations.
     - Example: SpectralNormalization uses an iterative algorithm to compute the spectral norm,
         which is accelerated by caching the singular vectors and reusing them in the next iteration.
@@ -29,7 +29,7 @@ Differences
 
 - Instead of inserting properties, we use buffers, because JIT does not support properties.
   This means that the parametrization is not recomputed automatically when the original tensor changes.
-  Instead, the parametrization needs to be recomputed manually by calling `update_parametrization()`.
+  Instead, the parametrization needs to be recomputed manually by calling ``update_parametrization()``.
 - register_parametrization is intended as a drop-in replacement for
   `torch.nn.utils.parametrizations.register_parametrization`.
   However, it is not equivalent. In particular, it does not support replacing a tensor with
@@ -247,7 +247,7 @@ class ParametrizationList[
         original (Tensor): The original tensor (typically an `nn.Parameter`) that is being
             parametrized. This tensor is stored as `original_parameter` and is the source of
             truth for updating the cached parametrized value. Its dtype and shape must be
-            compatible with the parametrizations unless `unsafe=True` is set.
+            compatible with the parametrizations unless ``unsafe=True`` is set.
         unsafe (bool): If True, safety checks that ensure the parametrization preserves dtype
             and shape (and that the `right_inverse` respects these invariants) are skipped.
             Use with caution; enabling `unsafe` can lead to silently incorrect parametrizations.
@@ -347,7 +347,7 @@ class ParametrizationList[
     def update_parametrization(self) -> None:
         r"""Update both the cached and the original tensors.
 
-        This function needs to be called after each `optimizer.step()` call.
+        This function needs to be called after each ``optimizer.step()`` call.
         Alternatively, one con use the `register_optimizer_hook` function to register
         a hook that automatically alls this function after each step.
 
@@ -640,7 +640,7 @@ def update_parametrizations(module: nn.Module, /) -> None:
 
 
 def register_optimizer_hook(optim: Optimizer, /, *modules: nn.Module) -> None:
-    r"""Automatically adds a hook to `optimizer.step()` which refreshes the cache after each step."""
+    r"""Automatically adds a hook to ``optimizer.step()`` which refreshes the cache after each step."""
 
     def hook(opt: Optimizer, /, *args: Any, **kwargs: Any) -> None:  # ruff: ignore[ARG001]
         r"""Hook to update the parametrization after each optimizer step."""

@@ -82,7 +82,7 @@ class TriangularTransform(nn.Module, Transform):
 
     @signature("(..., n) -> (..., n)")
     def encode(self, x: Tensor, /) -> Tensor:
-        r"""Compute :math:`y = P⁻¹(𝕀ₙ + L)Px`."""
+        r"""Compute $y = P⁻¹(𝕀ₙ + L)Px$."""
         x = x[..., self.permutation]
         lower = self.lower.tril(diagonal=-1)
         update = torch.einsum("mn, ...n -> ...m", lower, x)
@@ -91,7 +91,7 @@ class TriangularTransform(nn.Module, Transform):
 
     @signature("(..., n) -> (..., n)")
     def decode(self, y: Tensor, /) -> Tensor:
-        r"""Solve :math:`P⁻¹(𝕀ₙ + L)Px = y` for :math:`x`."""
+        r"""Solve $P⁻¹(𝕀ₙ + L)Px = y$ for $x$."""
         y = y[..., self.permutation]
         x = torch.linalg.solve_triangular(
             self.weight,

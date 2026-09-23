@@ -40,17 +40,17 @@ _DEFAULT_FILTER_BLUEPRINT = _module_blueprint(nn.GRUCell)
 class LinODEnet(nn.Module):
     r"""Linear ODE Network.
 
-    +-------------------------------------------------+-------------------+
-    | Component                                       | Formula           |
-    +=================================================+===================+
-    | Decoder π (default: :class:`~iResNet`)          | xᵢ  =  π(zᵢ)      |
-    +-------------------------------------------------+-------------------+
-    | Filter  F (default: :class:`~torch.nn.GRUCell`) | xᵢ' = F(xᵢ, oᵢ)   |
-    +-------------------------------------------------+-------------------+
-    | Encoder Φ (default: :class:`~iResNet`)          | zᵢ' = Φ(xᵢ')      |
-    +-------------------------------------------------+-------------------+
-    | System  S (default: :class:`~LinODECell`)       | zᵢ₊₁ = S(zᵢ, ∆tᵢ) |
-    +-------------------------------------------------+-------------------+
+    +-------------------------------------------------+---------------------+
+    | Component                                       | Formula             |
+    +=================================================+=====================+
+    | Decoder π (default: :class:`~iResNet`)          | $xᵢ = π(zᵢ)$        |
+    +-------------------------------------------------+---------------------+
+    | Filter  F (default: :class:`~torch.nn.GRUCell`) | $xᵢ' = F(xᵢ, oᵢ)$   |
+    +-------------------------------------------------+---------------------+
+    | Encoder Φ (default: :class:`~iResNet`)          | $zᵢ' = Φ(xᵢ')$      |
+    +-------------------------------------------------+---------------------+
+    | System  S (default: :class:`~LinODECell`)       | $zᵢ₊₁ = S(zᵢ, ∆tᵢ)$ |
+    +-------------------------------------------------+---------------------+
     """
 
     # Constants
@@ -95,17 +95,17 @@ class LinODEnet(nn.Module):
 
     # Sub-Modules
     # encoder: Any
-    # r"""MODULE: Responsible for embedding `x̂→ẑ`."""
+    # r"""MODULE: Responsible for embedding $x̂→ẑ$."""
     # embedding: nn.Module
-    # r"""MODULE: Responsible for embedding `x̂→ẑ`."""
+    # r"""MODULE: Responsible for embedding $x̂→ẑ$."""
     # system: nn.Module
-    # r"""MODULE: Responsible for propagating `ẑ_t→ẑ_{t+∆t}`."""
+    # r"""MODULE: Responsible for propagating $ẑₜ→ẑₜ₊∆ₜ$."""
     # decoder: nn.Module
-    # r"""MODULE: Responsible for projecting `ẑ→x̂`."""
+    # r"""MODULE: Responsible for projecting $ẑ→x̂$."""
     # projection: nn.Module
-    # r"""MODULE: Responsible for projecting `ẑ→x̂`."""
+    # r"""MODULE: Responsible for projecting $ẑ→x̂$."""
     # filter: nn.Module
-    # r"""MODULE: Responsible for updating `(x̂, x_obs) →x̂'`."""
+    # r"""MODULE: Responsible for updating $(x̂, x_\mathrm{obs}) → x̂'$."""
 
     @property
     def config(self) -> dict:

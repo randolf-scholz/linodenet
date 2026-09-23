@@ -34,7 +34,7 @@ def _symmetric(matrix: Tensor, /) -> Tensor:
 
 
 def _directional_second_derivative(fn, /) -> Tensor:
-    r"""Return the second derivative of `fn(t)` at `t = 0`."""
+    r"""Return the second derivative of ``fn(t)`` at $t = 0$."""
     t = torch.zeros((), requires_grad=True)
     value = fn(t)
     gradient = torch.autograd.grad(value, t, create_graph=True)[0]
@@ -211,7 +211,7 @@ class TestReverseKLSolvers:
             at fixed $q$ that is $O(γ_μ⁴)$.
 
         Note: Why two thresholds
-            `B < eps**0.5` guards the cosine endpoint (below). `γ_μ < eps**0.25` guards a
+            ``B < eps**0.5`` guards the cosine endpoint (below). ``γ_μ < eps**0.25`` guards a
             different failure: as $γ_μ → 0$ we have $u → 1$, so the exact path evaluates
             $(u − 1)/γ_μ$ as a ratio of two vanishing quantities and silently loses
             $≈ log₁₀(1/γ_μβ)$ digits well before $γ_μ$ underflows. The two overlap in
@@ -223,7 +223,7 @@ class TestReverseKLSolvers:
             finite in value *and* in local derivative — a $0 · ∞$ in the dead branch poisons
             the gradient of the live one.
 
-            - `γ_μ_safe` is threaded through `a` and `b`, not just the final division, so the
+            - ``γ_μ_safe`` is threaded through ``a`` and ``b``, not just the final division, so the
               dead cubic never divides by zero.
             - $\cos θ → 1⁻$ as $B → 0$ (specifically $1 - \cosθ ≈ 9B/2(1+γ_μβ)³$) and rounds
               to $≥ 1$ there, where $\arccos'(1) = -∞$. Clamping alone fixes the forward value
@@ -830,7 +830,7 @@ class TestArgminForwardKL:
 
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_compile_fullgraph(self, parametrization: CovarianceType) -> None:
-        r"""Test that the exact forward-KL update compiles with `fullgraph=True`."""
+        r"""Test that the exact forward-KL update compiles with ``fullgraph=True``."""
         dim = 4
         rho = torch.tensor(1.7 / 2.7)
         mean_prior = torch.randn(2, dim)
@@ -1109,7 +1109,7 @@ class TestArgminReverseKL:
 
     @pytest.mark.parametrize("parametrization", CovarianceType)
     def test_compile_fullgraph(self, parametrization: CovarianceType) -> None:
-        r"""Test that the exact reverse-KL update compiles with `fullgraph=True`."""
+        r"""Test that the exact reverse-KL update compiles with ``fullgraph=True``."""
         dim = 4
         gamma = torch.tensor(1.7)
         retention = (gamma / (1.0 + gamma), (gamma - 1.0) / gamma)

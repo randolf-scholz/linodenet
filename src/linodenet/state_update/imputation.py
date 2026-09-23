@@ -37,7 +37,7 @@ class ImputerProtocol(Protocol):
         Args:
             y_obs: Observed state.
             x: Estimated state.
-            mask: Mask indicating which values to impute. If `None`, uses `y_obs.isnan()`.
+            mask: Mask indicating which values to impute. If `None`, uses ``y_obs.isnan()``.
 
         Returns:
             Imputed state, where the masked values have been replaced.
@@ -66,7 +66,7 @@ class LinearImputer(nn.Module):
         Args:
             y: Observed state.
             x: Estimated state.
-            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
+            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
         """
         mask = y.isnan() if mask is None else mask
         return torch.where(mask, self.linear(x), y)
@@ -83,7 +83,7 @@ class ZeroImputer(nn.Module):
         Args:
             y: Observed state.
             _: Hidden state. Unused.
-            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
+            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
         """
         mask = y.isnan() if mask is None else mask
         return torch.where(mask, 0.0, y)
@@ -107,7 +107,7 @@ class ConstantImputer(nn.Module):
         Args:
             y: Observed state.
             _: Hidden state. Unused.
-            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
+            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
         """
         mask = y.isnan() if mask is None else mask
         return torch.where(mask, self.value, y)
@@ -157,7 +157,7 @@ class CorrelationImputer(nn.Module):
         r"""Impute missing values with the conditional Gaussian posterior mean.
 
         Let $ŷ = decoder(x)$ and assume the true observation follows
-        $y ∼ 𝓝(ŷ, Σ)$. If `mask=True` marks the coordinates to impute, then
+        $y ∼ 𝓝(ŷ, Σ)$. If ``mask=True`` marks the coordinates to impute, then
         conditioning on the observed coordinates selected by $Π = I - diag(mask)$
         gives the full-vector update
 
@@ -170,7 +170,7 @@ class CorrelationImputer(nn.Module):
         Args:
             y: Observed state, possibly containing NaNs at missing coordinates.
             x: Hidden state used by the decoder.
-            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
+            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
         """
         mask = y.isnan() if mask is None else mask
         observed_mask = ~mask
@@ -215,7 +215,7 @@ class LearnableImputer(nn.Module):
         Args:
             y: Observed state.
             _: Hidden state. Unused.
-            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
+            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
         """
         mask = y.isnan() if mask is None else mask
         return torch.where(mask, self.value, y)
@@ -242,7 +242,7 @@ class LastValueImputer(nn.Module):
         Args:
             y: Observed state.
             _: Hidden state. Unused.
-            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
+            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
         """
         mask = y.isnan() if mask is None else mask
         # convex combination of last value and current value

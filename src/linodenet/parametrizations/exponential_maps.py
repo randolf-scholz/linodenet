@@ -123,7 +123,7 @@ class MatrixLieGroup(MatrixManifold, Protocol):
 
 
 class ManifoldBase(nn.Module, RiemannManifold):
-    r"""Base class for Riemannian manifolds with `expₓ(v)`-style operations."""
+    r"""Base class for Riemannian manifolds with $\expₓ(v)$-style operations."""
 
     @signature("[(...), (...)] -> (...)")
     def forward(self, x: Tensor, v: Tensor, /) -> Tensor:

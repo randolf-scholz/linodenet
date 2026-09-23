@@ -2,9 +2,9 @@ r"""Utility functions for testing.
 
 Naming convention:
 
-- `assert_*`: should return `None` if the assertion passes.
-- `check_*`: should return the output of the function.
-- `is_*`, `all_*`, `any_*`: should return a boolean / TypeIs / TypeGuard.
+- ``assert_*``: should return `None` if the assertion passes.
+- ``check_*``: should return the output of the function.
+- ``is_*``, ``all_*``, ``any_*``: should return a boolean / TypeIs / TypeGuard.
 """
 
 __all__ = [

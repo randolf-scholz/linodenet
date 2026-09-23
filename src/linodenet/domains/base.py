@@ -530,8 +530,8 @@ class PosetEnum(Enum, metaclass=_PosetType):
         r"""Parse declared supertypes into direct supertype relations.
 
         `KNOWN_SUPERTYPES` may contain plain nodes or meet expressions. A meet
-        target `A & B` denotes the stronger statement `x ≤ A ∧ B`, so this
-        parser expands it to the implied direct supertypes `A` and `B`.
+        target $A ∧ B$ denotes the stronger statement $x ≤ A ∧ B$, so this
+        parser expands it to the implied direct supertypes $A$ and $B$.
         """
         members = frozenset(cls)
 
@@ -573,9 +573,9 @@ class PosetEnum(Enum, metaclass=_PosetType):
     ]:
         r"""Parse declared subtype relations from `KNOWN_SUBTYPES`.
 
-        Plain subtype entries `A` in `KNOWN_SUBTYPES[X]` denote `A ≤ X` and are
+        Plain subtype entries $A$ in ``KNOWN_SUBTYPES[X]`` denote $A ≤ X$ and are
         compiled into direct supertype edges. Meet entries are handled
-        separately as implication rules because `A & B ≤ X` cannot be reduced to
+        separately as implication rules because $A ∧ B ≤ X$ cannot be reduced to
         direct subtype declarations.
         """
         members = frozenset(cls)
@@ -637,8 +637,8 @@ class PosetEnum(Enum, metaclass=_PosetType):
     def _parse_known_subtype_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
         r"""Parse declared meet-based subtype implications.
 
-        A declaration `X: {A & B}` in `KNOWN_SUBTYPES` denotes the implication
-        `A ∧ B ≤ X`, i.e. every node below all meet factors is also below `X`.
+        A declaration ``X: {A & B}`` in ``KNOWN_SUBTYPES`` denotes the implication
+        $A ∧ B ≤ X$, i.e. every node below all meet factors is also below $X$.
         """
         _, subtype_meets = cls._parse_known_subtypes()
         return subtype_meets

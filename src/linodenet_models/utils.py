@@ -166,12 +166,12 @@ def _triplet_row_indices(times: Tensor, channels: Tensor, /) -> tuple[Tensor, Te
     increasing channel indices while the original triplet order is preserved.
 
     Args:
-        times: Timestamps with shape `(..., N)`, padded with NaN.
-        channels: Channel indices with shape `(..., N)`, padded with `-1`.
+        times: Timestamps with shape ``(..., N)``, padded with NaN.
+        channels: Channel indices with shape ``(..., N)``, padded with ``-1``.
 
     Returns:
-        A pair `(indices, counts)`. `indices` contains the dense row index of
-        every valid triplet and `-1` at padded positions. `counts` contains the
+        A pair ``(indices, counts)``. ``indices`` contains the dense row index of
+        every valid triplet and ``-1`` at padded positions. ``counts`` contains the
         number of canonical dense rows per batch item.
     """
     valid = channels.ge(0)
@@ -907,7 +907,7 @@ class MergedTimeData:
         seq_dim = -1 if self.batch_first else 0
 
         # The joint representation comes from a stable sort of context/query
-        # steps, so stably sorting by `~valid` recovers the split order: all
+        # steps, so stably sorting by ``~valid`` recovers the split order: all
         # selected steps move to the front while preserving their relative order.
         valid_idx = torch.argsort(~valid, dim=seq_dim, stable=True).narrow(
             seq_dim, 0, size
@@ -1575,10 +1575,10 @@ def merged_to_split(
     Y = arg.target_values.movedim(seq_dim, 0) if arg.target_values is not None else None
 
     # Gather the selected steps to the front of each batch item: a stable sort
-    # of `~valid` keeps the selected steps (key False) in order ahead of the
-    # rest, so the first `size` columns hold them. The gathered mask/values
+    # of ``~valid`` keeps the selected steps (key False) in order ahead of the
+    # rest, so the first ``size`` columns hold them. The gathered mask/values
     # tails are already all-False/all-NaN (unselected steps), so only the
-    # gathered times need their padding tail (`~keep`) reset to NaN.
+    # gathered times need their padding tail (``~keep``) reset to NaN.
     ctx_valid = C.any(dim=-1)  # ($N, ...)
     ctx_count = ctx_valid.sum(dim=0)  # (...)
     ctx_size = ctx_count.max().item() if context_size is None else context_size

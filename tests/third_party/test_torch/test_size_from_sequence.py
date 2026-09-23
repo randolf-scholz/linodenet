@@ -1,4 +1,4 @@
-r"""Test initialize torch.Size from `Sequence[int]`."""
+r"""Test initialize torch.Size from ``Sequence[int]``."""
 
 from collections.abc import Sequence
 from typing import SupportsIndex, overload

@@ -34,7 +34,7 @@ class Empirical(DistributionBase):
         r"""Initialize the empirical distribution.
 
         Args:
-            values: `(N, *D)` or `(*Bs, N, *D)`: The dataset that defines the empirical distribution.
+            values: ``(*Bs, N, *D)``, the dataset that defines the empirical distribution.
             ndim: The number of dimensions of each data point. If not given,
                 it is assumed that unbatched data is given, i.e., ``ndim=values.ndim - 1``.
         """
@@ -59,7 +59,7 @@ class Empirical(DistributionBase):
         index = index.expand(*sample_shape, *self.batch_shape, 1, *self.event_shape)
         # Broadcast the empirical dataset across the requested sample shape.
         data = self.data.expand(*sample_shape, *self.data.shape)
-        # Gather one empirical point per `(sample, *batch)` entry along the dataset axis.
+        # Gather one empirical point per ``(sample, *batch)`` entry along the dataset axis.
         dim = len(sample_shape) + len(self.batch_shape)
         self.samples = data.gather(dim=dim, index=index).squeeze(dim=dim)
         return self.samples

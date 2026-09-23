@@ -53,7 +53,7 @@ def test_signature_affine_dims(argument: str, expected: str) -> None:
     ],
 )
 def test_signature_affine_dim_repr(argument: str, expected: str) -> None:
-    r"""Affine dims should print with spaced `+` and `-` operators."""
+    r"""Affine dims should print with spaced ``+`` and ``-`` operators."""
     sig = signature(argument)
     assert str(sig) == expected
     assert repr(sig) == expected

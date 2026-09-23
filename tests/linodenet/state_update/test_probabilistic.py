@@ -145,7 +145,7 @@ class TestGaussianForwardKLUpdater:
         torch.testing.assert_close(actual_grad_retention, expected_grad_retention)
 
     def test_compile_fullgraph(self) -> None:
-        r"""The updater should compile under `torch.compile(fullgraph=True)`."""
+        r"""The updater should compile under ``torch.compile(fullgraph=True)``."""
         updater = GaussianForwardUpdater(
             decoder=ShiftTransform(shift=-0.1),
             parametrization="log-cholesky",
@@ -375,7 +375,7 @@ class TestGaussianReverseKLUpdater:
         )
 
     def test_compile_fullgraph(self) -> None:
-        r"""The updater should compile under `torch.compile(fullgraph=True)`."""
+        r"""The updater should compile under ``torch.compile(fullgraph=True)``."""
         updater = GaussianReverseUpdater(
             decoder=ShiftTransform(shift=-0.1),
             parametrization="log-cholesky",

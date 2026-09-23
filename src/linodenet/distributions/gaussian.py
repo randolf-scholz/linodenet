@@ -396,7 +396,7 @@ def argmin_reverse_kl(
         mask: Optional mask indicating observed coordinates of `z`. Currently supported
             only for covariance-parametrized inputs. Missing coordinates are handled by
             optimizing the observed marginal likelihood and preserving the prior conditional.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, `"log-cholesky"`.
+        parametrization: One of ``"covariance"``, ``"precision"``, ``"cholesky"``, ``"log-cholesky"``.
 
     Note: Admissible range
         $ρ_μ ∈ [0, 1]$ is closed: $0$ is $λ_μ = 0$, the unregularized jump $μ₊ = z$; $1$ is
@@ -568,7 +568,7 @@ def argmin_forward_kl(
           The denominator is bounded below by $\text{keep} > 0$, so no guard is needed.
         - `cholesky`: with $Σ₋ = L₋L₋ᵀ$, $a = L₋⁻¹δ$, the factor is
           $L₊ = L₋\chol(\text{keep}⋅I + \text{gain}⋅aaᵀ)$, already lower-triangular.
-        - `log-cholesky`: as `cholesky`, then store the diagonal in log form.
+        - ``"log-cholesky"``: as ``"cholesky"``, then store the diagonal in log form.
 
     Parametrization:
         Weights are the *retentions* $ρ = λ/(1 + λ) ∈ [0, 1]$, i.e. $λ = ρ/(1 - ρ)$: the
@@ -592,7 +592,7 @@ def argmin_forward_kl(
         mask: Optional mask indicating observed coordinates of `z`. Currently supported
             only for covariance-parametrized inputs. Missing coordinates are handled by
             optimizing the observed marginal likelihood and preserving the prior conditional.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, `"log-cholesky"`.
+        parametrization: One of ``"covariance"``, ``"precision"``, ``"cholesky"``, ``"log-cholesky"``.
 
     Note: Admissible range
         $ρ_μ ∈ [0, 1]$ is closed: $0$ is the jump $μ₊ = z$, $1$ the identity $μ₊ = μ₋$.
@@ -737,7 +737,7 @@ def fisher(
     Args:
         theta: Gaussian parameters in the selected parametrization.
         tangent: Tangent/cotangent-like direction to which the metric is applied.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
+        parametrization: One of ``"covariance"``, ``"precision"``, ``"cholesky"`` or ``"log-cholesky"``.
     """
     match CovarianceType(parametrization):
         case CovarianceType.COVARIANCE:
@@ -823,7 +823,7 @@ def inverse_fisher(
     Args:
         theta: Gaussian parameters in the selected parametrization.
         cotangent: Cotangent-like direction to which the inverse metric is applied.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, or `"log-cholesky"`.
+        parametrization: One of ``"covariance"``, ``"precision"``, ``"cholesky"``, or ``"log-cholesky"``.
     """
     match CovarianceType(parametrization):
         case CovarianceType.COVARIANCE:
@@ -904,10 +904,10 @@ def kl(
     Args:
         p: Gaussian parameters in the selected parametrization.
         q: Gaussian parameters in the selected parametrization.
-        parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, or `"log-cholesky"`.
+        parametrization: One of ``"covariance"``, ``"precision"``, ``"cholesky"``, or ``"log-cholesky"``.
 
     Returns:
-        The KL divergence `KL(p, q)`.
+        The KL divergence $\KL(p, q)$.
     """
     match CovarianceType(parametrization):
         case CovarianceType.COVARIANCE:

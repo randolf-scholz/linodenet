@@ -24,7 +24,7 @@ def test_registry_entries_are_complete(name: str) -> None:
 
 
 def test_register_rejects_overwriting_existing_field() -> None:
-    r"""`Registry.register()` should not overwrite populated fields."""
+    r"""``Registry.register()`` should not overwrite populated fields."""
     registry = Registry()
     old_marker: Any = object()
     registry.register("existing-entry", mapping_fn=old_marker)
@@ -34,7 +34,7 @@ def test_register_rejects_overwriting_existing_field() -> None:
 
 
 def test_update_existing_requires_existing_entry() -> None:
-    r"""`Registry.update_existing()` should not create new entries."""
+    r"""``Registry.update_existing()`` should not create new entries."""
     registry = Registry()
 
     with pytest.raises(KeyError, match=r"'missing-entry'"):
@@ -42,7 +42,7 @@ def test_update_existing_requires_existing_entry() -> None:
 
 
 def test_update_existing_registers_unset_field() -> None:
-    r"""`Registry.update_existing()` should fill unset fields on existing entries."""
+    r"""``Registry.update_existing()`` should fill unset fields on existing entries."""
     registry = Registry()
     marker: Any = object()
     registry.register("existing-entry")

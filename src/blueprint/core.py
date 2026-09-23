@@ -227,7 +227,7 @@ def is_basic_blueprint(obj: object, /) -> TypeIs[BasicBlueprint]:
 
 # region for inferring config from instance --------------------------------------------
 def _infer_args_from_init(arg: object, /) -> Args:
-    r"""Infers `*args` and `**kwargs` by matching model's attributes with `__init__`.
+    r"""Infers ``*args`` and ``**kwargs`` by matching model's attributes with ``__init__``.
 
     This only works for models that are essentially dataclasses.
     """

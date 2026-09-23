@@ -15,14 +15,14 @@ def inverse_softplus(x: Tensor, /) -> Tensor:
     This uses the stable identity
 
     .. math::
-       \operatorname{softplus}^{-1}(x) = x + \log(1 - e^{-x})
+       \operatorname{softplus}^{-1}(x) = x + \log(1 - e⁻ˣ)
 
-    which avoids the overflow in `log(expm1(x))` for large `x`.
+    which avoids the overflow in $\log(\op{expm1}(x))$ for large $x$.
 
     Args:
         x: Input tensor. The function is defined for $x ≥ 0$.
 
     Returns:
-        Tensor with the same shape as `x`.
+        Tensor with the same shape as ``x``.
     """
     return x + (-torch.expm1(-x)).log()

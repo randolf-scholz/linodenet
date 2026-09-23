@@ -49,13 +49,13 @@ def linear_flow(
     If `bias` is omitted, this reduces to $xₜ = φ₀(tA)x₀$.
 
     Args:
-        timedeltas: Evaluation time deltas, with shape `(..., n)`.
-        x0: Initial state, with shape `(..., d)`.
-        kernel: Linear drift matrix $A$, with shape `(d, d)`.
-        bias: Optional affine drift vector $b$, with shape `(d,)`.
+        timedeltas: Evaluation time deltas, with shape ``(..., n)``.
+        x0: Initial state, with shape ``(..., d)``.
+        kernel: Linear drift matrix $A$, with shape ``(d, d)``.
+        bias: Optional affine drift vector $b$, with shape ``(d,)``.
 
     Returns:
-        Propagated states at each requested time delta, with shape `(..., n, d)`.
+        Propagated states at each requested time delta, with shape ``(..., n, d)``.
     """
     if bias is None:
         Adt = torch.einsum("..., kl -> ...kl", timedeltas, kernel)
@@ -85,7 +85,7 @@ class LinearFlow(nn.Module, ContinuousFlow):
 
     .. math:: x_{t+∆t} = φ₀(A∆t)xₜ
 
-    or, when `use_bias=True`,
+    or, when ``use_bias=True``,
 
     .. math:: x_{t+∆t} = φ₀(A∆t)xₜ + ∆tφ₁(A∆t)b.
 
@@ -97,7 +97,7 @@ class LinearFlow(nn.Module, ContinuousFlow):
 
     # Constants
     input_size: Final[int]
-    r"""CONST: State dimensionality `d`."""
+    r"""CONST: State dimensionality $d$."""
     output_size: Final[int]
     r"""CONST: Output state dimensionality, equal to `input_size`."""
     use_rezero: Final[bool]
@@ -143,7 +143,7 @@ class LinearFlow(nn.Module, ContinuousFlow):
         r"""Initialize the linear flow.
 
         Args:
-            input_size: State dimensionality `d`.
+            input_size: State dimensionality $d$.
             kernel_initialization: Initialization specification for the drift matrix.
                 Strings and tensors are resolved by `resolve_kernel_initialization`.
             kernel_parametrization: Optional matrix parametrization specification
@@ -185,11 +185,11 @@ class LinearFlow(nn.Module, ContinuousFlow):
         r"""Propagate the flow for one scalar time delta per batch item.
 
         Args:
-            timedeltas: Scalar time delta or batched scalar deltas, with shape `(...)`.
-            x0: Initial state, with shape `(..., d)`.
+            timedeltas: Scalar time delta or batched scalar deltas, with shape ``(...)``.
+            x0: Initial state, with shape ``(..., d)``.
 
         Returns:
-            Propagated state after the requested delta, with shape `(..., d)`.
+            Propagated state after the requested delta, with shape ``(..., d)``.
         """
         return self.forward(timedeltas.unsqueeze(-1), x0).squeeze(-2)
 
@@ -201,11 +201,11 @@ class LinearFlow(nn.Module, ContinuousFlow):
         ReZero gate before evaluating the closed-form solution.
 
         Args:
-            timedeltas: Evaluation time deltas, with shape `(..., n)`.
-            x0: Initial state, with shape `(..., d)`.
+            timedeltas: Evaluation time deltas, with shape ``(..., n)``.
+            x0: Initial state, with shape ``(..., d)``.
 
         Returns:
-            Propagated states at each requested delta, with shape `(..., n, d)`.
+            Propagated states at each requested delta, with shape ``(..., n, d)``.
         """
         # update buffer
         self.kernel = self.rezero(self.weight)
@@ -221,16 +221,16 @@ class LinearFlow(nn.Module, ContinuousFlow):
     ) -> Tensor:
         r"""Evaluate the flow at absolute timestamps relative to an origin.
 
-        Converts timestamps to time deltas via `timestamps - t0` and delegates to
+        Converts timestamps to time deltas via ``timestamps - t0`` and delegates to
         `forward`.
 
         Args:
-            timestamps: Evaluation timestamps, with shape `(..., n)`.
-            x0: Initial state at `t0`, with shape `(..., d)`.
+            timestamps: Evaluation timestamps, with shape ``(..., n)``.
+            x0: Initial state at `t0`, with shape ``(..., d)``.
             t0: Reference timestamp of `x0`.
 
         Returns:
-            Propagated states at each timestamp, with shape `(..., n, d)`.
+            Propagated states at each timestamp, with shape ``(..., n, d)``.
         """
         return self(timestamps - t0, x0)
 

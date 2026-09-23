@@ -1,4 +1,4 @@
-r"""Implementation of the `@signature` decorator."""
+r"""Implementation of the ``@signature`` decorator."""
 
 __all__ = [
     # Config
@@ -163,7 +163,7 @@ class StaticDim(Dim):
 class VariadicDim(Dim):
     r"""Class for representing variadic dimensions.
 
-    E.g. a bundle of axes `*xs` that is fixed at runtime.
+    E.g. a bundle of axes ``*xs`` that is fixed at runtime.
     """
 
     kind: ClassVar[Literal[DimKind.VARIADIC]] = DimKind.VARIADIC
@@ -178,7 +178,7 @@ class VariadicDim(Dim):
 class DynamicDim(Dim):
     r"""Class for representing dynamic dimensions.
 
-    E.g. a single axis `$n` that can vary in size at runtime.
+    E.g. a single axis ``$n`` that can vary in size at runtime.
     """
 
     kind: ClassVar[Literal[DimKind.VARIADIC]] = DimKind.VARIADIC
@@ -202,10 +202,10 @@ class AffineDim(Dim):
 
     Currently, affine combinations of static dimensions are supported, e.g.,
 
-    - `2n`
-    - `3n + 1`
-    - `u + v`
-    - `1a - 2b + 3c - 4d +5`
+    - ``2n`1``
+    - ``3n + 1``
+    - ``u + v``
+    - ``1a - 2b + 3c - 4d +5``
     """
 
     kind: ClassVar[Literal[DimKind.AFFINE]] = DimKind.AFFINE
@@ -268,14 +268,14 @@ class FnType:
 
     - tensor shapes represented as literal tuples of dimensions
     - tensor types represented as generic types
-    - python types like `int`, `float`, `str`, etc.
+    - python types like ``int``, ``float``, ``str``, etc.
 
     Note: A single tensor is represented by a tuple with elements
         - integers for fixed-size dimensions
-        - strings (`"name"` ) for a single axis of fixed size
-        - strings (`"*name"` ) for a single axis of variable size
-        - strings (`"**xs"`) for a variable number of axes of variable size
-        - Ellipsis (`...`) for axes that are vectorized over
+        - strings (``"name"`` ) for a single axis of fixed size
+        - strings (``"*name"`` ) for a single axis of variable size
+        - strings (``"**xs"``) for a variable number of axes of variable size
+        - Ellipsis (``...``) for axes that are vectorized over
         - at maximum one Ellipsis is allowed per tensor.
     """
 
@@ -352,7 +352,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
         source: Signature string to tokenize.
 
     Yields:
-        Token: A stream of `Token` objects (pos, kind, value) for each lexical token.
+        Token: A stream of ``Token`` objects (pos, kind, value) for each lexical token.
                The final token yielded is always an EOF token.
 
     Raises:
@@ -360,8 +360,8 @@ def tokenize(source: str, /) -> Iterator[Token]:
 
     Notes:
         - Whitespace is skipped.
-        - Recognizes identifiers, integer literals, punctuation (`[ ] { } ( ) , * ?`),
-          the arrow `->`, and the ellipsis `...`.
+        - Recognizes identifiers, integer literals, punctuation (``[ ] { } ( ) , * ?``),
+          the arrow ``->``, and the ellipsis ``...``.
     """
     i = 0
     n = len(source)
@@ -418,7 +418,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
 
 
 def _has_wrapping_braces(source: str, /) -> bool:
-    r"""Return whether `source` is enclosed by a single top-level `{...}` pair."""
+    r"""Return whether ``source`` is enclosed by a single top-level ``{...}`` pair."""
     stripped = source.strip()
     if len(stripped) < 2 or stripped[0] != "{" or stripped[-1] != "}":
         return False
@@ -776,11 +776,11 @@ class signature:
 
     Signature DSL:
 
-    - `3`: axis of size 3
-    - `x`: single axis of statically known size
-    - `*xs`: single axis of variable size
-    - `**xs`: multiple axes of variable size
-    - `...`: axes to vectorize over
+    - ``3``: axis of size 3
+    - ``x``: single axis of statically known size
+    - ``*xs``: single axis of variable size
+    - ``**xs``: multiple axes of variable size
+    - ``...``: axes to vectorize over
     """
 
     def __init__(self, sig_string: str, /, lazy: bool = LAZY_EVAL) -> None:

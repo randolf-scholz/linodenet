@@ -2,8 +2,8 @@ r"""Diffeomorphisms, i.e. differentiable bijections with differentiable inverse.
 
 We call a module a bijection if it satisfies 3 properties:
 
-1. It has both an `encode` and `decode` method.
-2. It is invertible, i.e. `decode(encode(x)) = x` and `encode(decode(y)) = y`
+1. It has both an ``encode`` and ``decode`` method.
+2. It is invertible, i.e. ``decode(encode(x)) = x`` and ``encode(decode(y)) = y``
 3. Both encode and decode are differentiable.
 
 Examples:
@@ -32,11 +32,11 @@ Note that `torch.distributions.Transform` has some differences:
   For example: if $f(x) = xᵃ$, then $\log\abs{\det 𝐃f[x]} = \log\abs{a⋅y/x}$.
   is more efficient than $\log\abs{a⋅xᵃ⁻¹}$.
   However, for many bijections, this is not true and knowing $y$ is not that helpful.
-- Instead, it makes more sense to have 2 methods: `log_abs_det_jacobian(x)`
-  and `value_and_log_abs_det_jacobian(x) -> tuple[Tensor, Tensor]`,
-  similar to jax's `value_and_grad`.
-  Alternatively, one can store `y` in a buffer and reuse it if needed, i.e.
-  methods that need `y` can call:
+- Instead, it makes more sense to have 2 methods: ``log_abs_det_jacobian(x)``
+  and ``value_and_log_abs_det_jacobian(x) -> tuple[Tensor, Tensor]``,
+  similar to jax's ``value_and_grad``.
+  Alternatively, one can store ``y`` in a buffer and reuse it if needed, i.e.
+  methods that need ``y`` can call:
 
 >>> from torch import Tensor
 >>> def log_abs_det_jacobian(self, x: Tensor, y: None | Tensor = None) -> Tensor:

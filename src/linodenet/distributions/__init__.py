@@ -33,7 +33,7 @@ We want/need to be able to calculate the following:
 
 We would like to have:
 
-- useful `typing.Protocol`-classes (`Protocol`) and abstract base classes
+- useful ``typing.Protocol``-classes (``Protocol``) and abstract base classes
 - `torch.jit.script` support
 - `torch.compile` support
 

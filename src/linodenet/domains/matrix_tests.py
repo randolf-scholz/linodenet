@@ -96,7 +96,7 @@ def _has_shape(x: Tensor, shape: tuple[int, int], dim: tuple[int, int], /) -> bo
 
 
 def _has_size(x: Tensor, size: int, dim: tuple[int, int], /) -> bool:
-    r"""Return whether the selected matrix dimensions equal `(size, size)`."""
+    r"""Return whether the selected matrix dimensions equal ``(size, size)``."""
     return _has_shape(x, (size, size), dim)
 
 
@@ -219,7 +219,7 @@ def is_low_rank_symmetric(
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is symmetric with rank at most `2⋅rank`."""
+    r"""Check whether the given tensor is symmetric with rank at most ``2⋅rank``."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
 
@@ -243,7 +243,7 @@ def is_low_rank_skew_symmetric(
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is skew-symmetric with rank at most `2⋅rank`."""
+    r"""Check whether the given tensor is skew-symmetric with rank at most ``2⋅rank``."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
 
@@ -939,7 +939,7 @@ def is_traceless(
         torch.zeros((), dtype=x.dtype, device=x.device),
         rtol=rtol,
         atol=atol,
-    )  # NOTE: no need for `all(dim=dim)` here
+    )  # NOTE: no need for ``all(dim=dim)`` here
 
 
 @signature("(..., n, n) -> bool[(...)]")
@@ -1367,7 +1367,7 @@ def is_diagonally_dominant(
 
     .. math:: Aᵢᵢ ≥ ∑_{j≠i} |Aᵢⱼ| \quad\text{for all \(i = 1, …, n\)}
 
-    If `strict=True`, we require that the inequality is strict for all $i$, more specifically
+    If ``strict=True``, we require that the inequality is strict for all $i$, more specifically
     we include tolerance:
 
     .. math:: Aᵢᵢ ≥ (1+\text{rtol})⋅(∑_{j≠i} |Aᵢⱼ|) + \text{atol} \quad\text{for all \(i = 1, …, n\)}

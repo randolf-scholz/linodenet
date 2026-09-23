@@ -75,14 +75,14 @@ def marginal_gaussian_log_prob(
     r"""Compute log-likelihoods of masked Gaussian marginals.
 
     Args:
-        values: Dense values with shape `(..., D)`.
-        mean: Dense Gaussian means with shape `(..., D)`.
-        cov: Dense Gaussian covariance matrices with shape `(..., D, D)`.
+        values: Dense values with shape ``(..., D)``.
+        mean: Dense Gaussian means with shape ``(..., D)``.
+        cov: Dense Gaussian covariance matrices with shape ``(..., D, D)``.
         mask: Boolean mask selecting the marginal dimensions to score, with
-            shape `(..., D)`.
+            shape ``(..., D)``.
 
     Returns:
-        Log-likelihoods with shape `(...)`. Rows with no selected dimensions
+        Log-likelihoods with shape ``(...)``. Rows with no selected dimensions
         have log-likelihood zero.
     """
     dim = values.shape[-1]
@@ -113,14 +113,14 @@ def marginal_gaussian_sample(
 
     Args:
         size: Sample shape.
-        mean: Dense Gaussian means with shape `(..., D)`.
-        cov: Dense Gaussian covariance matrices with shape `(..., D, D)`.
+        mean: Dense Gaussian means with shape ``(..., D)``.
+        cov: Dense Gaussian covariance matrices with shape ``(..., D, D)``.
         mask: Boolean mask selecting the marginal dimensions to sample, with
-            shape `(..., D)`.
+            shape ``(..., D)``.
         rng: Optional random number generator to use for sampling.
 
     Returns:
-        Samples with shape `(*size, ..., D)`, with unselected dimensions filled
+        Samples with shape ``(*size, ..., D)``, with unselected dimensions filled
         with NaN.
     """
     dim = mean.shape[-1]
@@ -137,10 +137,7 @@ def marginal_gaussian_sample(
         device=mean.device,
         generator=rng,
     )
-    samples = torch.where(mask, mean, torch.zeros_like(mean)).expand(
-        *sample_shape,
-        *mean.shape,
-    ) + (
+    samples = torch.where(mask, mean, 0.0).expand(*sample_shape, *mean.shape) + (
         scale_tril.expand(*sample_shape, *scale_tril.shape) @ noise.unsqueeze(-1)
     ).squeeze(-1)
     return samples.masked_fill(~mask.expand(*sample_shape, *mask.shape), nan)
@@ -202,18 +199,12 @@ class ContinuousTimeKalmanFilter(nn.Module):
 
     .. math::
         ∂ₜxₜ &= Fxₜ + wₜ  &  wₜ &∼ 𝓝(0, Qₜ)  \\
-        yₜ &= Hxₜ + vₜ  &  vₜ &∼ 𝓝(0, Rₜ)
+          yₜ &= Hxₜ + vₜ  &  vₜ &∼ 𝓝(0, Rₜ)
 
-    ------------------ older docstring content ---------------
+    In the case of missing data, substitute $yₜ← Sₜ⋅yₜ$, $Hₜ ← Sₜ⋅Hₜ$ and
+    $Rₜ ← Sₜ⋅Rₜ⋅Sₜᵀ$ where $Sₜ$ is the $\abs{mₜ}×m$ projection matrix of the missing values.
 
-    .. math::
-        x̂ₜ₊₁ &= x̂ₜ + Pₜ Hₜᵀ(Hₜ Pₜ   Hₜᵀ + Rₜ)⁻¹ (yₜ - Hₜ x̂ₜ) \\
-        Pₜ₊₁ &= Pₜ - Pₜ Hₜᵀ(Hₜ Pₜ⁻¹ Hₜᵀ + Rₜ)⁻¹ Hₜ Pₜ⁻¹
-
-    In the case of missing data:
-
-    Substitute $yₜ← Sₜ⋅yₜ$, $Hₜ ← Sₜ⋅Hₜ$ and $Rₜ ← Sₜ⋅Rₜ⋅Sₜᵀ$ where $Sₜ$
-    is the $mₜ×m$ projection matrix of the missing values. In this case:
+    In this case, with $∏ₘ = S⁺S = \diag(mₜ)$
 
     .. math::
         x̂' &= x̂ + P⋅Hᵀ⋅Sᵀ(SHPHᵀSᵀ + SRSᵀ)⁻¹ (Sy - SHx̂) \\
@@ -223,19 +214,6 @@ class ContinuousTimeKalmanFilter(nn.Module):
         P' &= P - P⋅Hᵀ⋅Sᵀ(S H P⁻¹ Hᵀ Sᵀ + SRSᵀ)⁻¹ SH P⁻¹ \\
            &= P - P⋅Hᵀ⋅(S⁺S)ᵀ (H P⁻¹ Hᵀ + R)⁻¹ (S⁺S) H P⁻¹ \\
            &= P - P⋅Hᵀ⋅∏ₘᵀ (H P⁻¹ Hᵀ + R)⁻¹ ∏ₘ H P⁻¹
-
-
-    .. note::
-        The Kalman filter is a linear filter. The non-linear version is also possible,
-        the so called Extended Kalman-Filter. Here, the non-linearity is linearized at
-        the time of update.
-
-        ..math ::
-            x̂' &= x̂ + P⋅Hᵀ(HPHᵀ + R)⁻¹ (y - h(x̂)) \\
-            P' &= P -  P⋅Hᵀ(HPHᵀ + R)⁻¹ H P
-
-        where $H = \frac{∂h}{∂x}|_{x̂}$. Note that the EKF is generally not an optimal
-        filter.
     """
 
     input_size: Final[int]
@@ -257,23 +235,23 @@ class ContinuousTimeKalmanFilter(nn.Module):
     measurement_cov: Tensor
 
     prior_latent_means: Tensor
-    r"""The (a priori) latent mean μₖ for the most recent forward pass."""
+    r"""The (a priori) latent mean $μₖ$ for the most recent forward pass."""
     prior_latent_covs: Tensor
-    r"""The (a priori) latent covariance Σₖ for the most recent forward pass."""
+    r"""The (a priori) latent covariance $Σₖ$ for the most recent forward pass."""
     prior_target_means: Tensor
     r"""The (a priori) predicted mean $yₖ=Hμₖ$ for the most recent forward pass."""
     prior_target_covs: Tensor
     r"""The (a priori) predicted covariance $Sₖ=HΣₖHᵀ+R$ for the most recent forward pass."""
     post_latent_means: Tensor
-    r"""The (a posteriori) mean μₖ' after measurement update for the most recent forward pass."""
+    r"""The (a posteriori) mean $μₖ'$ after measurement update for the most recent forward pass."""
     post_latent_covs: Tensor
-    r"""The (a posteriori) covariance Σₖ' after measurement update for the most recent forward pass."""
+    r"""The (a posteriori) covariance $Σₖ'$ after measurement update for the most recent forward pass."""
     post_target_means: Tensor
-    r"""The (a posteriori) predicted mean yₖ'=Hμₖ' for the most recent forward pass."""
+    r"""The (a posteriori) predicted mean $yₖ'=Hμₖ'$ for the most recent forward pass."""
     post_target_covs: Tensor
-    r"""The (a posteriori) predicted covariance Sₖ'=HΣₖ'Hᵀ+R for the most recent forward pass."""
+    r"""The (a posteriori) predicted covariance $Sₖ'=HΣₖ'Hᵀ+R$ for the most recent forward pass."""
     identity_matrix: Tensor
-    r"""The identity matrix Iₙ used in the Joseph covariance update."""
+    r"""The identity matrix $Iₙ$ used in the Joseph covariance update."""
     van_loan_matrix: Tensor
     r"""The Van Loan block matrix $[[F,Q],[0,-Fᵀ]]$ used for propagation."""
 
@@ -454,10 +432,10 @@ class ContinuousTimeKalmanFilter(nn.Module):
         context_times: Tensor,  # Float[..., N], padded NaN, non-decreasing
         context_mask: Tensor,  # Bool[..., N, D], padded False
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
-        # μ₀=(..., D) Σ₀=(..., D, D)
+        # μ₀=Float[..., D], Σ₀=Float[..., D, D]
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
-    ) -> tuple[Tensor, Tensor]:  # (..., $K, D), (..., $K, D)
+    ) -> tuple[Tensor, Tensor]:  # Float[..., $K, D], Float[..., $K, D]
         r"""Compute the predictive mean and variance over split time representation."""
         combined = EventBatch.from_request(
             context_times=context_times,
@@ -502,7 +480,7 @@ class ContinuousTimeKalmanFilter(nn.Module):
         query_mask: Tensor,  # Bool[..., $T, D], padded False
         context_values: Tensor,  # Float[..., $T, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., $T, D], padded False
-        # μ₀=(..., D) Σ₀=(..., D, D)
+        # μ₀=Float[..., D], Σ₀=Float[..., D, D]
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
     ) -> tuple[Tensor, Tensor]:  # Float[..., $T, D], Float[..., $T, D, D]
@@ -688,7 +666,7 @@ class ContinuousTimeKalmanFilter(nn.Module):
         initial_state: tuple[Tensor, Tensor] | None = None,
         initial_time: Tensor | None = None,  # t₀, ()
         rng: Generator | None = None,
-    ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
+    ) -> tuple[Tensor, Tensor]:  # Float[*S, ..., $K, D], Float[*S, ..., $K]
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
         .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
@@ -799,17 +777,15 @@ class ContinuousTimeKalmanFilter(nn.Module):
         H: Tensor,
         R: Tensor,
     ) -> Tensor:
-        """Compute Kalman gain K.
-
-        K = P Hᵀ S⁻¹
+        r"""Compute Kalman gain $K = P Hᵀ S⁻¹$.
 
         Args:
-            P: Prior covariance Σₖ of shape (*B, n, n)
-            H: Masked observation matrix H of shape (*B, m, n)
-            R: Masked measurement covariance of shape (*B, m, m)
+            P: Prior covariance Σₖ of shape ``(*B, n, n)``.
+            H: Masked observation matrix H of shape ``(*B, m, n)``.
+            R: Masked measurement covariance of shape ``(*B, m, m)``.
 
         Returns:
-            K: Kalman gain of shape (*B, n, m)
+            K: Kalman gain of shape ``(*B, n, m)``.
         """
         S = R + einsum("...ik, ...kl, ...jl -> ...ij", H, P, H)
 
@@ -879,23 +855,23 @@ class DiscreteTimeKalmanFilter(nn.Module):
 
     # BUFFERS
     identity_matrix: Tensor
-    r"""The identity matrix Iₙ used in the Joseph covariance update."""
+    r"""The identity matrix $Iₙ$ used in the Joseph covariance update."""
     prior_latent_means: Tensor
-    r"""The (a priori) latent mean μₖ for the most recent forward pass."""
+    r"""The (a priori) latent mean $μₖ$ for the most recent forward pass."""
     prior_latent_covariances: Tensor
-    r"""The (a priori) latent covariance Σₖ for the most recent forward pass."""
+    r"""The (a priori) latent covariance $Σₖ$ for the most recent forward pass."""
     prior_predicted_means: Tensor
     r"""The (a priori) predicted mean $yₖ=Hμₖ$ for the most recent forward pass."""
     prior_predicted_covariances: Tensor
     r"""The (a priori) predicted covariance $Sₖ=HΣₖHᵀ+R$ for the most recent forward pass."""
     posterior_latent_means: Tensor
-    r"""The (a posteriori) mean μₖ' after measurement update for the most recent forward pass."""
+    r"""The (a posteriori) mean $μₖ'$ after measurement update for the most recent forward pass."""
     posterior_latent_covariances: Tensor
-    r"""The (a posteriori) covariance Σₖ' after measurement update for the most recent forward pass."""
+    r"""The (a posteriori) covariance $Σₖ'$ after measurement update for the most recent forward pass."""
     posterior_predicted_means: Tensor
-    r"""The (a posteriori) predicted mean yₖ'=Hμₖ' for the most recent forward pass."""
+    r"""The (a posteriori) predicted mean $yₖ'=Hμₖ'$ for the most recent forward pass."""
     posterior_predicted_covariances: Tensor
-    r"""The (a posteriori) predicted covariance Sₖ'=HΣₖ'Hᵀ+R for the most recent forward pass."""
+    r"""The (a posteriori) predicted covariance $Sₖ'=HΣₖ'Hᵀ+R$ for the most recent forward pass."""
     pred_means: Tensor
     r"""The query predictive means from the most recent predict call."""
     pred_covs: Tensor
@@ -1161,11 +1137,7 @@ class DiscreteTimeKalmanFilter(nn.Module):
         posterior_predicted_covariances: list[Tensor] = []
 
         for step_obs, y_obs, mask, active in zip(
-            steps,
-            context_values,
-            context_mask,
-            valid_steps,
-            strict=True,
+            steps, context_values, context_mask, valid_steps, strict=True
         ):
             # Within the loop we use batch-first.
             delta = torch.where(active, step_obs - step, torch.zeros_like(step_obs))
@@ -1196,53 +1168,41 @@ class DiscreteTimeKalmanFilter(nn.Module):
 
         self.prior_latent_means = stack(prior_latent_means, dim=stack_dim_mean)
         self.prior_latent_covariances = stack(
-            prior_latent_covariances,
-            dim=stack_dim_cov,
+            prior_latent_covariances, dim=stack_dim_cov
         )
-        self.prior_predicted_means = stack(
-            prior_predicted_means,
-            dim=stack_dim_mean,
-        )
+        self.prior_predicted_means = stack(prior_predicted_means, dim=stack_dim_mean)
         self.prior_predicted_covariances = stack(
-            prior_predicted_covariances,
-            dim=stack_dim_cov,
+            prior_predicted_covariances, dim=stack_dim_cov
         )
         self.posterior_latent_means = stack(posterior_latent_means, dim=stack_dim_mean)
         self.posterior_latent_covariances = stack(
-            posterior_latent_covariances,
-            dim=stack_dim_cov,
+            posterior_latent_covariances, dim=stack_dim_cov
         )
         self.posterior_predicted_means = stack(
-            posterior_predicted_means,
-            dim=stack_dim_mean,
+            posterior_predicted_means, dim=stack_dim_mean
         )
         self.posterior_predicted_covariances = stack(
-            posterior_predicted_covariances,
-            dim=stack_dim_cov,
+            posterior_predicted_covariances, dim=stack_dim_cov
         )
 
         self.prior_latent_means = self.prior_latent_means.masked_fill(~mean_mask, nan)
         self.prior_latent_covariances = self.prior_latent_covariances.masked_fill(
-            ~cov_mask,
-            nan,
+            ~cov_mask, nan
         )
         self.prior_predicted_means = self.prior_predicted_means.masked_fill(
-            ~mean_mask,
-            nan,
+            ~mean_mask, nan
         )
         self.prior_predicted_covariances = self.prior_predicted_covariances.masked_fill(
             ~cov_mask, nan
         )
         self.posterior_latent_means = self.posterior_latent_means.masked_fill(
-            ~mean_mask,
-            nan,
+            ~mean_mask, nan
         )
         self.posterior_latent_covariances = (
             self.posterior_latent_covariances.masked_fill(~cov_mask, nan)
         )
         self.posterior_predicted_means = self.posterior_predicted_means.masked_fill(
-            ~mean_mask,
-            nan,
+            ~mean_mask, nan
         )
         self.posterior_predicted_covariances = (
             self.posterior_predicted_covariances.masked_fill(~cov_mask, nan)
@@ -1429,17 +1389,15 @@ class DiscreteTimeKalmanFilter(nn.Module):
         H: Tensor,
         R: Tensor,
     ) -> Tensor:
-        """Compute Kalman gain K.
-
-        K = P Hᵀ S⁻¹
+        r"""Compute Kalman gain $K = P Hᵀ S⁻¹$.
 
         Args:
-            P: Prior covariance Σₖ of shape (*B, n, n)
-            H: Masked observation matrix Hₖ of shape (*B, m, n)
-            R: Masked measurement covariance Rₖ of shape (*B, m, m)
+            P: Prior covariance Σₖ of shape ``(*B, n, n)``.
+            H: Masked observation matrix Hₖ of shape ``(*B, m, n)``.
+            R: Masked measurement covariance Rₖ of shape ``(*B, m, m)``.
 
         Returns:
-            K: Kalman gain of shape (*B, n, m)
+            K: Kalman gain of shape ``(*B, n, m)``
         """
         S = R + einsum("...ik, ...kl, ...jl -> ...ij", H, P, H)
 
@@ -1464,18 +1422,18 @@ class DiscreteTimeKalmanFilter(nn.Module):
         H: Tensor,
         R: Tensor,
     ) -> Tensor:
-        """Compute Joseph form update for covariance.
+        r"""Compute Joseph form update for covariance.
 
-        Σₖ' = (I - KH) Σₖ (I - KH)ᵀ + K R Kᵀ
+        .. math:: Σₖ' = (I - KH) Σₖ (I - KH)ᵀ + K R Kᵀ
 
         Args:
-            P: Prior covariance Σₖ of shape (*B, n, n)
-            K: Kalman gain K of shape (*B, n, m)
-            H: Masked observation matrix H of shape (*B, m, n)
-            R: Masked measurement covariance of shape (*B, m, m)
+            P: Prior covariance Σₖ of shape ``(*B, n, n)``
+            K: Kalman gain K of shape ``(*B, n, m)``
+            H: Masked observation matrix H of shape ``(*B, m, n)``
+            R: Masked measurement covariance of shape ``(*B, m, m)``
 
         Returns:
-            P_new: Updated covariance Σₖ' of shape (*B, n, n)
+            P_new: Updated covariance Σₖ' of shape ``(*B, n, n)``
         """
         I_KH = self.identity_matrix - einsum("...ik, ...kj -> ...ij", K, H)
         P_new = (

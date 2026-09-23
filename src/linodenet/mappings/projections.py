@@ -534,7 +534,7 @@ class RankOne(nn.Module, Projection):
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ 1
 
-    This is the special case of `LowRank` with `rank=1`.
+    This is the special case of `LowRank` with ``rank=1``.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
