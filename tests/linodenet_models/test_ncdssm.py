@@ -83,10 +83,15 @@ class TestNCDSSM(TestProbabilisticModel[NCDSSM]):
         encoder_net = model.encoder.network
         assert isinstance(encoder_net, torch.nn.Sequential)
         encoder_layer = encoder_net[0]
-        emission_layer = encoder_net[-1]
+        auxiliary_layer = encoder_net[-1]
         assert isinstance(encoder_layer, torch.nn.Linear)
-        assert isinstance(emission_layer, torch.nn.Linear)
+        assert isinstance(auxiliary_layer, torch.nn.Linear)
         assert encoder_layer.in_features == 2 * model.input_size
+        assert auxiliary_layer.out_features == 2 * model.auxiliary_size
+        emission_net = model.emission.network
+        assert isinstance(emission_net, torch.nn.Sequential)
+        emission_layer = emission_net[-1]
+        assert isinstance(emission_layer, torch.nn.Linear)
         assert emission_layer.out_features == 2 * model.output_size
 
     def test_instantiation_from_parameters(self) -> None:
