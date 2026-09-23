@@ -5,12 +5,12 @@ import torch
 from linodenet.initializations import INITIALIZATIONS, Fixed
 
 
-class TestConstant:
+class TestFixed:
     r"""Validate constant initialization sampling semantics."""
 
     def test_exported(self) -> None:
         r"""The class is exported through the initialization registry."""
-        assert INITIALIZATIONS["Constant"] is Fixed
+        assert INITIALIZATIONS["Fixed"] is Fixed
 
     def test_size_empty_tuple_preserves_shape(self) -> None:
         r"""Sampling without batch shape returns the stored tensor shape."""
