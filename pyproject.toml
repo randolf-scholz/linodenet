@@ -198,10 +198,25 @@ docstring-code-format = true
 docstring-code-line-length = "dynamic"
 
 [tool.ruff.lint.per-file-ignores]
-"**/test*" = ["D100", "D101", "D104", "D106", "S101", "SIM300", "T20", "UP018", "RUF046"]
+"**/test*" = [
+    "D100",
+    "D101",
+    "D104",
+    "D106",
+    "S101",
+    "SIM300",
+    "T20",
+    "UP018",
+    "RUF046",
+]
 
 [tool.ruff.lint.pylint]
-allow-dunder-method-names = ["__array__", "__array_ufunc__", "__dataframe__", "_repr_html_"]
+allow-dunder-method-names = [
+    "__array__",
+    "__array_ufunc__",
+    "__dataframe__",
+    "_repr_html_",
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
