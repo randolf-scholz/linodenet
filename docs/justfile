@@ -31,5 +31,5 @@ make *sphinx_args: clean
     set -eu
 
     sphinx_opts=(-w {{ BUILD_DIR }}/warnings.txt)
-    uv run sphinx-apidoc --separate -o {{ APIDOC_DIR }} ../src/
+    # uv run sphinx-apidoc --separate -o {{ APIDOC_DIR }} ../src/
     uv run sphinx-build -M html . "{{ BUILD_DIR }}" "${sphinx_opts[@]}" {{ sphinx_args }}
