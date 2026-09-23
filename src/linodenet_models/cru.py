@@ -243,7 +243,7 @@ class CRUConfig:
 
 
 class CRUConfigDict(TypedDict):
-    r"""Mapping form of ``CRUConfig``."""
+    r"""Mapping form of `CRUConfig`."""
 
     input_size: int
     latent_size: int
@@ -259,7 +259,7 @@ class CRUConfigDict(TypedDict):
 
 
 class EncoderConfigDict(TypedDict):
-    r"""Mapping form of ``EncoderConfig``."""
+    r"""Mapping form of `EncoderConfig`."""
 
     input_size: int
     output_size: int
@@ -270,7 +270,7 @@ class EncoderConfigDict(TypedDict):
 
 
 class DecoderConfigDict(TypedDict):
-    r"""Mapping form of ``DecoderConfig``."""
+    r"""Mapping form of `DecoderConfig`."""
 
     input_size: int
     output_size: int
@@ -293,7 +293,7 @@ def update_masked[R: Tensor | tuple[Tensor, ...]](
     args: tuple[Tensor, ...],
     batch_mask: Tensor,  # Bool[...]
 ) -> R:  # (*(..., *eᵢ),)
-    r"""Update ``target`` with ``fn`` applied to selected batch elements."""
+    r"""Update `target` with `fn` applied to selected batch elements."""
     assert batch_mask.dtype == torch.bool
 
     ys = fn(*(x[batch_mask] for x in args))
@@ -611,12 +611,12 @@ class CRU(nn.Module):
         r"""Filter and forecast over combined context/query time points.
 
         Context and query masks explicitly select valid feature-level entries.
-        Context values outside ``context_mask`` are ignored. CRU does not
+        Context values outside `context_mask` are ignored. CRU does not
         support feature-level missingness: each time step must be either fully
         observed or fully missing (all context features present or none).
 
         Args:
-            timestamps: Float tensor of shape ``(..., $T)`` containing the combined context and
+            timestamps: Float tensor of shape ``(..., $T)`` containing the combined context and query time points.
             query_mask: Boolean mask selecting requested forecast entries.
             context_values: Sparse observations at context/query time points.
             context_mask: Boolean mask selecting observed context entries.

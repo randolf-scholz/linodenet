@@ -214,7 +214,7 @@ class Project:
                     message = f'"""Tests for {dirs}."""\n'
                     test_package_init_file.write_text(message, encoding="utf8")
         if dry_run:
-            print("Pass option `dry_run=False` to actually create the folders.")
+            print("Pass option ``dry_run=False`` to actually create the folders.")
 
 
 PROJECT: Final[Project] = Project()

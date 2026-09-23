@@ -34,7 +34,7 @@ class IResNet(TransformSequence[ResidualContraction]):
     latent_size: Final[int]
     r"""CONST: Hidden size used inside each residual block."""
     use_rezero: Final[bool]
-    r"""CONST: Whether to wrap blocks in ``ReZeroContraction``."""
+    r"""CONST: Whether to wrap blocks in `ReZeroContraction`."""
 
     def __init__(
         self,

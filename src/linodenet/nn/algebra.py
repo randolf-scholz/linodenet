@@ -177,7 +177,7 @@ class FunctionalMixin(Fn, Protocol):
         return series(other, self)
 
     def __pow__(self, n: int, /) -> Series[Self]:
-        r"""Repeat a module ``n`` times (``**``).
+        r"""Repeat a module `n` times (``**``).
 
         .. code-block::
 
@@ -419,7 +419,7 @@ def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M 
 
 
 class Repeat[M: Fn](Series[M]):
-    r"""Repeat a module ``n`` times (``**``).
+    r"""Repeat a module `num` times (``**``).
 
     .. code-block::
 
@@ -440,7 +440,7 @@ class Repeat[M: Fn](Series[M]):
 
 
 def repeat[M: Fn](module: M, num: int, /) -> Repeat[M]:
-    r"""Repeat a module ``n`` times in series (``**``).
+    r"""Repeat a module `num` times in series (``**``).
 
     .. code-block::
 

@@ -36,7 +36,7 @@ def _spd_expm(param: Tensor) -> Tensor:
 
 
 def _as_mean(mean: ArrayLike | float, size: int) -> Tensor:
-    r"""Convert scalar, vector, or ``None`` input to a mean vector."""
+    r"""Convert scalar, vector, or `None` input to a mean vector."""
     value = torch.as_tensor(mean, dtype=torch.get_default_dtype())
     if value.shape == ():
         return value * torch.ones(size)
@@ -46,7 +46,7 @@ def _as_mean(mean: ArrayLike | float, size: int) -> Tensor:
 
 
 def _as_covariance(covariance: ArrayLike | float, size: int) -> Tensor:
-    r"""Convert scalar, matrix, or ``None`` input to a covariance matrix."""
+    r"""Convert scalar, matrix, or `None` input to a covariance matrix."""
     value = torch.as_tensor(covariance, dtype=torch.get_default_dtype())
     if value.shape == ():
         return value * torch.eye(size)
@@ -489,7 +489,7 @@ class ContinuousTimeKalmanFilter(nn.Module):
         Args:
             timestamps: combined time points at which to filter.
             query_mask: Boolean mask selecting requested forecast entries.
-            context_mask: Boolean mask selecting observed entries in ``values``.
+            context_mask: Boolean mask selecting observed entries in values.
             context_values: Sparse observations at context time points.
             initial_state: Optional initial latent state $(μ₀, Σ₀)$.
                 If omitted, uses the model initial mean and covariance.

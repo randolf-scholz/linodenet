@@ -2,12 +2,12 @@ r"""Neural Flow state propagation operators and forecasting model.
 
 This module reimplements the flow operators used in the Neural Flows
 experiments without depending on :mod:`stribor`. The operator modules follow
-the single-step propagation interface used by ``GRU_ODE_Bayes``:
+the single-step propagation interface used by `GRU_ODE_Bayes`:
 
 ``forward(delta_time, state) -> state``
 
 where ``delta_time`` has shape ``(...)`` and ``state`` has shape ``(..., D)``.
-The ``NeuralFlow`` forecasting model adapts these operators to the
+The `NeuralFlow` forecasting model adapts these operators to the
 GRU-ODE-Bayes forecasting interface.
 """
 
@@ -268,7 +268,7 @@ class CouplingFlow(ModuleSequence[CouplingFlowBlock]):
         self.num_layers = num_layers
 
     def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
-        r"""Propagate ``state`` for a single time delta."""
+        r"""Propagate `state` for a single time delta."""
         # [delta=(...), state=(..., H)] -> (..., H)
         for block in self:
             state = block(delta, state)
@@ -363,7 +363,7 @@ class ResNetFlow(ModuleSequence[ResNetFlowBlock]):
         self.num_layers = num_layers
 
     def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
-        r"""Propagate ``state`` for a single time delta."""
+        r"""Propagate `state` for a single time delta."""
         # [delta=(...), state=(..., H)] -> (..., H)
         for block in self:
             state = block(delta, state)
@@ -475,7 +475,7 @@ class GRUFlow(ModuleSequence[GRUFlowBlock]):
         self.num_layers = num_layers
 
     def forward(self, delta: Tensor, state: Tensor, /) -> Tensor:
-        r"""Propagate ``state`` for a single time delta."""
+        r"""Propagate `state` for a single time delta."""
         # [delta=(...), state=(..., H)] -> (..., H)
         for block in self:
             state = block(delta, state)

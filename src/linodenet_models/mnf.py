@@ -1684,7 +1684,7 @@ class MixtureWeightsModel(nn.Module):
         Args:
             embeddings: Sequence embeddings with shape ``(..., $N, M)``.
             valid_mask: Optional boolean mask selecting valid sequence entries.
-                If omitted, it is inferred from finite rows of ``embeddings``.
+                If omitted, it is inferred from finite rows of `embeddings`.
 
         Returns:
             Mixture log-weights with shape ``(..., D)``. Each batch element
@@ -1851,21 +1851,21 @@ class SeparableEncoder(nn.Module):
         Args:
             query_times: Query timestamps with shape ``(..., $Q)``.
                 Invalid or padded positions should be encoded as ``NaN``
-                when ``query_valid`` is omitted.
+                when `query_valid` is omitted.
             query_channels: Query channel indices with shape ``(..., $Q)``.
                 Invalid or padded positions should be encoded as ``-1``.
             query_valid: Optional boolean mask with shape ``(..., $Q)`` marking
-                valid query positions. If omitted, validity is inferred from ``query_times``.
+                valid query positions. If omitted, validity is inferred from `query_times`.
             context_times: Context timestamps with shape ``(..., $X)``.
                 Invalid or padded positions should be encoded as ``NaN``
-                when ``context_valid`` is omitted.
+                when `context_valid` is omitted.
             context_channels: Context channel indices with shape ``(..., $X)``.
                 Invalid or padded positions should be encoded as ``-1``.
             context_values: Context values with shape ``(..., $X)``.
                 Invalid or padded positions should be encoded as ``NaN``.
             context_valid: Optional boolean mask with shape ``(..., $X)``
                 marking valid context positions. If omitted, validity is
-                inferred from ``context_times`` and ``context_values``.
+                inferred from `context_times` and `context_values`.
 
         Returns:
             𝐡ᵒᵇˢ: Context embeddings with shape ``(..., $X, M)``.
@@ -2328,7 +2328,7 @@ class Moses(nn.Module):
         and sums across query positions (joint under independence).
 
         Args:
-            values: Observed target values; finite at every `True` position in ``query_mask``.
+            values: Observed target values; finite at every `True` position in `query_mask`.
             query_times: Sorted time stamps for all query time steps.
             query_mask: Boolean mask selecting query (target) positions.
             context_times: Sorted time stamps for all context time steps.

@@ -105,7 +105,7 @@ def flatten_dict[K, K2](
             Defaults to ``str.split('.')``, implicitly assuming that all keys are strings.
 
     Example: flattening with string keys.
-        When ``join_fn`` and ``split_fn`` are not provided, they default to
+        When `join_fn` and `split_fn` are not provided, they default to
         ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``,
         implicitly assuming that all keys are strings.
         This will combine string keys like ``"a"`` and ``"b"`` into ``"a.b"``.
@@ -131,7 +131,7 @@ def flatten_dict[K, K2](
         ... )
         {('a', 'b', 'x'): 2, ('a', 'c'): 2}
 
-    Example: partial flattening with ``recursive``.
+    Example: partial flattening with `recursive`.
         >>> flatten_dict({"a": {"i": {"x": 0}, "b": {"y": 1}}})
         {'a.i.x': 0, 'a.b.y': 1}
 
@@ -194,7 +194,7 @@ def unflatten_dict[K, K2](
     r"""Unflatten dictionaries recursively.
 
     Example: Unflattening with string keys.
-        When ``join_fn`` and ``split_fn`` are not provided, they default to
+        When `join_fn` and `split_fn` are not provided, they default to
         ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``,
         implicitly assuming that all keys are strings.
         This will split up keys like ``"a.b"`` into ``{"a": {"b": ...}}``.
@@ -211,7 +211,7 @@ def unflatten_dict[K, K2](
         ... )
         {'a': {17: 'foo', 18: 'bar'}}
 
-    Example: partial unflattening with ``recursive``.
+    Example: partial unflattening with `recursive`.
         >>> unflatten_dict({"a.b.c.d": 0, "a.x.y.z": 1})
         {'a': {'b': {'c': {'d': 0}}, 'x': {'y': {'z': 1}}}}
 

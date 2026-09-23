@@ -268,7 +268,7 @@ class FnType:
 
     - tensor shapes represented as literal tuples of dimensions
     - tensor types represented as generic types
-    - python types like ``int``, ``float``, ``str``, etc.
+    - python types like `int`, `float`, `str`, etc.
 
     Note: A single tensor is represented by a tuple with elements
         - integers for fixed-size dimensions
@@ -352,7 +352,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
         source: Signature string to tokenize.
 
     Yields:
-        Token: A stream of ``Token`` objects (pos, kind, value) for each lexical token.
+        Token: A stream of `Token` objects (pos, kind, value) for each lexical token.
                The final token yielded is always an EOF token.
 
     Raises:
@@ -418,7 +418,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
 
 
 def _has_wrapping_braces(source: str, /) -> bool:
-    r"""Return whether ``source`` is enclosed by a single top-level ``{...}`` pair."""
+    r"""Return whether `source` is enclosed by a single top-level ``{...}`` pair."""
     stripped = source.strip()
     if len(stripped) < 2 or stripped[0] != "{" or stripped[-1] != "}":
         return False

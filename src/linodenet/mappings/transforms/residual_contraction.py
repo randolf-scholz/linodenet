@@ -122,8 +122,8 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
 
     Standard gate options are:
 
-    - ``"rezero"``: use a learnable scalar gate with optional ``scalar_map``.
-    - ``"identity"`` or ``None``: use no additional gating.
+    - ``"rezero"``: use a learnable scalar gate with optional `scalar_map`.
+    - ``"identity"`` or `None`: use no additional gating.
     - ``nn.Module``: use a custom user-provided gate.
 
     The jacobian determinant of the forward transformation is:

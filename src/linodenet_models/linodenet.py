@@ -74,7 +74,7 @@ class LinearFlow(nn.Module):
     input_size: Final[int]
     r"""CONST: The dimensionality of inputs."""
     use_rezero: Final[bool]
-    r"""CONST: Whether the kernel is wrapped in ``ReZero``."""
+    r"""CONST: Whether the kernel is wrapped in `ReZero`."""
     use_bias: Final[bool]
     r"""CONST: Whether the flow has a learnable affine bias."""
 
@@ -494,7 +494,7 @@ def update_masked(
     args: tuple[Tensor, ...],
     batch_mask: Tensor,  # Bool[...]
 ) -> Tensor:  # (..., *e)
-    r"""Update ``target`` with ``fn`` applied to selected batch elements."""
+    r"""Update `target` with `fn` applied to selected batch elements."""
     return target.masked_scatter(
         batch_mask.reshape(*batch_mask.shape, *(1,) * (target.ndim - batch_mask.ndim)),
         fn(*(x[batch_mask] for x in args)),

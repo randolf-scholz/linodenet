@@ -90,7 +90,7 @@ def rank_one(x: Tensor, /) -> Tensor:
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ 1
 
-    This is the special case of ``low_rank`` with ``rank=1``.
+    This is the special case of `low_rank` with ``rank=1``.
     """
     return low_rank(x, rank=1)
 
@@ -259,7 +259,7 @@ def tridiagonal(x: Tensor, /) -> Tensor:
 
     .. math:: \min_Y ½‖X-Y‖²   s.t.   Y = T⊙Y
 
-    This is the special case of ``banded`` with ``lower=-1`` and ``upper=1``.
+    This is the special case of `banded` with ``lower=-1`` and ``upper=1``.
     """
     return banded(x, lower=-1, upper=1)
 

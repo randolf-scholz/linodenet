@@ -65,7 +65,7 @@ class DiscreteTimeNKF(nn.Module):
         zₜ &= H lₜ + ηₜ,        & ηₜ &∼ 𝓝(0, R) \\
         yₜ &= f(zₜ).
 
-    Here ``decoder`` is the invertible map $f:z↦y$ and is assumed to satisfy the
+    Here `decoder` is the invertible map $f:z↦y$ and is assumed to satisfy the
     :class:`linodenet.mappings.Transform` protocol. Filtering first pulls
     observations back to pseudo-observations $zₜ=f⁻¹(yₜ)$ as in Proposition 1.
     Likelihoods use the change-of-variables term from Eq. (2) / Proposition 3.

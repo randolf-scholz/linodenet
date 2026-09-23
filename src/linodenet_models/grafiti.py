@@ -148,9 +148,9 @@ def reconstruct_y(
 
     Args:
         y_at_edge: Flattened values with shape ``(..., max_edges)``.
-        edge_mask: Boolean mask selecting valid entries from ``y_flat``.
-        target_mask: Boolean mask with shape ``(..., time, dim)``. True entries mark
-            dense positions that should be filled.
+        edge_mask: Boolean mask selecting valid entries from `y_at_edge`.
+        target_mask: Boolean mask with shape ``(..., time, dim)``.
+            True entries mark dense positions that should be filled.
 
     Returns:
         Reconstructed tensor with shape ``(..., time, dim)``.

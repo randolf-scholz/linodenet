@@ -198,14 +198,14 @@ class EventBatch(NamedTuple):
     context_mask: Tensor  # Bool[..., $T, D], padded False
     context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
     context_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., $N, D)`` from ``context_mask``."""
+    r"""Advanced index tuple recovering ``(..., $N, D)`` from `context_mask`."""
 
     query_mask: Tensor  # Bool[..., $T, F], padded False
     query_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., $K, F)`` from ``query_mask``."""
+    r"""Advanced index tuple recovering ``(..., $K, F)`` from `query_mask`."""
 
     target_values: Tensor | None = None  # Float[..., $T, F], padded NaN, sparse
-    r"""Only available during training, otherwise None."""
+    r"""Only available during training, otherwise `None`."""
 
     static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
 
@@ -345,14 +345,14 @@ class DiscreteTimeEventBatch(NamedTuple):
     context_mask: Tensor  # Bool[..., $T, D], padded False
     context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
     context_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., K, D)`` from ``context_mask``."""
+    r"""Advanced index tuple recovering ``(..., K, D)`` from `context_mask`."""
 
     query_mask: Tensor  # Bool[..., $T, F], padded False
     query_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., K, F)`` from ``query_mask``."""
+    r"""Advanced index tuple recovering ``(..., K, F)`` from `query_mask`."""
 
     target_values: Tensor | None = None  # Float[..., $T, F], padded NaN, sparse
-    r"""Only available during training, otherwise None."""
+    r"""Only available during training, otherwise `None`."""
 
     static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
 

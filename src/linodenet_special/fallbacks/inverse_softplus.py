@@ -23,6 +23,6 @@ def inverse_softplus(x: Tensor, /) -> Tensor:
         x: Input tensor. The function is defined for $x ≥ 0$.
 
     Returns:
-        Tensor with the same shape as ``x``.
+        Tensor with the same shape as `x`.
     """
     return x + (-torch.expm1(-x)).log()

@@ -32,7 +32,7 @@ class ResNet(ModuleSequence[nn.Module]):
     latent_size: Final[int]
     r"""CONST: Hidden size used inside each residual block."""
     use_rezero: Final[bool]
-    r"""CONST: Whether to wrap blocks in ``ReZero``."""
+    r"""CONST: Whether to wrap blocks in `ReZero`."""
     use_batchnorm: Final[bool]
 
     def __init__(

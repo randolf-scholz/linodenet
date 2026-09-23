@@ -88,8 +88,8 @@ class InnovationCell(nn.Module, SparseVectorStateUpdate):
     - ``"rezero"``: use a learnable ReZero scalar $ρ(z)=αz$ with $α$ initialized
       to zero, so that the cell starts as the identity map.
     - ``"identity"``: use $ρ(z)=z$ with no additional scaling.
-    - ``None``: alias for ``"identity"``.
-    - ``nn.Module``: use a custom user-provided gate.
+    - `None`: alias for ``"identity"``.
+    - `nn.Module`: use a custom user-provided gate.
 
     The observation map must be an `nn.Module`. If it is omitted, this cell uses
     $h(x)=x$, which requires ``input_size == hidden_size``.
@@ -357,7 +357,7 @@ class KalmanCell(nn.Module, SparseVectorStateUpdate):
     obtained by pushing the columns of $L(x)$ through the JVP of $h$ at $x$.
     $ρ$ is an optional gate applied to the Kalman correction. Standard gate
     options are the same as for `LinearInnovationCell`: ``"rezero"``,
-    ``"identity"``, ``None``, or a custom `nn.Module`.
+    ``"identity"``, `None`, or a custom `nn.Module`.
 
     Notes:
         LMMSE stands for linear minimum mean squared error: the best affine

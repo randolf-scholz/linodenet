@@ -116,11 +116,11 @@ def _odeint_forward(
         vector_field: Callable ``f(t, y, *args)`` returning ``dy/dt``.
         y0: Initial state.
         t0: Scalar initial time.
-        t_eval: Sorted evaluation times greater than or equal to ``t0``.
+        t_eval: Sorted evaluation times greater than or equal to `t0`.
         step_size: Maximum fixed step size. A final remainder step lands exactly
             on each requested evaluation time.
         method: One of ``"euler"``, ``"midpoint"``, or ``"heun"``.
-        args: Extra tensor arguments passed to ``vector_field``.
+        args: Extra tensor arguments passed to `vector_field`.
 
     Returns:
         Tuple ``(solution, history, times, output_indices)``. ``solution`` has
@@ -257,12 +257,12 @@ def solve_ivp(
     method: ODESolverMethod = "euler",
     args: tuple[Tensor, ...] = (),
 ) -> Tensor:
-    r"""Integrate ``dy/dt = f(t, y, *args)`` from ``t0`` to ``t_eval``.
+    r"""Integrate ``dy/dt = f(t, y, *args)`` from `t0` to `t_eval`.
 
     Evaluation times are currently assumed to be sorted and greater than or
-    equal to ``t0``. This wrapper returns the state at each evaluation time and
-    uses a custom discrete adjoint for gradients with respect to ``y0`` and
-    tensor ``args``.
+    equal to `t0`. This wrapper returns the state at each evaluation time and
+    uses a custom discrete adjoint for gradients with respect to `y0` and
+    tensor `args`.
     """
     t0_t = torch.as_tensor(t0, device=y0.device, dtype=y0.dtype)
     t_eval_t = torch.as_tensor(t_eval, device=y0.device, dtype=y0.dtype)

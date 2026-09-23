@@ -637,7 +637,7 @@ class PosetEnum(Enum, metaclass=_PosetType):
     def _parse_known_subtype_meets(cls) -> tuple[tuple[Self, frozenset[Self]], ...]:
         r"""Parse declared meet-based subtype implications.
 
-        A declaration ``X: {A & B}`` in ``KNOWN_SUBTYPES`` denotes the implication
+        A declaration ``X: {A & B}`` in `KNOWN_SUBTYPES` denotes the implication
         $A ∧ B ≤ X$, i.e. every node below all meet factors is also below $X$.
         """
         _, subtype_meets = cls._parse_known_subtypes()

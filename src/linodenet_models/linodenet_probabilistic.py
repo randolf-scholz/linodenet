@@ -40,7 +40,7 @@ def update_masked[R: Tensor | tuple[Tensor, ...]](
     args: tuple[Tensor, ...],
     batch_mask: Tensor,  # Bool[...]
 ) -> R:  # (*(..., *eᵢ),)
-    r"""Update ``target`` with ``fn`` applied to selected batch elements."""
+    r"""Update `target` with `fn` applied to selected batch elements."""
     assert batch_mask.dtype == torch.bool
 
     ys = fn(*(x[batch_mask] for x in args))
@@ -962,7 +962,7 @@ class KoopmanFilter(nn.Module):
         The nonlinear decoder makes the predictive density intractable in
         general. This therefore returns a Monte Carlo estimate of a *lower
         bound* on ``log p(values | context)`` rather than an exact log-density.
-        ``num_samples`` controls the reparameterized expectation under the
+        `num_samples` controls the reparameterized expectation under the
         Gaussian iEKF posterior; it must not exceed ``max_num_samples``.
         """
         return self.log_prob_bound(

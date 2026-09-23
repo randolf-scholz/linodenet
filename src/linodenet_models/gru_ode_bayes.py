@@ -120,7 +120,7 @@ def update_masked(
     args: tuple[Tensor, ...],
     batch_mask: Tensor,  # Bool[...]
 ) -> Tensor:  # Float[..., *e]
-    r"""Update ``target`` with ``fn`` applied to selected batch elements."""
+    r"""Update `target` with `fn` applied to selected batch elements."""
     return target.masked_scatter(
         batch_mask.reshape(*batch_mask.shape, *(1,) * (target.ndim - batch_mask.ndim)),
         fn(*(x[batch_mask] for x in args)),
@@ -158,7 +158,7 @@ class TorchODESolver(nn.Module):
         self.step_size = step_size
 
     def step_method(self, term: to.ODETerm, /) -> nn.Module:
-        r"""Return the torchode step method for ``term``."""
+        r"""Return the torchode step method for `term`."""
         match self.method:
             case "euler":
                 return to.Euler(term)
@@ -177,7 +177,7 @@ class TorchODESolver(nn.Module):
         delta_time: Tensor,  # Float[...]
         state: Tensor,  # Float[..., H]
     ) -> Tensor:  # Float[..., H]
-        r"""Propagate ``state`` independently for exactly ``delta_time``."""
+        r"""Propagate `state` independently for exactly `delta_time`."""
         assert (delta_time >= 0).all(), "delta_time must be non-negative."
         assert delta_time.shape == state.shape[:-1]
         positive = delta_time > 0
@@ -231,7 +231,7 @@ class ODE_Flow(nn.Module):
         state: Tensor,  # Float[..., H]
         /,
     ) -> Tensor:  # Float[..., H]
-        r"""Propagate ``state`` for ``delta_time``."""
+        r"""Propagate `state` for `delta_time`."""
         return self.solver(self.vector_field, delta_time, state)
 
     def step(
@@ -240,7 +240,7 @@ class ODE_Flow(nn.Module):
         state: Tensor,  # Float[..., H]
         /,
     ) -> Tensor:  # Float[..., H]
-        r"""Propagate ``state`` for a single time delta."""
+        r"""Propagate `state` for a single time delta."""
         return self.forward(delta_time, state)
 
 
@@ -263,7 +263,7 @@ class GRU_ODE(nn.Module):
 
     # (..., ), (..., H) -> (..., H)
     def forward(self, _time: Tensor, state: Tensor, /) -> Tensor:
-        r"""Return the ODE derivative for ``state``."""
+        r"""Return the ODE derivative for `state`."""
         reset = torch.sigmoid(self.lin_hr(state))
         update = torch.sigmoid(self.lin_hz(state))
         candidate = torch.tanh(self.lin_hh(reset * state))
@@ -681,7 +681,7 @@ class GRU_ODE_Bayes(nn.Module):
         r"""Filter and forecast over combined context/query time points.
 
         Context and query masks explicitly select valid feature-level entries.
-        Context values outside ``context_mask`` are ignored.
+        Context values outside `context_mask` are ignored.
         """
         # sanitize values
         context_values = context_values.masked_fill(~context_mask, nan)

@@ -29,7 +29,7 @@ class BottleneckFlow(TransformSequence[ResidualBottleneck]):
     hidden_size: Final[int]
     r"""CONST: Bottleneck dimensionality used inside each block."""
     use_rezero: Final[bool]
-    r"""CONST: Whether to wrap blocks in ``ReZero`` gating."""
+    r"""CONST: Whether to wrap blocks in `ReZero` gating."""
 
     def __init__(
         self,

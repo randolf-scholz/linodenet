@@ -468,7 +468,7 @@ class ProFITi(nn.Module):
 
         .. math:: \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ)))
 
-        The leading ``*S`` dims of ``values`` beyond the batch shape are treated
+        The leading ``*S`` dims of `values` beyond the batch shape are treated
         as sample dims; all samples must share the same query mask (e.g. samples
         drawn by :meth:`sample_and_log_prob`).
         """

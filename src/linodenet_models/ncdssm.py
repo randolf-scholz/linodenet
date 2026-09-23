@@ -413,13 +413,13 @@ class NCDSSM(nn.Module):
             context_values: Sparse context values at combined event times.
             context_mask: Feature-level mask selecting observed context values.
             initial_state: Optional initial latent Gaussian moments $(μ₀, Σ₀)$.
-            initial_time: Optional time associated with ``initial_state``.
+            initial_time: Optional time associated with `initial_state`.
 
         Returns:
             predicted_means: Output means for the combined event sequence. Values
-                outside ``query_mask`` are NaN.
+                outside `query_mask` are ``NaN``.
             predicted_stdvs: Output standard deviations for the combined event sequence.
-                Values outside ``query_mask`` are NaN.
+                Values outside `query_mask` are ``NaN``.
         """
         has_context = context_mask.any(dim=-1)  # (..., T)
         has_query = query_mask.any(dim=-1)  # (..., T)
@@ -544,7 +544,7 @@ class NCDSSM(nn.Module):
         context_values: Tensor,  # Float[..., N, D], padded NaN, sparse
         context_mask: Tensor,  # Bool[..., N, D], padded False
     ) -> Tensor:  # Float[*S, ..., K]
-        r"""Compute time-marginal predictive log-likelihoods of ``samples``."""
+        r"""Compute time-marginal predictive log-likelihoods of `samples`."""
         mean, stdv = self.predict(
             query_times=query_times,
             query_mask=query_mask,
