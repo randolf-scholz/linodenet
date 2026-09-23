@@ -43,3 +43,6 @@
 [submodule "third_party/survae_flows"]
 	path = third_party/survae_flows
 	url = git@github.com:didriknielsen/survae_flows.git
+[submodule "third_party/t-PatchGNN"]
+	path = third_party/t-PatchGNN
+	url = https://github.com/usail-hkust/t-PatchGNN.git
