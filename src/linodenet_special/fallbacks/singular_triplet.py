@@ -49,9 +49,9 @@ class _SingularTripletImpl(torch.autograd.Function):
         if g_sigma is None:
             g_sigma = torch.zeros((), dtype=A.dtype, device=A.device)
         if g_u is None:
-            g_u = torch.zeros_like(u)
+            g_u = zero_u
         if g_v is None:
-            g_v = torch.zeros_like(v)
+            g_v = zero_v
 
         g_sigma_out = g_sigma * torch.outer(u, v)
 

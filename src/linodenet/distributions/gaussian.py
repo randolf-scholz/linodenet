@@ -305,7 +305,7 @@ def _solve_w_closed_form(
     # acos'(±1) = ∓∞ and `where` backprops through the dead arm: neutralize the argument
     # wherever the cosine sits on its endpoint, and take the series there instead.
     degenerate = (κ < eps**0.5) | (raw >= 1.0)
-    cos_θ = torch.where(degenerate, torch.zeros_like(raw), raw).clamp(-1.0, 1.0)
+    cos_θ = torch.where(degenerate, 0.0, raw).clamp(-1.0, 1.0)
     v_exact = 2.0 * m * torch.cos(torch.acos(cos_θ) / 3.0) + 1.0 / 3.0
 
     v = torch.where(degenerate, v_series, v_exact)

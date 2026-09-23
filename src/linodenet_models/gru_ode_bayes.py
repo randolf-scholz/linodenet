@@ -51,12 +51,12 @@ def _marginal_logvar_gaussian_log_prob(
     assert mask.shape == values.shape
     assert mask.dtype == torch.bool
 
-    centered = torch.where(mask, values - mean, torch.zeros_like(values))
-    safe_logvar = torch.where(mask, logvar, torch.zeros_like(logvar))
+    centered = torch.where(mask, values - mean, 0.0)
+    safe_logvar = torch.where(mask, logvar, 0.0)
     log_prob = -0.5 * (
         centered.square() * torch.exp(-safe_logvar) + safe_logvar + _LOG2PI
     )
-    return torch.where(mask, log_prob, torch.zeros_like(log_prob)).sum(dim=-1)
+    return torch.where(mask, log_prob, 0.0).sum(dim=-1)
 
 
 def _marginal_logvar_gaussian_sample(
@@ -73,8 +73,8 @@ def _marginal_logvar_gaussian_sample(
     assert mask.dtype == torch.bool
 
     sample_shape = (size,) if isinstance(size, int) else size
-    safe_mean = torch.where(mask, mean, torch.zeros_like(mean))
-    safe_logvar = torch.where(mask, logvar, torch.zeros_like(logvar))
+    safe_mean = torch.where(mask, mean, 0.0)
+    safe_logvar = torch.where(mask, logvar, 0.0)
     noise = torch.randn(
         (*sample_shape, *mean.shape),
         dtype=mean.dtype,
@@ -724,7 +724,7 @@ class GRU_ODE_Bayes(nn.Module):
             strict=True,
         ):
             # propagate to the next time step
-            delta = torch.where(active, t_obs - t, torch.zeros_like(t_obs - t))
+            delta = torch.where(active, t_obs - t, 0.0)
             t = torch.where(active, t_obs, t)
             prior_state = update_masked(
                 post_state,

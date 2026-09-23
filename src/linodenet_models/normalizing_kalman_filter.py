@@ -37,7 +37,7 @@ def _reduce_logabsdet(logabsdet: Tensor, mask: Tensor) -> Tensor:
     the caveat discussed in Sec. 3, "Partial observations", of the NKF paper.
     """
     if logabsdet.shape == mask.shape:
-        return torch.where(mask, logabsdet, torch.zeros_like(logabsdet)).sum(dim=-1)
+        return torch.where(mask, logabsdet, 0.0).sum(dim=-1)
 
     if logabsdet.shape == mask.shape[:-1]:
         partial = mask.any(dim=-1) & ~mask.all(dim=-1)
@@ -47,7 +47,7 @@ def _reduce_logabsdet(logabsdet: Tensor, mask: Tensor) -> Tensor:
                 "closed-form marginalization over missing flow dimensions. Use "
                 "a coordinate-wise decoder for sparse feature masks.",
             )
-        return torch.where(mask.any(dim=-1), logabsdet, torch.zeros_like(logabsdet))
+        return torch.where(mask.any(dim=-1), logabsdet, 0.0)
 
     raise ValueError(
         f"Expected logabsdet shape {mask.shape} or {mask.shape[:-1]}, "

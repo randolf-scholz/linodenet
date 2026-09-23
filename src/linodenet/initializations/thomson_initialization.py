@@ -95,7 +95,7 @@ def _random_orthogonal_matrix(
     A = torch.randn(dim, dim, dtype=dtype, device=device)
     Q, R = torch.linalg.qr(A)
     d = torch.diagonal(R)
-    signs = torch.where(d == 0, torch.ones_like(d), d.sign())
+    signs = torch.where(d == 0, 1.0, d.sign())
     return Q * signs.unsqueeze(0)
 
 

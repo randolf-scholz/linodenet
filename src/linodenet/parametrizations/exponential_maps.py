@@ -214,7 +214,7 @@ class SphereManifold(ManifoldBase):
         sine = vector_norm(tangent, dim=-1, keepdim=True)
         cosine = vecdot(x, y, dim=-1).clamp(-1, 1).unsqueeze(-1)
         theta = torch.atan2(sine, cosine)
-        scale = torch.where(sine > eps, theta / sine, torch.zeros_like(theta))
+        scale = torch.where(sine > eps, theta / sine, 0.0)
         return scale * tangent
 
 

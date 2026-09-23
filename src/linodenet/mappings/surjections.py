@@ -232,8 +232,7 @@ class OrthogonalHouseholder(nn.Module, Surjection):
         tau = 2.0 / (1.0 + vecdot(a, a, dim=-2))  # (...n)
         q = torch.linalg.householder_product(a, tau)
         diagonal = x.diagonal(dim1=-2, dim2=-1).detach()
-        ones = torch.ones_like(diagonal)
-        signs = torch.where(diagonal < 0, -ones, ones)
+        signs = torch.where(diagonal < 0, -1.0, 1.0)
         return q * signs.unsqueeze(-2)
 
     def _right_inverse_columns(self, y: Tensor, /) -> Tensor:

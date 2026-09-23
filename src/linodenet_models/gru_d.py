@@ -198,9 +198,7 @@ class GRU_D(nn.Module):
             valid_steps,
             strict=True,
         ):
-            inc = torch.where(active, t_obs - t, torch.zeros_like(t_obs)).unsqueeze(
-                -1
-            )  # (..., 1)
+            inc = torch.where(active, t_obs - t, 0.0).unsqueeze(-1)  # (..., 1)
             t = torch.where(active, t_obs, t)  # (...)
 
             # per-feature delta: reset if observed, accumulate if not; unchanged if inactive

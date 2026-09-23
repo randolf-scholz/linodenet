@@ -115,11 +115,7 @@ class MarchenkoPastur(DistributionBase):
 
     @property
     def point_mass(self) -> Tensor:
-        return torch.where(
-            self.gamma > 1,
-            1 - (1 / self.gamma),
-            torch.zeros_like(self.gamma),
-        )
+        return torch.where(self.gamma > 1, 1 - (1 / self.gamma), 0.0)
 
     def log_prob(self, value: Tensor) -> Tensor:
         r"""Compute the log probability density function of the Marchenko-Pastur distribution.
@@ -163,19 +159,18 @@ class MarchenkoPastur(DistributionBase):
             + math.pi * (c - m)
         ) / (2 * math.pi * self.sigma2 * self.gamma)
 
-        jump = torch.where(x >= 0, self.point_mass, torch.zeros_like(x))
+        jump = torch.where(x >= 0, self.point_mass, 0.0)
         return torch.where(
             x <= a,
             jump,
-            torch.where(x >= b, torch.ones_like(x), value + jump),
+            torch.where(x >= b, 1.0, value + jump),
         )
 
     def icdf(self, value: Tensor) -> Tensor:
         point_mass = torch.broadcast_to(self.point_mass, value.shape)
-        zeros = torch.zeros_like(value)
         target = torch.clamp(value, min=0.0, max=1.0)
         inv = _icdf_bisect(self, target)
-        return torch.where(target <= point_mass, zeros, inv)
+        return torch.where(target <= point_mass, 0.0, inv)
 
     def sample(
         self, sample_shape: int | Size = (), rng: Generator | None = None

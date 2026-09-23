@@ -271,15 +271,13 @@ class ELU(nn.Module, Transform):
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         y = self.forward(x)
-        zeros = torch.zeros_like(x)
         log_alpha = math.log(self.alpha)
-        logabsdet = torch.where(x > 0, zeros, x + log_alpha)
+        logabsdet = torch.where(x > 0, 0.0, x + log_alpha)
         return y, logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         x = self.inverse(y)
-        zeros = torch.zeros_like(y)
-        logabsdet = torch.where(y > 0, zeros, -(y + self.alpha).log())
+        logabsdet = torch.where(y > 0, 0.0, -(y + self.alpha).log())
         return x, logabsdet
 
 
@@ -301,6 +299,7 @@ class CELU(nn.Module, Transform):
         if alpha <= 0:
             raise ValueError("alpha must be a positive float.")
         self.alpha = alpha
+        self.log_alpha = math.log(alpha)
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -312,17 +311,12 @@ class CELU(nn.Module, Transform):
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         y = self.forward(x)
-        zeros = torch.zeros_like(x)
-        logabsdet = torch.where(x > 0, zeros, x / self.alpha)
+        logabsdet = torch.where(x > 0, 0.0, x / self.alpha)
         return y, logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         x = self.inverse(y)
-        logabsdet = torch.where(
-            y > 0,
-            torch.zeros_like(y),
-            math.log(self.alpha) - (y + self.alpha).log(),
-        )
+        logabsdet = torch.where(y > 0, 0.0, self.log_alpha - (y + self.alpha).log())
         return x, logabsdet
 
 
@@ -342,16 +336,12 @@ class EntLU(nn.Module, Transform):
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         # one_m_x avoids NaN production in entr, helps with gradients.
-        one_m_x = torch.where(x > 0, torch.zeros_like(x), 1 - x)
+        one_m_x = torch.where(x > 0, 0.0, 1 - x)
         return torch.where(x > 0, x + 1, torch.exp(torch.special.entr(one_m_x)))
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         y = self.forward(x)
-        logabsdet = torch.where(
-            x > 0,
-            torch.zeros_like(x),
-            y.log() + torch.log1p(torch.log1p(-x)),
-        )
+        logabsdet = torch.where(x > 0, 0.0, y.log() + torch.log1p(torch.log1p(-x)))
         return y, logabsdet
 
     @signature("(...) -> (...)")

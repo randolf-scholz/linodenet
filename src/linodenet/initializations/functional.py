@@ -170,7 +170,7 @@ def orthogonal(
     Q, R = torch.linalg.qr(A)
     d = torch.diagonal(R, dim1=-2, dim2=-1)
     # Flip the columns of Q so diag(R) is positive, matching SciPy's construction.
-    signs = torch.where(d == 0, torch.ones_like(d), d.sign())
+    signs = torch.where(d == 0, 1.0, d.sign())
     return Q * signs.unsqueeze(-2)
 
 

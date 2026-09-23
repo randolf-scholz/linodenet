@@ -444,7 +444,7 @@ class LinodenetProbabilistic(nn.Module):
         assert torch.equal(mask.any(dim=-1), mask.all(dim=-1)), (
             "LinodenetProbabilistic requires all query features present or none."
         )
-        safe_values = torch.where(mask, values, torch.zeros_like(values))
+        safe_values = torch.where(mask, values, 0.0)
         z, ldj = self.decoder.encode_and_logabsdet(safe_values)
         base_log_prob = marginal_gaussian_log_prob(
             z,
@@ -746,7 +746,7 @@ class KoopmanFilter(nn.Module):
     ) -> Tensor:
         r"""Evaluate diagonal Normal observation densities with arbitrary masks."""
         variance = self.observation_covariance.diagonal(dim1=-2, dim2=-1)
-        residual = torch.where(mask, values - means, torch.zeros_like(means))
+        residual = torch.where(mask, values - means, 0.0)
         log_prob = -0.5 * (
             residual.square() / variance
             + variance.log()
@@ -754,7 +754,7 @@ class KoopmanFilter(nn.Module):
                 torch.tensor(2.0 * torch.pi, dtype=values.dtype, device=values.device)
             )
         )
-        return torch.where(mask, log_prob, torch.zeros_like(log_prob)).sum(dim=-1)
+        return torch.where(mask, log_prob, 0.0).sum(dim=-1)
 
     def update_iekf(
         self,
@@ -1029,7 +1029,7 @@ class KoopmanFilter(nn.Module):
             mask.unsqueeze(0),
         ).mean(dim=0)
         bound = log_likelihood - self._kl_gaussian(posterior, (mean_prior, cov_prior))
-        return torch.where(mask.any(dim=-1), bound, torch.zeros_like(bound))
+        return torch.where(mask.any(dim=-1), bound, 0.0)
 
     def sample(
         self,

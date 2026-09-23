@@ -60,7 +60,7 @@ def _as_covariance(covariance: ArrayLike | float, size: int) -> Tensor:
 def _masked_covariance(covariance: Tensor, mask: Tensor) -> Tensor:
     r"""Restrict a dense covariance to the masked subspace."""
     active = mask.unsqueeze(-1) & mask.unsqueeze(-2)
-    covariance = torch.where(active, covariance, torch.zeros_like(covariance))
+    covariance = torch.where(active, covariance, 0.0)
     covariance = covariance + (~mask).to(covariance.dtype).diag_embed()
     return (covariance + covariance.mT) / 2
 
@@ -91,7 +91,7 @@ def marginal_gaussian_log_prob(
     assert mask.shape == values.shape
     assert mask.dtype == torch.bool
 
-    residual = torch.where(mask, values - mean, torch.zeros_like(values))
+    residual = torch.where(mask, values - mean, 0.0)
     covariance = _masked_covariance(cov, mask)
     scale_tril = torch.linalg.cholesky(covariance)
     alpha = torch.cholesky_solve(residual.unsqueeze(-1), scale_tril).squeeze(-1)
@@ -166,7 +166,7 @@ def marginal_gaussian_sample_and_log_prob(
         device=mean.device,
         generator=rng,
     )
-    samples = torch.where(mask, mean, torch.zeros_like(mean)).expand(
+    samples = torch.where(mask, mean, 0.0).expand(
         *sample_shape,
         *mean.shape,
     ) + (
@@ -177,7 +177,7 @@ def marginal_gaussian_sample_and_log_prob(
     residual = torch.where(
         mask.expand(*sample_shape, *mask.shape),
         samples - mean.expand(*sample_shape, *mean.shape),
-        torch.zeros_like(samples),
+        0.0,
     )
     alpha = torch.cholesky_solve(
         residual.unsqueeze(-1),
@@ -555,7 +555,7 @@ class ContinuousTimeKalmanFilter(nn.Module):
             strict=True,
         ):
             # Within the loop we use batch-first.
-            delta = torch.where(active, t_obs - t, torch.zeros_like(t_obs - t))
+            delta = torch.where(active, t_obs - t, 0.0)
             t = torch.where(active, t_obs, t)
 
             # propagate forward in time
@@ -759,7 +759,7 @@ class ContinuousTimeKalmanFilter(nn.Module):
         )
 
         # Innovation residual: ignore unobserved coordinates.
-        r = torch.where(mask, y_obs - y_pred, torch.zeros_like(y_pred))
+        r = torch.where(mask, y_obs - y_pred, 0.0)
 
         # Kalman gain computation.
         K = self._compute_kalman_gain(P, H, R)  # (*B, n, m)
@@ -1140,7 +1140,7 @@ class DiscreteTimeKalmanFilter(nn.Module):
             steps, context_values, context_mask, valid_steps, strict=True
         ):
             # Within the loop we use batch-first.
-            delta = torch.where(active, step_obs - step, torch.zeros_like(step_obs))
+            delta = torch.where(active, step_obs - step, 0.0)
             step = torch.where(active, step_obs, step)
 
             # Propagate forward in discrete time.
@@ -1371,7 +1371,7 @@ class DiscreteTimeKalmanFilter(nn.Module):
         R_masked = M.unsqueeze(-1) * M.unsqueeze(-2) * R + missing.diag_embed()
 
         # Innovation residual: ignore unobserved coordinates.
-        r = torch.where(mask, y_obs - y_pred, torch.zeros_like(y_pred))
+        r = torch.where(mask, y_obs - y_pred, 0.0)
 
         # Kalman gain computation.
         K = self._compute_kalman_gain(P, H_masked, R_masked)  # (*B, n, m)

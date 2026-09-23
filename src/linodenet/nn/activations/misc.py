@@ -7,7 +7,7 @@ from torch import Tensor, nn
 
 
 def entlu(x: Tensor) -> Tensor:
-    one_m_x = torch.where(x > 0, torch.zeros_like(x), 1 - x)
+    one_m_x = torch.where(x > 0, 0.0, 1 - x)
     return torch.where(x > 0, x + 1, torch.exp(torch.special.entr(one_m_x)))
 
 

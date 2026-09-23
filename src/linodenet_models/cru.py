@@ -327,10 +327,10 @@ def _marginal_var_gaussian_log_prob(
     assert mask.shape == values.shape
     assert mask.dtype == torch.bool
 
-    centered = torch.where(mask, values - mean, torch.zeros_like(values))
-    safe_var = torch.where(mask, var, torch.ones_like(var))
+    centered = torch.where(mask, values - mean, 0.0)
+    safe_var = torch.where(mask, var, 1.0)
     log_prob = -0.5 * (centered.square() / safe_var + torch.log(safe_var) + _LOG2PI)
-    return torch.where(mask, log_prob, torch.zeros_like(log_prob)).sum(dim=-1)
+    return torch.where(mask, log_prob, 0.0).sum(dim=-1)
 
 
 def _marginal_var_gaussian_sample(
@@ -347,8 +347,8 @@ def _marginal_var_gaussian_sample(
     assert mask.dtype == torch.bool
 
     sample_shape = (size,) if isinstance(size, int) else size
-    safe_mean = torch.where(mask, mean, torch.zeros_like(mean))
-    safe_std = torch.where(mask, var.sqrt(), torch.zeros_like(var))
+    safe_mean = torch.where(mask, mean, 0.0)
+    safe_std = torch.where(mask, var.sqrt(), 0.0)
     noise = torch.randn(
         (*sample_shape, *mean.shape),
         dtype=mean.dtype,
@@ -697,7 +697,7 @@ class CRU(nn.Module):
             valid_steps,
             strict=True,
         ):
-            delta = torch.where(active, t_obs - t, torch.zeros_like(t_obs))
+            delta = torch.where(active, t_obs - t, 0.0)
             t = torch.where(active, t_obs, t)
 
             # Propagate only for active batch elements; restore old state for inactive.
@@ -880,10 +880,9 @@ class CRU(nn.Module):
 
         # compute van Loan matrix exponential
         n = posterior_mean.shape[-1]
-        zero = torch.zeros_like(A)
         M = torch.cat([
             torch.cat([A, Q], dim=-1),
-            torch.cat([zero, -A.mT], dim=-1),
+            torch.cat([torch.zeros_like(A), -A.mT], dim=-1),
         ], dim=-2)  # fmt: skip
         # eᴹᵗ = [[F, C], [0, -Fᵀ]]
         exp_Mt = torch.linalg.matrix_exp(M * delta_time[..., None, None])
