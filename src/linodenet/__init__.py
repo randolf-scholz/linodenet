@@ -8,10 +8,11 @@ __all__ = [
     "distributions",
     "embeddings",
     "forecasting",
+    "imputation",
     "initializations",
     "mappings",
+    "models",
     "nn",
-    "imputation",
     "parametrizations",
     "projections",
     "registry",
@@ -31,6 +32,7 @@ __all__ = [
 ]
 
 
+import linodenet_models as models
 import linodenet_special as special
 import signatures
 
