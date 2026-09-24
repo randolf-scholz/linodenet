@@ -1,0 +1,16 @@
+r"""Tests for `imtskit.testing.module_tests`."""
+
+from torch import Tensor
+
+from imtskit.testing.module_tests import assert_forward_stable
+
+
+def test_forward_stability() -> None:
+    def identity(x: Tensor) -> Tensor:
+        return x
+
+    assert_forward_stable(
+        identity,
+        input_shapes=[(10, 10)],
+        num_runs=100,
+    )

@@ -15,13 +15,13 @@ mode = "redirect"
 rebuild = false
 
 [tool.scikit-build.cmake]
-source-dir = "src/linodenet_special"
+source-dir = "src/imtskit_special"
 build-type = "Release"
-define = { LINODENET_SPECIAL_ENABLE_CLANG_TIDY = true }
+define = { IMTSKIT_SPECIAL_ENABLE_CLANG_TIDY = true }
 
 [[tool.scikit-build.overrides]]
 if.from-sdist = true
-cmake.define.LINODENET_SPECIAL_ENABLE_CLANG_TIDY = false
+cmake.define.IMTSKIT_SPECIAL_ENABLE_CLANG_TIDY = false
 
 [tool.scikit-build.sdist]
 inclusion-mode = "explicit"
@@ -36,32 +36,32 @@ exclude = ["**/_*/", "**/.*/"]
 [tool.scikit-build.wheel]
 packages = [
     "src/blueprint",
-    "src/linodenet",
-    "src/linodenet_models",
-    "src/linodenet_special",
+    "src/imtskit",
+    "src/imtskit_models",
+    "src/imtskit_special",
     "src/signatures",
 ]
 
 [tool.uv]
-no-build-isolation = true
+no-build-isolation-package = ["imtskit"]
 required-environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
 ]
 
 # region project configuration ---------------------------------------------------------
 [project]
-name = "linodenet"
-version = "0.5.1"
+name = "imtskit"
+version = "0.5.2"
 description = "Linear ODE Network for Time-Series Forecasting"
 readme = "README.md"
 license-files = ["LICENSE"]
 authors = [{ name = "Randolf Scholz", email = "randolf.scholz@gmail.com" }]
-urls = { repository = "https://github.com/randolf-scholz/linodenet.git" }
+urls = { repository = "https://github.com/randolf-scholz/imtskit.git" }
 import-names = [
     "blueprint",
-    "linodenet",
-    "linodenet_models",
-    "linodenet_special",
+    "imtskit",
+    "imtskit_models",
+    "imtskit_special",
     "signatures",
 ]
 
@@ -121,19 +121,19 @@ docs = [
 ]
 linters = [
     "prek>=0.5.3",
-    "ruff>=0.16.7",
+    "ruff>=0.16.8",
     "tach>=0.35.1",
 ]
 misc = [
     "ipympl>=0.10.0",
     "ipywidgets>=8.1.9",
-    "jupyterlab>=4.6.3",
+    "jupyterlab>=4.6.4",
     "jupyterlab-execute-time>=3.3.0",
     "psutil>=7.2.2",
 ]
 tests = [
     "coverage>=7.16.1",
-    "hypothesis[numpy,pytest]>=6.168.0",
+    "hypothesis[numpy,pytest]>=6.168.1",
     "matplotlib>=3.11.2",
     "optuna>=5.0.0",
     "psutil>=7.2.2",
@@ -142,7 +142,7 @@ tests = [
     "pytest-benchmark[histogram]>=5.3.0",
     "pytest-cov>=7.1.0",
     "pytest-repeat>=0.9.4",
-    "pytest-rerunfailures>=16.6.1",
+    "pytest-rerunfailures>=16.7",
     "pytest-xdist>=3.8.0",
     "pyyaml>=6.0.3",
     "scipy>=1.18.1",
@@ -154,8 +154,8 @@ typing = [
     "mypy>=2.3.1",
     "pyrefly>=1.3.1",
     "pyright>=1.1.414",
-    "scipy-stubs>=1.18.1.0",
-    "ty>=0.0.81",
+    "scipy-stubs>=1.18.1.1",
+    "ty>=0.0.83",
     "types-colorama>=0.4.15.20260508",
     "types-defusedxml>=0.7.0.20260504",
     "types-jsonschema>=4.26.0.20260518",
@@ -604,7 +604,7 @@ addopts = [
     "--numprocesses=0", # number of parallel processes
     "--dist=loadfile", # distribute tests by scope (module or class)
     # coverage options
-    # "--cov=linodenet",
+    # "--cov=imtskit",
     # "--cov-report=term:skip-covered",
     # "--cov-report=xml:.reports/coverage.xml",
     # "--cov-report=annotate:.reports/coverage",

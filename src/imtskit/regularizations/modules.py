@@ -1,0 +1,607 @@
+r"""Regularizations for the Linear ODE Networks.
+
+Notes:
+    - See `imtskit.regularizations.functional` for functional implementations.
+    - See `imtskit.regularizations.modules` for module-based implementations.
+"""
+
+__all__ = [
+    # Regularizations
+    "Banded",
+    "Contraction",
+    "Diagonal",
+    "DiagonallyDominant",
+    "Hamiltonian",
+    "Identity",
+    "LogDetExp",
+    "LipschitzBounded",
+    "LowRank",
+    "LowerTriangular",
+    "Masked",
+    "MatrixNorm",
+    "Normal",
+    "Orthogonal",
+    "RankOne",
+    "SkewSymmetric",
+    "SpectralNormalized",
+    "Symmetric",
+    "Symplectic",
+    "Traceless",
+    "Tridiagonal",
+    "UpperTriangular",
+    "UnitVector",
+]
+
+from typing import Final
+
+import torch
+from torch import Tensor, nn
+
+from imtskit.types import BoolTensor
+from signatures import signature
+
+from . import functional as F
+from .functional import Regularization
+
+
+# region regularizations ---------------------------------------------------------------
+class LogDetExp(nn.Module, Regularization):
+    r"""Bias $\det(eᴬ)$ towards 1.
+
+    By Jacobi's formula
+
+    .. math:: \det(eᴬ) = e^{\tr(A)} ⟺ \log(\det(eᴬ)) = \tr(A)
+
+    In particular, we can regularize the LinODE model by adding a regularization term of the form
+
+    .. math:: \abs{\tr(A)}ᵖ
+    """
+
+    p: Final[float]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: float = 1.0, size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias $\det(eᴬ)$ towards 1."""
+        return F.log_det_exp(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class MatrixNorm(nn.Module, Regularization):
+    r"""Return the matrix regularization term."""
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards zero matrix."""
+        return F.matrix_norm(x, p=self.p, size_normalize=self.size_normalize)
+
+
+# region matrix groups -----------------------------------------------------------------
+class Identity(nn.Module, Regularization):
+    r"""Bias the matrix towards the identity matrix."""
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards the identity matrix."""
+        return F.identity(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class DiagonallyDominant(nn.Module, Regularization):
+    r"""Bias the matrix towards being diagonally dominant."""
+
+    p: Final[float]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: float = 2.0, size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards diagonal dominance."""
+        return F.diagonally_dominant(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class LowRank(nn.Module, Regularization):
+    r"""Bias the matrix towards being low-rank.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $rank(X) ≤ k$
+    """
+
+    rank: Final[int]
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(
+        self, rank: int, *, p: str | int = "fro", size_normalize: bool = True
+    ) -> None:
+        super().__init__()
+        self.rank = rank
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards low-rank matrix."""
+        return F.low_rank(
+            x, rank=self.rank, p=self.p, size_normalize=self.size_normalize
+        )
+
+
+class RankOne(nn.Module, Regularization):
+    r"""Bias the matrix towards being rank-1.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A)$ is the closest rank-1 matrix to $A$.
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards rank-1 matrix."""
+        return F.rank_one(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Symmetric(nn.Module, Regularization):
+    r"""Bias the matrix towards being symmetric.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ Π(A) = \argmin_X ½‖X-A‖² s.t. Xᵀ = +X
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards symmetric matrix."""
+        return F.symmetric(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class SkewSymmetric(nn.Module, Regularization):
+    r"""Bias the matrix towards being skew-symmetric.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ Π(A) = \argmin_X ½‖X-A‖² s.t. Xᵀ = -X
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards skew-symmetric matrix."""
+        return F.skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Orthogonal(nn.Module, Regularization):
+    r"""Bias the matrix towards being orthogonal.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $XᵀX = 𝕀$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards orthogonal matrix."""
+        return F.orthogonal(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Traceless(nn.Module, Regularization):
+    r"""Bias the matrix towards being traceless."""
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards normal matrix."""
+        return F.traceless(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Normal(nn.Module, Regularization):
+    r"""Bias the matrix towards being orthogonal.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $XᵀX = 𝕀$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards normal matrix."""
+        return F.normal(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Symplectic(nn.Module, Regularization):
+    r"""Bias the matrix towards being symplectic.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $JᵀXJ = X$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., 2n, 2n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards normal matrix."""
+        return F.symplectic(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Hamiltonian(nn.Module, Regularization):
+    r"""Bias the matrix towards being hamiltonian.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $(JX)ᵀ = JX$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., 2n, 2n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards normal matrix."""
+        return F.hamiltonian(x, p=self.p, size_normalize=self.size_normalize)
+
+
+# endregion matrix groups --------------------------------------------------------------
+
+
+# region masked projections ------------------------------------------------------------
+class Diagonal(nn.Module, Regularization):
+    r"""Bias the matrix towards being diagonal.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $𝕀⊙X = X$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards diagonal matrix."""
+        return F.diagonal(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class LowerTriangular(nn.Module, Regularization):
+    r"""Bias the matrix towards being lower triangular.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $L⊙X = X$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+    lower: Final[int]
+
+    def __init__(
+        self, lower: int = 0, *, p: str | int = "fro", size_normalize: bool = True
+    ) -> None:
+        super().__init__()
+        self.lower = lower
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards lower triangular matrix."""
+        return F.lower_triangular(
+            x, lower=self.lower, p=self.p, size_normalize=self.size_normalize
+        )
+
+
+class UpperTriangular(nn.Module, Regularization):
+    r"""Bias the matrix towards being upper triangular.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $U⊙X = X$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+    upper: Final[int]
+
+    def __init__(
+        self, upper: int = 0, *, p: str | int = "fro", size_normalize: bool = True
+    ) -> None:
+        super().__init__()
+        self.upper = upper
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards upper triangular matrix."""
+        return F.upper_triangular(
+            x, upper=self.upper, p=self.p, size_normalize=self.size_normalize
+        )
+
+
+class Banded(nn.Module, Regularization):
+    r"""Bias the matrix towards being banded.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $B⊙X = X$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+    upper: Final[int]
+    lower: Final[int]
+
+    def __init__(
+        self,
+        lower: int,
+        upper: int,
+        *,
+        p: str | int = "fro",
+        size_normalize: bool = True,
+    ) -> None:
+        super().__init__()
+        self.lower = lower
+        self.upper = upper
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards banded matrix."""
+        return F.banded(
+            x,
+            lower=self.lower,
+            upper=self.upper,
+            p=self.p,
+            size_normalize=self.size_normalize,
+        )
+
+
+class Tridiagonal(nn.Module, Regularization):
+    r"""Bias the matrix towards being tridiagonal.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A)$ is the closest tridiagonal matrix to $A$.
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards tridiagonal matrix."""
+        return F.tridiagonal(x, p=self.p, size_normalize=self.size_normalize)
+
+
+class Masked(nn.Module, Regularization):
+    r"""Bias the matrix towards being masked.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $M⊙X = X$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+    mask: BoolTensor
+
+    def __init__(
+        self,
+        mask: BoolTensor,
+        *,
+        p: str | int = "fro",
+        size_normalize: bool = True,
+    ) -> None:
+        super().__init__()
+        self.mask = torch.as_tensor(mask, dtype=torch.bool)
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards masked matrix."""
+        return F.masked(x, mask=self.mask, p=self.p, size_normalize=self.size_normalize)
+
+
+# endregion masked projections ---------------------------------------------------------
+
+
+# region other regularizations ---------------------------------------------------------
+class Contraction(nn.Module, Regularization):
+    r"""Bias the matrix towards being a contraction.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤1$
+    """
+
+    lipschitz_bound: Final[float]
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(
+        self,
+        lipschitz_bound: float,
+        *,
+        p: str | int = "fro",
+        size_normalize: bool = True,
+    ) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+        self.lipschitz_bound = lipschitz_bound
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards contraction."""
+        return F.contraction(
+            x, self.lipschitz_bound, p=self.p, size_normalize=self.size_normalize
+        )
+
+
+class LipschitzBounded(nn.Module, Regularization):
+    r"""Bias the matrix towards having spectral norm at most γ.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤γ$
+    """
+
+    lipschitz_bound: Final[float]
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(
+        self,
+        lipschitz_bound: float,
+        *,
+        p: str | int = "fro",
+        size_normalize: bool = True,
+    ) -> None:
+        super().__init__()
+        self.lipschitz_bound = lipschitz_bound
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards a Lipschitz-bounded matrix."""
+        return F.lipschitz_bounded(
+            x,
+            self.lipschitz_bound,
+            p=self.p,
+            size_normalize=self.size_normalize,
+        )
+
+
+class SpectralNormalized(nn.Module, Regularization):
+    r"""Bias the matrix towards having unit spectral norm.
+
+    .. math:: A ↦ ‖A-Π(A)‖ₚ
+
+    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂=1$
+    """
+
+    p: Final[str | int]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: str | int = "fro", size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., m, n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards a spectrally normalized matrix."""
+        return F.spectral_normalized(x, p=self.p, size_normalize=self.size_normalize)
+
+
+# endregion other regularizations ------------------------------------------------------
+# region vector groups -----------------------------------------------------------------
+class UnitVector(nn.Module, Regularization):
+    r"""Bias the vector towards having unit norm."""
+
+    p: Final[float]
+    size_normalize: Final[bool]
+
+    def __init__(self, *, p: float = 2.0, size_normalize: bool = True) -> None:
+        super().__init__()
+        self.p = p
+        self.size_normalize = size_normalize
+
+    @signature("(..., n) -> (...)")
+    def forward(self, x: Tensor, /) -> Tensor:
+        r"""Bias x towards a unit vector."""
+        return F.unit_vector(x, p=self.p, size_normalize=self.size_normalize)
+
+
+# endregion vector groups --------------------------------------------------------------
+# endregion regularizations ------------------------------------------------------------

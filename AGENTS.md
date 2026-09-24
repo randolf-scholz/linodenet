@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Project conventions for automated agents contributing to `linodenet`.
+Project conventions for automated agents contributing to `imtskit`.
 
 ## Project snapshot
 

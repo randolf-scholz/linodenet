@@ -1,0 +1,147 @@
+r"""Tests for neural continuous-discrete state-space models."""
+
+from typing import ClassVar
+
+import pytest
+import torch
+from torch import Tensor
+
+from imtskit_models.ncdssm import NCDSSM, NCDSSMConfig
+from imtskit_models.utils import EventBatch, SplitTimeData
+
+from .base import TestProbabilisticModel
+
+
+class TestNCDSSM(TestProbabilisticModel[NCDSSM]):
+    r"""Run the shared probabilistic-forecasting contract against NCDSSM."""
+
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
+    STANDARD_CONFIG: ClassVar[NCDSSMConfig] = NCDSSMConfig(
+        input_size=CONTEXT_SHAPE[0],
+        output_size=OUTPUT_SHAPE[0],
+        latent_size=4,
+        auxiliary_size=5,
+        encoder_hidden_size=7,
+        decoder_hidden_size=11,
+        initial_stdv=1.0,
+        min_stdv=1e-4,
+        validate_args=True,
+    )
+
+    @pytest.fixture
+    def model_config(self) -> NCDSSMConfig:
+        r"""Configuration used to instantiate the NCDSSM under test."""
+        return self.STANDARD_CONFIG
+
+    @pytest.fixture(params=[False, True], ids=["no_missingness", "input_missingness"])
+    def input_missingness(self, request: pytest.FixtureRequest) -> bool:
+        r"""Whether roughly half of the context features are unavailable."""
+        return request.param
+
+    def make_model(self, model_config: object, /) -> NCDSSM:
+        r"""Instantiate an NCDSSM from the shared standard configuration."""
+        if not isinstance(model_config, NCDSSMConfig):
+            raise TypeError("model_config must be an NCDSSMConfig.")
+        return NCDSSM.from_config(model_config)
+
+    def forecast(self, model: NCDSSM, args: SplitTimeData) -> tuple[Tensor, ...]:
+        r"""Return NCDSSM output moments and time-marginal likelihoods."""
+        assert args.target_values is not None
+        log_prob = model.log_prob(
+            args.target_values,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+        )
+        return (
+            model.pred_means,
+            model.pred_stdvs,
+            log_prob.unsqueeze(-1).expand_as(model.pred_means),
+        )
+
+    def loss(
+        self,
+        model: NCDSSM,
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
+        r"""Return negative predictive log-likelihood over observed targets."""
+        del model, targets
+        _, _, log_prob = predictions
+        return -log_prob[..., 0].mean()
+
+    def test_instantiation_from_config(self) -> None:
+        model = NCDSSM.from_config(self.STANDARD_CONFIG)
+
+        assert model.input_size == self.STANDARD_CONFIG.input_size
+        assert model.output_size == self.STANDARD_CONFIG.output_size
+        assert model.latent_size == self.STANDARD_CONFIG.latent_size
+        assert model.auxiliary_size == self.STANDARD_CONFIG.auxiliary_size
+        encoder_net = model.encoder.network
+        assert isinstance(encoder_net, torch.nn.Sequential)
+        encoder_layer = encoder_net[0]
+        auxiliary_layer = encoder_net[-1]
+        assert isinstance(encoder_layer, torch.nn.Linear)
+        assert isinstance(auxiliary_layer, torch.nn.Linear)
+        assert encoder_layer.in_features == 2 * model.input_size
+        assert auxiliary_layer.out_features == 2 * model.auxiliary_size
+        emission_net = model.emission.network
+        assert isinstance(emission_net, torch.nn.Sequential)
+        emission_layer = emission_net[-1]
+        assert isinstance(emission_layer, torch.nn.Linear)
+        assert emission_layer.out_features == 2 * model.output_size
+
+    def test_instantiation_from_parameters(self) -> None:
+        config = self.STANDARD_CONFIG
+        model = NCDSSM.from_parameters(
+            input_size=config.input_size,
+            output_size=config.output_size,
+            latent_size=config.latent_size,
+            auxiliary_size=config.auxiliary_size,
+            encoder_hidden_size=config.encoder_hidden_size,
+            decoder_hidden_size=config.decoder_hidden_size,
+        )
+
+        assert model.input_size == config.input_size
+        assert model.output_size == config.output_size
+        assert model.latent_size == config.latent_size
+        assert model.auxiliary_size == config.auxiliary_size
+
+    def test_forward_combined_request_matches_predict(self) -> None:
+        r"""Check the combined-event loop handles interleaved context and queries."""
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+        context_times = torch.tensor([[0.0, 2.0]])
+        context_values = torch.tensor([[[1.0, 0.0, -1.0], [0.5, 1.0, 0.0]]])
+        context_mask = torch.ones_like(context_values, dtype=torch.bool)
+        query_times = torch.tensor([[1.0, 3.0]])
+        query_mask = torch.ones(1, 2, self.OUTPUT_SHAPE[0], dtype=torch.bool)
+        combined = EventBatch.from_request(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+        )
+
+        combined_mean, combined_variance = model(
+            timestamps=combined.timestamps,
+            query_mask=combined.query_mask,
+            context_values=combined.context_values,
+            context_mask=combined.context_mask,
+        )
+        mean, variance = model.predict(
+            query_times=query_times,
+            query_mask=query_mask,
+            context_times=context_times,
+            context_values=context_values,
+            context_mask=context_mask,
+        )
+
+        torch.testing.assert_close(combined_mean[..., *combined.query_indices, :], mean)
+        torch.testing.assert_close(
+            combined_variance[..., *combined.query_indices, :], variance
+        )

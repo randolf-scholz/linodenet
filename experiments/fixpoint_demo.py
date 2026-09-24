@@ -1,7 +1,7 @@
 import torch
 from torch import Tensor, nn
 
-from linodenet_special.fallbacks.fixpoint_iteration import (
+from imtskit_special.fallbacks.fixpoint_iteration import (
     fixpoint_solve,
     fixpoint_solve_functional,
 )
@@ -27,14 +27,14 @@ class LinearFixpointModel(nn.Module):
     r"""Model using `fixpoint_solve` with internal weight and external bias."""
 
     def __init__(
-        self,
-        weight: Tensor,
-        bias: Tensor,
-        /,
-        *,
-        maxiter: int,
-        atol: float,
-        rtol: float,
+            self,
+            weight: Tensor,
+            bias: Tensor,
+            /,
+            *,
+            maxiter: int,
+            atol: float,
+            rtol: float,
     ) -> None:
         super().__init__()
         self.input_size = weight.shape[-1]

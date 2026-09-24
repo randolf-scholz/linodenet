@@ -1,0 +1,82 @@
+#!/usr/bin/env just --justfile
+
+# Manual development fallback for the native extension. The canonical package
+# build remains `uv build` from the repository root.
+source_dir := justfile_directory()
+project_dir := source_dir + "/../.."
+build_dir := source_dir + "/build"
+venv_activate := project_dir + "/.venv/bin/activate"
+
+[default]
+[doc("Show available recipes.")]
+help:
+    @just --justfile {{ justfile() }} --list
+
+[doc("Show the PyTorch configuration used for the manual extension build.")]
+info:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source "{{ venv_activate }}"
+    python -c 'import torch; print(f"torch={torch.__version__}"); print(f"cuda={torch.version.cuda}"); print(f"cxx11_abi={int(torch.compiled_with_cxx11_abi())}"); print(f"cmake_prefix={torch.utils.cmake_prefix_path}")'
+
+[doc("Configure a Release Ninja build in src/imtskit_special/build.")]
+configure:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source "{{ venv_activate }}"
+    cmake -S "{{ source_dir }}" -B "{{ build_dir }}" -G Ninja \
+        -DCMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}" \
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+[doc("Build the native extension.")]
+build: configure
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source "{{ venv_activate }}"
+    cmake --build "{{ build_dir }}" --parallel
+
+[doc("Run the imtskit_special tests against the manual build.")]
+test *pytest_args: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source "{{ venv_activate }}"
+    cd "{{ project_dir }}"
+    timeout 30s uv run pytest -p no:rerunfailures --benchmark-skip \
+        tests/imtskit_special -n 0 --no-cov {{ pytest_args }}
+
+[doc("Run and compare the spectral-norm performance benchmark.")]
+benchmark *pytest_args: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source "{{ venv_activate }}"
+    cd "{{ project_dir }}"
+    timeout 30s uv run pytest -p no:rerunfailures \
+        tests/imtskit_special/test_performance.py::test_spectral_norm_forward \
+        -n 0 --no-cov \
+        --benchmark-group-by="func,param:device,param:shape" \
+        --benchmark-save=base \
+        --benchmark-sort=mean \
+        --benchmark-compare {{ pytest_args }}
+
+[doc("Compare saved benchmarks and write histograms to .benchmarks/histograms.")]
+compare *benchmark_args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source "{{ venv_activate }}"
+    cd "{{ project_dir }}"
+    uv run pytest-benchmark compare \
+        --histogram .benchmarks/histograms/ \
+        --group-by="func,param:device,param:shape" \
+        --name trial {{ benchmark_args }}
+
+[doc("Remove the manual CMake build directory.")]
+clean:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    rm -rf "{{ build_dir }}"
+
+[doc("Clean, configure, and build the native extension.")]
+rebuild: clean build
+
+[doc("Build the extension and run its tests.")]
+check: test

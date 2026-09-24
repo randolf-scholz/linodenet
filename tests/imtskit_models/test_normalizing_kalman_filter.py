@@ -1,0 +1,409 @@
+r"""Tests for the NKF model."""
+
+from typing import ClassVar, NamedTuple
+
+import pytest
+import torch
+from torch import Tensor
+from torch.testing import assert_close
+
+from imtskit.mappings.transforms.scalar import Sinh
+from imtskit_models import ContinuousTimeNKF, DiscreteTimeNKF
+from imtskit_models.utils import SplitTimeData
+
+from .base import (
+    TestContinuousTimeModel,
+    TestDiscreteTimeModel,
+    assert_probabilistic_self_consistent,
+)
+
+
+class NormalizingKalmanFilterTestConfig(NamedTuple):
+    r"""Configuration used by shared discrete NKF tests."""
+
+    input_size: int
+    hidden_size: int
+
+
+class TestDiscreteTimeNKF(TestDiscreteTimeModel[DiscreteTimeNKF]):
+    r"""Shared forecasting-model tests for normalizing Kalman filters."""
+
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    STANDARD_CONFIG: ClassVar[NormalizingKalmanFilterTestConfig] = (
+        NormalizingKalmanFilterTestConfig(
+            input_size=CONTEXT_SHAPE[0],
+            hidden_size=5,
+        )
+    )
+
+    @pytest.fixture
+    def model_config(self) -> NormalizingKalmanFilterTestConfig:
+        r"""Configuration used to instantiate the NKF under test."""
+        return self.STANDARD_CONFIG
+
+    @pytest.fixture(params=[False, True], ids=["no_missingness", "input_missingness"])
+    def input_missingness(self, request: pytest.FixtureRequest) -> bool:
+        r"""Whether to randomly mask half of the context values with NaN."""
+        return request.param
+
+    def make_model(self, model_config: object, /) -> DiscreteTimeNKF:
+        r"""Instantiate an NKF from :attr:`STANDARD_CONFIG`."""
+        if not isinstance(model_config, NormalizingKalmanFilterTestConfig):
+            raise TypeError("model_config must be a NormalizingKalmanFilterTestConfig.")
+
+        input_size = model_config.input_size
+        hidden_size = model_config.hidden_size
+        model = DiscreteTimeNKF(
+            input_size,
+            hidden_size,
+            decoder=Sinh(),
+            system_matrix=0.1 * torch.randn(hidden_size, hidden_size),
+            observation_matrix=torch.randn(input_size, hidden_size),
+            process_covariance=0.2,
+            measurement_covariance=0.5,
+            initial_mean=torch.randn(hidden_size),
+            initial_covariance=2.0,
+            learnable=True,
+        )
+        model.kalman.initial_mean.requires_grad_(False)
+        return model
+
+    def forecast(
+        self, model: DiscreteTimeNKF, args: SplitTimeData
+    ) -> tuple[Tensor, ...]:
+        r"""Return NKF predictions for sequential forecasting inputs."""
+        assert args.target_values is not None
+        pred_mean, pred_scale = model.predict_observations(
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+        )
+
+        assert pred_mean.shape == args.target_values.shape
+        assert pred_scale.shape == args.target_values.shape
+        assert pred_mean[args.query_mask].isfinite().all()
+        assert pred_scale[args.query_mask].isfinite().all()
+        assert pred_mean[~args.query_mask].isnan().all()
+        assert pred_scale[~args.query_mask].isnan().all()
+
+        log_prob = model.log_prob(
+            args.target_values,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+        )
+        assert log_prob.shape == args.query_times.shape
+        assert log_prob[args.query_mask.any(dim=-1)].isfinite().all()
+
+        return pred_mean, pred_scale, log_prob
+
+    def test_predict_returns_query_latent_states(self) -> None:
+        r"""Check split-time predict returns latent posterior states."""
+        model = self.make_model(self.STANDARD_CONFIG)
+        data = self.make_request(
+            rng=0,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        mean, cov = model.predict(
+            context_times=data.context_times,
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+            query_times=data.query_times,
+            query_mask=data.query_mask,
+        )
+
+        assert mean.shape == (*data.query_times.shape, model.hidden_size)
+        assert cov.shape == (
+            *data.query_times.shape,
+            model.hidden_size,
+            model.hidden_size,
+        )
+        assert mean[data.query_mask.any(dim=-1)].isfinite().all()
+        assert cov[data.query_mask.any(dim=-1)].isfinite().all()
+        assert_close(mean, model.pred_latent_means, equal_nan=True)
+        assert_close(cov, model.pred_latent_covs, equal_nan=True)
+
+    def loss(
+        self,
+        model: DiscreteTimeNKF,
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
+        r"""Return the negative log-likelihood under the discrete NKF."""
+        del model
+        *_, log_prob = predictions
+        valid = targets.isfinite().any(dim=-1)
+        return -log_prob[valid].mean()
+
+    def test_probabilistic_self_consistency_at_init(self) -> None:
+        r"""Check self-consistency at initialization."""
+        generator = torch.Generator()
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        data = self.make_request(
+            rng=generator,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        assert_probabilistic_self_consistent(
+            model,
+            data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-2,
+            rtol=1e-2,
+        )
+
+    def test_probabilistic_self_consistency_trained(self) -> None:
+        r"""Check self-consistency after a few training steps."""
+        generator = torch.Generator()
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        train_data = self.make_request(
+            rng=generator,
+            batch_shape=(4,),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+        eval_data = self.make_request(
+            rng=generator,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        assert train_data.target_values is not None
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        for _ in range(self.NUM_STEPS):
+            optimizer.zero_grad()
+            predictions = self.forecast(model, train_data)
+            loss = self.loss(model, predictions, train_data.target_values)
+            loss.backward()
+            optimizer.step()
+
+        assert_probabilistic_self_consistent(
+            model,
+            eval_data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-2,
+            rtol=1e-2,
+        )
+
+
+class TestContinuousTimeNKF(TestContinuousTimeModel[ContinuousTimeNKF]):
+    r"""Shared forecasting-model tests for continuous-time NKFs."""
+
+    CONTEXT_SHAPE: ClassVar[tuple[int, ...]] = (3,)
+    OUTPUT_SHAPE: ClassVar[tuple[int, ...]] = CONTEXT_SHAPE
+    STANDARD_CONFIG: ClassVar[NormalizingKalmanFilterTestConfig] = (
+        NormalizingKalmanFilterTestConfig(
+            input_size=CONTEXT_SHAPE[0],
+            hidden_size=5,
+        )
+    )
+
+    @pytest.fixture
+    def model_config(self) -> NormalizingKalmanFilterTestConfig:
+        r"""Configuration used to instantiate the continuous NKF under test."""
+        return self.STANDARD_CONFIG
+
+    @pytest.fixture(params=[False, True], ids=["no_missingness", "input_missingness"])
+    def input_missingness(self, request: pytest.FixtureRequest) -> bool:
+        r"""Whether to randomly mask half of the context values with NaN."""
+        return request.param
+
+    def make_model(self, model_config: object, /) -> ContinuousTimeNKF:
+        r"""Instantiate a continuous-time NKF from :attr:`STANDARD_CONFIG`."""
+        if not isinstance(model_config, NormalizingKalmanFilterTestConfig):
+            raise TypeError("model_config must be a NormalizingKalmanFilterTestConfig.")
+
+        input_size = model_config.input_size
+        hidden_size = model_config.hidden_size
+        return ContinuousTimeNKF(
+            input_size,
+            hidden_size,
+            decoder=Sinh(),
+            system_matrix=0.05 * torch.randn(hidden_size, hidden_size),
+            observation_matrix=torch.randn(input_size, hidden_size),
+            process_noise=0.2,
+            measurement_noise=0.5,
+            initial_mean=torch.randn(hidden_size),
+            initial_covariance=2.0 * torch.eye(hidden_size),
+            initial_state_learnable=True,
+            process_noise_learnable=False,
+            observation_noise_learnable=False,
+        )
+
+    def forecast(
+        self, model: ContinuousTimeNKF, args: SplitTimeData
+    ) -> tuple[Tensor, ...]:
+        r"""Return continuous NKF predictions for sequential forecasting inputs."""
+        assert args.target_values is not None
+        pred_mean, pred_scale = model.predict_observations(
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+        )
+
+        assert pred_mean.shape == args.target_values.shape
+        assert pred_scale.shape == args.target_values.shape
+        assert pred_mean[args.query_mask].isfinite().all()
+        assert pred_scale[args.query_mask].isfinite().all()
+        assert pred_mean[~args.query_mask].isnan().all()
+        assert pred_scale[~args.query_mask].isnan().all()
+
+        log_prob = model.log_prob(
+            args.target_values,
+            context_times=args.context_times,
+            context_values=args.context_values,
+            context_mask=args.context_mask,
+            query_times=args.query_times,
+            query_mask=args.query_mask,
+        )
+        assert log_prob.shape == args.query_times.shape
+        assert log_prob[args.query_mask.any(dim=-1)].isfinite().all()
+
+        return pred_mean, pred_scale, log_prob
+
+    def test_predict_returns_query_latent_states(self) -> None:
+        r"""Check split-time predict returns latent posterior states."""
+        model = self.make_model(self.STANDARD_CONFIG)
+        data = self.make_request(
+            rng=0,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        mean, cov = model.predict(
+            context_times=data.context_times,
+            context_values=data.context_values,
+            context_mask=data.context_mask,
+            query_times=data.query_times,
+            query_mask=data.query_mask,
+        )
+
+        assert mean.shape == (*data.query_times.shape, model.hidden_size)
+        assert cov.shape == (
+            *data.query_times.shape,
+            model.hidden_size,
+            model.hidden_size,
+        )
+        assert mean[data.query_mask.any(dim=-1)].isfinite().all()
+        assert cov[data.query_mask.any(dim=-1)].isfinite().all()
+        assert_close(mean, model.pred_latent_means, equal_nan=True)
+        assert_close(cov, model.pred_latent_covs, equal_nan=True)
+
+    def loss(
+        self,
+        model: ContinuousTimeNKF,
+        predictions: tuple[Tensor, ...],
+        targets: Tensor,
+    ) -> Tensor:
+        r"""Return the negative log-likelihood under the continuous NKF."""
+        del model
+        *_, log_prob = predictions
+        valid = targets.isfinite().any(dim=-1)
+        return -log_prob[valid].mean()
+
+    def test_probabilistic_self_consistency_at_init(self) -> None:
+        r"""Check self-consistency at initialization."""
+        generator = torch.Generator()
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        data = self.make_request(
+            rng=generator,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        assert_probabilistic_self_consistent(
+            model,
+            data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-2,
+            rtol=1e-2,
+        )
+
+    def test_probabilistic_self_consistency_trained(self) -> None:
+        r"""Check self-consistency after a few training steps."""
+        generator = torch.Generator()
+        torch.manual_seed(0)
+        model = self.make_model(self.STANDARD_CONFIG)
+
+        train_data = self.make_request(
+            rng=generator,
+            batch_shape=(4,),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+        eval_data = self.make_request(
+            rng=generator,
+            batch_shape=(),
+            min_steps=4,
+            max_steps=4,
+            context_shape=self.CONTEXT_SHAPE,
+            output_shape=self.OUTPUT_SHAPE,
+            input_missingness=True,
+        )
+
+        assert train_data.target_values is not None
+        optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+        for _ in range(self.NUM_STEPS):
+            optimizer.zero_grad()
+            predictions = self.forecast(model, train_data)
+            loss = self.loss(model, predictions, train_data.target_values)
+            loss.backward()
+            optimizer.step()
+
+        assert_probabilistic_self_consistent(
+            model,
+            eval_data,
+            rng=generator,
+            num_futures=8192,
+            num_probes=8,
+            atol=3e-2,
+            rtol=1e-2,
+        )

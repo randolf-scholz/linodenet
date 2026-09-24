@@ -1,0 +1,918 @@
+#include "gaussian_transport.h"
+
+#include <ATen/ATen.h>
+#include <numbers>
+#include <vector>
+#include <tuple>
+#include <cstdint>
+
+#include "hard_bend.h"
+#include "ndtri_exp.h"
+
+using torch::Tensor;
+using torch::autograd::AutogradContext;
+using torch::autograd::Function;
+using torch::autograd::variable_list;
+using torch::special::log_ndtr;
+
+namespace {
+constexpr double LOG_HALF = -std::numbers::ln2;
+constexpr double LOG_2PI = 1.8378770664093453;
+
+void check_bimodal_args(const Tensor &x, const Tensor &mu, const Tensor &sigma) {
+    TORCH_CHECK(x.is_floating_point(), "x must be a floating point tensor.");
+    TORCH_CHECK(mu.is_floating_point(), "mu must be a floating point tensor.");
+    TORCH_CHECK(sigma.is_floating_point(), "sigma must be a floating point tensor.");
+    TORCH_CHECK(x.dtype() == mu.dtype(), "x and mu must have the same dtype.");
+    TORCH_CHECK(x.dtype() == sigma.dtype(), "x and sigma must have the same dtype.");
+}
+
+void check_mixture_args(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas
+) {
+    TORCH_CHECK(x.is_floating_point(), "x must be a floating point tensor.");
+    TORCH_CHECK(weights.is_floating_point(), "weights must be a floating point tensor.");
+    TORCH_CHECK(mus.is_floating_point(), "mus must be a floating point tensor.");
+    TORCH_CHECK(sigmas.is_floating_point(), "sigmas must be a floating point tensor.");
+    TORCH_CHECK(weights.dtype() == x.dtype(), "weights must have the same dtype as x.");
+    TORCH_CHECK(mus.dtype() == x.dtype(), "mus must have the same dtype as x.");
+    TORCH_CHECK(sigmas.dtype() == x.dtype(), "sigmas must have the same dtype as x.");
+    TORCH_CHECK(weights.dim() == 1, "weights must be 1D.");
+    TORCH_CHECK(mus.dim() == 1, "mus must be 1D.");
+    TORCH_CHECK(sigmas.dim() == 1, "sigmas must be 1D.");
+    TORCH_CHECK(
+        weights.size(0) == mus.size(0) && weights.size(0) == sigmas.size(0),
+        "weights, mus, and sigmas must have the same number of components."
+    );
+}
+
+auto bimodal_value_and_stats(
+    const Tensor &x,
+    const Tensor &mu,
+    const Tensor &sigma
+) -> std::tuple<Tensor, Tensor, Tensor> {
+    const Tensor mu_abs = mu.abs();
+    const Tensor z_plus = (x + mu_abs) / sigma;
+    const Tensor z_minus = (x - mu_abs) / sigma;
+    const Tensor log_p = LOG_HALF + at::logaddexp(log_ndtr(z_plus), log_ndtr(z_minus));
+    const Tensor log_q = LOG_HALF + at::logaddexp(log_ndtr(-z_plus), log_ndtr(-z_minus));
+    // Switch between lower-tail and upper-tail evaluations to avoid cancellation near 0 and 1.
+    const Tensor y = torch::where(
+        log_p < LOG_HALF,
+        imtskit_special::ndtri_exp(log_p),
+        -imtskit_special::ndtri_exp(log_q)
+    ).clamp_(z_minus, z_plus);
+    return {y, z_plus, z_minus};
+}
+
+auto bimodal_to_gaussian_value_and_grad(
+    const Tensor &x,
+    const Tensor &mu,
+    const Tensor &sigma
+) -> std::tuple<Tensor, Tensor> {
+    const auto [fx, z_plus, z_minus] = bimodal_value_and_stats(x, mu, sigma);
+    const Tensor log_sigma = sigma.log();
+    const Tensor lower_bound = exp(-0.5 * (mu / sigma).square()) / sigma;
+    const Tensor upper_bound = sigma.reciprocal();
+    const Tensor y2 = fx.square();
+    const Tensor log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF;
+    const Tensor log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF;
+    const Tensor d_fx = exp(logaddexp(log_phi_plus, log_phi_minus)).clamp_(lower_bound, upper_bound);
+
+    return {fx, d_fx};
+}
+
+
+/*
+ * \dv{y}{x} &= ½σ⁻¹(ℯ^{½(y²-z₊²)} + ℯ^{½(y²-z₋²)}) \\
+ * \dv{y}{μ} &= ½σ⁻¹(ℯ^{½(y²-z₊²)} - ℯ^{½(y²-z₋²)}) \\
+ * \dv{y}{σ} &= -½σ⁻¹(z₊ℯ^{½(y²-z₊²)} + z₋ℯ^{½(y²-z₋²)})
+ */
+auto bimodal_to_gaussian_derivatives(
+    const Tensor &x,
+    const Tensor &mu,
+    const Tensor &sigma,
+    const Tensor &y
+) -> std::tuple<Tensor, Tensor, Tensor> {
+    const Tensor mu_abs = mu.abs();
+    const Tensor z_plus = (x + mu_abs) / sigma;
+    const Tensor z_minus = (x - mu_abs) / sigma;
+    const Tensor log_sigma = sigma.log();
+    const Tensor mu_sign = mu.sign();
+    const Tensor y2 = y.square();
+    // Evaluate the two mode contributions in log space to avoid tail underflow.
+    const Tensor log_phi_plus = LOG_HALF + 0.5 * (y2 - z_plus.square()) - log_sigma;
+    const Tensor log_phi_minus = LOG_HALF + 0.5 * (y2 - z_minus.square()) - log_sigma;
+    const Tensor hi = maximum(log_phi_plus, log_phi_minus);
+    const Tensor lo = minimum(log_phi_plus, log_phi_minus);
+
+    // The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
+    const Tensor lower_bound = exp(-0.5 * (mu_abs / sigma).square()) / sigma;
+    const Tensor upper_bound = sigma.reciprocal();
+
+    const Tensor d_x = exp(logaddexp(log_phi_plus, log_phi_minus)).clamp_(lower_bound, upper_bound);
+    const Tensor d_mu_abs = sign(log_phi_plus - log_phi_minus) * exp(hi + log1p(-exp(lo - hi)));
+    const Tensor d_mu = mu_sign * d_mu_abs.clamp_(-upper_bound, upper_bound);
+    const Tensor d_sigma = -(x * d_x + mu_abs * d_mu_abs) / sigma;
+
+    return {d_x, d_mu, d_sigma};
+}
+
+auto bimodal_to_gaussian_derivatives2(
+    const Tensor &x,
+    const Tensor &mu,
+    const Tensor &sigma,
+    const Tensor &y
+) -> std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> {
+    const Tensor mu_abs = mu.abs();
+    const Tensor z_plus = (x + mu_abs) / sigma;
+    const Tensor z_minus = (x - mu_abs) / sigma;
+    const Tensor log_sigma = sigma.log();
+    const Tensor mu_sign = mu.sign();
+    const Tensor y2 = y.square();
+    const Tensor log_phi_plus = 0.5 * (y2 - z_plus.square()) - log_sigma + LOG_HALF;
+    const Tensor log_phi_minus = 0.5 * (y2 - z_minus.square()) - log_sigma + LOG_HALF;
+    const Tensor log_norm = at::logaddexp(log_phi_plus, log_phi_minus);
+
+    Tensor d_x = log_norm.exp();
+    const Tensor w_plus = (log_phi_plus - log_norm).exp();
+    const Tensor w_minus = (log_phi_minus - log_norm).exp();
+    const Tensor d_mu_abs = d_x * (w_plus - w_minus);
+    const Tensor d_sigma_exact =
+        -(0.5 * (z_plus + z_minus) * d_x + (mu_abs / sigma) * d_mu_abs);
+
+    const Tensor lower_bound = (-0.5 * (mu_abs / sigma).square()).exp() / sigma;
+    const Tensor upper_bound = sigma.reciprocal();
+    // TODO: shouldn't this clamp be applied immediately?
+    d_x = d_x.clamp_(lower_bound, upper_bound);
+    const Tensor d_mu = mu_sign * d_mu_abs.clamp_(-upper_bound, upper_bound);
+
+    // Reuse d_x as the common scale so only the normalized two-mode weights
+    // need to be carried into the second-derivative terms.
+    const Tensor z_avg = z_plus * w_plus + z_minus * w_minus;
+    const Tensor z_diff = z_plus * w_plus - z_minus * w_minus;
+    const Tensor z2_avg = z_plus.square() * w_plus + z_minus.square() * w_minus;
+    const Tensor z_term_sum = d_x * z_avg / sigma;
+    const Tensor z_term_diff = d_x * z_diff / sigma;
+    const Tensor z2_term_sum = d_x * z2_avg / sigma;
+
+    const Tensor d2_x = y * d_x.square() - z_term_sum;
+    const Tensor d2_mu = mu_sign * (y * d_x * d_mu_abs - z_term_diff);
+    const Tensor d2_sigma = y * d_x * d_sigma_exact - d_x / sigma + z2_term_sum;
+
+    return {d_x, d_mu, d_sigma_exact, d2_x, d2_mu, d2_sigma};
+}
+
+auto gaussian_to_bimodal_guess(const Tensor &x, const Tensor &mu, const Tensor &sigma) -> Tensor {
+    // Match the slope at the origin with the hard-bend surrogate to get a cheap
+    // initial guess for the safeguarded Newton iteration.
+    const Tensor lambda = exp(-0.5 * (mu / sigma).square()) / sigma;
+    return imtskit_special::hard_bend(x, lambda, mu, sigma.reciprocal());
+}
+
+auto gaussian_to_bimodal_value_and_grad(
+    const Tensor &y,
+    const Tensor &mu,
+    const Tensor &sigma,
+    const int64_t maxiter
+) -> std::tuple<Tensor, Tensor> {
+    const Tensor m = mu.abs();
+    Tensor lower = sigma * y - m;
+    Tensor upper = sigma * y + m;
+    Tensor x = gaussian_to_bimodal_guess(y, mu, sigma);
+    x = x.clamp_(lower, upper);
+    auto [fx, d_fx] = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
+    Tensor residual = fx - y;
+
+    for (int64_t i = 0; i < maxiter; ++i) {
+        // Since T is monotone, the sign of the residual tells us which side of the
+        // bracket still contains the inverse solution.
+        lower = torch::where(residual < 0, x, lower);
+        upper = torch::where(residual > 0, x, upper);
+        const Tensor x_newton = x - residual / d_fx;
+        const Tensor x_bisect = 0.5 * (lower + upper);
+        x = torch::where(
+            (x_newton >= lower) & (x_newton <= upper),
+            x_newton,
+            x_bisect
+        ).clamp_(lower, upper);
+        std::tie(fx, d_fx) = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
+        residual = fx - y;
+    }
+
+    return {x, d_fx.reciprocal()};
+}
+
+auto mixture_value_and_stats(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas
+) -> std::tuple<Tensor, Tensor, Tensor> {
+    const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
+    const Tensor log_w = weights.log();
+    const Tensor log_p = logsumexp(log_w + log_ndtr(z), -1);
+    const Tensor log_q = logsumexp(log_w + log_ndtr(-z), -1);
+    const Tensor lower = std::get<0>(z.min(-1));
+    const Tensor upper = std::get<0>(z.max(-1));
+    // Switch between lower-tail and upper-tail evaluations to avoid cancellation near 0 and 1.
+    const Tensor y = where(
+        log_p < LOG_HALF,
+        imtskit_special::ndtri_exp(log_p),
+        -imtskit_special::ndtri_exp(log_q)
+    ).clamp_(lower, upper);
+
+    return {y, z, log_w};
+}
+
+/*
+ * ∂y/∂x &= ∑ₖ (ωₖ/σₖ) ℯ^{½(y²-zₖ²)}, \\
+ * ∂y/∂ωₖ &= \sqrt{2π} ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ)), \\
+ * ∂y/∂μₖ &= -(ωₖ/σₖ) ℯ^{½(y²-zₖ²)}, \\
+ * ∂y/∂σₖ &= -(ωₖ zₖ/σₖ) ℯ^{½(y²-zₖ²)}.
+ */
+auto mixture_to_gaussian_derivatives(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas,
+    const Tensor &y
+) -> std::tuple<Tensor, Tensor, Tensor, Tensor> {
+    const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
+    const Tensor log_w = weights.log();
+    const Tensor log_sigmas = sigmas.log();
+    const Tensor y2 = y.square();
+    // exp(½(y² - zₖ²)) = φ(zₖ) / φ(y)
+    const Tensor log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square());
+    // (ωₖ / σₖ) exp(½(y² - zₖ²)) appears in ∂y/∂x, ∂y/∂μₖ, and ∂y/∂σₖ.
+    const Tensor scaled_ratio = exp(log_ratio + log_w - log_sigmas);
+
+    const Tensor d_x = scaled_ratio.sum(-1);
+    const Tensor d_mus = -scaled_ratio;
+    const Tensor d_sigmas = z * -scaled_ratio;
+
+    // ∂y/∂ωₖ = √(2π) ℯ^{½y²}⋅(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ)).
+    // Factor out max(log Φ(zₖ)) to keep the centered CDF difference in a stable range.
+    const Tensor log_pdf_u = (-0.5 * (LOG_2PI + y2)).unsqueeze(-1);
+    const Tensor log_phi = log_ndtr(z);
+    const Tensor log_phi_max = std::get<0>(log_phi.max(-1, true));
+    const Tensor scaled_phi = exp(log_phi - log_phi_max);
+    const Tensor centered_scaled_phi = scaled_phi - scaled_phi.mean(-1, true);
+    const Tensor d_weights = exp(log_phi_max - log_pdf_u) * centered_scaled_phi;
+
+    return {d_x, d_weights, d_mus, d_sigmas};
+}
+
+auto
+mixture_to_gaussian_derivatives2(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas,
+    const Tensor &y
+) -> std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> {
+    const Tensor z = (x.unsqueeze(-1) - mus) / sigmas;
+    const Tensor log_w = weights.log();
+    const Tensor log_sigmas = sigmas.log();
+    const Tensor y2 = y.square();
+    const Tensor log_ratio = 0.5 * (y2.unsqueeze(-1) - z.square());
+    const Tensor scaled_ratio = (log_ratio + log_w - log_sigmas).exp();
+
+    const Tensor d_x = scaled_ratio.sum(-1);
+    const Tensor d_mus = -scaled_ratio;
+    const Tensor d_sigmas = -z * scaled_ratio;
+
+    const Tensor log_pdf_u = (-0.5 * (LOG_2PI + y2)).unsqueeze(-1);
+    const Tensor log_phi = log_ndtr(z);
+    const Tensor log_phi_max = std::get<0>(log_phi.max(-1, true));
+    const Tensor scaled_phi = (log_phi - log_phi_max).exp();
+    const Tensor centered_scaled_phi = scaled_phi - scaled_phi.mean(-1, true);
+    const Tensor d_weights = (log_phi_max - log_pdf_u).exp() * centered_scaled_phi;
+
+    // Eₖ / σₖ reappears in multiple mixed second derivatives, so keep that
+    // common factor grouped before forming the final Jacobian entries.
+    const Tensor e_over_sigma = (log_ratio - log_sigmas).exp();
+    const Tensor d2_x = y * d_x.square() + (d_sigmas / sigmas).sum(-1);
+    const Tensor d2_weights =
+        y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_weights
+        + e_over_sigma
+        - e_over_sigma.mean(-1, true);
+    const Tensor d2_mus =
+        y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_mus - d_sigmas / sigmas;
+    const Tensor d2_sigmas =
+        y.unsqueeze(-1) * d_x.unsqueeze(-1) * d_sigmas
+        + (z.square() - 1) * scaled_ratio / sigmas;
+
+    return {d_x, d_weights, d_mus, d_sigmas, d2_x, d2_weights, d2_mus, d2_sigmas};
+}
+
+auto mixture_to_gaussian_value_and_grad(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas
+) -> std::tuple<Tensor, Tensor> {
+    const auto [fx, z, log_w] = mixture_value_and_stats(x, weights, mus, sigmas);
+    const Tensor log_sigmas = sigmas.log();
+    const Tensor log_ratio = 0.5 * (fx.square().unsqueeze(-1) - z.square());
+    const Tensor d_fx = exp(log_ratio + log_w - log_sigmas).sum(-1);
+    return {fx, d_fx};
+}
+
+auto gaussian_to_mixture_value_and_grad(
+    const Tensor &y,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas,
+    const int64_t maxiter
+) -> std::tuple<Tensor, Tensor> {
+    // Each component alone would invert y to xₖ = μₖ + σₖy. The mixture inverse
+    // must lie between the smallest and largest of these affine tail candidates,
+    // so we use their pointwise min/max as a safe bracket and their weighted mean
+    // as a cheap initial guess for the safeguarded Newton iteration.
+    const Tensor lines = mus + sigmas * y.unsqueeze(-1);
+    Tensor lower = std::get<0>(lines.min(-1));
+    Tensor upper = std::get<0>(lines.max(-1));
+    Tensor x = torch::linalg_vecdot(weights, lines, -1);
+    x = x.clamp_(lower, upper);
+    auto [fx, d_fx] = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
+    Tensor residual = fx - y;
+
+    for (int64_t i = 0; i < maxiter; ++i) {
+        // Since T is monotone, the sign of the residual tells us which side of the
+        // bracket still contains the inverse solution.
+        lower = torch::where(residual < 0, x, lower);
+        upper = torch::where(residual > 0, x, upper);
+        const Tensor x_newton = x - residual / d_fx;
+        const Tensor x_bisect = 0.5 * (lower + upper);
+        x = torch::where(
+            (x_newton >= lower) & (x_newton <= upper),
+            x_newton,
+            x_bisect
+        ).clamp_(lower, upper);
+        std::tie(fx, d_fx) = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
+        residual = fx - y;
+    }
+
+    return {x, d_fx.reciprocal()};
+}
+
+
+struct BimodalToGaussian : Function<BimodalToGaussian> {
+    [[maybe_unused]] static auto forward(AutogradContext *ctx, const Tensor &x, const Tensor &mu,
+        const Tensor &sigma) -> Tensor {
+        torch::NoGradGuard const guard;
+        const Tensor y = std::get<0>(bimodal_value_and_stats(x, mu, sigma));
+        ctx->save_for_backward({x, mu, sigma, y});
+        return y;
+    }
+
+    [[maybe_unused]] static auto backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) -> variable_list {
+        const auto saved = ctx->get_saved_variables();
+        const Tensor &x = saved[0];
+        const Tensor &mu = saved[1];
+        const Tensor &sigma = saved[2];
+        const Tensor &y = saved[3];
+
+        const Tensor &g = grad_output[0];
+        const auto [d_x, d_mu, d_sigma] = bimodal_to_gaussian_derivatives(x, mu, sigma, y);
+
+        return {
+            g * d_x,
+            g * d_mu,
+            g * d_sigma,
+        };
+    }
+};
+
+struct BimodalToGaussianValueAndGrad : Function<BimodalToGaussianValueAndGrad> {
+    [[maybe_unused]] static auto forward(
+        AutogradContext *ctx,
+        const Tensor &x,
+        const Tensor &mu,
+        const Tensor &sigma
+    ) -> variable_list {
+        torch::NoGradGuard const guard;
+        const auto [y, d_x] = bimodal_to_gaussian_value_and_grad(x, mu, sigma);
+        ctx->save_for_backward({x, mu, sigma, y});
+        return {y, d_x};
+    }
+
+    [[maybe_unused]] static auto backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) -> variable_list {
+        const auto saved = ctx->get_saved_variables();
+        const Tensor &x = saved[0];
+        const Tensor &mu = saved[1];
+        const Tensor &sigma = saved[2];
+        const Tensor &y = saved[3];
+
+        const Tensor &grad_y = grad_output[0];
+        const Tensor &grad_dy = grad_output[1];
+
+        const auto [
+            d_x, d_mu, d_sigma,
+            d2_x, d2_mu, d2_sigma
+        ] = bimodal_to_gaussian_derivatives2(x, mu, sigma, y);
+
+        return {
+            // clang-format off
+            grad_y * d_x     + grad_dy * d2_x    ,
+            grad_y * d_mu    + grad_dy * d2_mu   ,
+            grad_y * d_sigma + grad_dy * d2_sigma,
+            // clang-format on
+        };
+    }
+};
+
+struct GaussianToBimodal : Function<GaussianToBimodal> {
+    [[maybe_unused]] static auto forward(
+        AutogradContext *ctx,
+        const Tensor &y,
+        const Tensor &mu,
+        const Tensor &sigma,
+        const int64_t maxiter
+    ) -> Tensor {
+        torch::NoGradGuard const guard;
+        const auto [x, _] = gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter);
+        ctx->save_for_backward({x, mu, sigma, y});
+        return x;
+    }
+
+    [[maybe_unused]] static auto backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) -> variable_list {
+        const auto saved = ctx->get_saved_variables();
+        const Tensor &x = saved[0];
+        const Tensor &mu = saved[1];
+        const Tensor &sigma = saved[2];
+        const Tensor &y = saved[3];
+        const Tensor &g = grad_output[0];
+
+        const auto [d_x, d_mu, d_sigma] =
+            bimodal_to_gaussian_derivatives(x, mu, sigma, y);
+
+        const Tensor upper_bound = sigma * exp(0.5 * (mu / sigma).square());
+
+        const Tensor grad_y = torch::clamp(d_x.reciprocal(), sigma, upper_bound);
+        const Tensor grad_mu = torch::clamp(-d_mu * grad_y, -1, +1);
+        const Tensor grad_sigma = -d_sigma * grad_y;
+
+        return {
+            g * grad_y,
+            g * grad_mu,
+            g * grad_sigma,
+            Tensor(),
+        };
+    }
+};
+
+struct GaussianToBimodalValueAndGrad : Function<GaussianToBimodalValueAndGrad> {
+    [[maybe_unused]] static auto forward(
+        AutogradContext *ctx,
+        const Tensor &y,
+        const Tensor &mu,
+        const Tensor &sigma,
+        const int64_t maxiter
+    ) -> variable_list {
+        torch::NoGradGuard const guard;
+        const auto [x, d_fx] = gaussian_to_bimodal_value_and_grad(y, mu, sigma, maxiter);
+        ctx->save_for_backward({x, mu, sigma, y});
+        return {x, d_fx};
+    }
+
+    [[maybe_unused]] static auto backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) -> variable_list {
+        const auto saved = ctx->get_saved_variables();
+        const Tensor &x = saved[0];
+        const Tensor &mu = saved[1];
+        const Tensor &sigma = saved[2];
+        const Tensor &fx = saved[3];
+
+        const Tensor &grad_x = grad_output[0];
+        const Tensor &grad_dx = grad_output[1];
+
+        const auto [
+            d_x, d_mu, d_sigma,
+            d2_x, d2_mu, d2_sigma
+        ] = bimodal_to_gaussian_derivatives2(x, mu, sigma, fx);
+        const Tensor dx_inv = d_x.reciprocal();
+
+
+        const Tensor upper_bound = sigma * (0.5 * (mu / sigma).square()).exp();
+        const Tensor d_y = torch::clamp(dx_inv, sigma, upper_bound);
+        const Tensor d_mu_inv = torch::clamp(-d_mu * dx_inv, -1, +1);
+        const Tensor d_sigma_inv = -d_sigma * dx_inv;
+
+        // j = ∂x/∂y = (∂T/∂x)⁻¹, so differentiating the inverse map once more
+        // introduces the cubic power of dx_inv in these Jacobian-output terms.
+        const Tensor dx_inv3 = dx_inv.pow(3);
+        const Tensor j_y = -d2_x * dx_inv3;
+        const Tensor j_mu = (d2_x * d_mu - d2_mu * d_x) * dx_inv3;
+        const Tensor j_sigma = (d2_x * d_sigma - d2_sigma * d_x) * dx_inv3;
+
+        return {
+            // clang-format off
+            grad_x * d_y         + grad_dx * j_y    ,
+            grad_x * d_mu_inv    + grad_dx * j_mu   ,
+            grad_x * d_sigma_inv + grad_dx * j_sigma,
+            Tensor()
+            // clang-format on
+        };
+    }
+};
+
+struct MixtureToGaussian : Function<MixtureToGaussian> {
+    [[maybe_unused]] static auto forward(
+        AutogradContext *ctx,
+        const Tensor &x,
+        const Tensor &weights,
+        const Tensor &mus,
+        const Tensor &sigmas
+    ) -> Tensor {
+        torch::NoGradGuard const guard;
+        const Tensor y = std::get<0>(mixture_value_and_stats(x, weights, mus, sigmas));
+        ctx->save_for_backward({x, weights, mus, sigmas, y});
+        return y;
+    }
+
+    [[maybe_unused]] static auto backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) -> variable_list {
+        const auto saved = ctx->get_saved_variables();
+        const Tensor &x = saved[0];
+        const Tensor &weights = saved[1];
+        const Tensor &mus = saved[2];
+        const Tensor &sigmas = saved[3];
+        const Tensor &y = saved[4];
+
+        const Tensor &g = grad_output[0];
+
+        const auto [d_values, d_weights, d_mus, d_sigmas] =
+            mixture_to_gaussian_derivatives(x, weights, mus, sigmas, y);
+        return {
+            // clang-format off
+            g               * d_values  ,
+            g.unsqueeze(-1) * d_weights ,
+            g.unsqueeze(-1) * d_mus     ,
+            g.unsqueeze(-1) * d_sigmas  ,
+            // clang-format on
+        };
+    }
+};
+
+struct MixtureToGaussianValueAndGrad : Function<MixtureToGaussianValueAndGrad> {
+    [[maybe_unused]] static auto forward(
+        AutogradContext *ctx,
+        const Tensor &x,
+        const Tensor &weights,
+        const Tensor &mus,
+        const Tensor &sigmas
+    ) -> variable_list {
+        torch::NoGradGuard const guard;
+        const auto [y, d_x] = mixture_to_gaussian_value_and_grad(x, weights, mus, sigmas);
+        ctx->save_for_backward({x, weights, mus, sigmas, y});
+        return {y, d_x};
+    }
+
+    [[maybe_unused]] static auto backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) -> variable_list {
+        const auto saved = ctx->get_saved_variables();
+        const Tensor &x = saved[0];
+        const Tensor &weights = saved[1];
+        const Tensor &mus = saved[2];
+        const Tensor &sigmas = saved[3];
+        const Tensor &y = saved[4];
+
+        const Tensor &grad_y = grad_output[0];
+        const Tensor &grad_dy = grad_output[1];
+
+        const auto [
+            d_x, d_weights, d_mus, d_sigmas,
+            d2_x, d2_weights, d2_mus, d2_sigmas
+        ] = mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y);
+        return {
+            // clang-format off
+            grad_y               * d_x       + grad_dy               * d2_x,
+            grad_y.unsqueeze(-1) * d_weights + grad_dy.unsqueeze(-1) * d2_weights,
+            grad_y.unsqueeze(-1) * d_mus     + grad_dy.unsqueeze(-1) * d2_mus,
+            grad_y.unsqueeze(-1) * d_sigmas  + grad_dy.unsqueeze(-1) * d2_sigmas,
+            // clang-format on
+        };
+    }
+};
+
+struct GaussianToMixture : Function<GaussianToMixture> {
+    [[maybe_unused]] static auto forward(
+        AutogradContext *ctx,
+        const Tensor &y,
+        const Tensor &weights,
+        const Tensor &mus,
+        const Tensor &sigmas,
+        const int64_t maxiter
+    ) -> Tensor {
+        torch::NoGradGuard const guard;
+        const auto [x, _] = gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter);
+        ctx->save_for_backward({x, weights, mus, sigmas, y});
+        return x;
+    }
+
+    [[maybe_unused]] static auto backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) -> variable_list {
+        const auto saved = ctx->get_saved_variables();
+        const Tensor &x = saved[0];
+        const Tensor &weights = saved[1];
+        const Tensor &mus = saved[2];
+        const Tensor &sigmas = saved[3];
+        const Tensor &y = saved[4];
+
+        const Tensor &g = grad_output[0];
+
+        const auto [d_x, d_weights, d_mus, d_sigmas] =
+            mixture_to_gaussian_derivatives(x, weights, mus, sigmas, y);
+
+        const Tensor grad_y = g * d_x.reciprocal();
+        const Tensor outer_grad = -grad_y.unsqueeze(-1);
+
+        return {
+            // clang-format off
+            grad_y,
+            outer_grad * d_weights,
+            outer_grad * d_mus    ,
+            outer_grad * d_sigmas ,
+            Tensor()
+            // clang-format on
+        };
+    }
+};
+
+struct GaussianToMixtureValueAndGrad : Function<GaussianToMixtureValueAndGrad> {
+    [[maybe_unused]] static auto forward(
+        AutogradContext *ctx,
+        const Tensor &y,
+        const Tensor &weights,
+        const Tensor &mus,
+        const Tensor &sigmas,
+        const int64_t maxiter
+    ) -> variable_list {
+        torch::NoGradGuard const guard;
+        const auto [x, d_fx] = gaussian_to_mixture_value_and_grad(y, weights, mus, sigmas, maxiter);
+        ctx->save_for_backward({x, weights, mus, sigmas, y});
+        return {x, d_fx};
+    }
+
+    [[maybe_unused]] static auto backward(
+        const AutogradContext *ctx,
+        const variable_list &grad_output
+    ) -> variable_list {
+        const auto saved = ctx->get_saved_variables();
+        const Tensor &x = saved[0];
+        const Tensor &weights = saved[1];
+        const Tensor &mus = saved[2];
+        const Tensor &sigmas = saved[3];
+        const Tensor &y = saved[4];
+
+        const Tensor &grad_x = grad_output[0];
+        const Tensor &grad_dx = grad_output[1];
+
+        const auto [
+            d_x, d_weights, d_mus, d_sigmas,
+            d2_x, d2_weights, d2_mus, d2_sigmas
+        ] = mixture_to_gaussian_derivatives2(x, weights, mus, sigmas, y);
+        const Tensor dx_inv = d_x.reciprocal();
+        // Every inverse-map parameter derivative is -(∂T/∂θ)/(∂T/∂x), and the
+        // Jacobian-output derivatives reuse the same dx_inv³ factor.
+        const Tensor dx_inv3 = dx_inv.pow(3);
+
+        const Tensor &d_y = dx_inv;
+        const Tensor d_weights_inv = -d_weights * dx_inv.unsqueeze(-1);
+        const Tensor d_mus_inv = -d_mus * dx_inv.unsqueeze(-1);
+        const Tensor d_sigmas_inv = -d_sigmas * dx_inv.unsqueeze(-1);
+
+        const Tensor j_y = -d2_x * dx_inv3;
+        const Tensor j_weights =
+            (d2_x.unsqueeze(-1) * d_weights - d2_weights * d_x.unsqueeze(-1))
+            * dx_inv3.unsqueeze(-1);
+        const Tensor j_mus =
+            (d2_x.unsqueeze(-1) * d_mus - d2_mus * d_x.unsqueeze(-1))
+            * dx_inv3.unsqueeze(-1);
+        const Tensor j_sigmas =
+            (d2_x.unsqueeze(-1) * d_sigmas - d2_sigmas * d_x.unsqueeze(-1))
+            * dx_inv3.unsqueeze(-1);
+        return {
+            // clang-format off
+            grad_x               * d_y           + grad_dx               * j_y      ,
+            grad_x.unsqueeze(-1) * d_weights_inv + grad_dx.unsqueeze(-1) * j_weights,
+            grad_x.unsqueeze(-1) * d_mus_inv     + grad_dx.unsqueeze(-1) * j_mus    ,
+            grad_x.unsqueeze(-1) * d_sigmas_inv  + grad_dx.unsqueeze(-1) * j_sigmas ,
+            Tensor()
+            // clang-format on
+        };
+    }
+};
+} // namespace
+
+namespace imtskit_special {
+auto bimodal_to_gaussian_meta(const Tensor &x, const Tensor &mu, const Tensor &sigma) -> Tensor {
+    check_bimodal_args(x, mu, sigma);
+    const auto tensors = torch::broadcast_tensors({x, mu, sigma});
+    return torch::empty_like(tensors[0]);
+}
+
+auto bimodal_to_gaussian_value_and_grad_meta(
+    const Tensor &x,
+    const Tensor &mu,
+    const Tensor &sigma
+) -> std::tuple<Tensor, Tensor> {
+    const Tensor y = bimodal_to_gaussian_meta(x, mu, sigma);
+    return {y, torch::empty_like(y)};
+}
+
+auto gaussian_to_bimodal_meta(
+    const Tensor &y,
+    const Tensor &mu,
+    const Tensor &sigma,
+    const int64_t maxiter
+) -> Tensor {
+    check_bimodal_args(y, mu, sigma);
+    TORCH_CHECK(maxiter >= 0, "maxiter must be a non-negative integer.");
+    const auto tensors = torch::broadcast_tensors({y, mu, sigma});
+    return torch::empty_like(tensors[0]);
+}
+
+auto gaussian_to_bimodal_value_and_grad_meta(
+    const Tensor &y,
+    const Tensor &mu,
+    const Tensor &sigma,
+    const int64_t maxiter
+) -> std::tuple<Tensor, Tensor> {
+    const Tensor x = gaussian_to_bimodal_meta(y, mu, sigma, maxiter);
+    return {x, torch::empty_like(x)};
+}
+
+auto bimodal_to_gaussian(const Tensor &x, const Tensor &mu, const Tensor &sigma) -> Tensor {
+    return BimodalToGaussian::apply(x, mu, sigma);
+}
+
+auto bimodal_to_gaussian_value_and_grad(
+    const Tensor &x,
+    const Tensor &mu,
+    const Tensor &sigma
+) -> std::tuple<Tensor, Tensor> {
+    auto output = BimodalToGaussianValueAndGrad::apply(x, mu, sigma);
+    return {output[0], output[1]};
+}
+
+auto gaussian_to_bimodal(
+    const Tensor &y,
+    const Tensor &mu,
+    const Tensor &sigma,
+    const int64_t maxiter
+) -> Tensor {
+    return GaussianToBimodal::apply(y, mu, sigma, maxiter);
+}
+
+auto gaussian_to_bimodal_value_and_grad(
+    const Tensor &y,
+    const Tensor &mu,
+    const Tensor &sigma,
+    const int64_t maxiter
+) -> std::tuple<Tensor, Tensor> {
+    auto output = GaussianToBimodalValueAndGrad::apply(y, mu, sigma, maxiter);
+    return {output[0], output[1]};
+}
+
+auto mixture_to_gaussian_meta(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas
+) -> Tensor {
+    check_mixture_args(x, weights, mus, sigmas);
+    return torch::empty_like(x);
+}
+
+auto mixture_to_gaussian_value_and_grad_meta(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas
+) -> std::tuple<Tensor, Tensor> {
+    const Tensor y = mixture_to_gaussian_meta(x, weights, mus, sigmas);
+    return {y, torch::empty_like(y)};
+}
+
+auto gaussian_to_mixture_meta(
+    const Tensor &y,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas,
+    const int64_t maxiter
+) -> Tensor {
+    check_mixture_args(y, weights, mus, sigmas);
+    TORCH_CHECK(maxiter >= 0, "maxiter must be a non-negative integer.");
+    return torch::empty_like(y);
+}
+
+auto gaussian_to_mixture_value_and_grad_meta(
+    const Tensor &y,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas,
+    const int64_t maxiter
+) -> std::tuple<Tensor, Tensor> {
+    const Tensor x = gaussian_to_mixture_meta(y, weights, mus, sigmas, maxiter);
+    return {x, torch::empty_like(x)};
+}
+
+auto mixture_to_gaussian(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas
+) -> Tensor {
+    return MixtureToGaussian::apply(x, weights, mus, sigmas);
+}
+
+auto mixture_to_gaussian_value_and_grad(
+    const Tensor &x,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas
+) -> std::tuple<Tensor, Tensor> {
+    auto output = MixtureToGaussianValueAndGrad::apply(x, weights, mus, sigmas);
+    return {output[0], output[1]};
+}
+
+auto gaussian_to_mixture(
+    const Tensor &y,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas,
+    const int64_t maxiter
+) -> Tensor {
+    return GaussianToMixture::apply(y, weights, mus, sigmas, maxiter);
+}
+
+auto gaussian_to_mixture_value_and_grad(
+    const Tensor &y,
+    const Tensor &weights,
+    const Tensor &mus,
+    const Tensor &sigmas,
+    const int64_t maxiter
+) -> std::tuple<Tensor, Tensor> {
+    auto output = GaussianToMixtureValueAndGrad::apply(y, weights, mus, sigmas, maxiter);
+    return {output[0], output[1]};
+}
+
+
+TORCH_LIBRARY_FRAGMENT(imtskit_special, m) {
+    m.def("bimodal_to_gaussian(Tensor _, Tensor mu, Tensor sigma) -> Tensor");
+    m.def("gaussian_to_bimodal(Tensor _, Tensor mu, Tensor sigma, int maxiter) -> Tensor");
+    m.def("mixture_to_gaussian(Tensor _, Tensor weights, Tensor mus, Tensor sigmas) -> Tensor");
+    m.def("gaussian_to_mixture(Tensor _, Tensor weights, Tensor mus, Tensor sigmas, int maxiter) -> Tensor");
+    m.def("bimodal_to_gaussian_value_and_grad(Tensor _, Tensor mu, Tensor sigma) -> (Tensor, Tensor)");
+    m.def("gaussian_to_bimodal_value_and_grad(Tensor _, Tensor mu, Tensor sigma, int maxiter) -> (Tensor, Tensor)");
+    m.def(
+        "mixture_to_gaussian_value_and_grad(Tensor _, Tensor weights, Tensor mus, Tensor sigmas) -> (Tensor, Tensor)");
+    m.def(
+        "gaussian_to_mixture_value_and_grad(Tensor _, Tensor weights, Tensor mus, Tensor sigmas, int maxiter) -> (Tensor, Tensor)");
+}
+
+TORCH_LIBRARY_IMPL(imtskit_special, Autograd, m) {
+    m.impl("bimodal_to_gaussian", &bimodal_to_gaussian);
+    m.impl("gaussian_to_bimodal", &gaussian_to_bimodal);
+    m.impl("mixture_to_gaussian", &mixture_to_gaussian);
+    m.impl("gaussian_to_mixture", &gaussian_to_mixture);
+    m.impl("bimodal_to_gaussian_value_and_grad", &bimodal_to_gaussian_value_and_grad);
+    m.impl("gaussian_to_bimodal_value_and_grad", &gaussian_to_bimodal_value_and_grad);
+    m.impl("mixture_to_gaussian_value_and_grad", &mixture_to_gaussian_value_and_grad);
+    m.impl("gaussian_to_mixture_value_and_grad", &gaussian_to_mixture_value_and_grad);
+}
+
+TORCH_LIBRARY_IMPL(imtskit_special, Meta, m) {
+    m.impl("bimodal_to_gaussian", &bimodal_to_gaussian_meta);
+    m.impl("gaussian_to_bimodal", &gaussian_to_bimodal_meta);
+    m.impl("mixture_to_gaussian", &mixture_to_gaussian_meta);
+    m.impl("gaussian_to_mixture", &gaussian_to_mixture_meta);
+    m.impl("bimodal_to_gaussian_value_and_grad", &bimodal_to_gaussian_value_and_grad_meta);
+    m.impl("gaussian_to_bimodal_value_and_grad", &gaussian_to_bimodal_value_and_grad_meta);
+    m.impl("mixture_to_gaussian_value_and_grad", &mixture_to_gaussian_value_and_grad_meta);
+    m.impl("gaussian_to_mixture_value_and_grad", &gaussian_to_mixture_value_and_grad_meta);
+}
+} // namespace imtskit_special

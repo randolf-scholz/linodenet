@@ -16,8 +16,8 @@ from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from torch import Tensor, nan, nn
 
-from linodenet.mappings.transforms.scalar import Sinh
-from linodenet_models import (
+from imtskit.mappings.transforms.scalar import Sinh
+from imtskit_models import (
     ContinuousTimeKalmanFilter,
     ContinuousTimeNKF,
     GRU_ODE_Bayes,
@@ -25,12 +25,12 @@ from linodenet_models import (
     ProbabilisticForecastingModel,
     ProFITi,
 )
-from linodenet_models.cru import DecoderConfig, EncoderConfig, build_cru
-from linodenet_models.linodenet_probabilistic import (
+from imtskit_models.cru import DecoderConfig, EncoderConfig, build_cru
+from imtskit_models.linodenet_probabilistic import (
     make_koopman_filter,
     make_linodenet_prob,
 )
-from linodenet_models.utils import SplitTimeData
+from imtskit_models.utils import SplitTimeData
 from tests.testing import PROJECT
 
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]

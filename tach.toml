@@ -9,76 +9,9 @@ exclude = [
 source_roots = ["src"]
 
 [[modules]]
-path = "linodenet.nn"
-depends_on = ["linodenet_special"]
-
-[[modules]]
-path = "linodenet.utils"
-depends_on = []
-utility = true
-
-[[modules]]
-path = "linodenet.initializations"
-depends_on = ["linodenet.domains"]
-
-[[modules]]
-path = "linodenet.constants"
-depends_on = []
-utility = true
-
-[[modules]]
-path = "linodenet.forecasting"
-depends_on = [
-    "linodenet.nn",
-    "linodenet_special",
-    "linodenet.mappings",
-    "linodenet.state_update",
-    "linodenet.state_propagation"
-]
-
-[[modules]]
-path = "linodenet.regularizations"
-depends_on = ["linodenet.mappings"]
-
-[[modules]]
-path = "linodenet.types"
-depends_on = []
-utility = true
-
-[[modules]]
-path = "linodenet.testing"
-depends_on = []
-utility = true
-
-[[modules]]
-path = "linodenet.domains"
-depends_on = []
-
-[[modules]]
-path = "linodenet.distributions"
-depends_on = ["linodenet.nn", "linodenet.domains"]
-
-[[modules]]
 path = "blueprint"
 depends_on = []
 utility = true
-
-[[modules]]
-path = "linodenet"
-depends_on = [
-    "linodenet.distributions",
-    "linodenet.initializations",
-    "linodenet_special",
-    "linodenet.state_update",
-    "linodenet.forecasting",
-    "linodenet.nn",
-    "linodenet.parametrizations",
-    "linodenet.regularizations",
-    "linodenet.domains",
-    "linodenet.mappings",
-    "linodenet.state_propagation",
-    "linodenet.state_update.imputation"
-]
 
 [[modules]]
 path = "signatures"
@@ -86,75 +19,133 @@ depends_on = []
 utility = true
 
 [[modules]]
-path = "linodenet_special"
-depends_on = [
-    "linodenet_special.fallbacks",
-    "linodenet_special.kernels",
-    "linodenet_special.interfaces"
-]
-
-[[modules]]
-path = "linodenet_special.fallbacks"
-depends_on = ["linodenet_special.interfaces"]
-
-[[modules]]
-path = "linodenet_special.interfaces"
+path = "imtskit_special"
 depends_on = []
 
 [[modules]]
-path = "linodenet_special.kernels"
+path = "imtskit_models"
+depends_on = ["imtskit.state_update"]
+
+[[modules]]
+path = "imtskit"
 depends_on = [
-    "linodenet_special.fallbacks",
-    "linodenet_special.compiled",
-    "linodenet_special.interfaces"
+    "imtskit.distributions",
+    "imtskit.initializations",
+    "imtskit.state_update",
+    "imtskit.forecasting",
+    "imtskit.nn",
+    "imtskit.parametrizations",
+    "imtskit.regularizations",
+    "imtskit.domains",
+    "imtskit.mappings",
+    "imtskit.state_propagation",
+    "imtskit.state_update.imputation",
+    "imtskit_models",
 ]
 
 [[modules]]
-path = "linodenet_special.compiled"
-depends_on = ["linodenet_special.interfaces"]
+path = "imtskit.constants"
+depends_on = []
+utility = true
 
 [[modules]]
-path = "linodenet.mappings"
-depends_on = [
-    "linodenet_special.fallbacks",
-    "linodenet.nn",
-    "linodenet_special",
-    "linodenet.domains"
-]
+path = "imtskit.utils"
+depends_on = []
+utility = true
 
 [[modules]]
-path = "linodenet.parametrizations"
-depends_on = [
-    "linodenet.nn",
-    "linodenet.mappings",
-    "linodenet.domains",
-    "linodenet_special"
-]
+path = "imtskit.types"
+depends_on = []
+utility = true
 
 [[modules]]
-path = "linodenet.registry"
+path = "imtskit.testing"
+depends_on = []
+utility = true
+
+[[modules]]
+path = "imtskit.registry"
 depends_on = [
-    "linodenet.parametrizations",
-    "linodenet.regularizations",
-    "linodenet.domains",
-    "linodenet.initializations",
-    "linodenet.mappings"
+    "imtskit.parametrizations",
+    "imtskit.regularizations",
+    "imtskit.domains",
+    "imtskit.initializations",
+    "imtskit.mappings",
 ]
 utility = true
 
 [[modules]]
-path = "linodenet.state_propagation"
-depends_on = ["linodenet.mappings", "linodenet.initializations", "linodenet.nn", "linodenet.parametrizations"]
+path = "imtskit.special"
+depends_on = ["imtskit_special"]
+utility = true
 
 [[modules]]
-path = "linodenet.state_update"
+path = "imtskit.initializations"
 depends_on = [
-    "linodenet.distributions",
-    "linodenet.nn",
-    "linodenet.state_update.imputation",
-    "linodenet.mappings"
+    "imtskit.domains",
 ]
 
 [[modules]]
-path = "linodenet.state_update.imputation"
+path = "imtskit.nn"
+depends_on = []
+
+[[modules]]
+path = "imtskit.forecasting"
+depends_on = [
+    "imtskit.nn",
+    "imtskit.mappings",
+    "imtskit.state_propagation",
+]
+
+[[modules]]
+path = "imtskit.regularizations"
+depends_on = ["imtskit.mappings"]
+
+[[modules]]
+path = "imtskit.domains"
+depends_on = []
+
+[[modules]]
+path = "imtskit.distributions"
+depends_on = [
+    "imtskit.nn",
+    "imtskit.domains",
+]
+
+[[modules]]
+path = "imtskit.mappings"
+depends_on = [
+    "imtskit.nn",
+    "imtskit.domains",
+    "imtskit_special",
+]
+
+[[modules]]
+path = "imtskit.parametrizations"
+depends_on = [
+    "imtskit.nn",
+    "imtskit.mappings",
+    "imtskit.domains",
+]
+
+[[modules]]
+path = "imtskit.state_propagation"
+depends_on = [
+    "imtskit.mappings",
+    "imtskit.initializations",
+    "imtskit.nn",
+    "imtskit.parametrizations",
+]
+
+[[modules]]
+path = "imtskit.state_update"
+depends_on = [
+    "imtskit.distributions",
+    "imtskit.nn",
+    "imtskit.state_update.imputation",
+    "imtskit.mappings",
+]
+
+[[modules]]
+path = "imtskit.state_update.imputation"
 depends_on = []

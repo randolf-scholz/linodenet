@@ -13,7 +13,7 @@ Use your personal namespace, e.g. <https://github.com/$USER/linodenet>.
 
 ```bash
 git clone https://github.com/randolf-scholz/linodenet
-cd linodenet
+cd imtskit
 ```
 
 ### 3. Set up the virtual environment
@@ -28,7 +28,7 @@ uv sync
 ### 4. Verify that the installation was successful
 
 ```bash
-python -c "import linodenet"
+python -c "import imtskit"
 ```
 
 ### 5. Setup remote repositories and pre-commit hooks

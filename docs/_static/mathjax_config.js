@@ -197,6 +197,7 @@ MathJax = {
             diag: "\\operatorname{diag}",
             dist: "\\operatorname{dist}",
             logsumexp: "\\operatorname{logsumexp}",
+            softplus: "\\operatorname{softplus}",
             NdtriExp: "\\operatorname{ndtri\\_exp}",
             rank: "\\operatorname{rank}",
             relu: "\\operatorname{ReLU}",

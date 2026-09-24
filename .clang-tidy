@@ -20,4 +20,4 @@ WarningsAsErrors: ''
 
 # Limit diagnostics from headers to the project's C++ extension, rather than
 # third-party headers brought in by PyTorch and CUDA.
-HeaderFilterRegex: '(^|.*/)src/linodenet_special/csrc/.*'
+HeaderFilterRegex: '(^|.*/)src/imtskit_special/csrc/.*'

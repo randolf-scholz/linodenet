@@ -1,12 +1,12 @@
-# LinODEnet — 𝗟𝗶𝗻ear 𝗢rdinary 𝗗ifferential 𝗘quation 𝗡𝗲𝘁work
+# imtskit — 𝗜rregular 𝗠ultivariate 𝗧ime 𝗦eries Tool𝗞𝗶𝘁
 
-[INSTALLATION](#installation) | [DOCUMENTATION](docs/index.rst) | [CONTRIBUTING](CONTRIBUTING.md) | [CHANGELOG](CHANGELOG.md) | [LICENSE](LICENSE)
+[INSTALLATION](#installation) | [DOCUMENTATION](docs/index.rst) | [CONTRIBUTING](CONTRIBUTING.md) | [LICENSE](LICENSE)
 
 ![model-sketch](docs/lssm.png)
 
 ## Introduction
 
-LinODEnet is a Python library for building components for state space models, with a particular focus on irregularly
+`imtskit` is a Python library for building components for state space models, with a particular focus on irregularly
 sampled time series. It is aimed at forecasting settings where observations do not arrive on a fixed grid and where
 continuous-time structure matters for modeling latent dynamics, interpolation, and prediction.
 
@@ -26,8 +26,10 @@ Install a development version with `uv`:
 
 ```bash
 git clone https://github.com/randolf-scholz/linodenet.git
-cd linodenet
-uv sync
+cd imtskit
+uv venv
+uv pip install --group build
+uv pip install -e .
 ```
 
 ## Other libraries
@@ -49,5 +51,5 @@ If you are looking for broader time series ecosystems, several other libraries c
 - [pyrregular](https://github.com/fspinna/pyrregular) focuses on irregular time series classification, providing a
   unified framework and standardized dataset repository for benchmarking methods on irregular temporal data.
 
-LinODEnet is narrower in scope than these libraries. Its emphasis is on reusable modeling components for continuous-time
+`imtskit` is narrower in scope than these libraries. Its emphasis is on reusable modeling components for continuous-time
 and irregular-time settings, especially when state space structure is central to the problem.

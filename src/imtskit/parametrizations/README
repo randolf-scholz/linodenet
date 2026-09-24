@@ -1,0 +1,14 @@
+# `imtskit.parametrize` Module
+
+This module is an alternative to `torch.nn.utils.parametrizations` that provides JIT-compatible parametrizations for
+PyTorch models.
+The central difference is the internal mechanism for applying parametrizations, which is designed to be compatible with
+TorchScript (JIT).
+
+- the builtin mechanism substitutes the parametrized tensor with a `@property` that holds the parametrization logic.
+  - in particular, it is evaluated at every access, which is very slow without caching if the parametrization is complex
+    and the tensor is accessed frequently
+  - this is especially problematic in sequential (RNN/GRU/LSTM) models.
+- Our method replaces the tensor with a `buffer` that holds the cached parametrization.
+  - we always use the parametrized value immediately
+  - we need to manually update the buffer when the base tensor changes (e.g. after an optimizer step)
