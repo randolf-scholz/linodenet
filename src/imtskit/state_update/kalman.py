@@ -14,16 +14,16 @@ with prior mean $x$ and prior covariance $Σ$, the classical Kalman filter updat
 In observation space, writing
 
 .. math::
-    μ_y &= Hμ \\
-    Σ_y &= HΣHᵀ + R
+    μ₞ &= Hμ \\
+    Σ₞ &= HΣHᵀ + R
 
 the posterior observation mean and covariance are
 
 .. math::
-    μ_y' &= μ_y + (Σ_y - R) Σ_y⁻¹ (y - μ_y) \\
-         &= y - R Σ_y⁻¹ (y - μ_y) \\
-    Σ_y' &= HΣ'Hᵀ + R \\
-         &= Σ_y - (Σ_y - R) Σ_y⁻¹ (Σ_y - R)
+    μ₞' &= μ₞ + (Σ₞ - R) Σ₞⁻¹ (y - μ₞) \\
+        &= y - R Σ₞⁻¹ (y - μ₞) \\
+    Σ₞' &= HΣ'Hᵀ + R \\
+        &= Σ₞ - (Σ₞ - R) Σ₞⁻¹ (Σ₞ - R)
 
 When the observation contains missing values, let $m = ¬\operatorname{isnan}(y)$ be
 the observation mask and let $Πₘ$ denote the projection onto the observed coordinates.
@@ -36,14 +36,14 @@ Then the Kalman update restricted to the observed subspace becomes
 
 Again in observation space, with the masked innovation covariance
 
-.. math:: Σ_{y,m} = Πₘ Σ_y Πₘᵀ
+.. math:: Σ̂₞ ≔ Πₘ Σ₞ Πₘᵀ
 
 the posterior observation mean and covariance become
 
 .. math::
-    μ_y' &= μ_y + (Σ_y - R) Πₘᵀ Σ_{y,m}⁻¹ Πₘ(y - μ_y) \\
-    Σ_y' &= HΣ'Hᵀ + R \\
-         &= Σ_y - (Σ_y - R) Πₘᵀ Σ_{y,m}⁻¹ Πₘ (Σ_y - R)
+    μ₞' &= μ₞ + (Σ₞ - R) Πₘᵀ Σ̂₞⁻¹ Πₘ(y - μ₞) \\
+    Σ₞' &= HΣ'Hᵀ + R \\
+        &= Σ₞ - (Σ₞ - R) Πₘᵀ Σ̂₞⁻¹ Πₘ (Σ₞ - R)
 
 This is the form used by the missing-value-aware variants in this module.
 """
