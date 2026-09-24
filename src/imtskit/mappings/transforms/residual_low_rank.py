@@ -17,7 +17,7 @@ class LowRankTransform(nn.Module, Transform):
 
     .. math:: y = (𝕀ₙ + USVᵀ)x
 
-    where $U, V ∈ ℝⁿˣᵏ$ and $S = \operatorname{diag}(s)$ with
+    where $U, V ∈ ℝⁿˣᵏ$ and $S = \diag(s)$ with
 
     .. math:: sᵢ = \frac{ρ \tanh(θᵢ)}{‖Uᵀvᵢ‖₁ + δ}
 

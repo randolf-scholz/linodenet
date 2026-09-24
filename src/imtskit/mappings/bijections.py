@@ -67,7 +67,7 @@ class PositiveScalarMatrix(nn.Module, Bijection):
 
 
 class PositiveDiagonal(nn.Module, Bijection):
-    r"""Map vectors to positive diagonal matrices via $v ↦ \operatorname{diag}(\exp(v))$."""
+    r"""Map vectors to positive diagonal matrices via $v ↦ \diag(\exp(v))$."""
 
     DOMAIN: Final[VectorDomains] = VectorDomains.REAL
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_DIAGONAL

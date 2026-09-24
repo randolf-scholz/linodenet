@@ -194,6 +194,7 @@ MathJax = {
             argmax: "\\operatorname*{arg\\,max}",
             argmin: "\\operatorname*{arg\\,min}",
             Median: "\\operatorname{Median}",
+            chol: "\\operatorname{chol}",
             diag: "\\operatorname{diag}",
             dist: "\\operatorname{dist}",
             logsumexp: "\\operatorname{logsumexp}",
