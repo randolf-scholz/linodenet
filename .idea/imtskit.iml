@@ -244,7 +244,7 @@
       <excludeFolder url="file://$MODULE_DIR$/src/imtskit_special/tests/reports" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
-    <orderEntry type="jdk" jdkName="uv (linodenet)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="~/github/randolf-scholz/imtskit/.venv" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PackageRequirementsSettings">
