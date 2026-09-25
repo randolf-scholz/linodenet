@@ -31,7 +31,7 @@ __all__ = [
 import math
 from collections.abc import Collection, Iterable
 from dataclasses import InitVar, dataclass, replace
-from typing import NamedTuple, Protocol
+from typing import TYPE_CHECKING, NamedTuple, Protocol, ReadOnly
 
 import torch
 from torch import Tensor, nan
@@ -51,22 +51,31 @@ class AbstractSplitTimeData(Protocol):
         static_covariates: Float[..., M],  padded NaN
     """
 
-    @property
-    def context_times(self) -> Tensor: ...
-    @property
-    def context_values(self) -> Tensor: ...
-    @property
-    def context_mask(self) -> Tensor: ...
+    if TYPE_CHECKING:
 
-    @property
-    def query_times(self) -> Tensor: ...
-    @property
-    def query_mask(self) -> Tensor: ...
-    @property
-    def target_values(self) -> Tensor | None: ...
+        @property
+        def context_times(self) -> Tensor: ...
+        @property
+        def context_values(self) -> Tensor: ...
+        @property
+        def context_mask(self) -> Tensor: ...
+        @property
+        def query_times(self) -> Tensor: ...
+        @property
+        def query_mask(self) -> Tensor: ...
+        @property
+        def target_values(self) -> Tensor | None: ...
+        @property
+        def static_covariates(self) -> Tensor | None: ...
 
-    @property
-    def static_covariates(self) -> Tensor | None: ...
+    else:  # FIXME: use https://peps.python.org/pep-0767/
+        context_times: ReadOnly[Tensor]
+        context_values: ReadOnly[Tensor]
+        context_mask: ReadOnly[Tensor]
+        query_times: ReadOnly[Tensor]
+        query_mask: ReadOnly[Tensor]
+        target_values: ReadOnly[Tensor | None]
+        static_covariates: ReadOnly[Tensor | None]
 
 
 class AbstractMergedTimeData(Protocol):
@@ -81,21 +90,28 @@ class AbstractMergedTimeData(Protocol):
         static_covariates: Float[..., M], padded NaN
     """
 
-    @property
-    def timestamps(self) -> Tensor: ...
+    if TYPE_CHECKING:
 
-    @property
-    def context_mask(self) -> Tensor: ...
-    @property
-    def context_values(self) -> Tensor: ...
+        @property
+        def timestamps(self) -> Tensor: ...
+        @property
+        def context_mask(self) -> Tensor: ...
+        @property
+        def context_values(self) -> Tensor: ...
+        @property
+        def query_mask(self) -> Tensor: ...
+        @property
+        def target_values(self) -> Tensor | None: ...
+        @property
+        def static_covariates(self) -> Tensor | None: ...
 
-    @property
-    def query_mask(self) -> Tensor: ...
-    @property
-    def target_values(self) -> Tensor | None: ...
-
-    @property
-    def static_covariates(self) -> Tensor | None: ...
+    else:  # FIXME: use https://peps.python.org/pep-0767/
+        timestamps: ReadOnly[Tensor]
+        context_mask: ReadOnly[Tensor]
+        context_values: ReadOnly[Tensor]
+        query_mask: ReadOnly[Tensor]
+        target_values: ReadOnly[Tensor | None]
+        static_covariates: ReadOnly[Tensor | None]
 
 
 class AbstractTripletTimeData(Protocol):
@@ -111,22 +127,31 @@ class AbstractTripletTimeData(Protocol):
         static_covariates: Float[..., M], padded NaN
     """
 
-    @property
-    def context_times(self) -> Tensor: ...
-    @property
-    def context_channels(self) -> Tensor: ...
-    @property
-    def context_values(self) -> Tensor: ...
+    if TYPE_CHECKING:
 
-    @property
-    def query_times(self) -> Tensor: ...
-    @property
-    def query_channels(self) -> Tensor: ...
-    @property
-    def target_values(self) -> Tensor | None: ...
+        @property
+        def context_times(self) -> Tensor: ...
+        @property
+        def context_channels(self) -> Tensor: ...
+        @property
+        def context_values(self) -> Tensor: ...
+        @property
+        def query_times(self) -> Tensor: ...
+        @property
+        def query_channels(self) -> Tensor: ...
+        @property
+        def target_values(self) -> Tensor | None: ...
+        @property
+        def static_covariates(self) -> Tensor | None: ...
 
-    @property
-    def static_covariates(self) -> Tensor | None: ...
+    else:  # FIXME: use https://peps.python.org/pep-0767/
+        context_times: ReadOnly[Tensor]
+        context_channels: ReadOnly[Tensor]
+        context_values: ReadOnly[Tensor]
+        query_times: ReadOnly[Tensor]
+        query_channels: ReadOnly[Tensor]
+        target_values: ReadOnly[Tensor | None]
+        static_covariates: ReadOnly[Tensor | None]
 
 
 def _all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
