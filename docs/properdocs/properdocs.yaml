@@ -42,7 +42,7 @@ plugins:
       handlers:
         python:
           # Resolve packages from source, independently of the invoking directory.
-          paths: [../../src]
+          paths: [ ../../src ]
           inventories:
             - https://numpy.org/doc/stable/objects.inv
             - https://docs.pytest.org/en/stable/objects.inv
@@ -51,21 +51,31 @@ plugins:
             - https://docs.pytorch.org/docs/stable/objects.inv
             - https://typing-extensions.readthedocs.io/en/latest/objects.inv
           options:
+            # general
+            show_source: true
+            # headings
+            heading_level: 1
+            parameter_headings: true
+            show_root_full_path: false
+            show_root_heading: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            # members
+            members: false
+            members_order: source
+            show_submodules: false
+            # docstrings
             docstring_style: google
             docstring_section_style: list
             docstring_options:
               ignore_init_summary: true
               trim_doctest_flags: true
-            heading_level: 1
-            members_order: source
-            parameter_headings: true
-            show_root_full_path: false
-            show_root_heading: true
-            show_source: false
-            members: false
-            show_submodules: false
-            show_symbol_type_heading: true
-            show_symbol_type_toc: true
+            # signatures
+            line_length: 88
+            overloads_only: true
+            separate_signature: true
+            show_signature_annotations: true
+            signature_crossrefs: true
             type_parameter_headings: true
 
 markdown_extensions:
