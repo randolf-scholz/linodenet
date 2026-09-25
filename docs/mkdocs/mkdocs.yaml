@@ -99,6 +99,7 @@ markdown_extensions:
       alternate_style: true
 
 extra_css:
+  - _static/footer-navigation.css
   - _static/signatures.css
 
 # The configuration must be loaded before the MathJax runtime.
