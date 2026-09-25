@@ -132,6 +132,7 @@ html_theme_options = {
     "features": [
         "content.action.view",
         "content.code.copy",
+        "navigation.footer",
         "navigation.sections",
         "navigation.top",
         "navigation.tabs",
@@ -176,7 +177,7 @@ html_codeblock_linenos_style = "inline"  # style for line numbers in code-blocks
 html_context = {}  # options to pass to the template engine
 html_logo = ""  # path/url to the project logo
 html_favicon = ""  # path/url to the favicon (icon in the browser tab)
-html_css_files = []  # A list of CSS files
+html_css_files = ["footer-navigation.css"]  # A list of CSS files
 html_js_files = []  # A list of JavaScript filename.
 html_static_path = [
     str(SPHINX_DIR / "_static")

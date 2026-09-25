@@ -12,6 +12,7 @@ import mkdocs_gen_files
 ROOT_DIR = Path(__file__).resolve().parents[3]
 SOURCE_DIR = ROOT_DIR / "src"
 REFERENCE_DIR = Path("reference")
+REFERENCE_INDEX = REFERENCE_DIR / "index.md"
 NAV = mkdocs_gen_files.Nav()
 DOCUMENTED_IDENTIFIERS: set[str] = set()
 
@@ -282,5 +283,14 @@ for module in MODULES.values():
             file.writelines(f"        - {name!r}\n" for name in constants)
     document_module_definitions(module)
 
+with mkdocs_gen_files.open(REFERENCE_INDEX, "w") as file:
+    file.write("# API reference\n\n")
+    file.write("## Packages\n\n")
+    for module in MODULES.values():
+        if "." not in module.identifier:
+            path = get_relative_path(REFERENCE_INDEX, module.doc_path)
+            file.write(f"- [{module.identifier}]({path})\n")
+
 with mkdocs_gen_files.open(REFERENCE_DIR / "SUMMARY.md", "w") as file:
+    file.write("- [API reference](index.md)\n")
     file.writelines(NAV.build_literate_nav())

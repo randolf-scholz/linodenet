@@ -292,4 +292,5 @@ with mkdocs_gen_files.open(REFERENCE_INDEX, "w") as file:
             file.write(f"- [{module.identifier}]({path})\n")
 
 with mkdocs_gen_files.open(REFERENCE_DIR / "SUMMARY.md", "w") as file:
+    file.write("- [API reference](index.md)\n")
     file.writelines(NAV.build_literate_nav())
