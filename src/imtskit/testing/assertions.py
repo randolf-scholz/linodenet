@@ -10,11 +10,13 @@ Naming convention:
 __all__ = [
     # assert functions
     "assert_all_close",
+    "assert_export_compatible",
     "assert_is_trainable",
     "assert_jit_compatible",
     "assert_model_ok",
     # check functions
     "check_backward",
+    "check_export_serializable",
     "check_forward",
     "check_jit_serializable",
     "check_initialization",
@@ -32,6 +34,7 @@ from typing import Any, Optional, overload
 
 import torch
 from torch import Tensor, jit
+from torch.export import ExportedProgram
 from torch.nn import Module
 
 from imtskit.constants import EMPTY_MAP
@@ -270,12 +273,8 @@ def check_backward(
 
 @overload
 def check_jit_scriptable(arg: Module, /) -> jit.ScriptModule: ...
-
-
 @overload
 def check_jit_scriptable(arg: Func, /) -> jit.ScriptFunction: ...
-
-
 def check_jit_scriptable(
     arg: Module | Func, /
 ) -> jit.ScriptModule | jit.ScriptFunction:
@@ -321,6 +320,24 @@ def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
     return loaded
 
 
+def check_export_serializable(exported_program: ExportedProgram, /) -> ExportedProgram:
+    r"""Test saving and loading an exported program.
+
+    Raises:
+        AssertionError: if saving or loading fails.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".pt2") as file:
+        try:
+            torch.export.save(exported_program, file.name)
+        except Exception as exc:
+            raise AssertionError("Export serialization failed!") from exc
+
+        try:
+            return torch.export.load(file.name)
+        except Exception as exc:
+            raise AssertionError("Export deserialization failed!") from exc
+
+
 # endregion check helper functions -----------------------------------------------------
 
 
@@ -346,8 +363,8 @@ def assert_is_trainable(
     if use_copy:
         with torch.no_grad():
             model = deepcopy(module)
-            call_args = deepcopy(call_args)
-            call_kwargs = deepcopy(call_kwargs)
+            call_args = deepcopy(tuple(call_args))
+            call_kwargs = deepcopy(dict(call_kwargs))
         # fix the gradient state
         for w, p in zip(model.parameters(), module.parameters(), strict=True):
             w.requires_grad_(bool(p.requires_grad))
@@ -385,8 +402,8 @@ def assert_jit_compatible(
     module_or_function: Module | Func,
     /,
     *,
-    call_args: tuple[Any, ...],
-    call_kwargs: Mapping[str, Tree],
+    call_args: tuple[Any, ...] = (),
+    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
     # optional arguments
     reference_model: Optional[Module | Func] = None,
     check_is_trainable: bool = True,
@@ -408,6 +425,7 @@ def assert_jit_compatible(
 
     # script the module
     scripted_obj = check_jit_scriptable(module_or_function)
+
     # perform forward pass
     check_forward(
         scripted_obj,
@@ -457,6 +475,66 @@ def assert_jit_compatible(
             call_args=call_args,
             call_kwargs=call_kwargs,
         )
+
+
+def assert_export_compatible(
+    module: Module,
+    /,
+    *,
+    call_args: tuple[Any, ...],
+    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    # optional arguments
+    reference_model: Module | Func | None = None,
+    check_is_trainable: bool = True,
+) -> None:
+    r"""Test whether a module is compatible with `torch.export`.
+
+    Checks the exported module before and after an export serialization round trip.
+    """
+    ref_obj = module if reference_model is None else reference_model
+    ref_outs = check_forward(
+        ref_obj,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+    )
+    ref_grads = check_backward(
+        ref_obj,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+    )
+
+    try:
+        exported_program = torch.export.export(
+            module,
+            args=call_args,
+            kwargs=dict(call_kwargs),
+        )
+    except Exception as exc:
+        raise AssertionError("Model export failed!") from exc
+
+    deserialized_module = check_export_serializable(exported_program).module()
+
+    for exported_module in (exported_program.module(), deserialized_module):
+        check_forward(
+            exported_module,
+            call_args=call_args,
+            call_kwargs=call_kwargs,
+            reference_values=ref_outs,
+            reference_shapes=get_shapes(ref_outs),
+        )
+        check_backward(
+            exported_module,
+            call_args=call_args,
+            call_kwargs=call_kwargs,
+            reference_gradients=ref_grads,
+            reference_shapes=get_shapes(ref_grads),
+        )
+        if check_is_trainable:
+            assert_is_trainable(
+                exported_module,
+                call_args=call_args,
+                call_kwargs=dict(call_kwargs),
+            )
 
 
 def assert_model_ok(

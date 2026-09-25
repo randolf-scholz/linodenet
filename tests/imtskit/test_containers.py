@@ -7,7 +7,7 @@ import torch
 from torch import Tensor, nn
 
 from imtskit.nn import ModuleMapping, ModuleSequence
-from imtskit.testing import assert_jit_compatible, check_jit_serializable
+from imtskit.testing import assert_export_compatible, assert_jit_compatible
 
 BATCH_SIZE = 5
 
@@ -40,7 +40,7 @@ class TestModuleSequence:
             for module in reversed(m):
                 assert type(module) is nn.Linear
 
-    def test_jit(self) -> None:
+    def test_compile(self) -> None:
         class Foo(ModuleSequence):
             def forward(self, x: Tensor) -> Tensor:
                 for module in self:
@@ -52,7 +52,8 @@ class TestModuleSequence:
         model = Foo([nn.Linear(DIM_IN, DIM_OUT), nn.Linear(DIM_OUT, DIM_OUT)])
         x = torch.randn(BATCH_SIZE, DIM_IN)
 
-        assert_jit_compatible(model, call_args=(x,), call_kwargs={})
+        assert_export_compatible(model, call_args=(x,))
+        assert_jit_compatible(model, call_args=(x,))
 
     def test_multiple_inheritance(self) -> None:
         class A(nn.Module):
@@ -166,7 +167,7 @@ class TestModuleMapping:
                 assert type(key) is str
                 assert type(module) is nn.Linear
 
-    def test_jit(self) -> None:
+    def test_compile(self) -> None:
         class Bar(ModuleMapping):
             def forward(self, x: Tensor) -> Tensor:
                 outputs: list[Tensor] = []
@@ -182,7 +183,5 @@ class TestModuleMapping:
         )
         x = torch.randn(BATCH_SIZE, DIM_IN)
 
+        assert_export_compatible(model, call_args=(x,), call_kwargs={})
         assert_jit_compatible(model, call_args=(x,), call_kwargs={})
-
-        reloaded = check_jit_serializable(model)
-        list(reloaded.named_buffers())
