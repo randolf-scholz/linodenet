@@ -15,6 +15,7 @@
     <mapping directory="$PROJECT_DIR$/third_party/separable_flows" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/set_transformer" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/survae_flows" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/third_party/t-PatchGNN" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/torchdiffeq" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/third_party/torchode" vcs="Git" />
   </component>
