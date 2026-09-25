@@ -30,6 +30,9 @@ tmp*.py
 # documentation
 docs/apidoc/
 docs/autoapi/
+docs/sphinx/apidoc/
+docs/sphinx/autoapi/
+docs/zensical/reference/
 
 # testing
 **/tests/**/reports/

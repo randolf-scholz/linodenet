@@ -1,35 +1,49 @@
 #!/usr/bin/env just --justfile
 export PYTORCH_JIT := "0"
-BUILD_DIR := "./build/latest"
-PREVIOUS_BUILD := "./build/previous"
-AUTOSUMMARY_DIR := "_autosummary"
-AUTOAPI_DIR := "autoapi"
-APIDOC_DIR := "apidoc"
 
 [default]
-[doc('Show documentation commands.')]
+[doc("Build the Sphinx HTML documentation (the current default).")]
+make *sphinx_args:
+    just --justfile {{ justfile() }} sphinx {{ sphinx_args }}
+
+[doc("Show documentation commands.")]
 help:
     @just --justfile {{ justfile() }} --list docs
 
-[doc('Clean Sphinx build artifacts.')]
-clean:
-    #!/usr/bin/env bash
-    set -eu
+[doc("Remove Sphinx output and generated API source files.")]
+sphinx-clean:
+    rm -rf autoapi build/sphinx sphinx/_autosummary sphinx/autoapi sphinx/apidoc
 
-    mkdir -p "{{ BUILD_DIR }}"
-    rm -rf {{ PREVIOUS_BUILD }}
-    mv "{{ BUILD_DIR }}" {{ PREVIOUS_BUILD }}
+[doc("Remove MkDocs output.")]
+mkdocs-clean:
+    rm -rf build/mkdocs
 
-    rm -rf "{{ BUILD_DIR }}"
-    rm -rf {{ AUTOSUMMARY_DIR }}
-    rm -rf {{ AUTOAPI_DIR }}
-    rm -rf {{ APIDOC_DIR }}
+[doc("Remove ProperDocs output.")]
+properdocs-clean:
+    rm -rf build/properdocs
 
-[doc('Rebuild the Sphinx API docs and HTML output.')]
-make *sphinx_args: clean
-    #!/usr/bin/env bash
-    set -eu
+[doc("Remove Zensical output and generated API Markdown.")]
+zensical-clean:
+    rm -rf build/zensical zensical/reference
 
-    sphinx_opts=(-w {{ BUILD_DIR }}/warnings.txt)
-    # uv run sphinx-apidoc --separate -o {{ APIDOC_DIR }} ../src/
-    uv run sphinx-build -M html . "{{ BUILD_DIR }}" "${sphinx_opts[@]}" {{ sphinx_args }}
+[doc("Remove all generated documentation output.")]
+clean: sphinx-clean mkdocs-clean properdocs-clean zensical-clean
+
+[doc("Build the MkDocs proof-of-concept site with strict validation.")]
+mkdocs *mkdocs_args: mkdocs-clean
+    uv run mkdocs build --strict --config-file mkdocs/mkdocs.yaml {{ mkdocs_args }}
+
+[doc("Build the ProperDocs proof-of-concept site with strict validation.")]
+properdocs *properdocs_args: properdocs-clean
+    uv run properdocs build --strict --config-file properdocs/properdocs.yaml {{ properdocs_args }}
+
+[doc("Build the Zensical proof-of-concept site with generated API Markdown.")]
+zensical *zensical_args: zensical-clean
+    uv run python zensical/scripts/generate_reference.py
+    cd .. && uv run zensical build --clean --strict {{ zensical_args }}
+    # Zensical does not copy a symlink whose target is outside its docs directory.
+    cp -RL zensical/_static build/zensical/
+
+[doc("Rebuild the Sphinx API docs and HTML output.")]
+sphinx *sphinx_args: sphinx-clean
+    uv run sphinx-build -M html . build/sphinx -c sphinx {{ sphinx_args }}

@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+site_name: imtskit
+site_description: Irregular Multivariate Time Series Toolkit
+repo_url: https://github.com/randolf-scholz/imtskit
+repo_name: randolf-scholz/imtskit
+
+docs_dir: .
+site_dir: ../build/mkdocs
+exclude_docs: |
+  justfile
+  mkdocs.yaml
+  scripts/**
+
+nav:
+  - Home: index.md
+  - API reference: reference/
+
+theme:
+  name: material
+  language: en
+  features:
+    - content.code.copy
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.tabs
+    - navigation.top
+    - search.highlight
+    - search.suggest
+    - toc.follow
+
+plugins:
+  - search
+  - gen-files:
+      scripts:
+        - scripts/generate_reference.py
+  - literate-nav:
+      nav_file: SUMMARY.md
+  - section-index
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          # Resolve packages from source, independently of the invoking directory.
+          paths: [../../src]
+          inventories:
+            - https://numpy.org/doc/stable/objects.inv
+            - https://docs.pytest.org/en/stable/objects.inv
+            - https://docs.python.org/3/objects.inv
+            - https://docs.scipy.org/doc/scipy/objects.inv
+            - https://docs.pytorch.org/docs/stable/objects.inv
+            - https://typing-extensions.readthedocs.io/en/latest/objects.inv
+          options:
+            docstring_style: google
+            docstring_section_style: list
+            docstring_options:
+              ignore_init_summary: true
+              trim_doctest_flags: true
+            heading_level: 1
+            members_order: source
+            parameter_headings: true
+            show_root_full_path: false
+            show_root_heading: true
+            show_source: false
+            members: false
+            show_submodules: false
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+            type_parameter_headings: true
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+extra_css:
+  - _static/signatures.css
+
+# The configuration must be loaded before the MathJax runtime.
+extra_javascript:
+  - _static/mathjax_config.js
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
