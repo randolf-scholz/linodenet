@@ -50,38 +50,20 @@ def get_device(x: object, /) -> DeviceArg:
 
 @overload
 def to_device[M: Module](x: M, /, *, device: DeviceArg = ...) -> M: ...
-
-
 @overload
 def to_device[T: Tensor](x: T, /, *, device: DeviceArg = ...) -> T: ...
-
-
 @overload
 def to_device[S: Scalar](x: S, /, *, device: DeviceArg = ...) -> S: ...
-
-
 @overload
-def to_device[T](
-    map_: Mapping[str, T], /, *, device: DeviceArg = ...
-) -> dict[str, T]: ...
-
-
+def to_device[*Ts](tup: tuple[*Ts], /, *, device: DeviceArg = ...) -> tuple[*Ts]: ...  # pyright: ignore[reportOverlappingOverload]
 @overload
-def to_device[T](set_: AbstractSet[T], /, *, device: DeviceArg = ...) -> set[T]: ...
-
-
+def to_device[T](m: Mapping[str, T], /, *, device: DeviceArg = ...) -> dict[str, T]: ...
 @overload
-def to_device[*Ts](tup: tuple[*Ts], /, *, device: DeviceArg = ...) -> tuple[*Ts]: ...
-
-
+def to_device[T](s: AbstractSet[T], /, *, device: DeviceArg = ...) -> set[T]: ...
 @overload
-def to_device[T](seq: list[T], /, *, device: DeviceArg = ...) -> list[T]: ...
-
-
+def to_device[T](seq: Sequence[T], /, *, device: DeviceArg = ...) -> list[T]: ...
 @overload
 def to_device[T](x: T, /, *, device: DeviceArg = ...) -> T: ...
-
-
 def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
     r"""Move a nested tensor to a device."""
     match x:
@@ -96,12 +78,12 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
             return scalar
         case tuple(tup):
             return tuple(to_device(item, device=device) for item in tup)
+        case Mapping() as mapping:
+            return {key: to_device(val, device=device) for key, val in mapping.items()}
         case AbstractSet() as set_like:
             return {to_device(item, device=device) for item in set_like}
         case Sequence() as seq:
             return [to_device(item, device=device) for item in seq]
-        case Mapping() as mapping:
-            return {key: to_device(val, device=device) for key, val in mapping.items()}
         case _:
             return x
 
@@ -181,28 +163,16 @@ def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
 
 @overload
 def make_tensors_parameters(x: Tensor, /) -> nn.Parameter: ...
-
-
 @overload
 def make_tensors_parameters[S: Scalar](x: S, /) -> S: ...
-
-
+@overload
+def make_tensors_parameters[*Ts](x: tuple[*Ts], /) -> tuple[*Ts]: ...  # pyright: ignore[reportOverlappingOverload]
 @overload
 def make_tensors_parameters[T](x: Mapping[str, T], /) -> dict[str, T]: ...
-
-
 @overload
 def make_tensors_parameters[T](x: AbstractSet[T], /) -> set[T]: ...
-
-
 @overload
-def make_tensors_parameters[*Ts](x: tuple[*Ts], /) -> tuple[*Ts]: ...
-
-
-@overload
-def make_tensors_parameters[T](x: list[T], /) -> list[T]: ...
-
-
+def make_tensors_parameters[T](x: Sequence[T], /) -> list[T]: ...
 def make_tensors_parameters(arg: Any, /) -> Any:
     r"""Make tensors parameters."""
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
@@ -211,10 +181,10 @@ def make_tensors_parameters(arg: Any, /) -> Any:
             return nn.Parameter(x) if not isinstance(x, nn.Parameter) else x
         case scalar if isinstance(scalar, Scalar.__value__):
             return scalar
-        case Mapping() as mapping:
-            return {key: make_tensors_parameters(val) for key, val in mapping.items()}
         case tuple(tup):
             return tuple(make_tensors_parameters(item) for item in tup)
+        case Mapping() as mapping:
+            return {key: make_tensors_parameters(val) for key, val in mapping.items()}
         case AbstractSet() as set_like:
             return {make_tensors_parameters(item) for item in set_like}
         case Sequence() as seq:
