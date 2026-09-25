@@ -14,9 +14,9 @@ help:
 sphinx-clean:
     rm -rf autoapi build/sphinx sphinx/_autosummary sphinx/autoapi sphinx/apidoc
 
-[doc("Remove MkDocs output.")]
-mkdocs-clean:
-    rm -rf build/mkdocs
+#[doc("Remove MkDocs output.")]
+#mkdocs-clean:
+#    rm -rf build/mkdocs
 
 [doc("Remove ProperDocs output.")]
 properdocs-clean:
@@ -27,11 +27,11 @@ zensical-clean:
     rm -rf build/zensical zensical/reference
 
 [doc("Remove all generated documentation output.")]
-clean: sphinx-clean mkdocs-clean properdocs-clean zensical-clean
+clean: sphinx-clean properdocs-clean zensical-clean
 
-[doc("Build the MkDocs proof-of-concept site with strict validation.")]
-mkdocs *mkdocs_args: mkdocs-clean
-    uv run mkdocs build --strict --config-file mkdocs/mkdocs.yaml {{ mkdocs_args }}
+#[doc("Build the MkDocs proof-of-concept site with strict validation.")]
+#mkdocs *mkdocs_args: mkdocs-clean
+#    uv run mkdocs build --strict --config-file mkdocs/mkdocs.yaml {{ mkdocs_args }}
 
 [doc("Build the ProperDocs proof-of-concept site with strict validation.")]
 properdocs *properdocs_args: properdocs-clean
