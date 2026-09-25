@@ -31,7 +31,7 @@ __all__ = [
 import math
 from collections.abc import Collection, Iterable
 from dataclasses import InitVar, dataclass, replace
-from typing import NamedTuple, Protocol
+from typing import TYPE_CHECKING, NamedTuple, Protocol, ReadOnly
 
 import torch
 from torch import Tensor, nan
@@ -42,91 +42,116 @@ class AbstractSplitTimeData(Protocol):
     r"""Protocol for split time representation.
 
     Attributes:
-        context_times:     Float[..., $N], padded NaN, non-decreasing
-        context_values:    Float[..., $N, D], padded NaN
-        context_mask:      Bool[..., $N, D], padded False
-        query_times:       Float[..., $K], padded NaN, non-decreasing
-        query_mask:        Bool[..., $K, F],  padded False
-        target_values:     Float[..., $K, F],  padded NaN
-        static_covariates: Float[..., M],  padded NaN
+        context_times:     ``Float[..., $N]``, padded NaN, non-decreasing
+        context_values:    ``Float[..., $N, D]``, padded NaN
+        context_mask:      ``Bool[..., $N, D]``, padded False
+        query_times:       ``Float[..., $K]``, padded NaN, non-decreasing
+        query_mask:        ``Bool[..., $K, F],``  padded False
+        target_values:     ``Float[..., $K, F],``  padded NaN
+        static_covariates: ``Float[..., M],``  padded NaN
     """
 
-    @property
-    def context_times(self) -> Tensor: ...
-    @property
-    def context_values(self) -> Tensor: ...
-    @property
-    def context_mask(self) -> Tensor: ...
+    if TYPE_CHECKING:
 
-    @property
-    def query_times(self) -> Tensor: ...
-    @property
-    def query_mask(self) -> Tensor: ...
-    @property
-    def target_values(self) -> Tensor | None: ...
+        @property
+        def context_times(self) -> Tensor: ...
+        @property
+        def context_values(self) -> Tensor: ...
+        @property
+        def context_mask(self) -> Tensor: ...
+        @property
+        def query_times(self) -> Tensor: ...
+        @property
+        def query_mask(self) -> Tensor: ...
+        @property
+        def target_values(self) -> Tensor | None: ...
+        @property
+        def static_covariates(self) -> Tensor | None: ...
 
-    @property
-    def static_covariates(self) -> Tensor | None: ...
+    else:  # FIXME: use https://peps.python.org/pep-0767/
+        context_times: ReadOnly[Tensor]  # Float[..., $N], padded NaN, non-decreasing
+        context_values: ReadOnly[Tensor]  # Float[..., $N, D], padded NaN
+        context_mask: ReadOnly[Tensor]  # Bool[..., $N, D], padded False
+        query_times: ReadOnly[Tensor]  # Float[..., $K], padded NaN, non-decreasing
+        query_mask: ReadOnly[Tensor]  # Bool[..., $K, F],  padded False
+        target_values: ReadOnly[Tensor | None]  # Float[..., $K, F],  padded NaN
+        static_covariates: ReadOnly[Tensor | None]  # Float[..., M],  padded NaN
 
 
 class AbstractMergedTimeData(Protocol):
     r"""Protocol for joint time representation.
 
     Attributes:
-        timestamps:        Float[..., $T], padded NaN, non-decreasing
-        context_mask:      Bool[..., $T, D], padded False
-        context_values:    Float[..., $T, D], padded NaN
-        query_mask:        Bool[..., $T, E], padded False
-        target_values:     Float[..., $T, E], padded NaN
-        static_covariates: Float[..., M], padded NaN
+        timestamps:        ``Float[..., $T]``, padded NaN, non-decreasing
+        context_mask:      ``Bool[..., $T, D]``, padded False
+        context_values:    ``Float[..., $T, D]``, padded NaN
+        query_mask:        ``Bool[..., $T, E]``, padded False
+        target_values:     ``Float[..., $T, E]``, padded NaN
+        static_covariates: ``Float[..., M]``, padded NaN
     """
 
-    @property
-    def timestamps(self) -> Tensor: ...
+    if TYPE_CHECKING:
 
-    @property
-    def context_mask(self) -> Tensor: ...
-    @property
-    def context_values(self) -> Tensor: ...
+        @property
+        def timestamps(self) -> Tensor: ...
+        @property
+        def context_mask(self) -> Tensor: ...
+        @property
+        def context_values(self) -> Tensor: ...
+        @property
+        def query_mask(self) -> Tensor: ...
+        @property
+        def target_values(self) -> Tensor | None: ...
+        @property
+        def static_covariates(self) -> Tensor | None: ...
 
-    @property
-    def query_mask(self) -> Tensor: ...
-    @property
-    def target_values(self) -> Tensor | None: ...
-
-    @property
-    def static_covariates(self) -> Tensor | None: ...
+    else:  # FIXME: use https://peps.python.org/pep-0767/
+        timestamps: ReadOnly[Tensor]  # Float[..., $T], padded NaN, non-decreasing
+        context_mask: ReadOnly[Tensor]  # Bool[..., $T, D], padded False
+        context_values: ReadOnly[Tensor]  # Float[..., $T, D], padded NaN
+        query_mask: ReadOnly[Tensor]  # Bool[..., $T, E], padded False
+        target_values: ReadOnly[Tensor | None]  # Float[..., $T, E], padded NaN
+        static_covariates: ReadOnly[Tensor | None]  # Float[..., M], padded NaN
 
 
 class AbstractTripletTimeData(Protocol):
     r"""Protocol for triplet time representation.
 
     Attributes:
-        context_times:     Float[..., $X], padded NaN, non-decreasing
-        context_channels:  Long[..., $X], padded -1
-        context_values:    Float[..., $X], padded NaN
-        query_times:       Float[..., $Q], padded NaN, non-decreasing
-        query_channels:    Long[..., $Q], padded -1
-        target_values:     Float[..., $Q], padded NaN
-        static_covariates: Float[..., M], padded NaN
+        context_times:     ``Float[..., $X]``, padded NaN, non-decreasing
+        context_channels:  ``Long[..., $X]``, padded -1
+        context_values:    ``Float[..., $X]``, padded NaN
+        query_times:       ``Float[..., $Q]``, padded NaN, non-decreasing
+        query_channels:    ``Long[..., $Q]``, padded -1
+        target_values:     ``Float[..., $Q]``, padded NaN
+        static_covariates: ``Float[..., M]``, padded NaN
     """
 
-    @property
-    def context_times(self) -> Tensor: ...
-    @property
-    def context_channels(self) -> Tensor: ...
-    @property
-    def context_values(self) -> Tensor: ...
+    if TYPE_CHECKING:
 
-    @property
-    def query_times(self) -> Tensor: ...
-    @property
-    def query_channels(self) -> Tensor: ...
-    @property
-    def target_values(self) -> Tensor | None: ...
+        @property
+        def context_times(self) -> Tensor: ...
+        @property
+        def context_channels(self) -> Tensor: ...
+        @property
+        def context_values(self) -> Tensor: ...
+        @property
+        def query_times(self) -> Tensor: ...
+        @property
+        def query_channels(self) -> Tensor: ...
+        @property
+        def target_values(self) -> Tensor | None: ...
+        @property
+        def static_covariates(self) -> Tensor | None: ...
 
-    @property
-    def static_covariates(self) -> Tensor | None: ...
+    else:  # FIXME: use https://peps.python.org/pep-0767/
+        context_times: ReadOnly[Tensor]  # Float[..., $X], padded NaN, non-decreasing
+        context_channels: ReadOnly[Tensor]  # Long[..., $X], padded -1
+        context_values: ReadOnly[Tensor]  # Float[..., $X], padded NaN
+        query_times: ReadOnly[Tensor]  # Float[..., $Q], padded NaN, non-decreasing
+        query_channels: ReadOnly[Tensor]  # Long[..., $Q], padded -1
+        target_values: ReadOnly[Tensor | None]  # Float[..., $Q], padded NaN
+        static_covariates: ReadOnly[Tensor | None]  # Float[..., M], padded NaN
 
 
 def _all_or_none[T](vals: Iterable[T | None], /) -> list[T] | None:
