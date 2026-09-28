@@ -30,14 +30,13 @@ import logging
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from typing import Any, Optional, overload
+from typing import Any, Final, Never, Optional, overload
 
 import torch
 from torch import Tensor, jit
 from torch.export import ExportedProgram
 from torch.nn import Module
 
-from imtskit.constants import EMPTY_MAP
 from imtskit.types import Nested, Scalar
 
 from .utils import (
@@ -54,6 +53,9 @@ from .utils import (
 type Tree = Nested[Tensor | Scalar]
 type Func = Callable[..., Nested[Tensor]]
 
+_EMPTY_MAP: Final[Mapping[Any, Never]] = {}  # FIXME: Use frozendict() in python 3.15
+r"""Immutable empty `Mapping`, used as a default in function signatures."""
+
 
 def assert_all_close(
     values: Nested[Tensor],
@@ -62,7 +64,7 @@ def assert_all_close(
     *,
     rtol: float = 1e-5,
     atol: float = 1e-8,
-    ctx: Mapping[str, Any] = EMPTY_MAP,
+    ctx: Mapping[str, Any] = _EMPTY_MAP,
 ) -> None:
     r"""Assert that outputs and targets are close."""
     match values:
@@ -152,7 +154,7 @@ def check_initialization[M: Module](
     /,
     *,
     init_args: tuple[Any, ...],
-    init_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    init_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
 ) -> M:
     r"""Test if the module is initializable.
 
@@ -179,7 +181,7 @@ def check_forward(
     /,
     *,
     call_args: tuple[Any, ...],
-    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # optional: reference outputs and shapes
     reference_values: Optional[Nested[Tensor]] = None,
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
@@ -212,7 +214,7 @@ def check_backward(
     /,
     *,
     call_args: tuple[Any, ...],
-    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # Optional: reference gradients
     reference_shapes: Optional[list[tuple[int, ...]]] = None,
     reference_gradients: Optional[Nested[Tensor]] = None,
@@ -346,7 +348,7 @@ def assert_is_trainable(
     /,
     *,
     call_args: tuple[Any, ...],
-    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # optional
     niter: int = 4,
     use_copy: bool = True,
@@ -403,7 +405,7 @@ def assert_jit_compatible(
     /,
     *,
     call_args: tuple[Any, ...] = (),
-    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # optional arguments
     reference_model: Optional[Module | Func] = None,
     check_is_trainable: bool = True,
@@ -482,7 +484,7 @@ def assert_export_compatible(
     /,
     *,
     call_args: tuple[Any, ...],
-    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # optional arguments
     reference_model: Module | Func | None = None,
     check_is_trainable: bool = True,
@@ -543,7 +545,7 @@ def assert_model_ok(
     *,
     # input arguments
     call_args: tuple[Any, ...],
-    call_kwargs: Mapping[str, Tree] = EMPTY_MAP,
+    call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # reference arguments
     reference_model: Optional[Module | Func] = None,
     reference_gradients: Optional[Nested[Tensor]] = None,
