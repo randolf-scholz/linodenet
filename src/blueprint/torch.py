@@ -12,7 +12,6 @@ __all__ = [
     "initialize_tensor",
     "is_model_blueprint",
     "is_tensor_blueprint",
-    "_small_tensor_to_json",
     "validate_tensor_blueprint",
 ]
 

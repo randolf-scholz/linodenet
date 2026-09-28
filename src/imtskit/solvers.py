@@ -11,7 +11,6 @@ __all__ = [
     "euler_step",
     "heun_step",
     "midpoint_step",
-    "_odeint_forward",
     "solve_ivp",
 ]
 
