@@ -145,8 +145,7 @@ html_theme_options = {
 
 
 # html_theme_options = {
-#     # faster builds?  SEE: https://stackoverflow.com/a/52175461
-#     "collapse_navigation": False,
+#     "collapse_navigation": False,  # faster builds? https://stackoverflow.com/a/52175461
 #     "navigation_depth": 2,
 #     "header_links_before_dropdown": 7,
 #     "icon_links": [
@@ -155,17 +154,17 @@ html_theme_options = {
 #             "url": f"https://github.com/randolf-scholz/{MODULE}",
 #             "icon": "fa-brands fa-github",
 #         },
-#         # {
-#         #     "name": "PyPI",
-#         #     "url": "https://pypi.org/project/pydata-sphinx-theme",
-#         #     "icon": "fa-custom fa-pypi",
-#         # },
+#         {
+#             "name": "PyPI",
+#             "url": "https://pypi.org/project/pydata-sphinx-theme",
+#             "icon": "fa-custom fa-pypi",
+#         },
 #     ],
-#     # "external_links": [
-#     #     {"url": "https://pydata.org", "name": "PyData"},
-#     #     {"url": "https://numfocus.org/", "name": "NumFocus"},
-#     #     {"url": "https://numfocus.org/donate", "name": "Donate to NumFocus"},
-#     # ],
+#     "external_links": [
+#         {"url": "https://pydata.org", "name": "PyData"},
+#         {"url": "https://numfocus.org/", "name": "NumFocus"},
+#         {"url": "https://numfocus.org/donate", "name": "Donate to NumFocus"},
+#     ],
 # }
 
 html_style = []  # style sheets to use for HTML pages

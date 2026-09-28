@@ -3,7 +3,7 @@
 #:schema https://www.schemastore.org/prek.json
 
 exclude = ".idea/|.vscode/|bugs/|dev/"
-minimum_prek_version = "0.5.1"
+minimum_prek_version = "0.5.4"
 fail_fast = false
 update.cooldown_days = 7
 default_language_version = { python = "3.14", node = "26.3.0" }
@@ -37,7 +37,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/ruff-pre-commit"
-rev = "v0.16.5"
+rev = "v0.16.8"
 hooks = [
     {
         id = "ruff-check",
@@ -51,7 +51,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/astral-sh/uv-pre-commit"
-rev = "0.12.7"
+rev = "0.12.17"
 hooks = [
     { id = "uv-lock" },
     {
@@ -89,7 +89,7 @@ hooks = [{ id = "nbstripout-fast", exclude = "^docs/|^experiments/" }]
 
 [[repos]]
 repo = "https://github.com/randolf-scholz/assorted-hooks.git"
-rev = "v0.7.22"
+rev = "v0.7.23"
 hooks = [
     { id = "check-direct-imports" },
     { id = "check-dunder-all", files = "^src/" },
@@ -162,7 +162,7 @@ hooks = [
 
 [[repos]]
 repo = "https://github.com/randolf-scholz/assorted-hooks.git"
-rev = "v0.7.22"
+rev = "v0.7.23"
 hooks = [
     {
         id = "pyright-concise",

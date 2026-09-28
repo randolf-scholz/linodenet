@@ -1,7 +1,7 @@
 [build-system]
 requires = [
     "numpy>=2.5.3",
-    "scikit-build-core>=1.0.3",
+    "scikit-build-core>=1.1.0",
     "torch>=2.14.0",
 ]
 build-backend = "scikit_build_core.build"
@@ -99,7 +99,7 @@ dev = [
 build = [
     "cmake>=4.4.3",
     "ninja>=1.13.2",
-    "scikit-build-core>=1.0.3",
+    "scikit-build-core>=1.1.0",
 ]
 docs = [
     "docutils>=0.22.4",
@@ -114,7 +114,7 @@ docs = [
     "piccolo-theme>=0.24.0",
     "properdocs>=1.6.7",
     "pybadges>=3.0.1",
-    "pydata-sphinx-theme>=0.21.0",
+    "pydata-sphinx-theme>=0.22.0",
     "pygments>=2.21.0",
     "sphinx>=9.1.0",
     "sphinx-autoapi>=3.8.1",
@@ -125,11 +125,11 @@ docs = [
     "sphinx-math-dollar>=1.3",
     "sphinx-togglebutton>=0.4.5",
     "sphinx-typo3-theme>=4.9.0",
-    "zensical>=0.0.65",
+    "zensical>=0.0.66",
 ]
 linters = [
-    "prek>=0.5.3",
-    "ruff>=0.16.8",
+    "prek>=0.5.4",
+    "ruff>=0.16.9",
     "tach>=0.35.1",
 ]
 misc = [
@@ -140,8 +140,8 @@ misc = [
     "psutil>=7.2.2",
 ]
 tests = [
-    "coverage>=7.16.1",
-    "hypothesis[numpy,pytest]>=6.168.1",
+    "coverage>=7.16.2",
+    "hypothesis[numpy,pytest]>=6.168.3",
     "matplotlib>=3.11.2",
     "optuna>=5.0.0",
     "psutil>=7.2.2",
@@ -163,7 +163,7 @@ typing = [
     "pyrefly>=1.3.1",
     "pyright>=1.1.414",
     "scipy-stubs>=1.18.1.1",
-    "ty>=0.0.83",
+    "ty>=0.0.84",
     "types-colorama>=0.4.15.20260508",
     "types-defusedxml>=0.7.0.20260504",
     "types-jsonschema>=4.26.0.20260518",
@@ -172,7 +172,7 @@ typing = [
     "types-protobuf>=7.35.1.20260906",
     "types-psutil>=7.2.2.20260906",
     "types-pygments>=2.21.0.20260819",
-    "types-pywin32>=312.0.0.20260827",
+    "types-pywin32>=312.0.0.20260928",
     "types-pyyaml>=6.0.12.20260906",
     "types-setuptools>=84.0.0.20260812",
     "types-tabulate>=0.10.0.20260508",
@@ -188,6 +188,14 @@ exact = true
 [tool.tombi]
 [tool.tombi.format.rules]
 indent-width = 4
+
+[[tool.tombi.schemas]]
+# XREF: https://tombi-toml.github.io/tombi/docs/formatter/auto-sorting/
+path = "tombi://www.schemastore.org/pyproject.json"
+include = ["pyproject.toml"]
+format.rules.array-values-order.enabled = false
+format.rules.table-keys-order.enabled = false
+
 
 # region ruff configuration ------------------------------------------------------------
 [tool.ruff]

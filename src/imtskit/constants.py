@@ -14,12 +14,11 @@ from typing import Final
 
 import torch
 
-try:  # single-source version
-    __version__ = metadata.version(__package__ or __name__)
-    r"""The version number of the package."""
-except metadata.PackageNotFoundError:
-    __version__ = "unknown"
-    r"""The version number of the package."""
+__version__: Final[str] = "0.5.2"
+r"""The version number of the package."""
+
+if metadata.version(__package__ or __name__) != __version__:
+    raise ValueError(f"pyproject.toml version does not match {__version__=!r}")
 
 
 ATOL: Final[float] = 1e-6
