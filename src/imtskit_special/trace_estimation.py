@@ -26,7 +26,7 @@ __all__ = [
     "exact_logabsdet",
     "exact_powers",
     "exact_trace",
-    "hutch_pp_estimator",
+    "hutchpp_estimator",
     "hutchinson_estimator",
     "logabsdet_series",
     "xtrace_estimator",
@@ -414,7 +414,7 @@ def hutchinson_estimator(
 
 
 @signature("[{(..., d) -> (..., d)}, (..., d)] -> (...)")
-def hutch_pp_estimator(
+def hutchpp_estimator(
     op: Fn[[Tensor], Tensor],
     x: Tensor,
     /,
@@ -759,8 +759,8 @@ class HutchinsonEstimator(TraceEstimator):
     r"""Estimate traces with Hutchinson's estimator.
 
     Cost: $mN² + 𝓞(m²N + m³)$
-        m is the number of matvecs (=`num_samples`),
-        N is the dimension of the operator.
+        - $m$ is the number of matvecs (``=num_samples``),
+        - $N$ is the dimension of the operator.
 
     This module wraps the same trace estimator as `hutchinson_estimator`.
     The `forward` method estimates $\tr(𝐃f(x))$ and `powers` extends the
@@ -890,17 +890,16 @@ class HutchPP_Estimator(TraceEstimator):
     r"""Estimate traces with the Hutch++ variance-reduced estimator.
 
     Cost: $mN² + 𝓞(m²N + m³)$
-        m is the number of matvecs (=3×`num_samples`),
-        N is the dimension of the operator.
+        - $m$ is the number of matvecs (``=3×num_samples``),
+        - $N$ is the dimension of the operator.
 
-    This module wraps the same trace estimator as `hutchplusplus_estimator`.
+    This module wraps the same trace estimator as `hutchpp_estimator`.
     The `forward` method estimates $\tr(𝐃f(x))$ and `powers` reuses the
     same low-rank-plus-residual decomposition for powers of the Jacobian.
 
     Args:
-        num_matvecs: Total matrix-vector product budget. The estimator uses
-            ``num_matvecs // 3`` probe vectors for the sketch and the same number for
-            the residual term.
+        num_matvecs: Total matrix-vector product budget. The estimator uses ``num_matvecs // 3``
+            probe vectors for the sketch and the same number for the residual term.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
         mode: Whether to use forward Jacobian-vector products, reverse vector-Jacobian
             products, or a symmetric alternating scheme.
@@ -1084,15 +1083,15 @@ class XTraceEstimator(TraceEstimator):
     traces.
 
     Args:
-        num_matvecs: Total matrix-vector product budget. XTrace uses
-            ``num_matvecs // 2`` probe vectors internally.
+        num_matvecs: Total matrix-vector product budget.
+            XTrace uses ``num_matvecs // 2`` probe vectors internally.
         sampler: Probe sampler, either a built-in sampler name or a custom callable.
         renormalize: Whether to apply the paper's renormalization.
         mode: Jacobian action mode. Must be ``"forward"`` or ``"reverse"``.
 
     Cost: $mN² + 𝓞(m³)$
-        m is the number of matvecs (=2x`num_samples`),
-        N is the dimension of the operator.
+        - $m$ is the number of matvecs (``=2×num_samples``),
+        - $N$ is the dimension of the operator.
 
     References:
         - | XTrace: Making the Most of Every Sample in Stochastic Trace Estimation
@@ -1101,24 +1100,24 @@ class XTraceEstimator(TraceEstimator):
           | DOI: 10.1137/23M1548323
 
     core idea:
-        samples: $[w₁, ..., wₖ]$
-        compute $Qᵢ = orth(AW₋ᵢ)$
-        compute: $trᵢ = \tr(QᵢᴴAQᵢ) + wᵢᴴ(I-QᵢQᵢᴴ) A (I-QᵢQᵢᴴ)wᵢ$
-        trick rank-1 update: $QᵢQᵢᴴ = Q(I − sᵢ sᵢᴴ)Qᴴ$
+        - samples: $[w₁, ..., wₖ]$
+        - compute $Qᵢ = orth(AW₋ᵢ)$
+        - compute: $trᵢ = \tr(QᵢᴴAQᵢ) + wᵢᴴ(I-QᵢQᵢᴴ) A (I-QᵢQᵢᴴ)wᵢ$
+        - trick rank-1 update: $QᵢQᵢᴴ = Q(I − sᵢ sᵢᴴ)Qᴴ$
 
-    Algorithm:
-        1: Draw Ω ∼ Unif{±1}^{N×m/2}
-        2: Y ← AΩ
-        3: (Q, R) ← qr(Y, 'econ')
-        4: Z ← AQ
-        5: H ← QᴴZ, W ← QᴴΩ, T ← ZᴴΩ
-        6: S ← R⁻ᴴ
-        7: Normalize the columns of S to unit norm
-        8: for i = 1 … m/2 do
-        9:     xᵢ ← wᵢ − ⟨sᵢ∣wᵢ⟩·sᵢ
-        10:    trᵢ ← \tr(H) − ⟨sᵢ|H sᵢ⟩ + ⟨wᵢ∣sᵢ⟩·⟨sᵢ∣rᵢ⟩ − ⟨tᵢ|xᵢ⟩ + ⟨xᵢ|Hxᵢ⟩
-        11: end for
-        12: tr ← mean(trᵢ: i=1…m/2)
+    Algorithm::
+        1. Draw Ω ∼ Unif{±1}^{N×m/2}
+        2. Y ← AΩ
+        3. (Q, R) ← qr(Y, 'econ')
+        4. Z ← AQ
+        5. H ← QᴴZ, W ← QᴴΩ, T ← ZᴴΩ
+        6. S ← R⁻ᴴ
+        7. Normalize the columns of S to unit norm
+        8. for i = 1 … m/2 do
+        9.     xᵢ ← wᵢ − ⟨sᵢ∣wᵢ⟩·sᵢ
+        10.    trᵢ ← \tr(H) − ⟨sᵢ|H sᵢ⟩ + ⟨wᵢ∣sᵢ⟩·⟨sᵢ∣rᵢ⟩ − ⟨tᵢ|xᵢ⟩ + ⟨xᵢ|Hxᵢ⟩
+        11. end for
+        12. tr ← mean(trᵢ: i=1…m/2)
     """
 
     MODES: Final[frozenset[str]] = frozenset({"forward", "reverse"})
