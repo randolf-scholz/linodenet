@@ -16,9 +16,9 @@ imtskit — 𝗜rregular 𝗠ultivariate 𝗧ime 𝗦eries Tool𝗞𝗶𝘁
     autoapi/signatures/index
     autoapi/blueprint/index
 
-    CONTRIBUTING <../content/CONTRIBUTING>
-    LICENSE <../content/LICENSE>
-    README <../content/README>
+    CONTRIBUTING <content/CONTRIBUTING>
+    LICENSE <content/LICENSE>
+    README <content/README>
 
 Indices and tables
 ==================

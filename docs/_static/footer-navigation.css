@@ -1,11 +1,7 @@
-/* Keep adjacent-page navigation with the documentation content. */
-.md-footer {
-    background: transparent;
-    color: var(--md-default-fg-color);
-}
-
-.md-footer__inner {
+/* Render adjacent-page navigation directly below the document content. */
+.adjacent-navigation {
     border-top: 0.05rem solid var(--md-default-fg-color--lightest);
+    margin-top: 1.5rem;
     padding: 0.2rem 0;
 }
 
@@ -29,22 +25,9 @@
     font-size: 0.55rem;
 }
 
-.md-footer-meta {
-    background: transparent;
-    color: var(--md-default-fg-color--light);
-}
-
-.md-footer-meta__inner {
-    border-top: 0.05rem solid var(--md-default-fg-color--lightest);
-    font-size: 0.6rem;
-    padding: 0.3rem 0;
-}
-
-@media screen and (min-width: 76.25em) {
-    .md-footer__inner,
-    .md-footer-meta__inner {
-        margin-left: calc(50% - 18.4rem);
-        margin-right: calc(50% - 18.4rem);
-        max-width: 36.8rem;
+@media screen and (min-width: 45em) {
+    .adjacent-navigation .md-footer__link {
+        flex: 0 0 33.333%;
+        max-width: 33.333%;
     }
 }

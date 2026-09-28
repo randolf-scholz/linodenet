@@ -80,15 +80,14 @@ needs_extensions = {}  # minimum version requirements for extensions
 today_fmt = "%Y-%m-%d"  # format for date in the docs
 
 # source file options
-root_doc = "sphinx/index"  # the master toctree document
+root_doc = "index"  # the master toctree document
 exclude_patterns = [
-    "**/_*/**",
+    "**/_templates/**",
     "**/.*/**",
-    "autoapi/**",
     "build",
 ]  # glob-style patterns that should be excluded
 include_patterns = ["**"]  # glob-style patterns [1] that are used to find source files.
-templates_path = [str(DOCS_DIR / "_templates")]  # paths that contain the template files
+templates_path = ["_templates"]  # paths that contain the template files
 
 # markup options
 rst_epilog = ""  # reStructuredText to append to every document
@@ -132,7 +131,7 @@ html_theme_options = {
     "features": [
         "content.action.view",
         "content.code.copy",
-        "navigation.footer",
+        # "navigation.footer",
         "navigation.sections",
         "navigation.top",
         "navigation.tabs",
@@ -179,12 +178,7 @@ html_logo = ""  # path/url to the project logo
 html_favicon = ""  # path/url to the favicon (icon in the browser tab)
 html_css_files = ["footer-navigation.css"]  # A list of CSS files
 html_js_files = []  # A list of JavaScript filename.
-html_static_path = [
-    str(SPHINX_DIR / "_static")
-]  # A list of paths that contain custom static files
-html_extra_path = [
-    str(SPHINX_DIR / "entrypoint")
-]  # extra files not directly related to the documentation
+html_static_path = ["_static"]  # A list of paths that contain custom static files
 html_permalinks = True  # Add link anchors to sections
 html_permalinks_icon = "§"  # A text for permalinks for each heading
 html_sidebars = {}  # custom sidebar templates
@@ -267,7 +261,7 @@ autoapi_options = [  # SEE: autodoc_default_options
     # "imported-members",
 ]
 autoapi_ignore = []  # patterns to ignore when finding files
-autoapi_root = "sphinx/autoapi"  # Path to output the generated AutoAPI files into
+autoapi_root = "autoapi"  # Path to output the generated AutoAPI files into
 autoapi_add_toctree_entry = False  # insert the generated docs into the TOC tree
 autoapi_member_order = "groupwise"  # SEE: autodoc_member_order
 autoapi_python_class_content = "both"  # SEE: autoclass_content

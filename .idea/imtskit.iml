@@ -242,6 +242,30 @@
       <excludeFolder url="file://$MODULE_DIR$/src/imtskit_special/reports" />
       <excludeFolder url="file://$MODULE_DIR$/src/imtskit_special/tests/.benchmarks" />
       <excludeFolder url="file://$MODULE_DIR$/src/imtskit_special/tests/reports" />
+      <excludeFolder url="file://$MODULE_DIR$/.agents" />
+      <excludeFolder url="file://$MODULE_DIR$/.cache" />
+      <excludeFolder url="file://$MODULE_DIR$/.claude" />
+      <excludeFolder url="file://$MODULE_DIR$/.codex" />
+      <excludeFolder url="file://$MODULE_DIR$/.github" />
+      <excludeFolder url="file://$MODULE_DIR$/docs/build" />
+      <excludeFolder url="file://$MODULE_DIR$/docs/sphinx/autoapi" />
+      <excludeFolder url="file://$MODULE_DIR$/docs/zensical/reference" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/.results" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/benchmarks/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/blueprint/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit/distributions/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit/domains/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit/mappings/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit/parametrizations/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit/parametrize/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit/regularizations/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit/state_update/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit/transforms/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit_models/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/imtskit_special/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/third_party/.benchmarks" />
+      <excludeFolder url="file://$MODULE_DIR$/tests/third_party/test_torch/.benchmarks" />
       <excludePattern pattern=".ipynb_checkpoints/" />
     </content>
     <orderEntry type="jdk" jdkName="~/github/randolf-scholz/imtskit/.venv" jdkType="Python SDK" />

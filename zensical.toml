@@ -21,10 +21,11 @@ nav = [
 ]
 
 [project.theme]
+custom_dir = "docs/zensical/_templates"
 language = "en"
 features = [
     "content.code.copy",
-    "navigation.footer",
+    # "navigation.footer",
     "navigation.indexes",
     "navigation.sections",
     "navigation.tabs",

@@ -35,6 +35,7 @@ def write_page(
     doc_path: Path,
     source_path: Path,
     nav_parts: tuple[str, ...],
+    symbol_type: str,
     members: list[str] | None = None,
 ) -> None:
     r"""Create a virtual API page and add it to the generated navigation."""
@@ -44,6 +45,10 @@ def write_page(
     DOCUMENTED_IDENTIFIERS.add(identifier)
     NAV[nav_parts] = doc_path.relative_to(REFERENCE_DIR).as_posix()
     with mkdocs_gen_files.open(doc_path, "w") as file:
+        title = identifier.rsplit(".", 1)[-1]
+        file.write(
+            f"---\ntitle: {title}\nsymbol_type: {symbol_type}\n---\n\n"
+        )
         file.write(f"::: {identifier}\n")
         if members is not None:
             file.write("    options:\n      members:\n")
@@ -250,6 +255,7 @@ def document_module_definitions(module: Module) -> None:
                     PAGE_PATHS[f"{module.identifier}.{name}"],
                     module.source_path,
                     (*module.identifier.split("."), name),
+                    "class",
                     get_class_members(body),
                 )
             case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
@@ -258,6 +264,7 @@ def document_module_definitions(module: Module) -> None:
                     PAGE_PATHS[f"{module.identifier}.{name}"],
                     module.source_path,
                     (*module.identifier.split("."), name),
+                    "function",
                 )
 
 
@@ -267,6 +274,7 @@ for module in MODULES.values():
         module.doc_path,
         module.source_path,
         tuple(module.identifier.split(".")),
+        "module",
     )
     with mkdocs_gen_files.open(module.doc_path, "a") as file:
         write_contents(module, file)

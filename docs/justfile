@@ -12,7 +12,7 @@ help:
 
 [doc("Remove Sphinx output and generated API source files.")]
 sphinx-clean:
-    rm -rf autoapi build/sphinx sphinx/_autosummary sphinx/autoapi sphinx/apidoc
+    rm -rf build/sphinx sphinx/_autosummary sphinx/autoapi sphinx/apidoc
 
 #[doc("Remove MkDocs output.")]
 #mkdocs-clean:
@@ -46,4 +46,6 @@ zensical *zensical_args: zensical-clean
 
 [doc("Rebuild the Sphinx API docs and HTML output.")]
 sphinx *sphinx_args: sphinx-clean
-    uv run sphinx-build -M html . build/sphinx -c sphinx {{ sphinx_args }}
+    uv run sphinx-build -M html sphinx build/sphinx {{ sphinx_args }}
+    # Sphinx Immaterial omits user static files when bundling theme assets.
+    cp -RL _static/* build/sphinx/html/_static/
