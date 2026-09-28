@@ -585,7 +585,7 @@ reportWildcardImportFromLibrary = "error"  # default: "warning"
 minversion = "9.0.2"
 pythonpath = ["src/"]
 testpaths = ["src/", "tests/"]
-xfail_strict = true
+strict_xfail = true
 
 filterwarnings = [
     """ignore:Input #\\d+ requires gradient and is not a double precision floating point or complex\\. \
