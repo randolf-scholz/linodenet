@@ -1,12 +1,12 @@
 [project]
+docs_dir = "zensical"
+site_dir = "build/zensical"
 site_name = "imtskit"
 site_description = "Irregular Multivariate Time Series Toolkit"
 site_url = "https://github.com/randolf-scholz/imtskit"
 site_author = "Randolf Scholz"
 repo_url = "https://github.com/randolf-scholz/imtskit"
 repo_name = "randolf-scholz/imtskit"
-docs_dir = "docs/zensical"
-site_dir = "docs/build/zensical"
 extra_css = ["_static/footer-navigation.css", "_static/signatures.css"]
 
 # The configuration must be loaded before the MathJax runtime.
@@ -21,7 +21,7 @@ nav = [
 ]
 
 [project.theme]
-custom_dir = "docs/zensical/_templates"
+custom_dir = "zensical/_templates"
 language = "en"
 features = [
     "content.code.copy",
@@ -59,7 +59,7 @@ default_handler = "python"
 nav_file = "SUMMARY.md"
 
 [project.plugins.mkdocstrings.handlers.python]
-paths = ["src"]
+paths = ["../src"]
 inventories = [
     "https://numpy.org/doc/stable/objects.inv",
     "https://docs.pytest.org/en/stable/objects.inv",

@@ -40,7 +40,7 @@ properdocs *properdocs_args: properdocs-clean
 [doc("Build the Zensical proof-of-concept site with generated API Markdown.")]
 zensical *zensical_args: zensical-clean
     uv run python zensical/scripts/generate_reference.py
-    cd .. && uv run zensical build --clean --strict {{ zensical_args }}
+    uv run zensical build --clean --strict --config-file zensical.toml {{ zensical_args }}
     # Zensical does not copy a symlink whose target is outside its docs directory.
     cp -RL zensical/_static build/zensical/
 
