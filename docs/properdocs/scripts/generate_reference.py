@@ -83,10 +83,10 @@ def get_kinds(nodes: list[ast.stmt], exports: list[str]) -> dict[str, str]:
             case ast.Assign(targets=targets):
                 names = [target.id for target in targets if isinstance(target, ast.Name)]
                 for name in names:
-                    if not name.startswith("_") and (name in exports or name.isupper()):
+                    if name in exports or (not name.startswith("_") and name.isupper()):
                         kinds[name] = "constants"
             case ast.AnnAssign(target=ast.Name(id=name)) | ast.TypeAlias(name=ast.Name(id=name)):
-                if not name.startswith("_") and (name in exports or name.isupper()):
+                if name in exports or (not name.startswith("_") and name.isupper()):
                     kinds[name] = "constants"
     return kinds
 
