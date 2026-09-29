@@ -30,7 +30,7 @@ class Signature(Directive):
         signature_text = self.arguments[0]
         # preformatted_node = nodes.literal(signature_text, signature_text)
         # nodes, messages = nodes.line(signature_text)
-        text_nodes, messages = self.state.inline_text(signature_text, self.lineno)
+        text_nodes, _messages = self.state.inline_text(signature_text, self.lineno)
 
         # Create a title node and add the preformatted node to it
         title_node = nodes.title(signature_text, "Signature: ", *text_nodes)

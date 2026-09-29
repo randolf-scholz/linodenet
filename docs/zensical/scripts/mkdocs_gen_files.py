@@ -1,11 +1,10 @@
 r"""Small filesystem-backed subset of ``mkdocs_gen_files`` for Zensical builds."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from typing import TextIO
 
 DOCS_DIR = Path(__file__).resolve().parents[1]
+type Tree = dict[str, str | Tree]
 
 
 class Nav:
@@ -18,28 +17,31 @@ class Nav:
         self.entries[parts] = path
 
     def build_literate_nav(self) -> list[str]:
-        tree: dict[str, dict[str, object]] = {}
+        tree: Tree = {}
         for parts, path in self.entries.items():
             current = tree
             for part in parts:
-                current = current.setdefault(part, {})  # type: ignore[assignment]
+                child = current.setdefault(part, {})
+                assert isinstance(child, dict)
+                current = child
             current["__path__"] = path
 
-        def render(nodes: dict[str, dict[str, object]], level: int = 0) -> list[str]:
-            lines: list[str] = []
-            for name, node in nodes.items():
-                if name == "__path__":
-                    continue
-                path = node.get("__path__")
-                label = f"[{name}]({path})" if isinstance(path, str) else name
-                lines.append(f"{'    ' * level}- {label}\n")
-                lines.extend(render(node, level + 1))
-            return lines
+        return self.render(tree)
 
-        return render(tree)
+    def render(self, nodes: Tree, level: int = 0) -> list[str]:
+        lines: list[str] = []
+        for name, node in nodes.items():
+            if name == "__path__":
+                continue
+            assert isinstance(node, dict)
+            path = node.get("__path__")
+            label = f"[{name}]({path})" if isinstance(path, str) else name
+            lines.append(f"{'    ' * level}- {label}\n")
+            lines.extend(self.render(node, level + 1))
+        return lines
 
 
-def open(path: str | Path, mode: str = "r", **kwargs: object) -> TextIO:
+def open(path: str | Path, mode: str = "r", **kwargs: object) -> TextIO:  # ruff: ignore[A001]
     r"""Open a generated document relative to the Zensical documentation root."""
     target = DOCS_DIR / path
     if any(flag in mode for flag in "wax+"):

@@ -13,7 +13,7 @@ class IsolatedPythonDomain(PythonDomain):
         env,
         fromdocname,
         builder,
-        type,
+        type,  # ruff: ignore[A002]
         target,
         node,
         contnode,
@@ -33,7 +33,7 @@ class IsolatedPythonDomain(PythonDomain):
         modname,
         classname,
         name,
-        type,
+        type,  # ruff: ignore[A002]
         searchmode=0,
     ):
         matches = super().find_obj(env, modname, classname, name, type, searchmode)

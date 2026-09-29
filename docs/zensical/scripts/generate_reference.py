@@ -1,11 +1,10 @@
 r"""Generate Zensical API pages for public modules, classes, and functions."""
 
-from __future__ import annotations
-
 import ast
 import posixpath
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TextIO
 
 import mkdocs_gen_files
 
@@ -46,9 +45,7 @@ def write_page(
     NAV[nav_parts] = doc_path.relative_to(REFERENCE_DIR).as_posix()
     with mkdocs_gen_files.open(doc_path, "w") as file:
         title = identifier.rsplit(".", 1)[-1]
-        file.write(
-            f"---\ntitle: {title}\nsymbol_type: {symbol_type}\n---\n\n"
-        )
+        file.write(f"---\ntitle: {title}\nsymbol_type: {symbol_type}\n---\n\n")
         file.write(f"::: {identifier}\n")
         if members is not None:
             file.write("    options:\n      members:\n")
@@ -61,7 +58,8 @@ def get_exports(nodes: list[ast.stmt]) -> list[str]:
     for node in nodes:
         match node:
             case ast.Assign(targets=targets, value=value) if any(
-                isinstance(target, ast.Name) and target.id == "__all__" for target in targets
+                isinstance(target, ast.Name) and target.id == "__all__"
+                for target in targets
             ):
                 try:
                     names = ast.literal_eval(value)
@@ -78,14 +76,21 @@ def get_kinds(nodes: list[ast.stmt], exports: list[str]) -> dict[str, str]:
         match node:
             case ast.ClassDef(name=name) if not name.startswith("_"):
                 kinds[name] = "classes"
-            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) if not name.startswith("_"):
+            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) if (
+                not name.startswith("_")
+            ):
                 kinds[name] = "functions"
             case ast.Assign(targets=targets):
-                names = [target.id for target in targets if isinstance(target, ast.Name)]
+                names = [
+                    target.id for target in targets if isinstance(target, ast.Name)
+                ]
                 for name in names:
                     if name in exports or (not name.startswith("_") and name.isupper()):
                         kinds[name] = "constants"
-            case ast.AnnAssign(target=ast.Name(id=name)) | ast.TypeAlias(name=ast.Name(id=name)):
+            case (
+                ast.AnnAssign(target=ast.Name(id=name))
+                | ast.TypeAlias(name=ast.Name(id=name))
+            ):
                 if name in exports or (not name.startswith("_") and name.isupper()):
                     kinds[name] = "constants"
     return kinds
@@ -208,7 +213,7 @@ def get_relative_path(source: Path, target: Path) -> str:
     return posixpath.relpath(target.as_posix(), start=source.parent.as_posix())
 
 
-def write_contents(module: Module, file: object) -> None:
+def write_contents(module: Module, file: TextIO) -> None:
     r"""Write the typed overview of a module's public API."""
     categories = {"classes": [], "functions": [], "submodules": [], "constants": []}
     names = module.exports or list(module.kinds)
@@ -224,7 +229,10 @@ def write_contents(module: Module, file: object) -> None:
 
     prefix = f"{module.identifier}."
     for identifier, submodule in MODULES.items():
-        if identifier.startswith(prefix) and identifier.count(".") == module.identifier.count(".") + 1:
+        if (
+            identifier.startswith(prefix)
+            and identifier.count(".") == module.identifier.count(".") + 1
+        ):
             categories["submodules"].append(
                 f"[{identifier.rsplit('.', 1)[-1]}]({get_relative_path(module.doc_path, submodule.doc_path)})"
             )
@@ -247,7 +255,9 @@ def document_module_definitions(module: Module) -> None:
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
         and not node.name.startswith("_")
     ]
-    for node in sorted(definitions, key=lambda node: positions.get(node.name, len(positions))):
+    for node in sorted(
+        definitions, key=lambda node: positions.get(node.name, len(positions))
+    ):
         match node:
             case ast.ClassDef(name=name, body=body):
                 write_page(
@@ -268,37 +278,43 @@ def document_module_definitions(module: Module) -> None:
                 )
 
 
-for module in MODULES.values():
-    write_page(
-        module.identifier,
-        module.doc_path,
-        module.source_path,
-        tuple(module.identifier.split(".")),
-        "module",
-    )
-    with mkdocs_gen_files.open(module.doc_path, "a") as file:
-        write_contents(module, file)
-        constants = [name for name, kind in module.kinds.items() if kind == "constants"]
-        if constants:
-            file.write("\n## Constants\n\n")
-            file.write(f"::: {module.identifier}\n")
-            file.write("    options:\n")
-            file.write("      heading_level: 3\n")
-            file.write("      show_docstring_description: false\n")
-            file.write("      show_root_heading: false\n")
-            file.write("      show_root_toc_entry: false\n")
-            file.write("      members:\n")
-            file.writelines(f"        - {name!r}\n" for name in constants)
-    document_module_definitions(module)
-
-with mkdocs_gen_files.open(REFERENCE_INDEX, "w") as file:
-    file.write("# API reference\n\n")
-    file.write("## Packages\n\n")
+def main() -> None:
     for module in MODULES.values():
-        if "." not in module.identifier:
-            path = get_relative_path(REFERENCE_INDEX, module.doc_path)
-            file.write(f"- [{module.identifier}]({path})\n")
+        write_page(
+            module.identifier,
+            module.doc_path,
+            module.source_path,
+            tuple(module.identifier.split(".")),
+            "module",
+        )
+        with mkdocs_gen_files.open(module.doc_path, "a") as file:
+            write_contents(module, file)
+            constants = [
+                name for name, kind in module.kinds.items() if kind == "constants"
+            ]
+            if constants:
+                file.write("\n## Constants\n\n")
+                file.write(f"::: {module.identifier}\n")
+                file.write("    options:\n")
+                file.write("      heading_level: 3\n")
+                file.write("      show_docstring_description: false\n")
+                file.write("      show_root_heading: false\n")
+                file.write("      show_root_toc_entry: false\n")
+                file.write("      members:\n")
+                file.writelines(f"        - {name!r}\n" for name in constants)
+        document_module_definitions(module)
 
-with mkdocs_gen_files.open(REFERENCE_DIR / "SUMMARY.md", "w") as file:
-    file.write("- [API reference](index.md)\n")
-    file.writelines(NAV.build_literate_nav())
+    with mkdocs_gen_files.open(REFERENCE_INDEX, "w") as file:
+        file.write("# API reference\n\n")
+        file.write("## Packages\n\n")
+        for module in MODULES.values():
+            if "." not in module.identifier:
+                path = get_relative_path(REFERENCE_INDEX, module.doc_path)
+                file.write(f"- [{module.identifier}]({path})\n")
+
+    with mkdocs_gen_files.open(REFERENCE_DIR / "SUMMARY.md", "w") as file:
+        file.write("- [API reference](index.md)\n")
+        file.writelines(NAV.build_literate_nav())
+
+
+main()
