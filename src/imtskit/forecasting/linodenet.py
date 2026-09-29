@@ -158,7 +158,7 @@ class LinODEnet(nn.Module):
 
         # Buffers
         self.register_buffer("ZERO", torch.tensor(0.0), persistent=True)
-        self.register_buffer("NAN", torch.tensor(float("nan")), persistent=True)
+        self.register_buffer("NAN", torch.tensor(torch.nan), persistent=True)
         self.register_buffer("timedeltas", torch.tensor(()), persistent=False)
         self.register_buffer("x_pre", torch.tensor(()), persistent=False)
         self.register_buffer("x_post", torch.tensor(()), persistent=False)
@@ -225,9 +225,9 @@ class LinODEnet(nn.Module):
             # dim = -1
             # shape = list(X.shape)
             # shape[dim] = self.padding_size
-            # z = torch.full(shape, float("nan"), dtype=X.dtype, device=X.device)
+            # z = torch.full(shape, torch.nan, dtype=X.dtype, device=X.device)
             # X = torch.cat([X, z], dim=dim)
-            X = pad(X, float("nan"), self.padding_size)
+            X = pad(X, torch.nan, self.padding_size)
 
         # prepend a single zero for the first iteration.
         # T = pad(T, 0.0, 1, prepend=True)

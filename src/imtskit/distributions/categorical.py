@@ -85,5 +85,5 @@ class Categorical(DistributionBase):
                    &= σ(w₋ₙ)ₖ
         """
         weights = self.weights.clone()
-        weights[indices] = float("-inf")
+        weights[indices] = -torch.inf
         return Categorical(weights)

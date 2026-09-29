@@ -73,9 +73,9 @@ def scaled_norm(
     else:
         dim = axis
 
-    if p == float("inf"):
+    if p == torch.inf:
         return x.amax(dim=dim, keepdim=keepdim)
-    if p == -float("inf"):
+    if p == -torch.inf:
         return x.amin(dim=dim, keepdim=keepdim)
     if p == 0:
         return geometric_mean(x, axis=dim, keepdim=keepdim)

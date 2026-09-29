@@ -9,7 +9,7 @@ __all__ = [
 import logging
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
-from math import isnan, nan
+from math import inf, isnan, nan
 from types import MappingProxyType
 from typing import Any, ClassVar, Final, Self, cast, overload
 
@@ -156,9 +156,9 @@ class Interval(ScalarDomain):
 
         match left.strip():
             case "-∞":
-                lower = float("-inf")
+                lower = -inf
             case "∞" | "+∞":
-                lower = float("inf")
+                lower = inf
             case left:
                 try:
                     lower = float(left)
@@ -170,9 +170,9 @@ class Interval(ScalarDomain):
 
         match right.strip():
             case "-∞":
-                upper = float("-inf")
+                upper = -inf
             case "∞" | "+∞":
-                upper = float("inf")
+                upper = inf
             case right:
                 try:
                     upper = float(right)
