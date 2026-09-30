@@ -120,7 +120,7 @@ class Interval(ScalarDomain):
     @staticmethod
     def _parse_string(s: str, /) -> Interval | None:
         if not (s := s.strip()):
-            __logger__.debug("Failed to parse interval string %r: empty string", s)
+            __logger__.debug(f"Failed to parse interval string {s!r}: empty string")
             return None
 
         match s[0]:
@@ -130,7 +130,7 @@ class Interval(ScalarDomain):
                 lower_inclusive = False
             case _:
                 __logger__.debug(
-                    "Failed to parse interval string %r: invalid lower bracket", s
+                    f"Failed to parse interval string {s!r}: invalid lower bracket"
                 )
                 return None
 
@@ -141,7 +141,7 @@ class Interval(ScalarDomain):
                 upper_inclusive = False
             case _:
                 __logger__.debug(
-                    "Failed to parse interval string %r: invalid upper bracket", s
+                    f"Failed to parse interval string {s!r}: invalid upper bracket"
                 )
                 return None
 
@@ -150,7 +150,7 @@ class Interval(ScalarDomain):
                 pass
             case _:
                 __logger__.debug(
-                    "Failed to parse interval string %r: expected two bounds", s
+                    f"Failed to parse interval string {s!r}: expected two bounds"
                 )
                 return None
 
@@ -164,7 +164,7 @@ class Interval(ScalarDomain):
                     lower = float(left)
                 except ValueError:
                     __logger__.debug(
-                        "Failed to parse interval string %r: invalid lower bound", s
+                        f"Failed to parse interval string {s!r}: invalid lower bound"
                     )
                     return None
 
@@ -178,7 +178,7 @@ class Interval(ScalarDomain):
                     upper = float(right)
                 except ValueError:
                     __logger__.debug(
-                        "Failed to parse interval string %r: invalid upper bound", s
+                        f"Failed to parse interval string {s!r}: invalid upper bound"
                     )
                     return None
 
