@@ -505,7 +505,7 @@ class TestMatrixDomains:
         eye_meets = M.EYE.factorizations
 
         assert M.SYMMETRIC & M.SKEW_SYMMETRIC in zero_meets
-        assert M.DIAGONAL, M.ZERO_DIAGONAL in zero_meets
+        assert M.DIAGONAL & M.ZERO_DIAGONAL in zero_meets
         assert M.POSITIVE_SEMIDEFINITE & M.NEGATIVE_SEMIDEFINITE in zero_meets
         assert M.POSITIVE_SEMIDEFINITE & M.SKEW_SYMMETRIC in zero_meets
         assert M.POSITIVE_DEFINITE & M.ORTHOGONAL in eye_meets
