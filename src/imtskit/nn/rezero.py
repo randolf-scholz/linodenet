@@ -68,7 +68,7 @@ class ReZero[
         if getattr(self.module, "right_inverse", None) is None:
             return None
 
-        return self.module.right_inverse(y / self.scalar_map(self.scalar))  # type: ignore[operator]
+        return self.module.right_inverse(y / self.scalar_map(self.scalar))  # type: ignore
 
 
 def resolve_gate(gate: str | nn.Module | None, /) -> nn.Module:

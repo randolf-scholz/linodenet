@@ -307,7 +307,7 @@ def update_masked[R: Tensor | tuple[Tensor, ...]](
         )
 
     assert isinstance(target, tuple)
-    return tuple(  # type: ignore[return-value]
+    return tuple(  # type: ignore
         t.masked_scatter(
             batch_mask.reshape(*batch_mask.shape, *(1,) * (t.ndim - batch_mask.ndim)), y
         )

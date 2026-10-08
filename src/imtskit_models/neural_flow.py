@@ -51,7 +51,7 @@ class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
     r"""Wrapper for ModuleList to make it a generic Sequence type."""
 
     if TYPE_CHECKING:
-        _modules: Mapping[str, M]  # type: ignore[assignment]
+        _modules: Mapping[str, M]  # type: ignore
 
         # noinspection PyMissingConstructor
         def __init__(self, _: Iterable[M] = (), /) -> None: ...
@@ -518,7 +518,7 @@ class NeuralFlow(GRU_ODE_Bayes):
     """
 
     @classmethod
-    def from_config(  # type: ignore[override]
+    def from_config(  # type: ignore
         cls,
         config: NeuralFlowConfig | Mapping[str, Any],
         /,
@@ -584,7 +584,7 @@ class NeuralFlow(GRU_ODE_Bayes):
         )
 
     @classmethod
-    def from_parameters(  # type: ignore[override]
+    def from_parameters(  # type: ignore
         cls,
         *,
         input_size: int,

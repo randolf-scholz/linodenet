@@ -54,7 +54,7 @@ class ReZero[
             return None
 
         assert callable(right_inverse)
-        return right_inverse(y / self.scalar_map(self.scalar))  # type: ignore[return-value]
+        return right_inverse(y / self.scalar_map(self.scalar))  # type: ignore
 
 
 class Symmetric(nn.Module):

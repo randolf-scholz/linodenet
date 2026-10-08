@@ -54,7 +54,7 @@ def update_masked[R: Tensor | tuple[Tensor, ...]](
         )
 
     assert isinstance(target, tuple)
-    return tuple(  # type: ignore[return-value]
+    return tuple(  # type: ignore
         t.masked_scatter(
             batch_mask.reshape(*batch_mask.shape, *(1,) * (t.ndim - batch_mask.ndim)), y
         )
@@ -279,7 +279,7 @@ class LinodenetProbabilistic(nn.Module):
         self.latent_size = input_size  # hard modelling constraint
         self.batch_first = batch_first
 
-        self.decoder = decoder  # type: ignore[assignment]
+        self.decoder = decoder  # type: ignore
         self.state_updater = state_updater
         self.state_propagator = state_propagator
 
@@ -706,9 +706,9 @@ class KoopmanFilter(nn.Module):
             case TransformSequence() as decoder:
                 value = z
                 for layer in reversed(decoder):
-                    value = layer.decode(value)  # type: ignore[attr-defined]
+                    value = layer.decode(value)  # type: ignore
             case decoder if hasattr(decoder, "decode"):
-                value = decoder.decode(z)  # type: ignore[attr-defined]
+                value = decoder.decode(z)  # type: ignore
             case decoder:
                 value = decoder(z)
         return value[..., : self.input_size]
@@ -823,7 +823,7 @@ class KoopmanFilter(nn.Module):
             K = torch.linalg.solve(HL @ HL.mT + R, ΣHt.mT).mT
             μ = μ_prior + einsum("...ij, ...j -> ...i", K, r)
 
-        Σ = Σ_prior - ΣHt @ K.mT  # type: ignore[unbound-name]
+        Σ = Σ_prior - ΣHt @ K.mT  # type: ignore
         Σ = (Σ + Σ.mT) / 2  # ensure symmetry.
         return μ, Σ
 

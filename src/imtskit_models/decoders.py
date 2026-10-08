@@ -163,7 +163,7 @@ class TransformSequence(nn.ModuleList, Sequence[nn.Module]):
     r"""Composable sequence of invertible transforms."""
 
     if TYPE_CHECKING:
-        _modules: Mapping[str, nn.Module]  # type: ignore[assignment]
+        _modules: Mapping[str, nn.Module]  # type: ignore
 
         def __init__(self, _: Iterable[nn.Module] = (), /) -> None: ...
         def __iter__(self) -> Iterator[nn.Module]: ...
@@ -196,13 +196,13 @@ class TransformSequence(nn.ModuleList, Sequence[nn.Module]):
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
         logabsdet = torch.zeros_like(x[..., 0])
         for layer in self:
-            x, ldj = layer.encode_and_logabsdet(x)  # type: ignore[attr-defined]
+            x, ldj = layer.encode_and_logabsdet(x)  # type: ignore
             logabsdet = logabsdet + self._event_logabsdet(ldj, x)
         return x, logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
         logabsdet = torch.zeros_like(y[..., 0])
         for layer in reversed(self):
-            y, ldj = layer.decode_and_logabsdet(y)  # type: ignore[attr-defined]
+            y, ldj = layer.decode_and_logabsdet(y)  # type: ignore
             logabsdet = logabsdet + self._event_logabsdet(ldj, y)
         return y, logabsdet

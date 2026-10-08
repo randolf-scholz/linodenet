@@ -27,13 +27,13 @@ from .abstract import (
 # TODO: use intersection type for upper bound ``Bijection & nn.Module``
 class BijectionSequence[
     B: Bijection,
-](ModuleSequence[B], Bijection):  # type: ignore[type-var]
+](ModuleSequence[B], Bijection):  # type: ignore
     r"""Apply multiple bijections sequentially."""
 
     # noinspection PyMissingConstructor
     def __init__(self, modules: Iterable[B] = (), /) -> None:
         assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
-        ModuleSequence[B].__init__(self, modules)  # type: ignore[type-var]
+        ModuleSequence[B].__init__(self, modules)  # type: ignore
 
     def __invert__(self) -> BijectionSequence:
         if type(self) is not BijectionSequence:
@@ -44,7 +44,7 @@ class BijectionSequence[
         def _inverse_iterator() -> Iterator[Transform]:
             for i, layer in enumerate(reversed(self)):
                 try:
-                    yield ~layer  # type: ignore[operator]
+                    yield ~layer  # type: ignore
                 except (TypeError, NotImplementedError) as exc:
                     raise NotImplementedError(
                         f"Inversion not implemented for layer {i} of type {type(layer)}"
@@ -66,13 +66,13 @@ class BijectionSequence[
 # TODO: use intersection type for upper bound ``Transform & nn.Module``
 class TransformSequence[
     T: Transform,
-](ModuleSequence[T], Transform):  # type: ignore[type-var]
+](ModuleSequence[T], Transform):  # type: ignore
     r"""Apply multiple transforms sequentially."""
 
     # noinspection PyMissingConstructor
     def __init__(self, modules: Iterable[T] = (), /) -> None:
         assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
-        ModuleSequence[T].__init__(self, modules)  # type: ignore[type-var]
+        ModuleSequence[T].__init__(self, modules)  # type: ignore
 
     def __invert__(self) -> TransformSequence:
         if type(self) is not TransformSequence:
@@ -83,7 +83,7 @@ class TransformSequence[
         def _inverse_iterator() -> Iterator[Transform]:
             for i, layer in enumerate(reversed(self)):
                 try:
-                    yield ~layer  # type: ignore[operator]
+                    yield ~layer  # type: ignore
                 except (TypeError, NotImplementedError) as exc:
                     raise NotImplementedError(
                         f"Inversion not implemented for layer {i} of type {type(layer)}"
@@ -131,13 +131,13 @@ class TransformSequence[
 # TODO: use intersection type for upper bound ``ConditionalBijection & nn.Module``
 class ConditionalBijectionSequence[
     B: ConditionalBijection,
-](ModuleSequence[B], ConditionalBijection):  # type: ignore[type-var]
+](ModuleSequence[B], ConditionalBijection):  # type: ignore
     r"""Apply multiple bijections sequentially."""
 
     # noinspection PyMissingConstructor
     def __init__(self, modules: Iterable[B] = (), /) -> None:
         assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
-        ModuleSequence[B].__init__(self, modules)  # type: ignore[type-var]
+        ModuleSequence[B].__init__(self, modules)  # type: ignore
 
     def __invert__(self) -> ConditionalBijectionSequence:
         if type(self) is not ConditionalBijectionSequence:
@@ -148,7 +148,7 @@ class ConditionalBijectionSequence[
         def _inverse_iterator() -> Iterator[ConditionalBijection]:
             for i, layer in enumerate(reversed(self)):
                 try:
-                    yield ~layer  # type: ignore[operator]
+                    yield ~layer  # type: ignore
                 except (TypeError, NotImplementedError) as exc:
                     raise NotImplementedError(
                         f"Inversion not implemented for layer {i} of type {type(layer)}"
@@ -173,13 +173,13 @@ class ConditionalBijectionSequence[
 # TODO: use intersection type for upper bound ``ConditionalTransform & nn.Module``
 class ConditionalTransformSequence[
     T: ConditionalTransform,
-](ModuleSequence[T], ConditionalTransform):  # type: ignore[type-var]
+](ModuleSequence[T], ConditionalTransform):  # type: ignore
     r"""Apply multiple transforms sequentially."""
 
     # noinspection PyMissingConstructor
     def __init__(self, modules: Iterable[T] = (), /) -> None:
         assert not hasattr(self, "_modules"), f"Module already initialized: {self}"
-        ModuleSequence[T].__init__(self, modules)  # type: ignore[type-var]
+        ModuleSequence[T].__init__(self, modules)  # type: ignore
 
     def __invert__(self) -> ConditionalTransformSequence:
         if type(self) is not ConditionalTransformSequence:
@@ -190,7 +190,7 @@ class ConditionalTransformSequence[
         def _inverse_iterator() -> Iterator[ConditionalTransform]:
             for i, layer in enumerate(reversed(self)):
                 try:
-                    yield ~layer  # type: ignore[operator]
+                    yield ~layer  # type: ignore
                 except (TypeError, NotImplementedError) as exc:
                     raise NotImplementedError(
                         f"Inversion not implemented for layer {i} of type {type(layer)}"

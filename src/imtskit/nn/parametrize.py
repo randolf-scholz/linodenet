@@ -235,7 +235,7 @@ class _post_init_hook(type(Protocol)):  # pyrefly: ignore[invalid-inheritance]
 # TODO: Use Intersection type (Surjection & nn.Module)
 class ParametrizationList[
     S: Surjection,
-](ModuleSequence[S], Parametrization, metaclass=_post_init_hook):  # type: ignore[type-var]
+](ModuleSequence[S], Parametrization, metaclass=_post_init_hook):  # type: ignore
     r"""Applies multiple parametrizations to the same tensor in sequence.
 
     Args:
@@ -271,7 +271,7 @@ class ParametrizationList[
         original: Tensor,
         unsafe: bool = False,
     ) -> None:
-        super().__init__(modules)  # type: ignore[arg-type]
+        super().__init__(modules)  # type: ignore
         if not isinstance(original, nn.Parameter):
             raise TypeError("tensor must be a nn.Parameter")
 
@@ -291,8 +291,8 @@ class ParametrizationList[
         # initialize the cache
         self.initialize_cache()
 
-    def __setitem__(self, idx: int, module: S, /) -> None:  # type: ignore[override]
-        super().__setitem__(idx, _insert_right_inverse(module))  # type: ignore[call-overload]
+    def __setitem__(self, idx: int, module: S, /) -> None:  # type: ignore
+        super().__setitem__(idx, _insert_right_inverse(module))  # type: ignore
         self.initialize_cache()
 
     def add_module(self, name: str, module: nn.Module | None) -> None:
@@ -392,11 +392,11 @@ def _insert_right_inverse(arg: nn.Module | None, /) -> nn.Module | None:
 
         # Ensure that right_inverse is jit-exported, otherwise we won't be able to call it
         # Note: we assume jit.export is idempotent.
-        arg.__class__.right_inverse = jit.export(arg.__class__.right_inverse)  # type: ignore[attr-defined]
+        arg.__class__.right_inverse = jit.export(arg.__class__.right_inverse)  # type: ignore
         return arg
 
     # inject a trivial right_inverse method
-    arg.__class__.right_inverse = jit.export(lambda _self, _tensor: None)  # type: ignore[attr-defined]
+    arg.__class__.right_inverse = jit.export(lambda _self, _tensor: None)  # type: ignore
     return arg
 
 

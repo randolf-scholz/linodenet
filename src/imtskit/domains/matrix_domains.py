@@ -141,8 +141,8 @@ class Rectangular(Matrix):
 class Square(Rectangular):
     r"""Domain of square matrices with optional fixed size."""
 
-    rows: Final[int | None] = field(default=None, repr=False)  # type: ignore[misc]
-    cols: Final[int | None] = field(default=None, repr=False)  # type: ignore[misc]
+    rows: Final[int | None] = field(default=None, repr=False)  # type: ignore
+    cols: Final[int | None] = field(default=None, repr=False)  # type: ignore
 
     size: Final[int | None] = field(default=None, init=False)
 

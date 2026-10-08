@@ -111,7 +111,7 @@ class DiscreteTimeNKF(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.batch_first = batch_first
-        self.decoder = decoder  # type: ignore[assignment]
+        self.decoder = decoder  # type: ignore
         self.kalman = DiscreteTimeKalmanFilter(
             input_size,
             hidden_size,
@@ -458,7 +458,7 @@ class ContinuousTimeNKF(nn.Module):
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.batch_first = batch_first
-        self.decoder = decoder  # type: ignore[assignment]
+        self.decoder = decoder  # type: ignore
         self.kalman = ContinuousTimeKalmanFilter(
             input_size,
             hidden_size,

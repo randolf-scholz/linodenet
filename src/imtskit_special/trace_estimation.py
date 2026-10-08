@@ -64,6 +64,7 @@ class Samplers(StrEnum):
     def new(cls, sampler: str | AbstractSampler, /) -> AbstractSampler:
         r"""Construct a built-in sampler or forward a custom sampler as-is."""
         if callable(sampler):
+            assert not isinstance(sampler, str)
             return sampler
 
         match Samplers(sampler):

@@ -373,7 +373,7 @@ class DomainMapping[D: Domain](Mapping[D, D]):
                         f"{left_codomain!r} ≰ {right_codomain!r}."
                     )
 
-    def __getitem__(self, key: D, /) -> D | Join:  # type: ignore[override]
+    def __getitem__(self, key: D, /) -> D | Join:  # type: ignore
         if key in self.domains:
             return self.domains[key]
 
@@ -500,11 +500,11 @@ class PosetEnum(Enum, metaclass=_PosetType):
     r"""Mixin implementing a partial order from immediate-superset edges."""
 
     # TODO: return type should be Collection[Self | Meet[Self] & Self], requiring Intersection
-    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[type-var]
+    KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore
     r"""Dependencies"""
-    KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore[type-var]
+    KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore
     r"""Reverse dependencies."""
-    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]  # type: ignore[type-var]
+    KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]  # type: ignore
     r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
     # TODO: use typing.ReadOnly for covariance.
     ANY: ClassVar[Self | Any | None]
@@ -826,9 +826,9 @@ class PosetEnum(Enum, metaclass=_PosetType):
         return self._closure_from(frozenset({self}))
 
     @property
-    def factorizations(self) -> frozenset[Meet[Self]]:  # type: ignore[type-var]
+    def factorizations(self) -> frozenset[Meet[Self]]:  # type: ignore
         return frozenset(
-            Meet(factors)  # type: ignore[arg-type]
+            Meet(factors)  # type: ignore
             for node, factors in self._parse_known_meets()
             if node is self
         )

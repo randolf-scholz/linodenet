@@ -89,9 +89,9 @@ class ResNet(ModuleSequence[nn.Module]):
     ) -> list[nn.Module]:
         linear = nn.Linear(input_size, output_size)
         if isinstance(activation, str):
-            nn.init.kaiming_uniform_(linear.weight, nonlinearity=activation)  # type: ignore[arg-type]
+            nn.init.kaiming_uniform_(linear.weight, nonlinearity=activation)  # type: ignore
             if linear.bias is not None:
-                nn.init.kaiming_uniform_(linear.bias[None], nonlinearity=activation)  # type: ignore[arg-type]
+                nn.init.kaiming_uniform_(linear.bias[None], nonlinearity=activation)  # type: ignore
 
         layers: list[nn.Module] = [Activations.new(activation), linear]
         if use_batchnorm:

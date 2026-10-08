@@ -806,5 +806,5 @@ class signature:
 
     def __call__[Fn: Callable](self, fn: Fn) -> Fn:
         r"""Decorator to annotate function signatures."""
-        fn.signature = self  # type: ignore[attr-defined]
+        fn.signature = self  # type: ignore
         return fn

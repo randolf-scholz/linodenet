@@ -213,7 +213,7 @@ class GaussianForwardUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tens
     ) -> None:
         super().__init__()
 
-        self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore[assignment]
+        self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore
         self.parametrization = CovarianceType(parametrization)
         self.retention_mu, self.retention_sigma = _make_retention_modules(
             retention,
@@ -289,7 +289,7 @@ class GaussianReverseUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tens
     ) -> None:
         super().__init__()
 
-        self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore[assignment]
+        self.decoder: Transform[Tensor, Tensor] = decoder  # type: ignore
         self.parametrization = CovarianceType(parametrization)
         self.retention_mu, self.retention_sigma = _make_retention_modules(
             retention,
