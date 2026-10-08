@@ -407,13 +407,13 @@ def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M 
     """
     match x, y:
         case Fn(), Fn():
-            return Series((x, y))
+            return Series((x, y))  # ty: ignore[invalid-return-type]
         case Fn(), [*modules]:
-            return Series((x, *modules))
+            return Series((x, *modules))  # ty: ignore[invalid-argument-type]
         case [*modules], Fn():
-            return Series((*modules, y))
+            return Series((*modules, y))  # ty: ignore[invalid-argument-type]
         case [*left_modules], [*right_modules]:
-            return Series((*left_modules, *right_modules))
+            return Series((*left_modules, *right_modules))  # ty: ignore[invalid-argument-type]
         case _:
             raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")
 
@@ -499,13 +499,13 @@ def parallel[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Paralle
     """
     match x, y:
         case Fn(), Fn():
-            return Parallel((x, y))
+            return Parallel((x, y))  # ty: ignore[invalid-return-type]
         case Fn(), [*modules]:
-            return Parallel((x, *modules))
+            return Parallel((x, *modules))  # ty: ignore[invalid-argument-type]
         case [*modules], Fn():
-            return Parallel((*modules, y))
+            return Parallel((*modules, y))  # ty: ignore[invalid-argument-type]
         case [*left_modules], [*right_modules]:
-            return Parallel((*left_modules, *right_modules))
+            return Parallel((*left_modules, *right_modules))  # ty: ignore[invalid-argument-type]
         case _:
             raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")
 
@@ -621,13 +621,13 @@ def fork[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Fork[M | N]
     """
     match x, y:
         case Fn(), Fn():
-            return Fork((x, y))
+            return Fork((x, y))  # ty: ignore[invalid-return-type]
         case Fn(), [*modules]:
-            return Fork((x, *modules))
+            return Fork((x, *modules))  # ty: ignore[invalid-argument-type]
         case [*modules], Fn():
-            return Fork((*modules, y))
+            return Fork((*modules, y))  # ty: ignore[invalid-argument-type]
         case [*left_modules], [*right_modules]:
-            return Fork((*left_modules, *right_modules))
+            return Fork((*left_modules, *right_modules))  # ty: ignore[invalid-argument-type]
         case _:
             raise TypeError(f"Expected Fn or Sequence[Fn], got {type(x)} and {type(y)}")
 

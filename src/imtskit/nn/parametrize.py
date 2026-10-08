@@ -213,7 +213,7 @@ class _post_init_hook(type(Protocol)):  # pyrefly: ignore[invalid-inheritance]
         pass
 
     def __call__[T](cls: type[T], *args: Any, **kwargs: Any) -> T:
-        instance = super().__call__(*args, **kwargs)
+        instance = super().__call__(*args, **kwargs)  # ty: ignore[invalid-super-argument]
         instance.__post_init__()
         return instance
 

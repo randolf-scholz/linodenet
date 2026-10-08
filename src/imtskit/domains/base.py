@@ -179,7 +179,7 @@ class Meet[D: DomainLike](Domain):
             case Join():
                 # (A₁ ∧ … ∧ Aₙ) ∧ (B₁ ∨ … ∨ Bₙ)
                 # ≡ A₁ ∧ … ∧ Aₙ ∧ (B₁ ∨ … ∨ Bₙ)
-                return Meet({*self, other})
+                return Meet({*self, other})  # ty: ignore[invalid-argument-type]
             case Meet():
                 # (A₁ ∧ … ∧ Aₙ) ∧ (B₁ ∧ … ∧ Bₙ)
                 # ≡ (A₁ ∧ … ∧ Aₙ ∧ B₁ ∧ … ∧ Bₙ)
@@ -298,7 +298,7 @@ class Join[D: DomainLike](Domain):
             case Meet():
                 # (A₁ ∨ … ∨ Aₙ) ∨ (B₁ ∧ … ∧ Bₘ)
                 # is already in DNF as singleton disjuncts and one conjunctive clause.
-                return Join({*self, other})
+                return Join({*self, other})  # ty: ignore[invalid-argument-type]
             case _:
                 # (A₁ ∨ … ∨ Aₙ) ∨ B ≡ (A₁ ∨ … ∨ Aₙ ∨ B)
                 return Join({*self, other})

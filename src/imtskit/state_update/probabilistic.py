@@ -73,9 +73,9 @@ def probabilistic_kalman_update(
         The updated state distribution.
     """
     μ: Tensor = val.mean
-    Σ: Tensor = val.covariance_matrix
+    Σ: Tensor = val.covariance_matrix  # ty: ignore[invalid-assignment]
     y: Tensor = obs.mean
-    R: Tensor = obs.covariance_matrix
+    R: Tensor = obs.covariance_matrix  # ty: ignore[invalid-assignment]
 
     if H is None:
         yhat = μ

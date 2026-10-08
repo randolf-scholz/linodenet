@@ -570,7 +570,8 @@ def assert_model_ok(
                 f" Consider using `check_class`!"
             )
         case Callable() as func:
-            name = func.__name__
+            name = getattr(func, "__name__", "<unknown>")
+            assert isinstance(name, str)
             test_obj = func
         case other:
             raise TypeError(f"Got unexpected input type {type(other)!r}")

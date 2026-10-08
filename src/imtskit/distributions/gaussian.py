@@ -1025,21 +1025,21 @@ class MultivariateNormal(dist.MultivariateNormal):
         r"""Add a tensor to the mean."""
         return self.__class__(
             self.mean + bias,
-            self.covariance_matrix,
+            self.covariance_matrix,  # ty: ignore[invalid-argument-type]
         )
 
     def __mul__(self, scale: float | Tensor, /) -> Self:
         r"""Multiply by a tensor."""
         return self.__class__(
             scale * self.mean,
-            scale**2 * self.covariance_matrix,
+            scale**2 * self.covariance_matrix,  # ty: ignore[unsupported-operator]
         )
 
     def __matmul__(self, scale: Tensor, /) -> Self:
         r"""Multiply by a tensor."""
         return self.__class__(
             scale @ self.mean,
-            scale @ self.covariance_matrix @ scale.T,
+            scale @ self.covariance_matrix @ scale.T,  # ty: ignore[unsupported-operator]
         )
 
 

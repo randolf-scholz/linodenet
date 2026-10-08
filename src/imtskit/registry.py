@@ -149,9 +149,12 @@ class Registry(Mapping[str, RegistryEntry]):
                 )
             self.register(entry.name, test=test)
 
-        test_name = test.__name__
+        if (test_name := getattr(test, "__name__", None)) is None:
+            raise ValueError(f"Test {test!r} has no '__name__' attribute.")
+
         assert test_name.startswith("is_")
         name = test_name.removeprefix("is_")
+
         if name not in self:
             self.register(name, domain=domain, test=test)
         else:
