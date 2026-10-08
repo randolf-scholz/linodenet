@@ -173,8 +173,8 @@ def _tensor_values_equal(lhs: Tensor, rhs: Tensor, /) -> bool:
     if lhs.is_floating_point() != rhs.is_floating_point():
         return False
     if lhs.is_floating_point():
-        return bool(torch.allclose(lhs, rhs, atol=0.0, rtol=0.0, equal_nan=True))
-    return bool(torch.equal(lhs, rhs))
+        return torch.allclose(lhs, rhs, atol=0.0, rtol=0.0, equal_nan=True)
+    return torch.equal(lhs, rhs)
 
 
 def _optional_tensor_values_equal(lhs: Tensor | None, rhs: Tensor | None, /) -> bool:

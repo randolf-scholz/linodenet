@@ -337,7 +337,7 @@ class Token:
             assert value is None
             value = kind.value
 
-        object.__setattr__(self, "pos", int(pos))
+        object.__setattr__(self, "pos", pos)
         object.__setattr__(self, "value", str(value))
         object.__setattr__(self, "kind", TokenKind(kind))
 

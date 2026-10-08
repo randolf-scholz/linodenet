@@ -242,7 +242,7 @@ class NonLinearKalmanUpdate(nn.Module, VectorStateUpdate):
         autoregressive: bool = False,
     ) -> None:
         super().__init__(input_size=input_size, hidden_size=hidden_size)
-        self.autoregressive = bool(autoregressive)
+        self.autoregressive = autoregressive
 
         # BUFFERS
         self.register_buffer("ZERO", torch.zeros(1))

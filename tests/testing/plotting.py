@@ -58,7 +58,7 @@ def visualize_distribution(
 
     bins: np.ndarray
     if log:
-        base = 10 if log is True else log
+        base = 10 if log else log
         tol = 2**-24 if np.issubdtype(x.dtype, np.float32) else 2**-53
         z = np.log10(np.maximum(x, tol))
         ax.set_xscale("log", base=base)

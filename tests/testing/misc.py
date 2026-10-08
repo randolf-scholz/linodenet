@@ -16,7 +16,7 @@ def as_seed(rng: int | torch.Generator, /) -> int:
     if isinstance(rng, int):
         return rng
     if isinstance(rng, torch.Generator):
-        return int(rng.initial_seed())
+        return rng.initial_seed()
     raise TypeError(f"Expected int or torch.Generator, got {type(rng)!r}.")
 
 

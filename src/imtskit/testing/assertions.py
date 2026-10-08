@@ -369,7 +369,7 @@ def assert_is_trainable(
             call_kwargs = deepcopy(dict(call_kwargs))
         # fix the gradient state
         for w, p in zip(model.parameters(), module.parameters(), strict=True):
-            w.requires_grad_(bool(p.requires_grad))
+            w.requires_grad_(p.requires_grad)
     else:
         model = module
 

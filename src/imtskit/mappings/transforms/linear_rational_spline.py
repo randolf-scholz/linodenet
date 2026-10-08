@@ -440,7 +440,7 @@ class LearnableLRS(nn.Module, Transform):
     ) -> None:
         super().__init__()
         #  Constants
-        self.num_bins = int(num_bins)
+        self.num_bins = num_bins
         self.x_bounds = x_bounds
         self.y_bounds = y_bounds
         self.n_heads = torch.Size((n_heads,) if isinstance(n_heads, int) else n_heads)

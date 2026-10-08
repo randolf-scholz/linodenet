@@ -399,16 +399,14 @@ class AttentionGain(nn.Module):
         hidden_size: int | None = None,
     ) -> None:
         super().__init__()
-        self.input_size = int(input_size)
-        self.output_size = int(output_size)
-        self.context_size = (
-            self.output_size if context_size is None else int(context_size)
-        )
+        self.input_size = input_size
+        self.output_size = output_size
+        self.context_size = self.output_size if context_size is None else context_size
         self.num_heads = 1
         self.hidden_size = (
             min(self.input_size, self.output_size, self.context_size, 32)
             if hidden_size is None
-            else int(hidden_size)
+            else hidden_size
         )
         self.head_dim = self.hidden_size
         if self.context_size <= 0:
@@ -665,7 +663,7 @@ class AttentionCovarianceFactor(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
         self.attention_size = (
-            min(hidden_size, 32) if attention_size is None else int(attention_size)
+            min(hidden_size, 32) if attention_size is None else attention_size
         )
         if self.attention_size <= 0:
             raise ValueError("attention_size must be a positive integer.")

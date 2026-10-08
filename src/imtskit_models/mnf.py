@@ -491,7 +491,7 @@ class LearnableLRS(nn.Module):
     ) -> None:
         super().__init__()
         #  Constants
-        self.num_bins = int(num_bins)
+        self.num_bins = num_bins
         self.x_bounds = x_bounds
         self.y_bounds = y_bounds
         self.n_heads = torch.Size(
@@ -674,7 +674,7 @@ class ConditionalLRS(nn.Module):
             (num_heads,) if isinstance(num_heads, int) else num_heads
         )
         self.use_fp64 = use_fp64
-        self.num_bins = int(num_bins)
+        self.num_bins = num_bins
         self.x_bounds = x_bounds
         self.y_bounds = y_bounds
         self.spline = UnconstrainedLinearRationalSpline(use_fp64=use_fp64)
@@ -1007,8 +1007,8 @@ class MultiHeadGaussian(nn.Module):
         super().__init__()
 
         # CONSTANTS
-        self.num_heads = int(num_heads)
-        self.num_features = int(num_feats)
+        self.num_heads = num_heads
+        self.num_features = num_feats
         normalization_constant = (
             0.5 * self.num_features * math.log(2 * math.pi)
         )  # -log (2π)^{-k/2}

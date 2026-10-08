@@ -1083,8 +1083,8 @@ class MultiHeadGaussian(DistributionBase):
     ) -> None:
         super().__init__(batch_shape=(n_heads,), event_shape=(n_feats,))
         # CONSTANTS
-        self.num_heads = int(n_heads)
-        self.num_features = int(n_feats)
+        self.num_heads = n_heads
+        self.num_features = n_feats
         normalization_constant = 0.5 * self.num_features * _LOG2PI  # -log (2π)^{-k/2}
         self.register_buffer(
             "normalization_constant", torch.tensor(normalization_constant)

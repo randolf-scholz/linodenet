@@ -644,7 +644,7 @@ class TestImplementation:
     @pytest.mark.parametrize("dtype", [torch.float64, torch.float32], ids=str)
     def test_erfinv_range(self, dtype: torch.dtype) -> None:
         finfo_eps = torch.finfo(dtype).eps
-        finfo_eps_log = int(math.floor(math.log2(finfo_eps)))
+        finfo_eps_log: int = math.floor(math.log2(finfo_eps))
 
         # figure out the range (-1+2⁻ᵏ, 1-2⁻ᵏ) that's safe to pass to erfinv without getting inf or NaN
         for k in range(60, 0, -1):

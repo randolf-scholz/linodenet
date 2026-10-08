@@ -1176,7 +1176,7 @@ class XTraceEstimator(TraceEstimator):
         super().__init__()
         self.num_matvecs = num_matvecs
         self.num_samples = num_samples
-        self.renormalize = bool(renormalize)
+        self.renormalize = renormalize
         self.mode = mode
         self.sampler = Samplers.new(sampler)
 

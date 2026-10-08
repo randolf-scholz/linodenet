@@ -85,8 +85,8 @@ class VectorStateUpdate(AbstractStateUpdate[Tensor, Tensor], Protocol):
     hidden_size: Final[int]
 
     def __init__(self, /, input_size: int, hidden_size: int) -> None:
-        self.input_size = int(input_size)
-        self.hidden_size = int(hidden_size)
+        self.input_size = input_size
+        self.hidden_size = hidden_size
 
     @signature("[(..., d), (..., h)] -> (..., h)")
     def __call__(self, y: Tensor, x: Tensor, /) -> Tensor: ...
@@ -281,7 +281,7 @@ class MissingValueCell[F: VectorStateUpdate](nn.Module, SparseVectorStateUpdate)
         super().__init__()
         VectorStateUpdate.__init__(self, input_size=input_size, hidden_size=hidden_size)
         self.imputation = imputation
-        self.concat_mask = bool(concat_mask)
+        self.concat_mask = concat_mask
 
         expected_input_size = self.input_size * (1 + self.concat_mask)
         if getattr(state_updater, "input_size", None) != expected_input_size:

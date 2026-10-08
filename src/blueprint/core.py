@@ -436,13 +436,13 @@ def _naive_serializer(value: object, /) -> JSON_Value:
         case None:
             return None
         case bool():
-            return bool(value)
+            return value
         case int():
-            return int(value)
+            return value
         case float():
-            return float(value)
+            return value
         case str():
-            return str(value)
+            return value
         case list():
             return [_naive_serializer(item) for item in value]
         case tuple():
@@ -594,7 +594,7 @@ def initialize[T = Any](spec: T | type[T] | Blueprint[T], /) -> T:
         spec: The blueprint to initialize from, or the object to return if it's not a blueprint.
     """
     if isinstance(spec, type):
-        return _initialize_from_args(cast("type[T]", spec), [], {})
+        return _initialize_from_args(spec, [], {})
     if isinstance(spec, dict):
         if not is_blueprint(spec):
             raise TypeError("Expected a blueprint dictionary.")

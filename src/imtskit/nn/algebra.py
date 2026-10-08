@@ -651,7 +651,7 @@ class Duplicate[M: Fn](Fn):
         if num < 0:
             raise ValueError(f"Expected {num=} to be greater than 0")
         super().__init__()
-        self.num: Final[int] = int(num)
+        self.num: Final[int] = num
         self.module: Final[M] = module
 
     def __call__(self, x: Any, /) -> tuple:

@@ -16,8 +16,8 @@ class Filter(Protocol):
 
     def __init__(self, input_size: int, hidden_size: int) -> None:
         super().__init__()
-        self.input_size = int(input_size)
-        self.hidden_size = int(hidden_size)
+        self.input_size = input_size
+        self.hidden_size = hidden_size
 
 
 def test_inherit_protocol_init() -> None:
