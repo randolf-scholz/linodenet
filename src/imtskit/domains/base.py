@@ -59,11 +59,11 @@ class Indeterminate:
 
 @runtime_checkable
 class DomainLike(Protocol):
-    r"""Protocol for Domains."""
+    r"""Protocol for domain membership checks and order comparisons."""
 
     @abstractmethod
     def check(self, value: Tensor, /) -> Tensor:
-        r"""Batched version of contains."""
+        r"""Check domain membership for each item in a batch."""
         raise NotImplementedError
 
     def __contains__(self, item: Tensor, /) -> bool:
@@ -454,7 +454,7 @@ def _le(a, b, /) -> bool | Indeterminate | NotImplementedType:
 
 
 def _meet_element[T](objs: Iterable, name: str, kind: type[T]) -> T | None:
-    r"""Emulates __getattr__ on Meet."""
+    r"""Emulate `__getattr__` on `Meet`."""
     members = list(objs)
 
     if not all(hasattr(member, name) for member in members):
@@ -501,16 +501,16 @@ class PosetEnum(Enum, metaclass=_PosetType):
 
     # TODO: return type should be Collection[Self | Meet[Self] & Self], requiring Intersection
     KNOWN_SUPERTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore
-    r"""Dependencies"""
+    r"""Declared immediate supertypes of each domain."""
     KNOWN_SUBTYPES: ClassVar[Mapping[Self, Collection[Self | Meet[Self]]]]  # type: ignore
-    r"""Reverse dependencies."""
+    r"""Declared subtypes and meet-based subtype implications."""
     KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]  # type: ignore
-    r"""Named meet rules encoded as implications x≤aᵢ ∀i ⇒ x≤m."""
+    r"""Named meets: if $x ≤ aᵢ$ for every factor $aᵢ$, then $x ≤ m$."""
     # TODO: use typing.ReadOnly for covariance.
     ANY: ClassVar[Self | Any | None]
-    r"""The universal type that all types are subtypes of."""
+    r"""The greatest domain, which is a supertype of every domain."""
     EMPTY: ClassVar[Self | Any | None]
-    r"""The universal bottom type that all types are supertypes of."""
+    r"""The least domain, which is a subtype of every domain."""
 
     def __init_subclass__(cls) -> None:
         if getattr(cls, "KNOWN_SUPERTYPES", None) is None:

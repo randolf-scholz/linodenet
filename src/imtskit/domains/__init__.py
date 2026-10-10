@@ -1,10 +1,10 @@
-r"""WORK IN PROGRESS.
+r"""Domain definitions, tensor membership checks, and subset relations.
 
-Domains should allow:
+This module is a work in progress. The intended domain interface supports:
 
-1. checking membership of tensors
-2. checking subset relations between domains
-3. performing some basic operations (e.g. product of domains, union, intersection)
+1. Checking tensor membership.
+2. Checking subset relations between domains.
+3. Performing domain operations, such as products, unions, and intersections.
 """
 # ruff: file-ignore[F403, F405]
 

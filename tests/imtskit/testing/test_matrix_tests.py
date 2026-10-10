@@ -1,5 +1,6 @@
 r"""Tests for `imtskit.testing.matrix_tests`."""
 
+import pytest
 import torch
 
 from imtskit.domains.matrix_tests import (
@@ -32,6 +33,7 @@ from imtskit.domains.matrix_tests import (
     is_row_centered,
     is_row_stochastic,
     is_skew_symmetric,
+    is_spectral_normalized,
     is_square,
     is_symmetric,
     is_tall,
@@ -41,6 +43,44 @@ from imtskit.domains.matrix_tests import (
     is_wide,
     is_zero,
 )
+
+
+@pytest.mark.parametrize(
+    "dtype", [torch.float32, torch.float64, torch.complex64, torch.complex128]
+)
+@pytest.mark.parametrize("dim", [(-2, -1), (0, 2)])
+def test_spectral_normalized_requires_unit_norm(
+    dtype: torch.dtype, dim: tuple[int, int]
+) -> None:
+    scales = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0], dtype=dtype)
+    x = scales[:, None, None] * torch.eye(2, 3, dtype=dtype)
+    x = x.movedim((-2, -1), dim)
+
+    result = is_spectral_normalized(x, shape=(2, 3), dim=dim)
+
+    torch.testing.assert_close(
+        result, torch.tensor([False, False, True, False, False, False])
+    )
+    assert not is_spectral_normalized(x, shape=(3, 2), dim=dim).any()
+    assert is_spectral_normalized(torch.eye(2, 3, dtype=dtype)).item()
+
+
+@pytest.mark.parametrize(("rtol", "atol"), [(0.02, 0.0), (0.0, 0.02), (0.01, 0.01)])
+def test_spectral_normalized_tolerances_are_symmetric(rtol: float, atol: float) -> None:
+    x = torch.tensor([0.975, 0.985, 1.0, 1.015, 1.025], dtype=torch.float64)
+
+    result = is_spectral_normalized(x[:, None, None], rtol=rtol, atol=atol)
+
+    torch.testing.assert_close(result, torch.tensor([False, True, True, True, False]))
+
+
+def test_spectral_normalized_default_tolerances_allow_rounding() -> None:
+    x = torch.tensor([1.0 - 1e-7, 1.0 + 1e-7, 1.0 - 1e-4, 1.0 + 1e-4])
+
+    torch.testing.assert_close(
+        is_spectral_normalized(x[:, None, None]),
+        torch.tensor([True, True, False, False]),
+    )
 
 
 def test_square_matrix_tests_return_false_for_size_mismatch() -> None:

@@ -82,7 +82,7 @@ from .base import Indeterminate, MatrixDomain, PosetEnum
 
 @dataclass(frozen=True)
 class Matrix(MatrixDomain):
-    r"""Matrix domain with optional admissible values."""
+    r"""Domain of matrices with optional fixed numbers of rows and columns."""
 
     rows: Final[int | None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
     cols: Final[int | None] = None  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -480,7 +480,7 @@ class Traceless(Square):
 
 @dataclass(frozen=True)
 class Symplectic(EvenSquare):
-    r"""Domain of symplectic even square matrices."""
+    r"""Domain of symplectic square matrices of even size."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return tests.is_symplectic(value, size=self.size)
@@ -488,7 +488,7 @@ class Symplectic(EvenSquare):
 
 @dataclass(frozen=True)
 class Hamiltonian(EvenSquare):
-    r"""Domain of Hamiltonian even square matrices."""
+    r"""Domain of Hamiltonian square matrices of even size."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return tests.is_hamiltonian(value, size=self.size)

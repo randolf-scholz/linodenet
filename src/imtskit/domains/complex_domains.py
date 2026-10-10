@@ -41,7 +41,7 @@ class ComplexDomain(ScalarDomain):
 
 @dataclass(frozen=True)
 class OpenRightPlane(ComplexDomain):
-    r"""The complex region with $Re(z) > 0$."""
+    r"""The open right half-plane $\Re(z) > 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return value.real > 0
@@ -49,7 +49,7 @@ class OpenRightPlane(ComplexDomain):
 
 @dataclass(frozen=True)
 class OpenLeftPlane(ComplexDomain):
-    r"""The complex region with $Re(z) < 0$."""
+    r"""The open left half-plane $\Re(z) < 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return value.real < 0
@@ -57,7 +57,7 @@ class OpenLeftPlane(ComplexDomain):
 
 @dataclass(frozen=True)
 class OpenUpperPlane(ComplexDomain):
-    r"""The complex region with $Im(z) > 0$."""
+    r"""The open upper half-plane $\Im(z) > 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return (value + 0.0j).imag > 0
@@ -65,7 +65,7 @@ class OpenUpperPlane(ComplexDomain):
 
 @dataclass(frozen=True)
 class OpenLowerPlane(ComplexDomain):
-    r"""The complex region with $Im(z) < 0$."""
+    r"""The open lower half-plane $\Im(z) < 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return (value + 0.0j).imag < 0
@@ -73,7 +73,7 @@ class OpenLowerPlane(ComplexDomain):
 
 @dataclass(frozen=True)
 class ClosedRightPlane(ComplexDomain):
-    r"""The complex region with $Re(z) ≥ 0$."""
+    r"""The closed right half-plane $\Re(z) ≥ 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return value.real >= 0
@@ -81,7 +81,7 @@ class ClosedRightPlane(ComplexDomain):
 
 @dataclass(frozen=True)
 class ClosedLeftPlane(ComplexDomain):
-    r"""The complex region with $Re(z) ≤ 0$."""
+    r"""The closed left half-plane $\Re(z) ≤ 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return value.real <= 0
@@ -89,7 +89,7 @@ class ClosedLeftPlane(ComplexDomain):
 
 @dataclass(frozen=True)
 class ClosedUpperPlane(ComplexDomain):
-    r"""The complex region with $Im(z) ≥ 0$."""
+    r"""The closed upper half-plane $\Im(z) ≥ 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return (value + 0.0j).imag >= 0
@@ -97,7 +97,7 @@ class ClosedUpperPlane(ComplexDomain):
 
 @dataclass(frozen=True)
 class ClosedLowerPlane(ComplexDomain):
-    r"""The complex region with $Im(z) ≤ 0$."""
+    r"""The closed lower half-plane $\Im(z) ≤ 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return (value + 0.0j).imag <= 0
@@ -105,7 +105,7 @@ class ClosedLowerPlane(ComplexDomain):
 
 @dataclass(frozen=True)
 class OpenDisk(ComplexDomain):
-    r"""The complex region with $|z| < r$."""
+    r"""The open disk $|z| < r$, where $r$ is `radius`."""
 
     radius: Final[float]
 
@@ -119,7 +119,7 @@ class OpenDisk(ComplexDomain):
 
 @dataclass(frozen=True)
 class ClosedDisk(ComplexDomain):
-    r"""The complex region with $|z| ≤ r$."""
+    r"""The closed disk $|z| ≤ r$, where $r$ is `radius`."""
 
     radius: Final[float]
 
@@ -133,7 +133,7 @@ class ClosedDisk(ComplexDomain):
 
 @dataclass(frozen=True)
 class OpenUnitDisk(ComplexDomain):
-    r"""The complex region with $|z| < 1$."""
+    r"""The open unit disk $|z| < 1$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return value.abs() < 1
@@ -141,7 +141,7 @@ class OpenUnitDisk(ComplexDomain):
 
 @dataclass(frozen=True)
 class ClosedUnitDisk(ComplexDomain):
-    r"""The complex region with $|z| ≤ 1$."""
+    r"""The closed unit disk $|z| ≤ 1$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return value.abs() <= 1
@@ -149,7 +149,7 @@ class ClosedUnitDisk(ComplexDomain):
 
 @dataclass(frozen=True)
 class UnitCircle(ComplexDomain):
-    r"""The complex region with $|z| = 1$."""
+    r"""The unit circle $|z| = 1$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return value.abs() == 1
@@ -157,7 +157,7 @@ class UnitCircle(ComplexDomain):
 
 @dataclass(frozen=True)
 class OpenVerticalStrip(ComplexDomain):
-    r"""The complex region with $Re(z) ∈ (a,b)$."""
+    r"""The open vertical strip $\Re(z) ∈ (a, b)$."""
 
     lower: Final[float]
     upper: Final[float]
@@ -172,7 +172,7 @@ class OpenVerticalStrip(ComplexDomain):
 
 @dataclass(frozen=True)
 class ClosedVerticalStrip(ComplexDomain):
-    r"""The complex region with $Re(z) ∈ [a,b]$."""
+    r"""The closed vertical strip $\Re(z) ∈ [a, b]$."""
 
     lower: Final[float]
     upper: Final[float]
@@ -187,7 +187,7 @@ class ClosedVerticalStrip(ComplexDomain):
 
 @dataclass(frozen=True)
 class OpenHorizontalStrip(ComplexDomain):
-    r"""The complex region with $Im(z) ∈ (c, d)$."""
+    r"""The open horizontal strip $\Im(z) ∈ (c, d)$."""
 
     lower: Final[float]
     upper: Final[float]
@@ -203,7 +203,7 @@ class OpenHorizontalStrip(ComplexDomain):
 
 @dataclass(frozen=True)
 class ClosedHorizontalStrip(ComplexDomain):
-    r"""The complex region with $Im(z) ∈ [c,d]$."""
+    r"""The closed horizontal strip $\Im(z) ∈ [c, d]$."""
 
     lower: Final[float]
     upper: Final[float]
@@ -219,7 +219,7 @@ class ClosedHorizontalStrip(ComplexDomain):
 
 @dataclass(frozen=True)
 class HorizontalLine(ComplexDomain):
-    r"""The complex region with $Im(z) = c$."""
+    r"""The horizontal line $\Im(z) = c$, where $c$ is `value`."""
 
     value: Final[float]
 
@@ -229,7 +229,7 @@ class HorizontalLine(ComplexDomain):
 
 @dataclass(frozen=True)
 class VerticalLine(ComplexDomain):
-    r"""The complex region with $Re(z) = c$."""
+    r"""The vertical line $\Re(z) = c$, where $c$ is `value`."""
 
     value: Final[float]
 
@@ -239,7 +239,7 @@ class VerticalLine(ComplexDomain):
 
 @dataclass(frozen=True)
 class ImaginaryAxis(ComplexDomain):
-    r"""The complex region with $Re(z) = 0$."""
+    r"""The imaginary axis $\Re(z) = 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return value.real == 0
@@ -247,7 +247,7 @@ class ImaginaryAxis(ComplexDomain):
 
 @dataclass(frozen=True)
 class RealAxis(ComplexDomain):
-    r"""The complex region with $Im(z) = 0$."""
+    r"""The real axis $\Im(z) = 0$."""
 
     def check(self, value: Tensor, /) -> Tensor:
         return (value + 0.0j).imag == 0

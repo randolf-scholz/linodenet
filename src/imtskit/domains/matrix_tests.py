@@ -1,4 +1,4 @@
-r"""Checks for testing certain matrix properties (type (1,1)-tensors)."""
+r"""Batched checks for matrix properties along two selected tensor dimensions."""
 
 __all__ = [
     # ABCs & Protocols
@@ -96,12 +96,12 @@ def _has_shape(x: Tensor, shape: tuple[int, int], dim: tuple[int, int], /) -> bo
 
 
 def _has_size(x: Tensor, size: int, dim: tuple[int, int], /) -> bool:
-    r"""Return whether the selected matrix dimensions equal ``(size, size)``."""
+    r"""Return whether the selected matrix dimensions equal `(size, size)`."""
     return _has_shape(x, (size, size), dim)
 
 
 class MatrixTest(Protocol):
-    r"""Protocol for testing certain matrix property."""
+    r"""Protocol for testing matrix properties."""
 
     @signature("(..., m, n) -> bool[(...)]")
     def __call__(
@@ -113,13 +113,11 @@ class MatrixTest(Protocol):
         rtol: float = RTOL,
         atol: float = ATOL,
     ) -> Tensor:
-        r"""Check whether the given matrix belongs to a matrix group/manifold.
+        r"""Check a matrix property for each matrix in a batch.
 
         Note:
-            - There are different kinds of matrix groups, which are not cleanly separated
-              here at the moment (additive, multiplicative, Lie groups, ...).
-            - JIT does not support positional-only and keyword-only arguments.
-              So they are only used in the protocol.
+            Tests may describe additive groups, multiplicative groups, or
+            manifolds. The protocol does not distinguish these structures.
         """
         ...
 
@@ -219,7 +217,7 @@ def is_low_rank_symmetric(
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is symmetric with rank at most ``2⋅rank``."""
+    r"""Check whether the given tensor is symmetric with rank at most `2 * rank`."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
 
@@ -243,7 +241,7 @@ def is_low_rank_skew_symmetric(
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor is skew-symmetric with rank at most ``2⋅rank``."""
+    r"""Check whether the tensor is skew-symmetric with rank at most `2 * rank`."""
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
 
@@ -924,13 +922,18 @@ def is_traceless(
     rtol: float = RTOL,
     atol: float = ATOL,
 ) -> Tensor:
-    r"""Checks whether the trace of the given tensor is zero.
+    r"""Check whether the trace of the given tensor is zero.
 
     Note:
-        - Traceless matrices are an additive group.
-        - Traceless relates to Lie-Algebras: <https://en.wikipedia.org/wiki/Trace_(linear_algebra)#Lie_algebra>
-        - In particular a complex matrix is traceless if and only if it is expressible as a commutator:
-          tr(A) = 0 ⟺ ∑λᵢ = 0 ⟺ A = PQ-QP for some P,Q.
+        Traceless square matrices form an additive group and are related to
+        [Lie algebras](https://en.wikipedia.org/wiki/Trace_(linear_algebra)#Lie_algebra).
+        A complex square matrix is traceless if and only if it can be written
+        as a commutator:
+
+        $$  \tr(A) = 0 ⟺ ∑ᵢ λᵢ = 0 ⟺ A = PQ - QP  $$
+
+        Here $λᵢ$ are the eigenvalues counted with multiplicity, and $P$ and
+        $Q$ are square matrices of the same size as $A$.
     """
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
@@ -1070,7 +1073,7 @@ def is_upper_triangular(
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
-    r"""Check whether the given tensor is lower triangular."""
+    r"""Check whether the given tensor is upper triangular."""
     if shape is not None and not _has_shape(x, shape, dim):
         return _full_false(x, dim)
 
@@ -1283,20 +1286,19 @@ def is_spectral_normalized(
     shape: tuple[int, int] | None = None,
     *,
     dim: tuple[int, int] = (-2, -1),
-    rtol: float = 0.0,
-    atol: float = 0.0,
+    rtol: float = RTOL,
+    atol: float = ATOL,
 ) -> Tensor:
-    r"""Check whether the given tensor has unit spectral norm.
+    r"""Check whether the given tensor has approximately unit spectral norm.
 
-    .. math:: (‖A‖₂-1) ≤ rtol⋅𝟏 + atol
+    $$  |‖A‖₂ - 1| ≤ r + a  $$
 
-    This is done by checking whether the spectral norm is less than or equal to L.
+    where $r$ is `rtol` and $a$ is `atol`.
     """
     if shape is not None and not _has_shape(x, shape, dim):
         return _full_false(x, dim)
-    # TODO: compute spectral norm with given tolerance
     sigma = torch.linalg.matrix_norm(x, ord=2, dim=dim)
-    return (sigma - 1.0) <= (1.0 + rtol) * 1.0 + atol
+    return torch.isclose(sigma, torch.ones_like(sigma), rtol=rtol, atol=atol)
 
 
 @signature("(..., m, n) -> bool[(...)]")
@@ -1310,11 +1312,11 @@ def is_lipschitz_bounded(
     rtol: float = 0.0,
     atol: float = 0.0,
 ) -> Tensor:
-    r"""Check whether the given tensor has bounded lipschitz constant.
+    r"""Check whether the given tensor has a bounded Lipschitz constant.
 
-    .. math:: ‖A‖₂ ≤ (1+rtol)⋅L + atol
+    $$  ‖A‖₂ ≤ (1 + r)L + a  $$
 
-    This is done by checking whether the spectral norm is less than or equal to L.
+    Where $L$ is the `lipschitz_bound`, $r$ is `rtol`, and $a$ is `atol`.
     """
     if shape is not None and not _has_shape(x, shape, dim):
         return _full_false(x, dim)
@@ -1336,11 +1338,13 @@ def is_contraction(
 ) -> Tensor:
     r"""Check whether the given tensor is a contraction.
 
-    This is done by checking whether the spectral norm is less than or equal to 1.
-    If strict, we require that the spectral norm is strictly less than 1, more specifically
-    we include tolerance:
+    $$ ‖A‖₂ ≤ \min(1, (1 + r)L + a)  $$
 
-    .. math:: ‖A‖₂ ≤ (1-rtol)⋅𝟏 - atol
+    where $L$ is the `lipschitz_bound`, $r$ is `rtol`, and $a$ is `atol`.
+
+    Note:
+        The upper bound is inclusive, so matrices with unit spectral norm
+        may pass when the tolerance-adjusted bound reaches one.
     """
     if shape is not None and not _has_shape(x, shape, dim):
         return _full_false(x, dim)
@@ -1363,16 +1367,22 @@ def is_diagonally_dominant(
 ) -> Tensor:
     r"""Check whether the given matrix is diagonally dominant.
 
-    The test is based on the definition of diagonally dominant matrices:
+    For each row $i$, diagonal dominance requires:
 
-    .. math:: Aᵢᵢ ≥ ∑_{j≠i} |Aᵢⱼ| \quad\text{for all \(i = 1, …, n\)}
+    $$  |Aᵢᵢ| ≥ ∑ⱼ |Aᵢⱼ| - |Aᵢᵢ|   $$
 
-    If ``strict=True``, we require that the inequality is strict for all $i$, more specifically
-    we include tolerance:
+    With `strict=True`, let $r$ be `rtol` and $a$ be `atol`.
+    The implementation requires the following for every row:
 
-    .. math:: Aᵢᵢ ≥ (1+\text{rtol})⋅(∑_{j≠i} |Aᵢⱼ|) + \text{atol} \quad\text{for all \(i = 1, …, n\)}
+    $$  2|Aᵢᵢ| ≥ (1 + r)∑ⱼ |Aᵢⱼ| + a  $$
 
-    In this case, the matrix is guaranteed to be invertible
+    Note:
+        With zero tolerances, `strict=True` also accepts equality, so it does
+        not guarantee strict diagonal dominance or invertibility.
+
+    Raises:
+        ValueError: If the selected matrix dimensions are not square and
+            the matrix was not already rejected by the optional `size` check.
     """
     if size is not None and not _has_size(x, size, dim):
         return _full_false(x, dim)
@@ -1402,7 +1412,9 @@ def is_forward_stable(
     r"""Check whether the given matrix is forward stable.
 
     Note:
-        An m×n matrix A is forward stable if and only if $𝐄[Aᵢⱼ] = 0$ and $𝐕[Aᵢⱼ] = 1/n$
+        For an $m × n$ matrix, the current implementation checks that the
+        empirical mean of all entries is close to zero and their sample
+        standard deviation is close to $1/n$, using `rtol` and `atol`.
     """
     num = x.shape[dim[-1]]
     mean = x.mean(dim=dim)
@@ -1426,7 +1438,9 @@ def is_backward_stable(
     r"""Check whether the given matrix is backward stable.
 
     Note:
-        An m×n matrix A is backward stable if and only if $𝐄[Aᵢⱼ] = 0$ and $𝐕[Aᵢⱼ] = 1/m$
+        For an $m × n$ matrix, the current implementation checks that the
+        empirical mean of all entries is close to zero and their sample
+        standard deviation is close to $1/m$, using `rtol` and `atol`.
     """
     return is_forward_stable(x.swapaxes(*dim), dim=dim, rtol=rtol, atol=atol)
 
