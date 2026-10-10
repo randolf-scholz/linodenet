@@ -12,7 +12,7 @@ extra_css = ["_static/footer-navigation.css", "_static/signatures.css"]
 # The configuration must be loaded before the MathJax runtime.
 extra_javascript = [
     "_static/mathjax_config.js",
-    "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
+    "https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js",
 ]
 
 nav = [
@@ -51,6 +51,22 @@ media = "(prefers-color-scheme: dark)"
 scheme = "slate"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to system preference"
+
+[project.theme.icon.admonition]
+# See: https://zensical.org/docs/authoring/admonitions/#admonition-icons
+note = "octicons/tag-16"
+abstract = "octicons/checklist-16"
+info = "octicons/info-16"
+tip = "octicons/squirrel-16"
+success = "octicons/check-16"
+question = "octicons/question-16"
+warning = "octicons/alert-16"
+failure = "octicons/x-circle-16"
+danger = "octicons/zap-16"
+bug = "octicons/bug-16"
+example = "octicons/beaker-16"
+quote = "octicons/quote-16"
+
 
 [project.plugins.mkdocstrings]
 default_handler = "python"
