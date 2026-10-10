@@ -40,11 +40,16 @@ __all__ = [
     "MultivariateNormal",
     "MultiHeadGaussian",
     "CovarianceType",
+    "GaussianParams",
+    "CovarianceParams",
+    "PrecisionParams",
+    "CholeskyParams",
+    "LogCholeskyParams",
 ]
 
 import math
 from enum import StrEnum
-from typing import Final, Optional, Self, assert_never
+from typing import Final, Literal, NamedTuple, Optional, Self, assert_never
 
 import torch
 import torch.nn.functional as F
@@ -54,6 +59,7 @@ from torch.linalg import cholesky, solve_triangular, vecdot
 from .base import DistributionBase
 
 type GaussianParams = tuple[Tensor, Tensor]
+r"""Gaussian tensor pair; representation-specific parameter tuples also satisfy this type."""
 type ScalarLike = Tensor | float
 
 
@@ -72,139 +78,413 @@ class CovarianceType(StrEnum):
     # - exp(S), S symmetric  (matrix exp)
     # - diag(σ) + UUᵀ  (low rank perturbation)
 
-    def to_covariance(self, theta: GaussianParams, /) -> GaussianParams:
+    @classmethod
+    def from_params(
+        cls,
+        theta: tuple[Tensor, Tensor],
+        /,
+        parametrization: str | None = None,
+    ) -> CovarianceType:
+        r"""Infer a parameter pair's representation and reject conflicting overrides.
+
+        Our parameter tuples provide their own covariance type. Other tensor pairs
+        require an explicit parametrization. Missing, unknown, or conflicting
+        parametrizations raise `ValueError`.
+        """
+        if isinstance(
+            theta,
+            (CovarianceParams, PrecisionParams, CholeskyParams, LogCholeskyParams),
+        ):
+            if parametrization is None:
+                return cls(theta.covariance_type)
+            covariance_type = cls(parametrization)
+            if covariance_type != theta.covariance_type:
+                raise ValueError(
+                    f"Parametrization {covariance_type.value!r} does not match "
+                    f"{type(theta).__name__} ({theta.covariance_type.value!r})."
+                )
+            return covariance_type
+        return CovarianceType(parametrization)
+
+    def _as_params(
+        self, theta: GaussianParams, /
+    ) -> CovarianceParams | PrecisionParams | CholeskyParams | LogCholeskyParams:
+        r"""Wrap a tensor pair in this representation's parameter type."""
+        match self:
+            case CovarianceType.COVARIANCE:
+                return CovarianceParams(*theta)
+            case CovarianceType.PRECISION:
+                return PrecisionParams(*theta)
+            case CovarianceType.CHOLESKY:
+                return CholeskyParams(*theta)
+            case CovarianceType.LOG_CHOLESKY:
+                return LogCholeskyParams(*theta)
+            case other:
+                assert_never(other)
+
+    def to_covariance(self, theta: GaussianParams, /) -> CovarianceParams:
         r"""Return Gaussian parameters in covariance parametrization."""
-        mean, matrix = theta
+        return self._as_params(theta).to_covariance()
 
-        match self:
-            case CovarianceType.COVARIANCE:
-                return mean, matrix
-
-            case CovarianceType.PRECISION:
-                return mean, cholesky_inverse(cholesky(matrix))
-
-            case CovarianceType.CHOLESKY:
-                return mean, matrix @ matrix.mT
-
-            case CovarianceType.LOG_CHOLESKY:
-                chol = (
-                    matrix.tril(diagonal=-1)
-                    + matrix.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-                )
-                return mean, chol @ chol.mT
-
-            case other:
-                assert_never(other)
-
-    def to_precision(self, theta: GaussianParams, /) -> GaussianParams:
+    def to_precision(self, theta: GaussianParams, /) -> PrecisionParams:
         r"""Return the precision parametrization."""
-        mean, matrix = theta
+        return self._as_params(theta).to_precision()
 
-        match self:
-            case CovarianceType.COVARIANCE:
-                return mean, cholesky_inverse(cholesky(matrix))
-
-            case CovarianceType.PRECISION:
-                return theta
-
-            case CovarianceType.CHOLESKY:
-                return mean, cholesky_inverse(matrix)
-
-            case CovarianceType.LOG_CHOLESKY:
-                chol = (
-                    matrix.tril(diagonal=-1)
-                    + matrix.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-                )
-                return mean, cholesky_inverse(chol)
-
-    def to_cholesky(self, theta: GaussianParams, /) -> GaussianParams:
+    def to_cholesky(self, theta: GaussianParams, /) -> CholeskyParams:
         r"""Return the Cholesky parametrization."""
-        mean, matrix = theta
+        return self._as_params(theta).to_cholesky()
 
-        match self:
-            case CovarianceType.COVARIANCE:
-                return mean, cholesky(matrix)
-
-            case CovarianceType.PRECISION:
-                return mean, cholesky_inverse(cholesky(matrix))
-
-            case CovarianceType.CHOLESKY:
-                return theta
-
-            case CovarianceType.LOG_CHOLESKY:
-                return (
-                    mean,
-                    matrix.tril(diagonal=-1)
-                    + matrix.diagonal(dim1=-2, dim2=-1).exp().diag_embed(),
-                )
-
-            case other:
-                assert_never(other)
-
-    def to_log_cholesky(self, theta: GaussianParams, /) -> GaussianParams:
+    def to_log_cholesky(self, theta: GaussianParams, /) -> LogCholeskyParams:
         r"""Return the log-Cholesky parametrization."""
-        mean, matrix = theta
+        return self._as_params(theta).to_log_cholesky()
 
-        match self:
-            case CovarianceType.COVARIANCE:
-                chol = cholesky(matrix)
-                return CovarianceType.CHOLESKY.to_log_cholesky((mean, chol))
-
-            case CovarianceType.PRECISION:
-                chol = cholesky_inverse(cholesky(matrix))
-                return CovarianceType.CHOLESKY.to_log_cholesky((mean, chol))
-
-            case CovarianceType.CHOLESKY:
-                return (
-                    mean,
-                    matrix.diagonal(dim1=-2, dim2=-1).log().diag_embed()
-                    + matrix.tril(diagonal=-1),
-                )
-
-            case CovarianceType.LOG_CHOLESKY:
-                return theta
-
-            case other:
-                assert_never(other)
-
-    def from_covariance(self, theta: GaussianParams, /) -> GaussianParams:
+    def from_covariance(self, theta: tuple[Tensor, Tensor], /) -> GaussianParams:
         r"""Return covariance-parametrized Gaussian parameters in this form."""
-        mean, covariance = theta
-
+        params = CovarianceParams(*theta)
         match self:
             case CovarianceType.COVARIANCE:
-                return mean, covariance
-
+                return params
             case CovarianceType.PRECISION:
-                return mean, cholesky_inverse(cholesky(covariance))
-
+                return params.to_precision()
             case CovarianceType.CHOLESKY:
-                return mean, cholesky(covariance)
-
+                return params.to_cholesky()
             case CovarianceType.LOG_CHOLESKY:
-                L = cholesky(covariance)
-                return (
-                    mean,
-                    L.tril(-1) + L.diagonal(dim1=-2, dim2=-1).log().diag_embed(),
-                )
-
+                return params.to_log_cholesky()
             case other:
                 assert_never(other)
+
+
+class CovarianceParams(NamedTuple):
+    r"""Covariance parameters `(mean, covariance)` with positive-definite covariance.
+
+    Construction does not validate or broadcast inputs. Tensors must have
+    compatible batch shapes, dtype, and device. The tuple is immutable, but its
+    tensors remain mutable.
+    """
+
+    mean: Tensor
+    r"""Mean vector with shape `(..., D)`."""
+    covariance: Tensor
+    r"""Covariance matrix with shape `(..., D, D)`."""
+
+    @property
+    def covariance_type(self) -> Literal[CovarianceType.COVARIANCE]:
+        r"""Representation of the second tensor."""
+        return CovarianceType.COVARIANCE
+
+    def log_prob(self, value: Tensor, /) -> Tensor:
+        r"""Evaluate the density via [`log_prob`][imtskit.distributions.gaussian.log_prob]."""
+        return log_prob(value, self)
+
+    def kl(self, other: GaussianParams, /) -> Tensor:
+        r"""Compute KL to `other`, which must use the same representation."""
+        return kl(self, other, self.covariance_type)
+
+    def fisher(self, tangent: GaussianParams, /) -> GaussianParams:
+        r"""Apply [`fisher`][imtskit.distributions.gaussian.fisher] to a direction pair."""
+        return fisher(self, tangent)
+
+    def inverse_fisher(self, cotangent: GaussianParams, /) -> GaussianParams:
+        r"""Apply [`inverse_fisher`][imtskit.distributions.gaussian.inverse_fisher]."""
+        return inverse_fisher(self, cotangent)
+
+    def argmin_forward_kl(
+        self,
+        value: Tensor,
+        /,
+        *,
+        retention: ScalarLike | tuple[ScalarLike, ScalarLike],
+        mask: Tensor | None = None,
+    ) -> CovarianceParams:
+        r"""Return the [forward-KL update][imtskit.distributions.gaussian.argmin_forward_kl]."""
+        result = argmin_forward_kl(value, self, retention=retention, mask=mask)
+        return CovarianceParams(*result)
+
+    def argmin_reverse_kl(
+        self,
+        value: Tensor,
+        /,
+        *,
+        retention: ScalarLike | tuple[ScalarLike, ScalarLike],
+        mask: Tensor | None = None,
+    ) -> CovarianceParams:
+        r"""Return the [reverse-KL update][imtskit.distributions.gaussian.argmin_reverse_kl]."""
+        result = argmin_reverse_kl(value, self, retention=retention, mask=mask)
+        return CovarianceParams(*result)
+
+    def to_covariance(self) -> CovarianceParams:
+        r"""Convert to covariance parameters."""
+        return self
+
+    def to_precision(self) -> PrecisionParams:
+        r"""Convert to precision parameters."""
+        return PrecisionParams(self.mean, cholesky_inverse(cholesky(self.covariance)))
+
+    def to_cholesky(self) -> CholeskyParams:
+        r"""Convert to Cholesky parameters."""
+        return CholeskyParams(self.mean, cholesky(self.covariance))
+
+    def to_log_cholesky(self) -> LogCholeskyParams:
+        r"""Convert to parameters with logarithms on the Cholesky diagonal."""
+        return self.to_cholesky().to_log_cholesky()
+
+
+class PrecisionParams(NamedTuple):
+    r"""Precision parameters `(mean, precision)` with positive-definite precision.
+
+    Construction does not validate or broadcast inputs. Tensors must have
+    compatible batch shapes, dtype, and device. The tuple is immutable, but its
+    tensors remain mutable.
+    """
+
+    mean: Tensor
+    r"""Mean vector with shape `(..., D)`."""
+    precision: Tensor
+    r"""Precision matrix with shape `(..., D, D)`."""
+
+    @property
+    def covariance_type(self) -> Literal[CovarianceType.PRECISION]:
+        r"""Representation of the second tensor."""
+        return CovarianceType.PRECISION
+
+    def log_prob(self, value: Tensor, /) -> Tensor:
+        r"""Evaluate the density via [`log_prob`][imtskit.distributions.gaussian.log_prob]."""
+        return log_prob(value, self)
+
+    def kl(self, other: GaussianParams, /) -> Tensor:
+        r"""Compute KL to `other`, which must use the same representation."""
+        return kl(self, other, self.covariance_type)
+
+    def fisher(self, tangent: GaussianParams, /) -> GaussianParams:
+        r"""Apply [`fisher`][imtskit.distributions.gaussian.fisher] to a direction pair."""
+        return fisher(self, tangent)
+
+    def inverse_fisher(self, cotangent: GaussianParams, /) -> GaussianParams:
+        r"""Apply [`inverse_fisher`][imtskit.distributions.gaussian.inverse_fisher]."""
+        return inverse_fisher(self, cotangent)
+
+    def argmin_forward_kl(
+        self,
+        value: Tensor,
+        /,
+        *,
+        retention: ScalarLike | tuple[ScalarLike, ScalarLike],
+        mask: Tensor | None = None,
+    ) -> Self:
+        r"""Return the [forward-KL update][imtskit.distributions.gaussian.argmin_forward_kl]."""
+        return self.__class__(
+            *argmin_forward_kl(value, self, retention=retention, mask=mask)
+        )
+
+    def argmin_reverse_kl(
+        self,
+        value: Tensor,
+        /,
+        *,
+        retention: ScalarLike | tuple[ScalarLike, ScalarLike],
+        mask: Tensor | None = None,
+    ) -> Self:
+        r"""Return the [reverse-KL update][imtskit.distributions.gaussian.argmin_reverse_kl]."""
+        return self.__class__(
+            *argmin_reverse_kl(value, self, retention=retention, mask=mask)
+        )
+
+    def to_covariance(self) -> CovarianceParams:
+        r"""Convert to covariance parameters."""
+        return CovarianceParams(self.mean, cholesky_inverse(cholesky(self.precision)))
+
+    def to_precision(self) -> PrecisionParams:
+        r"""Convert to precision parameters."""
+        return self
+
+    def to_cholesky(self) -> CholeskyParams:
+        r"""Convert to Cholesky parameters."""
+        return self.to_covariance().to_cholesky()
+
+    def to_log_cholesky(self) -> LogCholeskyParams:
+        r"""Convert to parameters with logarithms on the Cholesky diagonal."""
+        return self.to_cholesky().to_log_cholesky()
+
+
+class CholeskyParams(NamedTuple):
+    r"""Cholesky parameters `(mean, scale_tril)` with a positive-diagonal factor.
+
+    Construction does not validate or broadcast inputs. Tensors must have
+    compatible batch shapes, dtype, and device. The tuple is immutable, but its
+    tensors remain mutable.
+    """
+
+    mean: Tensor
+    r"""Mean vector with shape `(..., D)`."""
+    scale_tril: Tensor
+    r"""Lower-triangular factor of the covariance with positive diagonal."""
+
+    @property
+    def covariance_type(self) -> Literal[CovarianceType.CHOLESKY]:
+        r"""Representation of the second tensor."""
+        return CovarianceType.CHOLESKY
+
+    def log_prob(self, value: Tensor, /) -> Tensor:
+        r"""Evaluate the density via [`log_prob`][imtskit.distributions.gaussian.log_prob]."""
+        return log_prob(value, self)
+
+    def kl(self, other: GaussianParams, /) -> Tensor:
+        r"""Compute KL to `other`, which must use the same representation."""
+        return kl(self, other, self.covariance_type)
+
+    def fisher(self, tangent: GaussianParams, /) -> GaussianParams:
+        r"""Apply [`fisher`][imtskit.distributions.gaussian.fisher] to a direction pair."""
+        return fisher(self, tangent)
+
+    def inverse_fisher(self, cotangent: GaussianParams, /) -> GaussianParams:
+        r"""Apply [`inverse_fisher`][imtskit.distributions.gaussian.inverse_fisher]."""
+        return inverse_fisher(self, cotangent)
+
+    def argmin_forward_kl(
+        self,
+        value: Tensor,
+        /,
+        *,
+        retention: ScalarLike | tuple[ScalarLike, ScalarLike],
+        mask: Tensor | None = None,
+    ) -> Self:
+        r"""Return the [forward-KL update][imtskit.distributions.gaussian.argmin_forward_kl]."""
+        return self.__class__(
+            *argmin_forward_kl(value, self, retention=retention, mask=mask)
+        )
+
+    def argmin_reverse_kl(
+        self,
+        value: Tensor,
+        /,
+        *,
+        retention: ScalarLike | tuple[ScalarLike, ScalarLike],
+        mask: Tensor | None = None,
+    ) -> Self:
+        r"""Return the [reverse-KL update][imtskit.distributions.gaussian.argmin_reverse_kl]."""
+        return self.__class__(
+            *argmin_reverse_kl(value, self, retention=retention, mask=mask)
+        )
+
+    def to_covariance(self) -> CovarianceParams:
+        r"""Convert to covariance parameters."""
+        return CovarianceParams(self.mean, self.scale_tril @ self.scale_tril.mT)
+
+    def to_precision(self) -> PrecisionParams:
+        r"""Convert to precision parameters."""
+        return PrecisionParams(self.mean, cholesky_inverse(self.scale_tril))
+
+    def to_cholesky(self) -> CholeskyParams:
+        r"""Convert to Cholesky parameters."""
+        return self
+
+    def to_log_cholesky(self) -> LogCholeskyParams:
+        r"""Convert to parameters with logarithms on the Cholesky diagonal."""
+        return LogCholeskyParams(
+            self.mean,
+            self.scale_tril.diagonal(dim1=-2, dim2=-1).log().diag_embed()
+            + self.scale_tril.tril(diagonal=-1),
+        )
+
+
+class LogCholeskyParams(NamedTuple):
+    r"""Log-Cholesky parameters with logarithms stored only on the diagonal.
+
+    Construction does not validate or broadcast inputs. Tensors must have
+    compatible batch shapes, dtype, and device. The tuple is immutable, but its
+    tensors remain mutable.
+    """
+
+    mean: Tensor
+    r"""Mean vector with shape `(..., D)`."""
+    log_scale_tril: Tensor
+    r"""Lower-triangular matrix with log diagonal and unchanged off-diagonal entries."""
+
+    @property
+    def covariance_type(self) -> Literal[CovarianceType.LOG_CHOLESKY]:
+        r"""Representation of the second tensor."""
+        return CovarianceType.LOG_CHOLESKY
+
+    def log_prob(self, value: Tensor, /) -> Tensor:
+        r"""Evaluate the density via [`log_prob`][imtskit.distributions.gaussian.log_prob]."""
+        return log_prob(value, self)
+
+    def kl(self, other: GaussianParams, /) -> Tensor:
+        r"""Compute KL to `other`, which must use the same representation."""
+        return kl(self, other, self.covariance_type)
+
+    def fisher(self, tangent: GaussianParams, /) -> GaussianParams:
+        r"""Apply [`fisher`][imtskit.distributions.gaussian.fisher] to a direction pair."""
+        return fisher(self, tangent)
+
+    def inverse_fisher(self, cotangent: GaussianParams, /) -> GaussianParams:
+        r"""Apply [`inverse_fisher`][imtskit.distributions.gaussian.inverse_fisher]."""
+        return inverse_fisher(self, cotangent)
+
+    def argmin_forward_kl(
+        self,
+        value: Tensor,
+        /,
+        *,
+        retention: ScalarLike | tuple[ScalarLike, ScalarLike],
+        mask: Tensor | None = None,
+    ) -> Self:
+        r"""Return the [forward-KL update][imtskit.distributions.gaussian.argmin_forward_kl]."""
+        return self.__class__(
+            *argmin_forward_kl(value, self, retention=retention, mask=mask)
+        )
+
+    def argmin_reverse_kl(
+        self,
+        value: Tensor,
+        /,
+        *,
+        retention: ScalarLike | tuple[ScalarLike, ScalarLike],
+        mask: Tensor | None = None,
+    ) -> Self:
+        r"""Return the [reverse-KL update][imtskit.distributions.gaussian.argmin_reverse_kl]."""
+        return self.__class__(
+            *argmin_reverse_kl(value, self, retention=retention, mask=mask)
+        )
+
+    def to_covariance(self) -> CovarianceParams:
+        r"""Convert to covariance parameters."""
+        return self.to_cholesky().to_covariance()
+
+    def to_precision(self) -> PrecisionParams:
+        r"""Convert to precision parameters."""
+        return self.to_cholesky().to_precision()
+
+    def to_cholesky(self) -> CholeskyParams:
+        r"""Convert to Cholesky parameters."""
+        return CholeskyParams(
+            self.mean,
+            self.log_scale_tril.tril(diagonal=-1)
+            + self.log_scale_tril.diagonal(dim1=-2, dim2=-1).exp().diag_embed(),
+        )
+
+    def to_log_cholesky(self) -> LogCholeskyParams:
+        r"""Convert to parameters with logarithms on the Cholesky diagonal."""
+        return self
 
 
 def log_prob(
     x: Tensor,  # (*S, ..., D)
     theta: GaussianParams,  # (..., D), (..., D, D)
     /,
-    *,
-    parametrization: str = "covariance",
+    parametrization: str | None = None,
 ) -> Tensor:  # (*S, ...)
-    r"""Compute the Gaussian log-density at `x` in the chosen parametrization."""
+    r"""Compute the Gaussian log-density at `x` in the chosen parametrization.
+
+    Parametrization is inferred from tagged parameter tuples when omitted. Plain
+    tensor pairs require an explicit parametrization. Conflicting representations
+    raise `ValueError`.
+    """
     mean, matrix = theta
     residual = x - mean
     dim = residual.shape[-1]
 
-    match CovarianceType(parametrization):
+    match CovarianceType.from_params(theta, parametrization):
         case CovarianceType.COVARIANCE:
             L = cholesky(matrix)
             z = solve_triangular(L, residual.unsqueeze(-1), upper=False).squeeze(-1)
@@ -341,12 +621,16 @@ def argmin_reverse_kl(
     z: Tensor,  # (..., d)
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
+    parametrization: str | None = None,
     *,
     retention: ScalarLike | tuple[ScalarLike, ScalarLike],  # rho or (rho_mu, rho_sigma)
     mask: Tensor | None = None,  # (..., d), True where observed
-    parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact minimizer of NLL plus reverse-KL regularization term.
+
+    Parametrization is inferred from tagged parameter tuples when omitted. Plain
+    tensor pairs require an explicit parametrization. Conflicting representations
+    raise `ValueError`.
 
     This returns the exact minimizer of
 
@@ -421,7 +705,6 @@ def argmin_reverse_kl(
     Its covariance retention map is $ρ_Σ = λ_Σ/(1 + λ_Σ)$, since it has no
     $λ_Σ > 1$ constraint. In both updates, $ρ_Σ$ is the coefficient multiplying $Σ₋$.
     """
-    parametrization = CovarianceType(parametrization)
     μ, matrix = theta
     rho_mu, rho_sigma = (
         retention if isinstance(retention, tuple) else (retention, retention)
@@ -435,7 +718,7 @@ def argmin_reverse_kl(
     δ = z - μ
     dim = matrix.shape[-1]
 
-    match parametrization:
+    match CovarianceType.from_params(theta, parametrization):
         case CovarianceType.COVARIANCE:
             Σ = matrix
             if mask is not None:
@@ -547,12 +830,16 @@ def argmin_forward_kl(
     z: Tensor,  # (..., d)
     theta: GaussianParams,  # (..., d), (..., d, d)
     /,
+    parametrization: str | None = None,
     *,
     retention: ScalarLike | tuple[ScalarLike, ScalarLike],  # rho or (rho_mu, rho_sigma)
     mask: Tensor | None = None,  # (..., d), True where observed
-    parametrization: str = "covariance",
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Return the exact minimizer of NLL plus separable forward-KL anchoring.
+
+    Parametrization is inferred from tagged parameter tuples when omitted. Plain
+    tensor pairs require an explicit parametrization. Conflicting representations
+    raise `ValueError`.
 
     This returns the exact minimizer of
 
@@ -632,7 +919,6 @@ def argmin_forward_kl(
     `retention`, but reverse KL uses $ρ_Σ = 1 - 1/λ_Σ$, whereas forward KL uses
     $ρ_Σ = λ_Σ/(1 + λ_Σ)$. The nominal mean retention map is the same in both cases.
     """
-    parametrization = CovarianceType(parametrization)
     μ, matrix = theta
     rho_mu, rho_sigma = (
         retention if isinstance(retention, tuple) else (retention, retention)
@@ -648,7 +934,7 @@ def argmin_forward_kl(
     δ = z - μ
     μ_new = μ + (1.0 - ρ_μ)[..., None] * δ
 
-    match parametrization:
+    match CovarianceType.from_params(theta, parametrization):
         case CovarianceType.COVARIANCE:
             Σ = matrix
             if mask is not None:
@@ -738,10 +1024,13 @@ def fisher(
     theta: GaussianParams,  # (..., d), (..., d, d)
     tangent: GaussianParams,  # (..., d), (..., d, d)
     /,
-    *,
-    parametrization: str = "covariance",
+    parametrization: str | None = None,
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Apply the Gaussian Fisher/KL metric in the chosen parametrization.
+
+    Parametrization is inferred from tagged parameter tuples when omitted. Plain
+    tensor pairs require an explicit parametrization. Conflicting representations
+    raise `ValueError`.
 
     $$\begin{aligned}
         F_{(μ, Σ)}(δμ, δΣ) &= (Σ⁻¹δμ, ½Σ⁻¹\sym(δΣ)Σ⁻¹)
@@ -756,7 +1045,7 @@ def fisher(
         tangent: Tangent/cotangent-like direction to which the metric is applied.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"` or `"log-cholesky"`.
     """
-    match CovarianceType(parametrization):
+    match CovarianceType.from_params(theta, parametrization):
         case CovarianceType.COVARIANCE:
             # F(δμ, δΣ) = (Σ⁻¹δμ, ½Σ⁻¹ sym(δΣ) Σ⁻¹).
             _, cov = theta
@@ -825,10 +1114,13 @@ def inverse_fisher(
     theta: GaussianParams,  # (..., d), (..., d, d)
     cotangent: GaussianParams,  # (..., d), (..., d, d)
     /,
-    *,
-    parametrization: str = "covariance",
+    parametrization: str | None = None,
 ) -> GaussianParams:  # (..., d), (..., d, d)
     r"""Apply the inverse Gaussian Fisher/KL metric in the chosen parametrization.
+
+    Parametrization is inferred from tagged parameter tuples when omitted. Plain
+    tensor pairs require an explicit parametrization. Conflicting representations
+    raise `ValueError`.
 
     $$\begin{aligned}
         F_{(μ, Σ)}⁻¹(g, G) &= (Σg, 2Σ\sym(G)Σ)
@@ -843,7 +1135,7 @@ def inverse_fisher(
         cotangent: Cotangent-like direction to which the inverse metric is applied.
         parametrization: One of `"covariance"`, `"precision"`, `"cholesky"`, or `"log-cholesky"`.
     """
-    match CovarianceType(parametrization):
+    match CovarianceType.from_params(theta, parametrization):
         case CovarianceType.COVARIANCE:
             # F⁻¹(g, G) = (Σg, 2Σ sym(G) Σ).
             _, cov = theta
@@ -914,10 +1206,13 @@ def kl(
     p: GaussianParams,  # (..., d), (..., d, d)
     q: GaussianParams,  # (..., d), (..., d, d)
     /,
-    *,
-    parametrization: str = "covariance",
+    parametrization: str | None = None,
 ) -> Tensor:  # (...)
     r"""Return the KL divergence from Gaussian distribution `p` to `q`.
+
+    Parametrization is inferred from tagged parameter tuples when omitted. Plain
+    tensor pairs require an explicit parametrization. Conflicting representations
+    raise `ValueError`.
 
     Args:
         p: Gaussian parameters in the selected parametrization.
@@ -928,7 +1223,11 @@ def kl(
     Returns:
         The KL divergence $\KL(p，q)$.
     """
-    match CovarianceType(parametrization):
+    covariance_type = CovarianceType.from_params(p, parametrization)
+    if CovarianceType.from_params(q, parametrization) != covariance_type:
+        raise ValueError("Gaussian parameters must use the same parametrization.")
+
+    match covariance_type:
         case CovarianceType.COVARIANCE:
             # KL = ½(tr(Σᵥ⁻¹Σᵤ) - d + (μᵥ-μᵤ)ᵀΣᵥ⁻¹(μᵥ-μᵤ) + log det Σᵥ - log det Σᵤ).
             mean_p, covariance_p = p
@@ -1040,6 +1339,15 @@ class MultivariateNormal(dist.MultivariateNormal):
     We add some utilities to the base class.
     """
 
+    CovarianceParams = CovarianceParams
+    r"""Constructor for covariance parameters."""
+    PrecisionParams = PrecisionParams
+    r"""Constructor for precision parameters."""
+    CholeskyParams = CholeskyParams
+    r"""Constructor for Cholesky parameters."""
+    LogCholeskyParams = LogCholeskyParams
+    r"""Constructor for log-Cholesky parameters."""
+
     def __add__(self, bias: float | Tensor, /) -> Self:
         r"""Add a tensor to the mean."""
         return self.__class__(
@@ -1064,6 +1372,15 @@ class MultivariateNormal(dist.MultivariateNormal):
 
 class MultiHeadGaussian(DistributionBase):
     r"""Implements a multi-head Gaussian distribution."""
+
+    CovarianceParams = CovarianceParams
+    r"""Constructor for covariance parameters."""
+    PrecisionParams = PrecisionParams
+    r"""Constructor for precision parameters."""
+    CholeskyParams = CholeskyParams
+    r"""Constructor for Cholesky parameters."""
+    LogCholeskyParams = LogCholeskyParams
+    r"""Constructor for log-Cholesky parameters."""
 
     normalization_constant: Tensor
     r"""CONST: Normalization constant of a Gaussian distribution."""
