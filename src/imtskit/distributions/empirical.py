@@ -18,7 +18,9 @@ from .base import DistributionBase
 class Empirical(DistributionBase):
     r"""The empirical distribution.
 
-    .. math:: p(x) = \frac{1}{n} ∑_{i=1}^n δ(x - xᵢ)
+    $$
+        p(x) = \frac{1}{n} ∑ᵢ₌₁ⁿ δ(x - xᵢ)
+    $$
     """
 
     data: Tensor  # shape: (N, *D)
@@ -68,7 +70,7 @@ class Empirical(DistributionBase):
     def log_prob(self, value: Tensor, /) -> Tensor:
         r"""Log probability of the empirical distribution.
 
-        Formally, we set δ(0) = ∞ and δ(x) = 0 for x ≠ 0.
+        Formally, we set $δ(0) = ∞$ and $δ(x) = 0$ for $x ≠ 0$.
         """
         # (..., *D), (N, *D) -> (..., N, *D)
         # NOTE: list[-n: n and None] fancy way to get last n elements for n≥0
@@ -85,7 +87,7 @@ class Empirical(DistributionBase):
 class Dirac(Empirical):
     r"""The Dirac distribution.
 
-    .. math:: p(x) = δ(x - x₀)
+    $$ p(x) = δ(x - x₀) $$
     """
 
     data: Tensor  # shape: (*D)
