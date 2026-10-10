@@ -508,10 +508,7 @@ def log_prob(
 
         case CovarianceType.LOG_CHOLESKY:
             log_chol = matrix
-            L = (
-                log_chol.tril(diagonal=-1)
-                + log_chol.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-            )
+            L = LogCholeskyParams(mean, log_chol).to_cholesky().scale_tril
             z = solve_triangular(L, residual.unsqueeze(-1), upper=False).squeeze(-1)
             logdet = 2 * log_chol.diagonal(dim1=-2, dim2=-1).sum(dim=-1)
             mahalanobis = vecdot(z, z, dim=-1)
@@ -797,11 +794,7 @@ def argmin_reverse_kl(
         case CovarianceType.LOG_CHOLESKY:
             if mask is not None:
                 raise NotImplementedError
-            log_chol_prior = matrix
-            L = (
-                log_chol_prior.tril(diagonal=-1)
-                + log_chol_prior.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-            )
+            L = LogCholeskyParams(μ, matrix).to_cholesky().scale_tril
             a = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             q = vecdot(a, a, dim=-1)
             w = _solve_w_closed_form(q, ρ_μ, ρ_Σ)
@@ -818,12 +811,8 @@ def argmin_reverse_kl(
             )
             return μ_new, log_chol_new
 
-        case _:
-            raise ValueError(
-                "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
-                f"got {parametrization!r}."
-            )
+        case other:
+            assert_never(other)
 
 
 def argmin_forward_kl(
@@ -996,11 +985,7 @@ def argmin_forward_kl(
         case CovarianceType.LOG_CHOLESKY:
             if mask is not None:
                 raise NotImplementedError
-            log_chol_prior = matrix
-            L = (
-                log_chol_prior.tril(diagonal=-1)
-                + log_chol_prior.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-            )
+            L = LogCholeskyParams(μ, matrix).to_cholesky().scale_tril
             u = solve_triangular(L, δ.unsqueeze(-1), upper=False).squeeze(-1)
             I = torch.eye(L.shape[-1], dtype=L.dtype, device=L.device)
             uuT = torch.einsum("...i, ...j -> ...ij", u, u)
@@ -1012,12 +997,8 @@ def argmin_forward_kl(
             )
             return μ_new, log_chol_new
 
-        case _:
-            raise ValueError(
-                "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
-                f"got {parametrization!r}."
-            )
+        case other:
+            assert_never(other)
 
 
 def fisher(
@@ -1083,10 +1064,7 @@ def fisher(
             # JₓδX = tril(δX, -1) + diag(Lᵢᵢ δxᵢᵢ).
             mean, log_chol = theta
             d_mu, d_log_chol = tangent
-            L = (
-                log_chol.tril(diagonal=-1)
-                + log_chol.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-            )
+            L = LogCholeskyParams(mean, log_chol).to_cholesky().scale_tril
             diag = L.diagonal(dim1=-2, dim2=-1)
             d_chol = d_log_chol.tril(diagonal=-1) + torch.diag_embed(
                 diag * d_log_chol.diagonal(dim1=-2, dim2=-1)
@@ -1102,12 +1080,8 @@ def fisher(
                 + torch.diag_embed(diag * g_chol.diagonal(dim1=-2, dim2=-1)),
             )
 
-        case _:
-            raise ValueError(
-                "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
-                f"got {parametrization!r}."
-            )
+        case other:
+            assert_never(other)
 
 
 def inverse_fisher(
@@ -1175,10 +1149,7 @@ def inverse_fisher(
             # Jₓ⁻¹ΔL = tril(ΔL, -1) + diag(ΔLᵢᵢ / Lᵢᵢ).
             mean, log_chol = theta
             g_mu, g_log_chol = cotangent
-            L = (
-                log_chol.tril(diagonal=-1)
-                + log_chol.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-            )
+            L = LogCholeskyParams(mean, log_chol).to_cholesky().scale_tril
             diag = L.diagonal(dim1=-2, dim2=-1)
             g_chol = g_log_chol.tril(diagonal=-1) + torch.diag_embed(
                 g_log_chol.diagonal(dim1=-2, dim2=-1) / diag
@@ -1194,12 +1165,8 @@ def inverse_fisher(
                 + torch.diag_embed(d_chol.diagonal(dim1=-2, dim2=-1) / diag),
             )
 
-        case _:
-            raise ValueError(
-                "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
-                f"got {parametrization!r}."
-            )
+        case other:
+            assert_never(other)
 
 
 def kl(
@@ -1299,14 +1266,8 @@ def kl(
             # L(X) = tril(X, -1) + diag(exp(diag(X))).
             mean_p, log_chol_p = p
             mean_q, log_chol_q = q
-            chol_p = (
-                log_chol_p.tril(diagonal=-1)
-                + log_chol_p.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-            )
-            chol_q = (
-                log_chol_q.tril(diagonal=-1)
-                + log_chol_q.diagonal(dim1=-2, dim2=-1).exp().diag_embed()
-            )
+            chol_p = LogCholeskyParams(mean_p, log_chol_p).to_cholesky().scale_tril
+            chol_q = LogCholeskyParams(mean_q, log_chol_q).to_cholesky().scale_tril
             delta = mean_q - mean_p
             # (μᵥ - μᵤ)ᵀΣᵥ⁻¹(μᵥ - μᵤ) = ‖Lᵥ⁻¹(μᵥ - μᵤ)‖².
             whitened = solve_triangular(
@@ -1325,12 +1286,8 @@ def kl(
             dim = mean_p.shape[-1]
             return 0.5 * (trace_term + mahalanobis - dim + logdet_q - logdet_p)
 
-        case _:
-            raise ValueError(
-                "Expected parametrization to be one of "
-                "{'covariance', 'precision', 'cholesky', 'log-cholesky'}, "
-                f"got {parametrization!r}."
-            )
+        case other:
+            assert_never(other)
 
 
 class MultivariateNormal(dist.MultivariateNormal):
