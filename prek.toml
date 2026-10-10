@@ -191,6 +191,8 @@ hooks = [
         language = "pygrep",
         types_or = ["python", "pyi", "rst"],
         files = "^src/|^tests/",
+        groups = ["unused"],
+        stages = ["manual"],
         entry = '(?<!`)`(?![`\s])(?!(?:\w+\.)*\w+`)[^`\n]*?(?<!\s)`(?![`_])',
         args = [],
         # `foo` E: no match
