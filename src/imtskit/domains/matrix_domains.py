@@ -54,7 +54,7 @@ __all__ = [
     "SkewSymmetric",
     "Sparse",
     "SpecialOrthogonal",
-    "SpectralNormalized",
+    "SpectrallyNormalized",
     "Square",
     "Symmetric",
     "Symplectic",
@@ -766,7 +766,7 @@ class LipschitzBounded(Rectangular):
 
 
 @dataclass(frozen=True)
-class SpectralNormalized(LipschitzBounded):
+class SpectrallyNormalized(LipschitzBounded):
     r"""Domain of matrices with unit spectral norm."""
 
     def __post_init__(self) -> None:
@@ -775,11 +775,11 @@ class SpectralNormalized(LipschitzBounded):
             object.__setattr__(self, "lipschitz_bound", 1.0)
         elif self.lipschitz_bound != 1.0:
             raise ValueError(
-                "Spectral normalized matrices must have lipschitz_bound=1.0."
+                "Spectrally normalized matrices must have lipschitz_bound=1.0."
             )
 
     def check(self, value: Tensor, /) -> Tensor:
-        return tests.is_spectral_normalized(value, shape=self.shape)
+        return tests.is_spectrally_normalized(value, shape=self.shape)
 
 
 @dataclass(frozen=True)
@@ -1016,7 +1016,7 @@ class MatrixDomains(MatrixDomain, PosetEnum):
     HURWITZ = Placeholder(name="hurwitz")  # Re(λ) < 0 for all λ ∈ spec(A)
 
     CONTRACTION = Contraction()  # ‖A‖₂ < 1
-    SPECTRAL_NORMALIZED = SpectralNormalized()  # ‖A‖₂ = 1
+    SPECTRALLY_NORMALIZED = SpectrallyNormalized()  # ‖A‖₂ = 1
     LIPSCHITZ_BOUNDED = LipschitzBounded()  # ‖A‖₂ ≤ C
     DIAGONALLY_DOMINANT = DiagonallyDominant()  # |Aᵢᵢ| ≥ ∑_{j≠i} |Aᵢⱼ| for all i
 
@@ -1110,7 +1110,7 @@ class MatrixDomains(MatrixDomain, PosetEnum):
 M = MatrixDomains  # temporary alias
 # pyrefly: ignore[bad-assignment]
 M.KNOWN_MEETS = (  # pyright: ignore[reportAttributeAccessIssue]
-    (M.EMPTY, M.CONTRACTION & M.SPECTRAL_NORMALIZED),
+    (M.EMPTY, M.CONTRACTION & M.SPECTRALLY_NORMALIZED),
     (M.EMPTY, M.INVERTIBLE & M.SINGULAR),
     (M.EMPTY, M.NEGATIVE_DEFINITE & M.POSITIVE_DEFINITE),
     (M.EMPTY, M.NEGATIVE_DEFINITE & M.POSITIVE_SEMIDEFINITE),
@@ -1153,7 +1153,7 @@ M.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAttributeAccess
     M.CAYLEY_ORTHOGONAL: {M.SPECIAL_ORTHOGONAL},
     M.CHOLESKY_FACTOR: {M.LOWER_INVERTIBLE, M.POSITIVE_DIAGONAL_ENTRIES},
     M.CIRCULANT: {M.TOEPLITZ, M.SQUARE},
-    M.COLUMN_ORTHOGONAL: {M.LEFT_INVERTIBLE, M.SPECTRAL_NORMALIZED},
+    M.COLUMN_ORTHOGONAL: {M.LEFT_INVERTIBLE, M.SPECTRALLY_NORMALIZED},
     M.COLUMN_STOCHASTIC: {M.RECTANGULAR},
     M.CONTRACTION: {M.LIPSCHITZ_BOUNDED},
     M.DIAGONAL: {M.SYMMETRIC, M.TRIDIAGONAL},
@@ -1194,13 +1194,13 @@ M.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAttributeAccess
     M.PROJECTION: {M.SQUARE},
     M.RANK_ONE: {M.LOW_RANK},
     M.RIGHT_INVERTIBLE: {M.WIDE},
-    M.ROW_ORTHOGONAL: {M.RIGHT_INVERTIBLE, M.SPECTRAL_NORMALIZED},
+    M.ROW_ORTHOGONAL: {M.RIGHT_INVERTIBLE, M.SPECTRALLY_NORMALIZED},
     M.ROW_STOCHASTIC: {M.RECTANGULAR},
     M.SINGULAR: {M.SQUARE},
     M.SKEW_SYMMETRIC: {M.SQUARE, M.NORMAL, M.ZERO_DIAGONAL},
     M.SPARSE: {M.BOOLEAN},
     M.SPECIAL_ORTHOGONAL: {M.ORTHOGONAL, M.UNIT_DETERMINANT},
-    M.SPECTRAL_NORMALIZED: {M.RECTANGULAR, M.LIPSCHITZ_BOUNDED},
+    M.SPECTRALLY_NORMALIZED: {M.RECTANGULAR, M.LIPSCHITZ_BOUNDED},
     M.SQUARE: {M.TALL, M.WIDE},
     M.STANDARD_SYMPLECTIC: {M.SYMPLECTIC, M.SKEW_SYMMETRIC},
     M.SYMMETRIC: {M.SQUARE, M.NORMAL},
@@ -1309,7 +1309,7 @@ M.ALIASES = MappingProxyType({
     "sparse"                     : M.SPARSE,
     "special-linear"             : M.SPECIAL_LINEAR,
     "special-orthogonal"         : M.SPECIAL_ORTHOGONAL,
-    "spectral-normalized"        : M.SPECTRAL_NORMALIZED,
+    "spectrally-normalized"      : M.SPECTRALLY_NORMALIZED,
     "square"                     : M.SQUARE,
     "standard-symplectic"        : M.STANDARD_SYMPLECTIC,
     "symmetric"                  : M.SYMMETRIC,

@@ -23,7 +23,7 @@ __all__ = [
     "Orthogonal",
     "RankOne",
     "SkewSymmetric",
-    "SpectralNormalized",
+    "SpectrallyNormalized",
     "Symmetric",
     "Symplectic",
     "Traceless",
@@ -562,7 +562,7 @@ class LipschitzBounded(nn.Module, Regularization):
         )
 
 
-class SpectralNormalized(nn.Module, Regularization):
+class SpectrallyNormalized(nn.Module, Regularization):
     r"""Bias the matrix towards having unit spectral norm.
 
     .. math:: A ↦ ‖A-Π(A)‖ₚ
@@ -581,7 +581,7 @@ class SpectralNormalized(nn.Module, Regularization):
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
         r"""Bias x towards a spectrally normalized matrix."""
-        return F.spectral_normalized(x, p=self.p, size_normalize=self.size_normalize)
+        return F.spectrally_normalized(x, p=self.p, size_normalize=self.size_normalize)
 
 
 # endregion other regularizations ------------------------------------------------------

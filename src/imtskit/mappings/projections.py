@@ -16,7 +16,7 @@ __all__ = [
     "Diagonal",
     "DiagonallyDominant",
     "LipschitzBounded",
-    "SpectralNormalized",
+    "SpectrallyNormalized",
     "Contraction",
     "Hamiltonian",
     "LowerTriangular",
@@ -75,7 +75,7 @@ class LipschitzBounded(nn.Module, Projection):
         can be computed via fixpoint iteration.
 
     See Also:
-        - `SpectralNormalized` for the special case of γ=1.
+        - `SpectrallyNormalized` for the special case of γ=1.
         - `Contraction` for the special case of $0<‖Y‖₂<1$.
     """
 
@@ -150,7 +150,7 @@ class LipschitzBounded(nn.Module, Projection):
         return gamma * x
 
 
-class SpectralNormalized(LipschitzBounded):
+class SpectrallyNormalized(LipschitzBounded):
     r"""Return the closest matrix to X with unit spectral norm.
 
     .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ = 1
@@ -175,7 +175,7 @@ class SpectralNormalized(LipschitzBounded):
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
-    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SPECTRAL_NORMALIZED
+    CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SPECTRALLY_NORMALIZED
 
     def __init__(
         self, atol: float = ATOL, rtol: float = RTOL, maxiter: Optional[int] = None
@@ -225,7 +225,7 @@ class Contraction(LipschitzBounded):
 
     See Also:
         - `SpectralNormBounded` for the general case $‖Y‖₂≤γ$
-        - `SpectralNormalized` for the special case of $‖Y‖₂=1$.
+        - `SpectrallyNormalized` for the special case of $‖Y‖₂=1$.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR

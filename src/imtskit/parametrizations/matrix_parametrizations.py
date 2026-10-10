@@ -19,7 +19,7 @@ __all__ = [
     "SpecialOrthogonal",
     "RankOne",
     "SkewSymmetric",
-    "SpectralNormalized",
+    "SpectrallyNormalized",
     "Symmetric",
     "DiagonallyDominant",
     "Symplectic",
@@ -51,7 +51,7 @@ Masked = projections.Masked
 Normal = projections.Normal
 RankOne = projections.RankOne
 SkewSymmetric = projections.SkewSymmetric
-SpectralNormalized = projections.SpectralNormalized
+SpectrallyNormalized = projections.SpectrallyNormalized
 Symmetric = projections.Symmetric
 Symplectic = projections.Symplectic
 Traceless = projections.Traceless

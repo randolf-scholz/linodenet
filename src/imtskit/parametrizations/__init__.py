@@ -76,7 +76,7 @@ MATRIX_PARAMETRIZATIONS: dict[str, type[Surjection]] = {
     "RankOne": matrix_parametrizations.RankOne,
     "SkewSymmetric": matrix_parametrizations.SkewSymmetric,
     "SpecialOrthogonal": matrix_parametrizations.SpecialOrthogonal,
-    "SpectralNormalized": matrix_parametrizations.SpectralNormalized,
+    "SpectrallyNormalized": matrix_parametrizations.SpectrallyNormalized,
     "Symmetric": matrix_parametrizations.Symmetric,
     "Symplectic": matrix_parametrizations.Symplectic,
     "Traceless": matrix_parametrizations.Traceless,

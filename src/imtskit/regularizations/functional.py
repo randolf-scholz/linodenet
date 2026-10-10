@@ -25,7 +25,7 @@ __all__ = [
     "orthogonal",
     "rank_one",
     "skew_symmetric",
-    "spectral_normalized",
+    "spectrally_normalized",
     "symmetric",
     "symplectic",
     "traceless",
@@ -419,7 +419,7 @@ def lipschitz_bounded(
 
 
 @signature("(..., m, n) -> (...)")
-def spectral_normalized(
+def spectrally_normalized(
     x: Tensor,
     /,
     *,
@@ -432,7 +432,7 @@ def spectral_normalized(
 
     where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂=1$
     """
-    r = x - projections.spectral_normalized(x)
+    r = x - projections.spectrally_normalized(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
 
 

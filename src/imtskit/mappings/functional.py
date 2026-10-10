@@ -13,7 +13,7 @@ __all__ = [
     "banded",
     "contraction",
     "lipschitz_bounded",
-    "spectral_normalized",
+    "spectrally_normalized",
     "diagonal",
     "diagonally_dominant",
     "hamiltonian",
@@ -309,7 +309,7 @@ def lipschitz_bounded(x: Tensor, /, lipschitz_bound: float) -> Tensor:
 
 
 @signature("(..., m, n) -> (..., m, n)")
-def spectral_normalized(x: Tensor, /) -> Tensor:
+def spectrally_normalized(x: Tensor, /) -> Tensor:
     r"""Return the closest matrix to X with unit spectral norm.
 
     .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ = 1

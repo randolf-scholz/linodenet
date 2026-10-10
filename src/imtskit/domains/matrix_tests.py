@@ -52,7 +52,7 @@ __all__ = [
     "is_skew_symmetric",
     "is_sparse",
     "is_special_orthogonal",
-    "is_spectral_normalized",
+    "is_spectrally_normalized",
     "is_square",
     "is_symmetric",
     "is_symplectic",
@@ -1280,7 +1280,7 @@ def is_orthogonal_projection(
 
 
 @signature("(..., m, n) -> bool[(...)]")
-def is_spectral_normalized(
+def is_spectrally_normalized(
     x: Tensor,
     /,
     shape: tuple[int, int] | None = None,

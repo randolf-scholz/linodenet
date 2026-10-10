@@ -139,7 +139,7 @@ MATRIX_TESTS: dict[MatrixDomains, MatrixTest | MatrixTestWithArgs] = {
     MatrixDomains.SKEW_SYMMETRIC          : matrix_tests.is_skew_symmetric,
     MatrixDomains.SPARSE                  : matrix_tests.is_sparse,
     MatrixDomains.SPECIAL_ORTHOGONAL      : matrix_tests.is_special_orthogonal,
-    MatrixDomains.SPECTRAL_NORMALIZED     : matrix_tests.is_spectral_normalized,
+    MatrixDomains.SPECTRALLY_NORMALIZED   : matrix_tests.is_spectrally_normalized,
     MatrixDomains.SQUARE                  : matrix_tests.is_square,
     MatrixDomains.SYMMETRIC               : matrix_tests.is_symmetric,
     MatrixDomains.SYMPLECTIC              : matrix_tests.is_symplectic,

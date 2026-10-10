@@ -62,7 +62,7 @@ from imtskit.domains.matrix_domains import (
     RowOrthogonal,
     RowStochastic,
     SpecialOrthogonal,
-    SpectralNormalized,
+    SpectrallyNormalized,
     Symplectic,
     Tall,
     Toeplitz,
@@ -478,7 +478,7 @@ class TestMatrixDomains:
         assert M.PERMUTATION <= M.SQUARE
         assert M.PERMUTATION != M.SQUARE
         assert M.EMPTY <= M.CONTRACTION
-        assert M.EMPTY <= M.SPECTRAL_NORMALIZED
+        assert M.EMPTY <= M.SPECTRALLY_NORMALIZED
         assert M.EMPTY <= M.POSITIVE_DEFINITE
         assert M.EMPTY <= M.NEGATIVE_DEFINITE
 
@@ -496,7 +496,7 @@ class TestMatrixDomains:
 
     def test_none_meet_rules(self) -> None:
         none_meets = M.EMPTY.factorizations
-        assert M.CONTRACTION & M.SPECTRAL_NORMALIZED in none_meets
+        assert M.CONTRACTION & M.SPECTRALLY_NORMALIZED in none_meets
         assert M.INVERTIBLE & M.SINGULAR in none_meets
         assert M.NEGATIVE_DEFINITE & M.POSITIVE_DEFINITE in none_meets
 
@@ -700,10 +700,10 @@ class TestMatrixDomains:
         assert column_centered in ColumnCentered()
         assert doubly_centered in DoublyCentered()
         assert tensor([[0.0, 1.0], [1.0, 0.0]]) in Permutation()
-        assert orthogonal in SpectralNormalized()
-        assert zero not in SpectralNormalized()
-        assert contraction not in SpectralNormalized()
-        assert positive not in SpectralNormalized()
+        assert orthogonal in SpectrallyNormalized()
+        assert zero not in SpectrallyNormalized()
+        assert contraction not in SpectrallyNormalized()
+        assert positive not in SpectrallyNormalized()
         assert orthogonal in LipschitzBounded(lipschitz_bound=1.0)
         assert contraction in Contraction()
         assert positive in DiagonallyDominant()
