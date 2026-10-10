@@ -3,85 +3,84 @@ r"""Implementation of the univariate Normal distribution."""
 __all__ = [
     # Classes
     "Normal",
-    # functions
-    "normal_mean",
-    "normal_median",
-    "normal_mode",
-    "normal_variance",
-    "normal_stddev",
-    "normal_cdf",
-    "normal_icdf",
-    "normal_entropy",
-    "normal_log_prob",
-    "normal_sample",
+    "NormalParams",
 ]
 
 import math
-from typing import Final, override
+from typing import Final, NamedTuple, override
 
 import torch
 from torch import Tensor
 
 from .base import DistributionBase
 
-type NormalParams = tuple[Tensor, Tensor]
-r"""Parameters `(loc, scale)` of the normal distribution, with `scale > 0`."""
-
 _SQRT_2: Final[float] = math.sqrt(2.0)
 _HALF_LOG_2PI: Final[float] = 0.5 * math.log(2.0 * math.pi)
 _HALF_LOG_2PIE: Final[float] = 0.5 * math.log(2.0 * math.pi * math.e)
 
 
-def normal_mean(params: NormalParams, /) -> Tensor:
-    loc, _ = params
-    return loc
+class NormalParams(NamedTuple):
+    r"""Normal parameters and operations for location `loc` and scale `scale`.
 
+    Callers must provide floating-point parameters with the same shape, dtype,
+    and device, satisfying `scale > 0` elementwise. Construction does not
+    validate or broadcast parameters; use `Normal` for that. The tuple is
+    immutable, but its tensors remain mutable.
+    """
 
-def normal_median(params: NormalParams, /) -> Tensor:
-    return normal_mean(params)
+    loc: Tensor
+    r"""Mean of the distribution."""
+    scale: Tensor
+    r"""Standard deviation of the distribution."""
 
+    @property
+    def mean(self) -> Tensor:
+        r"""Mean of the distribution."""
+        return self.loc
 
-def normal_mode(params: NormalParams, /) -> Tensor:
-    return normal_mean(params)
+    @property
+    def median(self) -> Tensor:
+        r"""Median of the distribution."""
+        return self.mean
 
+    @property
+    def mode(self) -> Tensor:
+        r"""Mode of the distribution."""
+        return self.mean
 
-def normal_variance(params: NormalParams, /) -> Tensor:
-    _, scale = params
-    return scale.square()
+    @property
+    def variance(self) -> Tensor:
+        r"""Variance of the distribution."""
+        return self.scale.square()
 
+    @property
+    def stddev(self) -> Tensor:
+        r"""Standard deviation of the distribution."""
+        return self.scale
 
-def normal_stddev(params: NormalParams, /) -> Tensor:
-    _, scale = params
-    return scale
+    def sample(self, num: int = 1, /) -> Tensor:
+        r"""Draw samples with shape `(num, *loc.shape)`."""
+        shape = (num, *self.loc.shape)
+        eps = torch.randn(shape, dtype=self.loc.dtype, device=self.loc.device)
+        return self.loc + eps * self.scale
 
+    def log_prob(self, value: Tensor, /) -> Tensor:
+        r"""Log density at the given value."""
+        z = (value - self.loc) / self.scale
+        return -0.5 * z.square() - self.scale.log() - _HALF_LOG_2PI
 
-def normal_sample(params: NormalParams, num: int, /) -> Tensor:
-    loc, scale = params
-    shape = (num, *loc.shape)
-    eps = torch.randn(shape, dtype=loc.dtype, device=loc.device)
-    return loc + eps * scale
+    def cdf(self, value: Tensor, /) -> Tensor:
+        r"""Cumulative distribution function."""
+        z = (value - self.loc) / (self.scale * _SQRT_2)
+        return 0.5 * (1.0 + torch.erf(z))
 
+    def icdf(self, value: Tensor, /) -> Tensor:
+        r"""Quantile function; callers must provide probabilities in `[0, 1]`."""
+        return self.loc + self.scale * torch.erfinv(2.0 * value - 1.0) * _SQRT_2
 
-def normal_log_prob(params: NormalParams, value: Tensor, /) -> Tensor:
-    loc, scale = params
-    z = (value - loc) / scale
-    return -0.5 * z.square() - scale.log() - _HALF_LOG_2PI
-
-
-def normal_cdf(params: NormalParams, value: Tensor, /) -> Tensor:
-    loc, scale = params
-    z = (value - loc) / (scale * _SQRT_2)
-    return 0.5 * (1.0 + torch.erf(z))
-
-
-def normal_icdf(params: NormalParams, value: Tensor, /) -> Tensor:
-    loc, scale = params
-    return loc + scale * torch.erfinv(2.0 * value - 1.0) * _SQRT_2
-
-
-def normal_entropy(params: NormalParams, /) -> Tensor:
-    _, scale = params
-    return scale.log() + _HALF_LOG_2PIE
+    def entropy(self) -> Tensor:
+        r"""Differential entropy of the distribution."""
+        return self.scale.log() + _HALF_LOG_2PIE
 
 
 class Normal(DistributionBase):
@@ -90,6 +89,9 @@ class Normal(DistributionBase):
     The mean `loc` and standard deviation `scale` are broadcast to a common batch
     shape. The scale must be positive elementwise. Samples are scalar events.
     """
+
+    Params: Final = NormalParams
+    r"""Parameter type for direct construction via `Normal.Params(loc, scale)`."""
 
     loc: Tensor
     r"""Param: Mean of the distribution."""
@@ -117,44 +119,45 @@ class Normal(DistributionBase):
         self.register_buffer("scale", scale_broadcast)
 
     @property
-    def params(self) -> tuple[Tensor, Tensor]:
-        return self.loc, self.scale
+    def params(self) -> NormalParams:
+        r"""Parameters referencing the current registered location and scale."""
+        return NormalParams(self.loc, self.scale)
 
     @property
     def mean(self) -> Tensor:
-        return normal_mean(self.params)
+        return self.params.mean
 
     @property
     def median(self) -> Tensor:
-        return normal_median(self.params)
+        return self.params.median
 
     @property
     def mode(self) -> Tensor:
-        return normal_mode(self.params)
+        return self.params.mode
 
     @property
     def variance(self) -> Tensor:
-        return normal_variance(self.params)
+        return self.params.variance
 
     @property
     def stddev(self) -> Tensor:
-        return normal_stddev(self.params)
+        return self.params.stddev
 
     @override
     def sample(self, num: int = 1, /) -> Tensor:
-        self.samples = normal_sample(self.params, num)
+        self.samples = self.params.sample(num)
         return self.samples
 
     @override
     def log_prob(self, value: Tensor, /) -> Tensor:
-        self.log_probs = normal_log_prob(self.params, value)
+        self.log_probs = self.params.log_prob(value)
         return self.log_probs
 
     def cdf(self, value: Tensor, /) -> Tensor:
-        return normal_cdf(self.params, value)
+        return self.params.cdf(value)
 
     def icdf(self, value: Tensor, /) -> Tensor:
-        return normal_icdf(self.params, value)
+        return self.params.icdf(value)
 
     def entropy(self) -> Tensor:
-        return normal_entropy(self.params)
+        return self.params.entropy()

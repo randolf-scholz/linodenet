@@ -5,7 +5,6 @@ import torch
 from torch.distributions import Uniform as TorchUniform
 
 from imtskit.distributions import Uniform
-from imtskit.distributions.uniform import UniformParams
 
 
 @pytest.mark.parametrize("batch_shape", [(), (1,), (2,), (1, 1), (2, 2)])
@@ -17,7 +16,7 @@ def test_uniform_shapes(batch_shape: tuple[int, ...]) -> None:
 
     assert dist.event_shape == ()
     assert dist.batch_shape == batch_shape
-    assert isinstance(dist.params, UniformParams)
+    assert isinstance(dist.params, Uniform.Params)
     params_low, params_high = dist.params
     assert torch.allclose(params_low, low)
     assert torch.allclose(params_high, high)
@@ -64,7 +63,7 @@ def test_uniform_params_match_torch() -> None:
     value = torch.tensor([-0.5, 1.25, 4.0])
     quantile = torch.tensor([0.25, 0.5, 0.75])
     reference = TorchUniform(low, high)
-    params = UniformParams(low, high)
+    params = Uniform.Params(low, high)
 
     samples = params.sample(5)
     assert samples.shape == (5, 3)

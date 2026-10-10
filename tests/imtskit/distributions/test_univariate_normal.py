@@ -5,18 +5,6 @@ import torch
 from torch.distributions import Normal as TorchNormal
 
 from imtskit.distributions import Normal
-from imtskit.distributions.univariate_normal import (
-    normal_cdf,
-    normal_entropy,
-    normal_icdf,
-    normal_log_prob,
-    normal_mean,
-    normal_median,
-    normal_mode,
-    normal_sample,
-    normal_stddev,
-    normal_variance,
-)
 
 
 @pytest.mark.parametrize("batch_shape", [(), (1,), (2,), (1, 1), (2, 2)])
@@ -28,6 +16,7 @@ def test_normal_shapes(batch_shape: tuple[int, ...]) -> None:
 
     assert dist.event_shape == ()
     assert dist.batch_shape == batch_shape
+    assert isinstance(dist.params, Normal.Params)
     params_loc, params_scale = dist.params
     assert torch.allclose(params_loc, loc)
     assert torch.allclose(params_scale, scale)
@@ -66,24 +55,38 @@ def test_normal_rejects_invalid_scale() -> None:
         Normal(torch.tensor([0.0, 1.0]), torch.tensor([1.0, 0.0]))
 
 
-def test_normal_functional_api() -> None:
-    r"""The functional helpers match torch's Normal formulas."""
+def test_normal_params_match_torch() -> None:
+    r"""The parameter tuple operations match torch's Normal formulas."""
     loc = torch.tensor([-1.0, 0.5, 2.0])
     scale = torch.tensor([0.5, 1.25, 2.0])
     value = torch.tensor([-0.5, 1.25, 4.0])
     quantile = torch.tensor([0.25, 0.5, 0.75])
     reference = TorchNormal(loc, scale)
-    params = (loc, scale)
+    params = Normal.Params(loc, scale)
 
-    samples = normal_sample(params, 5)
+    samples = params.sample(5)
     assert samples.shape == (5, 3)
 
-    assert torch.allclose(normal_mean(params), reference.mean)
-    assert torch.allclose(normal_median(params), reference.mean)
-    assert torch.allclose(normal_mode(params), reference.mode)
-    assert torch.allclose(normal_variance(params), reference.variance)
-    assert torch.allclose(normal_stddev(params), reference.stddev)
-    assert torch.allclose(normal_log_prob(params, value), reference.log_prob(value))
-    assert torch.allclose(normal_cdf(params, value), reference.cdf(value))
-    assert torch.allclose(normal_icdf(params, quantile), reference.icdf(quantile))
-    assert torch.allclose(normal_entropy(params), reference.entropy())
+    assert torch.allclose(params.mean, reference.mean)
+    assert torch.allclose(params.median, reference.mean)
+    assert torch.allclose(params.mode, reference.mode)
+    assert torch.allclose(params.variance, reference.variance)
+    assert torch.allclose(params.stddev, reference.stddev)
+    assert torch.allclose(params.log_prob(value), reference.log_prob(value))
+    assert torch.allclose(params.cdf(value), reference.cdf(value))
+    assert torch.allclose(params.icdf(quantile), reference.icdf(quantile))
+    assert torch.allclose(params.entropy(), reference.entropy())
+
+
+def test_normal_params_follow_buffers() -> None:
+    r"""Parameters reference the current buffers after a dtype conversion."""
+    dist = Normal(torch.tensor(0.0, dtype=torch.float32), 1.0)
+    original = dist.params
+    dist.to(dtype=torch.float64)
+
+    assert original.loc.dtype == torch.float32
+    assert dist.params.loc is dist.loc
+    assert dist.params.scale is dist.scale
+    assert dist.params.loc.dtype == torch.float64
+    assert dist.params.scale.dtype == torch.float64
+    assert dist.params.sample().dtype == torch.float64

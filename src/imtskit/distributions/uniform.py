@@ -86,6 +86,9 @@ class Uniform(DistributionBase):
     elementwise. Samples are scalar events.
     """
 
+    Params: Final = UniformParams
+    r"""Parameter type for direct construction via `Uniform.Params(low, high)`."""
+
     low: Tensor
     r"""Param: Lower interval bound."""
     high: Tensor
