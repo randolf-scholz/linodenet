@@ -24,7 +24,7 @@ from torch import Tensor
 from .base import DistributionBase
 
 type UniformParams = tuple[Tensor, Tensor]
-r"""Parameters of the Uniform distribution (low, high)."""
+r"""Parameters `(low, high)` of the uniform distribution, with `low < high`."""
 
 
 def uniform_mean(params: UniformParams, /) -> Tensor:
@@ -80,7 +80,11 @@ def uniform_entropy(params: UniformParams, /) -> Tensor:
 
 
 class Uniform(DistributionBase):
-    r"""Uniform distribution on the half-open interval $[low, high)$."""
+    r"""Uniform distribution on the half-open interval `[low, high)`.
+
+    Bounds are broadcast to a common batch shape and must satisfy `low < high`
+    elementwise. Samples are scalar events.
+    """
 
     low: Tensor
     r"""Param: Lower interval bound."""

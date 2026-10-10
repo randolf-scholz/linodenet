@@ -193,21 +193,27 @@ window.MathJax = {
         displayMath: [["\\[", "\\]"]],
         macros: {
             // operators
+            E: "\\operatorname{\\mathbf{E}}",
+            KL: "\\operatorname{KL}",
+            Median: "\\operatorname{Median}",
+            NdtriExp: "\\operatorname{ndtri\\_exp}",
+            Var: "\\operatorname{\\mathbf{Var}}",
             argmax: "\\operatorname*{arg\\,max}",
             argmin: "\\operatorname*{arg\\,min}",
-            Median: "\\operatorname{Median}",
-            chol: "\\operatorname{chol}",
+            chol: "\\operatorname{chol}",  // cholesky decomposition
             diag: "\\operatorname{diag}",
             dist: "\\operatorname{dist}",
+            mae: "\\operatorname{\\mathbf{MAE}}",
+            mse: "\\operatorname{\\mathbf{MSE}}",
+            nan: "\\texttt{NaN}",
             logsumexp: "\\operatorname{logsumexp}",
-            softplus: "\\operatorname{softplus}",
-            NdtriExp: "\\operatorname{ndtri\\_exp}",
             rank: "\\operatorname{rank}",
             relu: "\\operatorname{ReLU}",
-            KL: "\\operatorname{KL}",
-            tr: "\\operatorname{tr}",
-            E: "\\operatorname{\\mathbf{E}}",
-            Var: "\\operatorname{\\mathbf{Var}}",
+            softplus: "\\operatorname{softplus}",
+            sym: "\\operatorname{sym}",  // symmetric part
+            tr: "\\operatorname{tr}",  // trace
+            tril: "\\operatorname{tril}",  // lower triangular
+            triu: "\\operatorname{triu}",  // upper triangular
             // macros
             bmat: ["\\begin{bmatrix} #1 \\end{bmatrix}", 1],
             norm: ["\\left\\lVert #1\\right\\rVert", 1],

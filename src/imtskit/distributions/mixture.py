@@ -1,4 +1,4 @@
-r"""Implementation of Mixture Distribution."""
+r"""Mixture distributions."""
 
 __all__ = ["Mixture", "MixtureSameFamily"]
 
@@ -15,12 +15,14 @@ from .categorical import Categorical
 
 
 class Mixture[D: DistributionBase](nn.Module):
-    r"""Creates a mixture of distributions for a random variable $X$.
+    r"""A mixture of distributions for a random variable $X$.
 
-    .. math:: p(x) = ∑ᵢ wᵢ⋅pᵢ(x)  \qq{with} wᵢ≥0 and ∑ᵢ wᵢ = 1
+    $$  p(x) = ∑ᵢ wᵢ pᵢ(x)  $$
 
-    References:
-        - https://wikipedia.org/wiki/Mixture_model
+    The normalized weights satisfy $wᵢ ≥ 0$ and $∑ᵢ wᵢ = 1$.
+    Input weights must have a positive sum.
+
+    See the [mixture model overview](https://en.wikipedia.org/wiki/Mixture_model).
     """
 
     probs: Tensor
@@ -50,8 +52,9 @@ class Mixture[D: DistributionBase](nn.Module):
 
         For a mixture, we have:
 
-        .. math:: p(x) = ∑ₖ wₖ pₖ(x)
-            ⟹ ∫ p(x) dxᵢ = ∫∑ₖwₖpₖ(x)dxᵢ = ∑ₖwₖ∫pₖ(x)dxᵢ= ∑ₖwₖp̃ₖ(x)
+        $$  ∫ p(x) dxᵢ = ∑ₖ wₖ ∫ pₖ(x) dxᵢ = ∑ₖ wₖ p̃ₖ(x)   $$
+
+        Here $p̃ₖ$ is the marginal of component $k$. This method is not implemented.
         """
         # return Mixture((d.marginalize() for d in self.distributions), self.weights)
         raise NotImplementedError
@@ -63,18 +66,18 @@ class Mixture[D: DistributionBase](nn.Module):
     def __getitem__(self, index: slice, /) -> Self: ...
 
     def __getitem__(self, index: int | slice, /) -> D | Self:
-        r"""Returns the sub-mixture at the given index."""
+        r"""Return a component at an integer index or a sub-mixture for a slice."""
         if isinstance(index, SupportsIndex):
             return self.components[index]
         return self.__class__(self.components[index], weights=self.probs[index])
 
     def __len__(self) -> int:
-        r"""Returns the number of components in the mixture."""
+        r"""Return the number of components in the mixture."""
         return len(self.components)
 
 
 class MixtureSameFamily[D: DistributionBase](DistributionBase):
-    r"""More efficient implementation of Mixture distribution.
+    r"""A mixture whose components share a distribution class.
 
     When all components are from the same class and this class supports multi-head
     operations, we can implement a more efficient mixture distribution.
@@ -111,13 +114,13 @@ class MixtureSameFamily[D: DistributionBase](DistributionBase):
     def log_prob(self, x: Tensor, /) -> Tensor:
         r"""Compute the log-likelihood of the samples.
 
-        .. math::  p(x) = ∑ₖ wₖ pₖ(x) ⟹ log p(x) = log ∑ₖ wₖ pₖ(x) = LSE(log wₖ + log pₖ(x))
+        $$  \log p(x) = \log ∑ₖ wₖ pₖ(x) = \logsumexpₖ(\log wₖ + \log pₖ(x))    $$
 
         Args:
-            x (..., *D): The samples to evaluate.
+            x: Samples with shape `(..., *D)` to evaluate.
 
         Returns:
-            log_prob (...): The log-likelihood of the samples.
+            Tensor: Log-likelihoods with shape `(...)`.
         """
         logits = self.mixture_distribution.logits  # (H)
 

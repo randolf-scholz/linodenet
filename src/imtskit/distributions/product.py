@@ -17,14 +17,15 @@ from .base import DistributionBase
 
 # TODO: Consider using TypeVarTuple if they ever become powerful enough.
 class Product[D: DistributionBase](ModuleSequence[D]):
-    r"""Represents the outer product of random distributions.
+    r"""The joint distribution of independent random variables.
 
-    .. math:: p(x₁，x₂，…，xₙ) = ∏ₖ pₖ(xₖ)
+    $$  p(x₁, x₂, …, xₙ) = ∏ₖ pₖ(xₖ)    $$
 
-    Arguments:
-        marginals: A list of distributions $p(Zᵢ)$.
+    Args:
+        *marginals: Marginal distributions $p(Zᵢ)$ with identical batch shapes.
 
-    Example:
+    Examples:
+        ```pycon
         >>> from imtskit.distributions import Uniform, Normal
         >>> import torch
         >>> _ = torch.manual_seed(0)
@@ -33,6 +34,7 @@ class Product[D: DistributionBase](ModuleSequence[D]):
         (torch.Size([]), torch.Size([]))
         >>> d.sample()
         (tensor([0.4963]), tensor([0.2072]))
+        ```
     """
 
     has_rsample = True
@@ -59,7 +61,7 @@ class Product[D: DistributionBase](ModuleSequence[D]):
     def log_prob(self, value: tuple[Tensor, ...], /) -> Tensor:
         r"""Compute the log probability of the given samples.
 
-        .. math:: log p(x₁ , ..., xₙ) = ∑ₖ log pₖ(xₖ)
+        $$  \log p(x₁, …, xₙ) = ∑ₖ \log pₖ(xₖ)  $$
         """
         log_probs = [
             marginal.log_prob(v) for marginal, v in zip(self, value, strict=True)

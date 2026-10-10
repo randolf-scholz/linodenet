@@ -36,9 +36,9 @@ class Empirical(DistributionBase):
         r"""Initialize the empirical distribution.
 
         Args:
-            values: ``(*Bs, N, *D)``, the dataset that defines the empirical distribution.
+            values: `(*Bs, N, *D)`, the dataset that defines the empirical distribution.
             ndim: The number of dimensions of each data point. If not given,
-                it is assumed that unbatched data is given, i.e., ``ndim=values.ndim - 1``.
+                it is assumed that unbatched data is given, i.e., `ndim=values.ndim - 1`.
         """
         assert values.ndim >= 1, "The data must have at least one dimension."
         n = values.ndim - 1 if ndim is None else ndim
@@ -110,7 +110,7 @@ class Dirac(Empirical):
     def log_prob(self, value: Tensor, /) -> Tensor:
         r"""Log probability of the Dirac distribution.
 
-        Formally, we set δ(0) = ∞ and δ(x) = 0 for x ≠ 0.
+        Formally, we set $δ(0) = ∞$ and $δ(x) = 0$ for $x ≠ 0$.
         """
         # NOTE: list[-n: n and None] fancy way to get last n elements for n≥0
         assert value.shape[-self.ndims : self.ndims and None] == self.event_shape

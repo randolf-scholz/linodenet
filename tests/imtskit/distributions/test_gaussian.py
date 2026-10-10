@@ -8,6 +8,7 @@ from torch.distributions.kl import kl_divergence
 
 from imtskit.distributions.gaussian import (
     CovarianceType,
+    MultiHeadGaussian,
     argmin_forward_kl,
     argmin_reverse_kl,
     fisher,
@@ -20,6 +21,48 @@ from tests.testing import SEEDS_3
 BATCH_SHAPES = [(), (6,), (1, 2, 3)]
 GAMMA_MODES = ["scalar", "batched", "split-batched"]
 RHO_MODES = ["scalar", "batched", "split-batched"]
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64], ids=str)
+@pytest.mark.parametrize(("n_heads", "n_feats"), [(1, 1), (3, 4)])
+def test_multi_head_log_prob_matches_torch(
+    seed: int, *, dtype: torch.dtype, n_heads: int, n_feats: int
+) -> None:
+    r"""Compare multi-head log densities with an independent PyTorch implementation."""
+    torch.manual_seed(seed)
+    means = torch.randn(n_heads, n_feats, dtype=dtype)
+    raw_scale = 0.1 * torch.randn(n_heads, n_feats, n_feats, dtype=dtype)
+    raw_scale.diagonal(dim1=-2, dim2=-1).fill_(-2.0)
+    model = MultiHeadGaussian(n_heads, n_feats, means=means, covs=raw_scale).to(dtype)
+    reference = MultivariateNormal(model.means, scale_tril=model.get_cholesky())
+    values = torch.cat(
+        (means.unsqueeze(0), reference.sample((8,)), (means + 5).unsqueeze(0))
+    )
+
+    actual = model.log_prob(values)
+    expected = reference.log_prob(values)
+
+    assert actual.shape == (10, n_heads)
+    assert expected[0].gt(0).all()
+    assert expected[-1].lt(0).all()
+    torch.testing.assert_close(actual, expected)
+    torch.testing.assert_close(model.log_probs, expected)
+
+
+def test_multi_head_density_integrates_to_one() -> None:
+    r"""Check density normalization numerically for narrow and broad Gaussian heads."""
+    means = torch.tensor([[-0.5], [1.25], [3.0]], dtype=torch.float64)
+    raw_scale = torch.tensor([[[-2.0]], [[0.0]], [[1.0]]], dtype=torch.float64)
+    model = MultiHeadGaussian(3, 1, means=means, covs=raw_scale).double()
+    stddev = model.get_cholesky().squeeze(-1)
+    grid = (
+        means + torch.linspace(-8, 8, 4097, dtype=torch.float64)[:, None, None] * stddev
+    )
+
+    density = model.log_prob(grid).exp()
+    mass = torch.trapezoid(density, grid.squeeze(-1), dim=0)
+
+    torch.testing.assert_close(mass, torch.ones_like(mass), atol=1e-7, rtol=1e-7)
 
 
 @pytest.fixture(params=SEEDS_3, ids="seed={}".format)

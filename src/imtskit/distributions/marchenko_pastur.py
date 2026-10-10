@@ -1,23 +1,25 @@
 r"""Marchenko-Pastur distribution.
 
-Given a matrix X of shape (m, n) with i.i.d. entries
+Let $X$ have shape $(m, n)$ with independent, identically distributed entries.
+As $n → ∞$ with $m/n → γ > 0$:
 
-a) N(0, σ²)
-b) N(0, σ²/n)
+- For entries $𝓝(0, σ²/n)$, the empirical eigenvalue distribution of $XXᵀ$
+    converges to $\operatorname{MP}(γ, σ²)$.
+- For entries $𝓝(0, σ²)$, the empirical eigenvalue distribution of $XXᵀ/n$
+    has the same limit. The unnormalized spectrum is scaled by $n$, corresponding
+    to the asymptotic approximation $\operatorname{MP}(γ, σ²n)$.
 
-then, as n→∞, m/n→γ, the distribution of the squared singular values of X converges
-to the Marchenko-Pastur distribution with parameters
+Zero eigenvalues are included when $m > n$.
 
-a) MP(γ, σ²n)
-b) MP(γ, σ²)
+The continuous part of the law with parameters $γ$ and $σ²$ has support
 
-The Marchenko-Pastur distribution with parameters γ and σ² has support on the interval
+$$  [λ₋, λ₊] = [σ²(1 - √γ)², σ²(1 + √γ)²]   $$
 
-.. math:: [σ²(1 - √γ)², σ²(1 + √γ)²]
+and density, for $x > 0$ in this interval,
 
-and has probability density function
+$$  f(x) = \frac{\sqrt{(λ₊ - x)(x - λ₋)}}{2πσ²γx}.  $$
 
-.. math:: f(x) = \frac{1}{2\pi σ² x} \sqrt{(σ²(1 + √γ)² - x)(x - σ²(1 - √γ)²)}
+For $γ > 1$, the law also has an atom at $x = 0$ with mass $1 - 1/γ$.
 """
 
 __all__ = ["MarchenkoPastur", "Union"]
@@ -50,7 +52,7 @@ class Union(constraints.Constraint):
 
 
 class MarchenkoPastur(DistributionBase):
-    r"""Marchenko-Pastur distribution with parameters γ and σ²."""
+    r"""Marchenko-Pastur distribution with positive parameters $γ$ and $σ²$."""
 
     arg_constraints = {
         "gamma": constraints.positive,
@@ -120,12 +122,13 @@ class MarchenkoPastur(DistributionBase):
     def log_prob(self, value: Tensor) -> Tensor:
         r"""Compute the log probability density function of the Marchenko-Pastur distribution.
 
-        For x in [λ₋, λ₊], where λ₋ = σ²(1-√γ)² and λ₊ = σ²(1+√γ)²
-            √(λ₊-x)(x-λ₋) / (2πσ²γx) + max(0, (1-1/γ))⋅δ₀
+        For $x > 0$ in $[λ₋, λ₊]$, where $λ₋ = σ²(1 - √γ)²$ and
+        $λ₊ = σ²(1 + √γ)²$:
 
-        log p(x) = ½ log((λ₊-x)(x-λ₋)) - log(2πσ²γx)
+        $$  \log p(x) = ½ \log((λ₊ - x)(x - λ₋)) - \log(2πσ²γx).    $$
 
-        (added point mass at 0 when γ > 1, with weight 1 - 1/γ).
+        At $x = 0$, return the log mass of the atom, with weight
+        $\max(0, 1 - 1/γ)$. Values outside the support have log probability $-∞$.
         """
         x = value
         a = self.lower_bound
@@ -192,12 +195,12 @@ class MarchenkoPastur(DistributionBase):
         sample_shape: Size = (),
         rng: Generator | None = None,
     ) -> Tensor:
-        r"""Sample from the conditional distribution MP(γ, σ² | x > 0).
+        r"""Sample from the Marchenko-Pastur distribution conditioned on $x > 0$.
 
-        For γ > 1, the Marchenko-Pastur law has an atom at x = 0 with mass
-        1 - 1/γ. This method excludes that atom and samples from the
-        renormalized continuous part on [λ₋, λ₊]. For γ <= 1, this is identical
-        to :meth:`sample`.
+        For $γ > 1$, the Marchenko-Pastur law has an atom at $x = 0$ with mass
+        $1 - 1/γ$. This method excludes that atom and samples from the
+        renormalized continuous part on $[λ₋, λ₊]$. For $γ ≤ 1$, this is identical
+        to [`sample`][imtskit.distributions.marchenko_pastur.MarchenkoPastur.sample].
         """
         shape = tuple(sample_shape) + self.batch_shape
         value = torch.rand(

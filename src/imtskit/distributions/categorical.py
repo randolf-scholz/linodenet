@@ -15,13 +15,13 @@ class Categorical(DistributionBase):
     r"""A categorical distribution with fixed weights.
 
     Args:
-        weights (..., D): The weights of the distribution. Requires $θ∈Δⁿ$.
+        weights: Unnormalized logits with shape `(..., D)`.
         ndim: The number of dimensions of the distribution. If not given,
-            ``event_shape=weights.shape``, else ``event_shape=weights.shape[-ndim:]``.
+            `event_shape=weights.shape`, else `event_shape=weights.shape[-ndim:]`.
     """
 
     weights: Tensor
-    r"""Param: The weights of the distribution."""
+    r"""Param: Unnormalized logits of the distribution."""
 
     def __init__(self, weights: Tensor, *, ndim: Optional[int] = None) -> None:
         event_shape = weights.shape[-ndim:] if ndim is not None else weights.shape
@@ -64,25 +64,28 @@ class Categorical(DistributionBase):
 
     @override
     def log_prob(self, samples: Tensor, /) -> Tensor:
-        r"""Compute the negative log-likelihood of the samples."""
+        r"""Compute the log probability of the samples."""
         self.log_probs = self.logits.gather(-1, samples).squeeze(-1)
         return self.log_probs
 
     def exclude(self, indices: Tensor, /) -> Categorical:
         r"""Condition the categorical distribution assuming the indices cannot occur.
 
-        For a categorical distribution with parameters p∈Δⁿ, there is a nice fact:
-        If the parameters are given by softmax transform: $p = σ(w)$,
-        then $p₋ᵢ = σ(w₋ᵢ)$
+        If $p = σ(w)$ is the softmax of logits $w$, conditioning on the exclusion
+        of category $i$ is equivalent to setting $wᵢ = -∞$ before applying softmax.
+        At least one category must remain available.
 
-        Proof:
-            Let $q=p₋ᵢ$, w.l.o.g. $i=n$ is the last index. Then:
+        !!! note "Proof"
 
-            .. math::
-                qₖ &= pₖ / ∑_{j=1}^{n-1} pⱼ \\
-                   &= (e^{wₖ}/∑_{i=1}^n e^{wᵢ}) / ∑_{j=1}^{n-1} (e^{wⱼ}/∑_{i=1}^n e^{wᵢ}) \\
-                   &= e^{wₖ} / ∑_{j=1}^{n-1} e^{wⱼ}
-                   &= σ(w₋ₙ)ₖ
+            Let $q$ be the conditional probabilities of the remaining categories.
+            Without loss of generality, exclude the last category $n$. For $k < n$:
+
+            $$\begin{aligned}
+            qₖ &= pₖ / ∑ⱼ₌₁ⁿ⁻¹ pⱼ \\
+               &= (e^{wₖ}/∑ᵢ₌₁ⁿ e^{wᵢ}) / ∑ⱼ₌₁ⁿ⁻¹ (e^{wⱼ}/∑ᵢ₌₁ⁿ e^{wᵢ}) \\
+               &= e^{wₖ} / ∑ⱼ₌₁ⁿ⁻¹ e^{wⱼ} \\
+               &= σ(w₋ₙ)ₖ
+            \end{aligned}$$
         """
         weights = self.weights.clone()
         weights[indices] = -torch.inf

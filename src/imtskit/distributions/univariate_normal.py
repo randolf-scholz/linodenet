@@ -25,7 +25,7 @@ from torch import Tensor
 from .base import DistributionBase
 
 type NormalParams = tuple[Tensor, Tensor]
-r"""Parameters of the Normal distribution $(loc, scale)$."""
+r"""Parameters `(loc, scale)` of the normal distribution, with `scale > 0`."""
 
 _SQRT_2: Final[float] = math.sqrt(2.0)
 _HALF_LOG_2PI: Final[float] = 0.5 * math.log(2.0 * math.pi)
@@ -85,7 +85,11 @@ def normal_entropy(params: NormalParams, /) -> Tensor:
 
 
 class Normal(DistributionBase):
-    r"""Univariate normal distribution parameterized by $loc$ and $scale$."""
+    r"""Univariate normal distribution parameterized by `loc` and `scale`.
+
+    The mean `loc` and standard deviation `scale` are broadcast to a common batch
+    shape. The scale must be positive elementwise. Samples are scalar events.
+    """
 
     loc: Tensor
     r"""Param: Mean of the distribution."""

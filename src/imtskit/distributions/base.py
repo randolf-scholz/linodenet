@@ -1,4 +1,4 @@
-r"""Distributions base class."""
+r"""Base classes and protocols for distributions."""
 
 __all__ = [
     # ABCs & Protocols
@@ -138,7 +138,7 @@ class DistributionBase(nn.Module):
     event_shape: Final[tuple[int, ...]]
     r"""CONST: The shape of a single sample."""
     batch_shape: Final[tuple[int, ...]]
-    r"""CONST: builtin batch shape (for multi-head distributions)."""
+    r"""CONST: The batch shape, including heads for multi-head distributions."""
 
     def __init__(
         self,
