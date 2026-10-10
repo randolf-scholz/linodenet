@@ -1296,13 +1296,13 @@ class MultivariateNormal(dist.MultivariateNormal):
     We add some utilities to the base class.
     """
 
-    CovarianceParams = CovarianceParams
+    CovarianceParams: Final = CovarianceParams
     r"""Constructor for covariance parameters."""
-    PrecisionParams = PrecisionParams
+    PrecisionParams: Final = PrecisionParams
     r"""Constructor for precision parameters."""
-    CholeskyParams = CholeskyParams
+    CholeskyParams: Final = CholeskyParams
     r"""Constructor for Cholesky parameters."""
-    LogCholeskyParams = LogCholeskyParams
+    LogCholeskyParams: Final = LogCholeskyParams
     r"""Constructor for log-Cholesky parameters."""
 
     def __add__(self, bias: float | Tensor, /) -> Self:
@@ -1330,13 +1330,13 @@ class MultivariateNormal(dist.MultivariateNormal):
 class MultiHeadGaussian(DistributionBase):
     r"""Implements a multi-head Gaussian distribution."""
 
-    CovarianceParams = CovarianceParams
+    CovarianceParams: Final = CovarianceParams
     r"""Constructor for covariance parameters."""
-    PrecisionParams = PrecisionParams
+    PrecisionParams: Final = PrecisionParams
     r"""Constructor for precision parameters."""
-    CholeskyParams = CholeskyParams
+    CholeskyParams: Final = CholeskyParams
     r"""Constructor for Cholesky parameters."""
-    LogCholeskyParams = LogCholeskyParams
+    LogCholeskyParams: Final = LogCholeskyParams
     r"""Constructor for log-Cholesky parameters."""
 
     normalization_constant: Tensor
