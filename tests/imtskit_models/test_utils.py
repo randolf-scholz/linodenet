@@ -1024,13 +1024,10 @@ DEVICES = [
 def _simple_test_data(
     batch_shape: tuple[int, ...], batch_first: bool, /
 ) -> CanonicalTestData:
-    batch_type = cast(
-        "BatchType",
-        next(
-            batch_type
-            for batch_type, candidate_shape in BATCH_SHAPES.items()
-            if candidate_shape == batch_shape
-        ),
+    batch_type = next(
+        batch_type
+        for batch_type, candidate_shape in BATCH_SHAPES.items()
+        if candidate_shape == batch_shape
     )
     return TEST_DATA["simple", batch_type, batch_first]
 
