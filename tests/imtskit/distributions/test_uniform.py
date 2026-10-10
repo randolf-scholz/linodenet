@@ -5,18 +5,7 @@ import torch
 from torch.distributions import Uniform as TorchUniform
 
 from imtskit.distributions import Uniform
-from imtskit.distributions.uniform import (
-    uniform_cdf,
-    uniform_entropy,
-    uniform_icdf,
-    uniform_log_prob,
-    uniform_mean,
-    uniform_median,
-    uniform_mode,
-    uniform_sample,
-    uniform_stddev,
-    uniform_variance,
-)
+from imtskit.distributions.uniform import UniformParams
 
 
 @pytest.mark.parametrize("batch_shape", [(), (1,), (2,), (1, 1), (2, 2)])
@@ -28,6 +17,7 @@ def test_uniform_shapes(batch_shape: tuple[int, ...]) -> None:
 
     assert dist.event_shape == ()
     assert dist.batch_shape == batch_shape
+    assert isinstance(dist.params, UniformParams)
     params_low, params_high = dist.params
     assert torch.allclose(params_low, low)
     assert torch.allclose(params_high, high)
@@ -67,27 +57,41 @@ def test_uniform_rejects_invalid_bounds() -> None:
         Uniform(torch.tensor([0.0, 1.0]), torch.tensor([1.0, 1.0]))
 
 
-def test_uniform_functional_api() -> None:
-    r"""The functional helpers match torch's Uniform formulas."""
+def test_uniform_params_match_torch() -> None:
+    r"""The parameter tuple operations match torch's Uniform formulas."""
     low = torch.tensor([-1.0, 0.5, 2.0])
     high = torch.tensor([0.0, 2.5, 4.0])
     value = torch.tensor([-0.5, 1.25, 4.0])
     quantile = torch.tensor([0.25, 0.5, 0.75])
     reference = TorchUniform(low, high)
-    params = (low, high)
+    params = UniformParams(low, high)
 
-    samples = uniform_sample(params, 5)
+    samples = params.sample(5)
     assert samples.shape == (5, 3)
     assert torch.all(low <= samples)
     assert torch.all(samples < high)
 
-    assert torch.allclose(uniform_mean(params), reference.mean)
-    assert torch.allclose(uniform_median(params), reference.mean)
+    assert torch.allclose(params.mean, reference.mean)
+    assert torch.allclose(params.median, reference.mean)
     with pytest.raises(NotImplementedError):
-        uniform_mode(params)
-    assert torch.allclose(uniform_variance(params), reference.variance)
-    assert torch.allclose(uniform_stddev(params), reference.stddev)
-    assert torch.equal(uniform_log_prob(params, value), reference.log_prob(value))
-    assert torch.allclose(uniform_cdf(params, value), reference.cdf(value))
-    assert torch.allclose(uniform_icdf(params, quantile), reference.icdf(quantile))
-    assert torch.allclose(uniform_entropy(params), reference.entropy())
+        _ = params.mode
+    assert torch.allclose(params.variance, reference.variance)
+    assert torch.allclose(params.stddev, reference.stddev)
+    assert torch.equal(params.log_prob(value), reference.log_prob(value))
+    assert torch.allclose(params.cdf(value), reference.cdf(value))
+    assert torch.allclose(params.icdf(quantile), reference.icdf(quantile))
+    assert torch.allclose(params.entropy(), reference.entropy())
+
+
+def test_uniform_params_follow_buffers() -> None:
+    r"""Parameters reference the current buffers after a dtype conversion."""
+    dist = Uniform(torch.tensor(0.0, dtype=torch.float32), 1.0)
+    original = dist.params
+    dist.to(dtype=torch.float64)
+
+    assert original.low.dtype == torch.float32
+    assert dist.params.low is dist.low
+    assert dist.params.high is dist.high
+    assert dist.params.low.dtype == torch.float64
+    assert dist.params.high.dtype == torch.float64
+    assert dist.params.sample().dtype == torch.float64

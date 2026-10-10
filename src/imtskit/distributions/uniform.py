@@ -3,80 +3,80 @@ r"""Implementation of the Uniform distribution."""
 __all__ = [
     # Classes
     "Uniform",
-    # functions
-    "uniform_mean",
-    "uniform_median",
-    "uniform_mode",
-    "uniform_variance",
-    "uniform_stddev",
-    "uniform_cdf",
-    "uniform_icdf",
-    "uniform_entropy",
-    "uniform_log_prob",
-    "uniform_sample",
+    "UniformParams",
 ]
 
-from typing import Final, override
+from typing import Final, NamedTuple, override
 
 import torch
 from torch import Tensor
 
 from .base import DistributionBase
 
-type UniformParams = tuple[Tensor, Tensor]
-r"""Parameters `(low, high)` of the uniform distribution, with `low < high`."""
 
+class UniformParams(NamedTuple):
+    r"""Uniform bounds and operations on the half-open interval `[low, high)`.
 
-def uniform_mean(params: UniformParams, /) -> Tensor:
-    low, high = params
-    return (high + low) / 2
+    Callers must provide floating-point bounds with the same shape, dtype, and
+    device, satisfying `low < high` elementwise. Construction does not validate
+    or broadcast bounds; use `Uniform` for that. The tuple is immutable, but its
+    tensors remain mutable.
+    """
 
+    low: Tensor
+    r"""Lower interval bound."""
+    high: Tensor
+    r"""Upper interval bound."""
 
-def uniform_median(params: UniformParams, /) -> Tensor:
-    return uniform_mean(params)
+    @property
+    def mean(self) -> Tensor:
+        r"""Mean of the distribution."""
+        return (self.high + self.low) / 2
 
+    @property
+    def median(self) -> Tensor:
+        r"""Median of the distribution."""
+        return self.mean
 
-def uniform_mode(params: UniformParams, /) -> Tensor:
-    raise NotImplementedError
+    @property
+    def mode(self) -> Tensor:
+        r"""Raise `NotImplementedError` because the distribution has no unique mode."""
+        raise NotImplementedError
 
+    @property
+    def variance(self) -> Tensor:
+        r"""Variance of the distribution."""
+        return (self.high - self.low).square() / 12
 
-def uniform_variance(params: UniformParams, /) -> Tensor:
-    low, high = params
-    return (high - low).pow(2) / 12
+    @property
+    def stddev(self) -> Tensor:
+        r"""Standard deviation of the distribution."""
+        return self.variance.sqrt()
 
+    def sample(self, num: int = 1, /) -> Tensor:
+        r"""Draw samples with shape `(num, *low.shape)`."""
+        shape = (num, *self.low.shape)
+        rand = torch.rand(shape, dtype=self.low.dtype, device=self.low.device)
+        return self.low + rand * (self.high - self.low)
 
-def uniform_stddev(params: UniformParams, /) -> Tensor:
-    return uniform_variance(params).sqrt()
+    def log_prob(self, value: Tensor, /) -> Tensor:
+        r"""Log density, with `-inf` outside `[low, high)`."""
+        inside = (self.low <= value) & (value < self.high)
+        log_density = -(self.high - self.low).log()
+        return torch.where(inside, log_density, -torch.inf)
 
+    def cdf(self, value: Tensor, /) -> Tensor:
+        r"""Cumulative distribution function, clamped to `[0, 1]`."""
+        result = (value - self.low) / (self.high - self.low)
+        return result.clamp(min=0.0, max=1.0)
 
-def uniform_sample(params: UniformParams, num: int, /) -> Tensor:
-    low, high = params
-    shape = (num, *low.shape)
-    rand = torch.rand(shape, dtype=low.dtype, device=low.device)
-    return low + rand * (high - low)
+    def icdf(self, value: Tensor, /) -> Tensor:
+        r"""Quantile function; callers must provide probabilities in `[0, 1]`."""
+        return value * (self.high - self.low) + self.low
 
-
-def uniform_log_prob(params: UniformParams, value: Tensor, /) -> Tensor:
-    low, high = params
-    inside = (low <= value) & (value < high)
-    log_density = -(high - low).log()
-    return torch.where(inside, log_density, -torch.inf)
-
-
-def uniform_cdf(params: UniformParams, value: Tensor, /) -> Tensor:
-    low, high = params
-    result = (value - low) / (high - low)
-    return result.clamp(min=0.0, max=1.0)
-
-
-def uniform_icdf(params: UniformParams, value: Tensor, /) -> Tensor:
-    low, high = params
-    return value * (high - low) + low
-
-
-def uniform_entropy(params: UniformParams, /) -> Tensor:
-    low, high = params
-    return (high - low).log()
+    def entropy(self) -> Tensor:
+        r"""Differential entropy of the distribution."""
+        return (self.high - self.low).log()
 
 
 class Uniform(DistributionBase):
@@ -110,44 +110,45 @@ class Uniform(DistributionBase):
         self.register_buffer("high", high_broadcast)
 
     @property
-    def params(self) -> tuple[Tensor, Tensor]:
-        return self.low, self.high
+    def params(self) -> UniformParams:
+        r"""Parameters referencing the current registered bounds."""
+        return UniformParams(self.low, self.high)
 
     @property
     def mean(self) -> Tensor:
-        return uniform_mean(self.params)
+        return self.params.mean
 
     @property
     def median(self) -> Tensor:
-        return uniform_median(self.params)
+        return self.params.median
 
     @property
     def mode(self) -> Tensor:
-        return uniform_mode(self.params)
+        return self.params.mode
 
     @property
     def variance(self) -> Tensor:
-        return uniform_variance(self.params)
+        return self.params.variance
 
     @property
     def stddev(self) -> Tensor:
-        return uniform_stddev(self.params)
+        return self.params.stddev
 
     @override
     def sample(self, num: int = 1, /) -> Tensor:
-        self.samples = uniform_sample(self.params, num)
+        self.samples = self.params.sample(num)
         return self.samples
 
     @override
     def log_prob(self, value: Tensor, /) -> Tensor:
-        self.log_probs = uniform_log_prob(self.params, value)
+        self.log_probs = self.params.log_prob(value)
         return self.log_probs
 
     def cdf(self, value: Tensor, /) -> Tensor:
-        return uniform_cdf(self.params, value)
+        return self.params.cdf(value)
 
     def icdf(self, value: Tensor, /) -> Tensor:
-        return uniform_icdf(self.params, value)
+        return self.params.icdf(value)
 
     def entropy(self) -> Tensor:
-        return uniform_entropy(self.params)
+        return self.params.entropy()
