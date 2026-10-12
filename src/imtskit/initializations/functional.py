@@ -74,21 +74,22 @@ def diagonally_dominant(
 ) -> Tensor:
     r"""Sample a random diagonally dominant matrix.
 
-    $$  A = 𝕀ₙ + B/s, \qquad s = ∑ᵢⱼ |Bᵢⱼ|  $$
+    $$  A = 𝕀ₙ + B/s, \qquad s = \max(ε, ∑ᵢⱼ |Bᵢⱼ|)  $$
 
     Sample $B$ with $Bᵢᵢ=0$ and independent off-diagonal entries
-    $Bᵢⱼ∼𝓝(0,1/n)$. Normalize by the sum of absolute entries $s$:
+    $Bᵢⱼ∼𝓝(0,1/n)$. Normalize by the sum of absolute entries $s$, clamped
+    below by the machine epsilon of the dtype.
 
-    For $s>0$, diagonal entries equal one and each off-diagonal row sum is at
-    most one, giving weak diagonal dominance. If $s=0$, division by zero
-    produces non-finite entries; this always occurs for $n=1$.
+    Diagonal entries equal one and each off-diagonal row sum is at most one,
+    giving weak diagonal dominance. If $B=0$, return the identity
+    matrix; in particular, $n=1$ always gives $[[1]]$.
     """
     n = _normalize_square_dim(dim)
     B = traceless(size, dim=n, dtype=dtype, device=device)
-    # calculate 1-norm of B
     eye = torch.eye(n, dtype=dtype, device=device)
-    # for diagonal dominance, we need to multiply
-    return eye + B / B.abs().sum(dim=(-2, -1), keepdim=True)
+    eps = torch.finfo(B.dtype).eps
+    s = B.abs().sum(dim=(-2, -1), keepdim=True).clamp_min(eps)
+    return eye + B / s
 
 
 def symmetric(

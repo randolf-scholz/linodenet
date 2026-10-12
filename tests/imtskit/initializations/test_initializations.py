@@ -16,16 +16,43 @@ from tests.testing import PROJECT, TestSuite
 RESULT_DIR = PROJECT.RESULTS_DIR[__file__]
 
 
-@pytest.mark.parametrize("name", INITIALIZATION_FNS)
 class TestCorrectness(TestSuite):
     r"""Validate correctness properties of initialization functions."""
 
     BATCH_SIZE = 10
     SEED = 0
 
-    @pytest.mark.parametrize("dim", [128], ids=lambda dim: f"{dim}x{dim}")
+    @pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+    @pytest.mark.parametrize("size", [(), 10, (2, 3)])
+    @pytest.mark.parametrize("dim", [1, 2, 4, (1, 1), (1, 4), (4, 1), (3, 5), (5, 3)])
+    @pytest.mark.parametrize("name", INITIALIZATION_FNS)
+    def test_finite(
+        self,
+        *,
+        name: str,
+        dim: int | tuple[int, int],
+        size: int | tuple[int, ...],
+        dtype: torch.dtype,
+    ) -> None:
+        r"""Check finiteness for supported matrix shapes, including vector cases."""
+        torch.manual_seed(self.SEED)
+        m, n = (dim, dim) if isinstance(dim, int) else dim
+        kwargs = {"rank": min(m, n)} if name == "low_rank" else {}
+        init_fn = INITIALIZATION_FNS[name]
+        try:
+            A = init_fn(size, dim, dtype=dtype, **kwargs)
+        except ValueError as exc:
+            pytest.skip(str(exc))
+        batch_shape = (size,) if isinstance(size, int) else size
+        assert A.shape == (*batch_shape, m, n)
+        assert A.isfinite().all()
+        if name == "diagonally_dominant" and n == 1:
+            assert (A == 1).all()
+
     @pytest.mark.parametrize("num_samples", [1024], ids=lambda size: f"{size=}")
     @pytest.mark.parametrize("num_runs", [64], ids=lambda n_runs: f"{n_runs=}")
+    @pytest.mark.parametrize("dim", [128], ids=lambda dim: f"{dim}x{dim}")
+    @pytest.mark.parametrize("name", INITIALIZATION_FNS)
     def test_normalization_property(
         self,
         *,
@@ -76,8 +103,9 @@ class TestCorrectness(TestSuite):
         )
         logger.info("%s of stdvs are close to 1 ✔ ", f"{valid_stdv=:.2%}")
 
-    @pytest.mark.parametrize("size", [4])
     @pytest.mark.parametrize("batch_size", [10])
+    @pytest.mark.parametrize("size", [4])
+    @pytest.mark.parametrize("name", INITIALIZATION_FNS)
     def test_validity_initializations(
         self, name: str, size: int, batch_size: int
     ) -> None:
@@ -109,6 +137,7 @@ class TestCorrectness(TestSuite):
             pytest.param((3, 5, 7), (3, 5, 7), id="3d-tuple"),
         ],
     )
+    @pytest.mark.parametrize("name", INITIALIZATION_FNS)
     def test_shapes(
         self,
         *,
