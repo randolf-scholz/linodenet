@@ -158,6 +158,7 @@ class SplineCoefficients(NamedTuple):
         return SplineCoefficients(λ, wa, wb, wc, ya, yb, yc, xa, xb, xc)
 
 
+# (...), (..., K+1) -> (...), (...)
 def _lrs_encode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bounded LRS forward map and log|det J| at inputs."""
     num_bins = knots.x.shape[-1] - 1
@@ -189,11 +190,14 @@ def _lrs_encode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
     return numerator / denominator, logabsdet
 
 
+# (...), (..., K+1) -> (...), (...)
 def _lrs_decode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bounded LRS inverse map and log|det J| at inputs."""
     num_bins = knots.y.shape[-1] - 1
     bin_idx = torch.searchsorted(
-        knots.y[..., 1:-1].contiguous(), inputs.unsqueeze(-1), side="right"
+        knots.y[..., 1:-1].contiguous(),
+        inputs[..., None].contiguous(),
+        side="right",
     ).clip(0, num_bins - 1)
 
     lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = SplineCoefficients.from_selected_knots(
@@ -253,12 +257,12 @@ class LinearRationalSpline(nn.Module):
     def get_spline_knots(
         self,
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K)
-        x_center: Tensor,  # (...,)
-        y_center: Tensor,  # (...,)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K]
+        x_center: Tensor,  # Float[...,]
+        y_center: Tensor,  # Float[...,]
     ) -> BinKnots:
         r"""Construct spline knots from constrained bin parameters.
 
@@ -306,13 +310,13 @@ class LinearRationalSpline(nn.Module):
 
     def encode_and_logabsdet(
         self,
-        inputs: Tensor,  # (...)
+        inputs: Tensor,  # Float[...]
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K+1)
-    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K+1]
+    ) -> tuple[Tensor, Tensor]:  # Float[...], Float[...]
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
         knots = self.get_spline_knots(
@@ -328,13 +332,13 @@ class LinearRationalSpline(nn.Module):
 
     def decode_and_logabsdet(
         self,
-        inputs: Tensor,  # (...)
+        inputs: Tensor,  # Float[...]
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K+1)
-    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K+1]
+    ) -> tuple[Tensor, Tensor]:  # Float[...], Float[...]
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
         knots = self.get_spline_knots(
@@ -354,13 +358,13 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
 
     def encode_and_logabsdet(
         self,
-        inputs: Tensor,  # (...)
+        inputs: Tensor,  # Float[...]
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K+1)
-    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K+1]
+    ) -> tuple[Tensor, Tensor]:  # Float[...], Float[...]
         r"""Use linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
@@ -390,13 +394,13 @@ class UnconstrainedLinearRationalSpline(LinearRationalSpline):
 
     def decode_and_logabsdet(
         self,
-        inputs: Tensor,  # (...)
+        inputs: Tensor,  # Float[...]
         *,
-        widths: Tensor,  # (..., K)
-        heights: Tensor,  # (..., K)
-        lambdas: Tensor,  # (..., K)
-        derivatives: Tensor,  # (..., K+1)
-    ) -> tuple[Tensor, Tensor]:  # (...), (...)
+        widths: Tensor,  # Float[..., K]
+        heights: Tensor,  # Float[..., K]
+        lambdas: Tensor,  # Float[..., K]
+        derivatives: Tensor,  # Float[..., K+1]
+    ) -> tuple[Tensor, Tensor]:  # Float[...], Float[...]
         r"""Invert the linear tails anchored at the learned spline endpoints."""
         original_dtype = inputs.dtype
         inputs = inputs.to(dtype=self.MIN_DERIVATIVE.dtype)
@@ -444,7 +448,7 @@ class LearnableLRS(nn.Module, Transform):
 
     def __init__(
         self,
-        n_heads: int | tuple[int, ...],
+        num_heads: int | tuple[int, ...],
         *,
         num_bins: int,
         x_bounds: tuple[float, float],
@@ -456,7 +460,9 @@ class LearnableLRS(nn.Module, Transform):
         self.num_bins = num_bins
         self.x_bounds = x_bounds
         self.y_bounds = y_bounds
-        self.n_heads = torch.Size((n_heads,) if isinstance(n_heads, int) else n_heads)
+        self.n_heads = torch.Size(
+            (num_heads,) if isinstance(num_heads, int) else num_heads
+        )
         left, right = x_bounds
         bottom, top = y_bounds
         assert left < right
@@ -470,25 +476,28 @@ class LearnableLRS(nn.Module, Transform):
         assert width_init > min_bin_width
         assert height_init > min_bin_height
 
-        def inverse_softplus(value: float, /) -> float:
+        def _inverse_softplus(value: float, /) -> float:
             return value + math.log(-math.expm1(-value))
 
         # Parameters
+        # Initialize to a globally affine map by using uniform widths/heights,
+        # λ = 0.5 in every bin, and derivatives equal to the interval slope.
+        # When x_bounds == y_bounds, the initial transform is exactly the identity.
         self.widths = nn.Parameter(
             torch.full(
                 (*self.n_heads, num_bins),
-                inverse_softplus(width_init - min_bin_width),
+                _inverse_softplus(width_init - min_bin_width),
             )
         )
         self.heights = nn.Parameter(
             torch.full(
                 (*self.n_heads, num_bins),
-                inverse_softplus(height_init - min_bin_height),
+                _inverse_softplus(height_init - min_bin_height),
             )
         )
         self.lambdas = nn.Parameter(torch.zeros(*self.n_heads, num_bins))
         self.derivatives = nn.Parameter(
-            torch.full((*self.n_heads, num_bins + 1), inverse_softplus(slope))
+            torch.full((*self.n_heads, num_bins + 1), _inverse_softplus(slope))
         )
         self.x_center = nn.Parameter(torch.full(self.n_heads, 0.5 * (left + right)))
         self.y_center = nn.Parameter(torch.full(self.n_heads, 0.5 * (bottom + top)))
@@ -532,7 +541,7 @@ class LearnableLRS(nn.Module, Transform):
 
         new_heads = (*self.n_heads[:-1], num_kept)
         new = LearnableLRS(
-            n_heads=new_heads,
+            num_heads=new_heads,
             num_bins=self.num_bins,
             x_bounds=self.x_bounds,
             y_bounds=self.y_bounds,
@@ -612,7 +621,7 @@ class SplineTransform(TransformSequence[LearnableLRS]):
 
     def __init__(
         self,
-        n_heads: int | tuple[int, ...] = (),
+        num_heads: int | tuple[int, ...] = (),
         *,
         num_flow_layers: int,
         num_bins: int,
@@ -622,7 +631,7 @@ class SplineTransform(TransformSequence[LearnableLRS]):
     ) -> None:
         layers = [
             LearnableLRS(
-                n_heads,
+                num_heads,
                 num_bins=num_bins,
                 x_bounds=x_bounds,
                 y_bounds=y_bounds,

@@ -100,7 +100,7 @@ def _centered_cumulative_knots(widths: Tensor, center: Tensor, /) -> Tensor:
             + cumwidths[..., right_center_idx : right_center_idx + 1]
         )
 
-    return cumwidths - center_offset + center[..., None]
+    return cumwidths - center_offset + center.unsqueeze(-1)
 
 
 class BinKnots(NamedTuple):
@@ -140,7 +140,11 @@ class SplineCoefficients(NamedTuple):
 
     @staticmethod
     def from_knots(knots: BinKnots) -> SplineCoefficients:
-        r"""Get the spline coefficients for the given knots shape: (..., K)."""
+        r"""Get one set of spline coefficients per bin.
+
+        Knot coordinates and derivatives have shape `(..., K+1)`, while mixing
+        fractions and the resulting coefficients have shape `(..., K)`.
+        """
         x = knots.x  # (..., K)
         y = knots.y  # (..., K)
         λ = knots.lambdas  # (..., K)
@@ -170,11 +174,13 @@ class SplineCoefficients(NamedTuple):
         r"""Get the spline coefficients for the selected bins.
 
         Args:
-            knots: The bin parameters (shape: (..., K)).
-            bin_idx: The selected bin indices (shape: (...) with entries in {0, ..., K-1}).
+            knots: Knot coordinates and derivatives of shape `(..., K+1)` and
+                bin mixing fractions of shape `(..., K)`.
+            bin_idx: Selected bin indices of shape `(..., 1)` with entries in
+                `{0, …, K-1}`. The final singleton dimension is removed.
 
         Returns:
-            SplineCoefficients: The coefficients for the selected bins (shape: (...)).
+            Coefficients for the selected bins, each with shape `(...)`.
         """
         # bin_idx: LongTensor with entries 0...K-1
         xa = knots.x.gather(-1, bin_idx).squeeze(-1)  # (...)
@@ -202,7 +208,7 @@ def _lrs_encode(inputs: Tensor, knots: BinKnots) -> tuple[Tensor, Tensor]:
     r"""Evaluate the bounded LRS forward map and log|det J| at inputs."""
     num_bins = knots.x.shape[-1] - 1
     bin_idx = torch.searchsorted(
-        knots.x[..., 1:-1].contiguous(), inputs[..., None], side="right"
+        knots.x[..., 1:-1].contiguous(), inputs.unsqueeze(-1), side="right"
     ).clip(0, num_bins - 1)
 
     lam, wa, wb, wc, ya, yb, yc, xa, xb, _ = SplineCoefficients.from_selected_knots(
@@ -303,19 +309,26 @@ class LinearRationalSpline(nn.Module):
         x_center: Tensor,  # Float[...,]
         y_center: Tensor,  # Float[...,]
     ) -> BinKnots:
-        r"""Determine the spline parameters from the raw inputs.
+        r"""Construct spline knots from constrained bin parameters.
 
         Note:
-            Instead of x and y, we expect positive widths and heights together with
-            the x/y center coordinates.
+            Inputs are positive bin widths and heights, mixing fractions in $(0,1)$,
+            and positive knot derivatives. They are already constrained rather than
+            unconstrained trainable parameters. Center coordinates may be any real
+            values. Derivatives are clipped to `MIN_DERIVATIVE`.
 
         Args:
-            widths: The positive widths of the bins.
-            heights: The positive heights of the bins.
-            lambdas: The raw lambdas of the bins. (λ∈(0,1)ᴷ⁻¹)
-            derivatives: The raw derivatives of the knots. (d>0)
-            x_center: The x center of the bins. (d>0)
-            y_center: The y center of the bins. (d>0)
+            widths: Bin widths of shape `(..., K)`, at least `MIN_BIN_WIDTH`.
+            heights: Bin heights of shape `(..., K)`, at least `MIN_BIN_HEIGHT`.
+            lambdas: Bin mixing fractions of shape `(..., K)`, each in $(0,1)$.
+            derivatives: Positive knot derivatives of shape `(..., K+1)`.
+            x_center: Coordinate assigned to the middle knot, or the midpoint
+                of the two middle knots. Broadcastable to shape `(...)`.
+            y_center: Corresponding center coordinate for the output knots,
+                broadcastable to shape `(...)`.
+
+        Returns:
+            Knot coordinates, mixing fractions, and clipped derivatives.
         """
         work_dtype = self.MIN_DERIVATIVE.dtype
         widths = widths.to(dtype=work_dtype)
@@ -466,9 +479,9 @@ class LearnableLRS(nn.Module):
     r"""Trainable Linear Rational Spline."""
 
     n_heads: Final[torch.Size]  # tuple[*H]
-    r"""Number of mixture components."""
+    r"""Shape of the independent spline heads."""
     num_bins: Final[int]
-    r"""Number of rational linear spline components."""
+    r"""Number of bins in each rational linear spline."""
 
     # Parameters
     widths: Tensor  # (*H, K)
@@ -556,10 +569,11 @@ class LearnableLRS(nn.Module):
 
     @torch.no_grad()
     def marginalize(self, kept: list[int] | Tensor) -> LearnableLRS:
-        r"""Marginalize out the specified variables.
+        r"""Return a spline restricted to the retained feature indices.
 
-        Assumes that ``n_heads = (*heads, dims)``,
-        and that the last dimension corresponds to the features.
+        Assumes `n_heads = (*heads, dims)`, with the final head dimension indexing
+        features. `kept` selects the retained features by integer indices or a
+        Boolean mask of length `dims`. Parameters are copied into a new module.
         """
         device = self.widths.device
         kept = torch.as_tensor(kept, device=device)
@@ -597,14 +611,14 @@ class LearnableLRS(nn.Module):
         return new
 
     def encode_and_logabsdet(self, x: Tensor, /) -> tuple[Tensor, Tensor]:
-        r"""Forward pass of the flow.
+        r"""Compute the forward flow and its log absolute Jacobian determinant.
 
         Args:
-            x (..., *H, $K): input tensor
+            x: input tensor of shape `(..., *n_heads, $K)`
 
         Returns:
-            y (..., *H, $K): transformed tensor
-            ldj (..., *H): log determinant of the Jacobian
+            y: transformed tensor of shape `(..., *n_heads, $K)`
+            ldj: log determinant of the Jacobian of shape `(..., *n_heads)`
         """
         batch_shape = x.shape[: -len(self.n_heads)] if self.n_heads else x.shape
         widths, heights, lambdas, derivatives = self.spline_parameters(batch_shape)
@@ -619,14 +633,14 @@ class LearnableLRS(nn.Module):
         return y, logabsdet.sum(dim=-1) if self.n_heads else logabsdet
 
     def decode_and_logabsdet(self, y: Tensor, /) -> tuple[Tensor, Tensor]:
-        r"""Inverse pass of the flow.
+        r"""Compute the inverse flow and its log absolute Jacobian determinant.
 
         Args:
-            y (..., *H, $K): input tensor
+            y: Input tensor of shape `(..., *n_heads, $K)`.
 
         Returns:
-            x (..., *H, $K): transformed tensor
-            ldj (..., *H): log determinant of the Jacobian
+            x: transformed tensor of shape `(..., *n_heads, $K)`
+            ldj: log determinant of the Jacobian of shape `(..., *n_heads)`
         """
         batch_shape = y.shape[: -len(self.n_heads)] if self.n_heads else y.shape
         widths, heights, lambdas, derivatives = self.spline_parameters(batch_shape)
