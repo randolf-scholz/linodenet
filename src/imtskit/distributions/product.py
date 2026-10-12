@@ -34,6 +34,7 @@ class Product[D: DistributionBase](ModuleSequence[D]):
         (torch.Size([]), torch.Size([]))
         >>> d.sample()
         (tensor([0.4963]), tensor([0.2072]))
+
         ```
     """
 
