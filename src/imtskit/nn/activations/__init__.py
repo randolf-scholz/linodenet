@@ -1,8 +1,11 @@
-r"""Implementations of activation functions.
+r"""Activation functions, modules, and registries.
 
 Notes:
-    - See `imtskit.activations.functional` for functional implementations.
-    - See `imtskit.activations.modular` for module-based  implementations.
+    - `imtskit.nn.activations.base` provides the activation protocol, enum, and
+        registries of functions and module classes.
+    - `imtskit.nn.activations.crelu` and `imtskit.nn.activations.misc` provide
+        local activation implementations.
+    - `imtskit.nn.activations.imported` provides wrappers for special functions.
 """
 
 __all__ = [

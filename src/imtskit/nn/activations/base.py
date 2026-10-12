@@ -36,15 +36,16 @@ from .imported import (
 from .misc import EntLU, entlu
 
 type GenericActivation = Callable[..., Tensor | tuple[Tensor, ...]]
-r"""Type alias for generic activation functions (may require additional args!)."""
+r"""Type alias for activations with extra arguments or tensor-tuple outputs."""
 
 
 @runtime_checkable
 class Activation(Protocol):
-    r"""Protocol for activation functions.
+    r"""Protocol for activations that preserve tensor shape.
 
-    We define (element-wise) activations as callables that take a single tensor input
-    and returns a tensor of the same shape.
+    These callables take one tensor and return a tensor of the same shape.
+    Activations returning tuples or changing the shape use `GenericActivation`
+    instead.
     """
 
     @abstractmethod
@@ -225,4 +226,4 @@ ACTIVATION_FNS_WITH_ARGS: dict[str, GenericActivation] = {
     "mixture_to_gaussian": mixture_to_gaussian,
     "gaussian_to_mixture": gaussian_to_mixture,
 }  # fmt: skip
-r"""Activations that do not match the usual signature of activations."""
+r"""Activation functions with extra arguments or tensor-tuple outputs."""

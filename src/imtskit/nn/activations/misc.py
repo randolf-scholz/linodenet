@@ -12,7 +12,13 @@ def entlu(x: Tensor) -> Tensor:
 
 
 class EntLU(nn.Module):
-    r"""Maps tensor elementwise via $x ↦ ⟦x>0 ? x + 1 : eᴴ⁽¹⁻ˣ⁾⟧$."""
+    r"""Map tensor entries via the entropic linear unit.
+
+    $$ ϕ(x)=⟦x>0 ? x+1 : \exp(H(1-x))⟧ $$
+
+    Here $H(t)=-t\log(t)$ is the entropy primitive for $t>0$.
+    The map preserves tensor shape and has strictly positive outputs.
+    """
 
     def forward(self, x: Tensor) -> Tensor:
         return entlu(x)

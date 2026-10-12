@@ -1,10 +1,10 @@
 r"""ReZero layers.
 
 References:
-    - | ReZero is all you need: fast convergence at large depth.
-      | Thomas Bachlechner, Bodhisattwa Prasad Majumder, Henry Mao, Gary Cottrell, Julian McAuley
-      | Proceedings of the Thirty-Seventh Conference on Uncertainty in Artificial Intelligence, PMLR
-      | https://proceedings.mlr.press/v161/bachlechner21a.html
+    - ReZero is all you need: fast convergence at large depth. \
+      Thomas Bachlechner, Bodhisattwa Prasad Majumder, Henry Mao, Gary Cottrell, Julian McAuley \
+      Proceedings of the Thirty-Seventh Conference on Uncertainty in Artificial Intelligence, PMLR \
+      <https://proceedings.mlr.press/v161/bachlechner21a.html>
 """
 
 __all__ = [
@@ -24,9 +24,14 @@ class ReZero[
     M: nn.Module = nn.Module,
     S: nn.Module = nn.Module,
 ](nn.Module):
-    r"""ReZero module.
+    r"""Scale a module's output by a mapped scalar parameter.
 
-    Simply multiplies the inputs by a scalar initialized to zero.
+    $$ y=ϕ(ε)⋅f(x) $$
+
+    Here `module` defines $f$ and `scalar_map` defines $ϕ$; both default to
+    the identity. The scalar $ε$ defaults to zero, but `initial_value` can
+    override it. Zero initialization gives zero output only when $ϕ(0)=0$.
+    Set `learnable=False` to freeze the scalar.
     """
 
     scalar: Tensor

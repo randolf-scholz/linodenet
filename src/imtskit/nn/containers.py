@@ -23,7 +23,11 @@ from torch.nn import Module, ModuleDict, ModuleList
 
 
 class Constant(Module):
-    r"""Module that returns a learned constant tensor."""
+    r"""Module that returns a constant tensor, optionally learnable.
+
+    The input is ignored. The stored tensor is returned directly, without copying
+    or broadcasting it. Its gradient is enabled only when `learnable=True`.
+    """
 
     value: Tensor
     r"""PARAM: Constant tensor returned by the module."""

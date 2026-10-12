@@ -1,7 +1,7 @@
-r"""Neural Network subpackage of imtskit.
+r"""General-purpose neural network building blocks.
 
-This contains general-purpose building blocks for neural networks, such as layers, activations, and containers.
-This does not contain timeseries-specific layers and forecasting models.
+This subpackage provides layers, activations, and module containers.
+Time-series-specific layers and forecasting models live in other subpackages.
 """
 # ruff: file-ignore[E402, F403]
 

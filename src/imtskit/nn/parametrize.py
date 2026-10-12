@@ -1,70 +1,41 @@
-r"""Alternative to builtin parametrizations of torch.
+r"""Cached parametrizations for PyTorch module parameters.
 
-Goals
------
+## Cache behavior
 
-- Support for JIT. In particular, we do not use ``@property``.
-- Class-based parametrizations that allow more complex parametrizations.
-    - Example: SpectralNormalization uses an iterative algorithm to compute the spectral norm,
-        which is accelerated by caching the singular vectors and reusing them in the next iteration.
-- More fine-grained control over what is cached and what is not.
-    - In particular, we do not use any global variables
+Parametrized attributes are buffers backed by `ParametrizationList` caches.
+The trainable source remains in `original_parameter`. Attribute access reads
+the cache rather than recomputing the parametrization.
 
-Content
--------
+Call `update_parametrizations` after modifying parameters, or register an
+optimizer post-step hook with `register_optimizer_hook`. The `cached` context
+manager refreshes the supplied modules and their descendants on exit.
+Accumulating gradients in an original parameter marks its cache stale and
+fills it with NaNs until it is refreshed.
 
-- `Parametrization`: Protocol class for parametrizations.
-- `ParametrizationBase`: Parametrization of a single tensor
-- `ParametrizationDict`: Parametrization of multiple tensors
-- `parametrizations`: plug-in replacement for `torch.nn.utils.parametrizations`
-    wraps a function Tensor -> Tensor into a parametrization.
-- `cached`: (quasi) plug-in replacement for `torch.nn.utils.parametrizations.cached`
-    context manager which refreshes parametrization cache on exit.
-- `get_parametrizations`: recursively returns all parametrizations in a module
-- `register_parametrization`: adds a parametrization to a specific tensor
-- `register_optimizer_hook`: automatically adds a hook to optimizer.step() which refreshes the cache after each step.
+## API
 
-Differences
------------
+- `Surjection`: Protocol for maps with an optional right inverse.
+- `Parametrization`: Protocol for maps with a right inverse and cache update.
+- `Parametrized`: Protocol for modules exposing a `parametrizations` mapping.
+- `ParametrizationList`: Chain of parametrizations sharing one source parameter
+    and one cached output tensor.
+- `register_parametrization`: Register a map or append it to an existing chain.
+- `get_parametrizations`: Read a module's own parametrization mapping.
+- `update_parametrizations`: Refresh parametrizations recursively.
+- `register_optimizer_hook`: Refresh caches after each optimizer step.
+- `cached`: Context manager and decorator that refreshes caches on exit.
+- `remove_parametrizations`: Placeholder; removal is not implemented.
 
-- Instead of inserting properties, we use buffers, because JIT does not support properties.
-  This means that the parametrization is not recomputed automatically when the original tensor changes.
-  Instead, the parametrization needs to be recomputed manually by calling ``update_parametrization()``.
-- register_parametrization is intended as a drop-in replacement for
-  `torch.nn.utils.parametrizations.register_parametrization`.
-  However, it is not equivalent. In particular, it does not support replacing a tensor with
-  other tensors. For example, a rank-one parametrization is realized by projecting onto the
-  low rank manifold in the forward pass and projecting back to the full rank manifold when
-  updating the parameters. This is important to ensure parametrizations are chainable and to maintain
-  type-safety.
+## Tensor invariants
 
-Usage
------
+Unless `unsafe=True`, parametrizations and non-`None` right-inverse results
+must preserve shape and dtype. The source must be an `nn.Parameter`.
+Modules without a `right_inverse` receive a method returning `None`, which
+skips the pullback to the source parameter. Multiple parametrizations on one
+parameter are applied in registration order; right inverses run in reverse.
 
-- Create new parametrizations by subclassing Parametrization
-- Autogenerate parametrizations from a callable by SimpleParametrization
-- add parametrizations to an existing nn.Module by register_parametrization
-
-Issues
-------
-
-- It would be useful if without caching, the parametrizations would work like simple properties.
-- properties are not supported by JIT...
-- One could disable an if branch
-    - but if-branches are slow...
-- context decorator could maybe mutate the nn.Module state...
-- In principle the parametrization only needs to recomputed if the tensor values change,
-  so after an optimizer.step() or a reset_parameters() call.
-- Currently unsupported to use multiple parametrizations on the same tensor.
-
-Classes
--------
-
-- `ParametrizationProto`: Protocol for all parametrizations.
-- `Parametrization`: Base class for parametrizations that maintain a single cached tensor.
-    - `parametrizations`: wraps a function Tensor -> Tensor into a parametrization.
-    - `ParametrizationCache`: Base class for parametrization with multiple cached tensors.
-- `ParametrizationDict`: Base class for complex parametrization with multiple parametrized and cached tensors.
+This API uses explicit cache refreshes rather than the property-based access
+provided by `torch.nn.utils.parametrize`.
 """
 
 __all__ = [
@@ -116,18 +87,15 @@ from .containers import ModuleMapping, ModuleSequence
 
 # TODO: Use IntersectionType
 class Surjection[X, Y](Protocol):
-    r"""A protocol for surjections.
+    r"""Protocol for parametrization maps with an optional right inverse.
 
-    Surjections are maps that are onto, i.e., for every $y$ in $Y$, there exists
-    an $x$ in $X$ such that $f(x) = y$. In particular, they admit a right inverse,
-    i.e., a map $g: Y -> X$ such that $f(g(y)) = y$ for all $y$ in $Y$.
+    A surjection $f:X→Y$ admits a right inverse $g:Y→X$ satisfying
+    $f(g(y))=y$ for every $y∈Y$.
 
-    In the context of parametrizations, we allow surjections to return `None` when
-    calling right_inverse. This is to signal that the right-inverse should not be used,
-    and the parametrized tensor should not be updated with the pullback.
-
-    For example, with the ReZero transform $x ↦ ε⋅x$, since the learnable scalar is initialized with $ε=0$,
-    a `right_inverse` is not not well-defined at initialization.
+    For parametrizations, `right_inverse` may return `None` to skip updating the
+    original parameter from the parametrized value. This permits maps without
+    a right inverse at some parameter values. For example, the scaling map
+    $x ↦ εx$ cannot be inverted onto nonzero outputs when $ε=0$.
     """
 
     @abstractmethod
@@ -138,10 +106,10 @@ class Surjection[X, Y](Protocol):
 
 # TODO: Use IntersectionType
 def is_surjection(obj: object, /) -> TypeIs[Surjection]:
-    r"""Check if the object is a Surjection.
+    r"""Check whether an object is a module with a callable `right_inverse`.
 
-    This method is needed because standard isinstance checks do not work with jit.ScriptModule.
-    This is because Protocol used getattr_static, rather than proper getattr/hasattr.
+    This checks the interface through dynamic attribute access. It does not
+    verify surjectivity or the mathematical right-inverse identity.
     """
     return isinstance(obj, nn.Module) and callable(getattr(obj, "right_inverse", None))
 
@@ -171,10 +139,10 @@ def is_parametrization(obj: type, /) -> TypeIs[type[Parametrization]]: ...
 @overload
 def is_parametrization(obj: object, /) -> TypeIs[Parametrization]: ...
 def is_parametrization(obj: object, /) -> bool:
-    r"""Check if the object is a Parametrization.
+    r"""Check whether all members of the parametrization protocol are callable.
 
-    This method is needed because standard isinstance checks do not work with jit.ScriptModule.
-    This is because Protocol used getattr_static, rather than proper getattr/hasattr.
+    The check uses dynamic attribute access and accepts either an instance or
+    a class. It checks the interface, without evaluating the parametrization.
     """
     return all(
         callable(getattr(obj, name, None))
@@ -184,10 +152,7 @@ def is_parametrization(obj: object, /) -> bool:
 
 # TODO: Use intersection type
 class Parametrized(Protocol):
-    r"""Protocol for parametrized modules.
-
-    This should only apply to nn.Modules.
-    """
+    r"""Protocol for `nn.Module` instances exposing a parametrization mapping."""
 
     parametrizations: ModuleMapping[ParametrizationList]
 
@@ -195,7 +160,11 @@ class Parametrized(Protocol):
 def is_parametrized(
     module: object, tensor_name: Optional[str] = None
 ) -> TypeIs[Parametrized]:
-    r"""Return True if the module has any parametrizations."""
+    r"""Check whether a module has registered parametrizations.
+
+    If `tensor_name` is provided, check that specific parameter. Otherwise,
+    require a nonempty parametrization mapping on the module itself.
+    """
     return (
         isinstance(module, nn.Module)
         and ((parametrizations := get_parametrizations(module)) is not None)
@@ -207,7 +176,7 @@ def is_parametrized(
 
 
 class _post_init_hook(type(Protocol)):  # pyrefly: ignore[invalid-inheritance]
-    r"""Metclass that adds a ``__post_init__`` hook to class initialization."""
+    r"""Metaclass that calls `__post_init__` after instance initialization."""
 
     def __post_init__(cls, /) -> None:
         pass
@@ -236,31 +205,29 @@ class _post_init_hook(type(Protocol)):  # pyrefly: ignore[invalid-inheritance]
 class ParametrizationList[
     S: Surjection,
 ](ModuleSequence[S], Parametrization, metaclass=_post_init_hook):  # type: ignore
-    r"""Applies multiple parametrizations to the same tensor in sequence.
+    r"""Apply a chain of parametrizations to one source parameter.
 
     Args:
-        modules (Iterable[S | nn.Module]): An iterable of parametrization modules to apply in
-            sequence. Each entry should either implement the `Surjection` protocol (i.e. provide
-            a callable transform and a `right_inverse`) or be a plain `nn.Module`, in which case
-            it will be wrapped by `WithoutRightInverse` so that a `right_inverse` returning
-            `None` is used.
-        original (Tensor): The original tensor (typically an `nn.Parameter`) that is being
-            parametrized. This tensor is stored as `original_parameter` and is the source of
-            truth for updating the cached parametrized value. Its dtype and shape must be
-            compatible with the parametrizations unless ``unsafe=True`` is set.
-        unsafe (bool): If True, safety checks that ensure the parametrization preserves dtype
-            and shape (and that the `right_inverse` respects these invariants) are skipped.
-            Use with caution; enabling `unsafe` can lead to silently incorrect parametrizations.
+        modules: Modules applied in sequence. Modules without a `right_inverse`
+            receive a method returning `None`, which skips the source pullback.
+        original: Source `nn.Parameter`, stored as `original_parameter`.
+        unsafe: Whether to skip shape and dtype checks on the transformations
+            and their non-`None` right-inverse results.
+
+    Note:
+        The output is stored in `cached_parameter`. After an optimizer step or
+        another source modification, refresh it with `update_parametrization`.
+        Gradient accumulation marks the cache stale and fills it with NaNs.
     """
 
     original_parameter: nn.Parameter
-    r"""PARAM: Holds parametrized tensors."""
+    r"""PARAM: Original parameter from which the cached value is computed."""
     cached_parameter: Tensor
     r"""BUFFER: Holds cached version of the parametrized tensor."""
     is_stale: Tensor
     r"""BUFFER: Boolean scalar indicating whether the cached parameter is stale."""
     unsafe: Final[bool]
-    r"""FLAG: Whether to perform safety checks (tests if parametrization changes dtype/device/shape)."""
+    r"""FLAG: Whether to skip shape and dtype checks."""
 
     def __init__(
         self,
@@ -345,15 +312,16 @@ class ParametrizationList[
 
     @jit.export
     def update_parametrization(self) -> None:
-        r"""Update both the cached and the original tensors.
+        r"""Refresh the cache and apply the right-inverse pullback when available.
 
-        This function needs to be called after each ``optimizer.step()`` call.
-        Alternatively, one con use the `register_optimizer_hook` function to register
-        a hook that automatically alls this function after each step.
+        Call this after modifying the original parameter, including after an
+        `optimizer.step()`. A `None` right-inverse result leaves the original
+        parameter unchanged. The cache is then reconnected to autograd and
+        marked fresh.
 
         See Also:
-            - `update_parametrizations`:
-            - `register_optimizer_hook`:
+            - `update_parametrizations`: Refresh all parametrizations recursively.
+            - `register_optimizer_hook`: Refresh caches after optimizer steps.
         """
         with torch.no_grad():
             # recompute the parametrization given the modified parameters
@@ -476,7 +444,12 @@ def register_parametrization(
 
 
 def assert_is_safe_parametrization(module: nn.Module, tensor: Tensor) -> None:
-    r"""Check if the parametrization is safe to apply to the tensor."""
+    r"""Check that a parametrization preserves tensor shape and dtype.
+
+    A non-`None` right-inverse result must preserve these properties too.
+    A right inverse raising `NotImplementedError` is accepted. Device equality
+    and the mathematical right-inverse identity are not checked.
+    """
     transform = _insert_right_inverse(module)
     assert is_surjection(transform)
     Y = tensor
@@ -534,12 +507,21 @@ def remove_parametrizations(
     tensor_name: str,
     leave_parametrized: bool = True,
 ) -> nn.Module:
-    r"""Remove the parametrizations on a tensor in a module."""
+    r"""Remove parametrizations from a module parameter.
+
+    Raises:
+        NotImplementedError: Parametrization removal is not implemented.
+    """
     raise NotImplementedError
 
 
 class cached(ContextDecorator, AbstractContextManager):
-    r"""Context Manager to update the caches of all the given modules."""
+    r"""Refresh parametrization caches when leaving a context or decorated call.
+
+    At least one module is required. Caches in the supplied modules and their
+    descendants are refreshed on exit, including when the body raises an
+    exception. The context does not suppress exceptions.
+    """
 
     def __init__(self, *modules: *tuple[nn.Module, *tuple[nn.Module, ...]]) -> None:
         self.modules = modules
@@ -622,7 +604,7 @@ def _update_fallback(module: nn.Module, tensor_name: str, parametrization: nn.Mo
 
 
 def update_parametrizations(module: nn.Module, /) -> None:
-    r"""Update all parametrizations in a module."""
+    r"""Refresh parametrizations in a module and all its descendants."""
     for submodule in module.modules():
         if parametrizations := get_parametrizations(submodule):
             for tensor_name, parametrization in parametrizations.items():
@@ -640,7 +622,7 @@ def update_parametrizations(module: nn.Module, /) -> None:
 
 
 def register_optimizer_hook(optim: Optimizer, /, *modules: nn.Module) -> None:
-    r"""Automatically adds a hook to ``optimizer.step()`` which refreshes the cache after each step."""
+    r"""Register an optimizer post-step hook that refreshes the supplied modules."""
 
     def hook(opt: Optimizer, /, *args: Any, **kwargs: Any) -> None:  # ruff: ignore[ARG001]
         r"""Hook to update the parametrization after each optimizer step."""

@@ -17,10 +17,10 @@ class ResNet(ModuleSequence[nn.Module]):
     r"""A ResNet model.
 
     References:
-        - | Identity Mappings in Deep Residual Networks
-          | Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun
-          | European Conference on Computer Vision 2016
-          | https://link.springer.com/chapter/10.1007/978-3-319-46493-0_38
+        - Identity Mappings in Deep Residual Networks \
+          Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun \
+          European Conference on Computer Vision 2016 \
+          <https://link.springer.com/chapter/10.1007/978-3-319-46493-0_38>
     """
 
     input_size: Final[int]
