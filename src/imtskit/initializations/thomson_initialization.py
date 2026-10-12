@@ -1,21 +1,17 @@
 r"""Thomson initialization for sampling points on the sphere.
 
-The Thomson Problem is a classical problem in physics and mathematics
-that asks for the minimum energy configuration of n electrons on the surface of a sphere.
-The electrons repel each other with a force inversely proportional to the square of the distance between them,
-and the energy of a configuration is given by the sum of the inverse distances between all pairs of electrons.
+The classical Thomson problem asks for the minimum-energy configuration of
+electrons on the surface of a sphere. Its energy is the sum of inverse distances between
+distinct pairs of electrons.
 
-We generalize this problem to an initialization scheme for sampling points on the surface of a d-dimensional sphere.
+Here, `thomson_initialization` seeks well-separated points on the unit sphere
+$Sᵈ⁻¹⊂ℝᵈ$ using an inner-product loss. Maximizing the minimum pairwise distance
+is equivalent to maximizing the minimum angle, or minimizing the maximum
+off-diagonal inner product. This objective differs from the classical Thomson energy.
 
-That is, we want thomson_init(n, d) to return n points on the surface of a d-dimensional sphere
-that are maximally spread out, i.e. the minimum distance between any two points is maximized.
-
-Equivalently, one can ask to maximize the angle between any two points on the sphere,
-which is itself equivalent to minimizing the inner product.
-
-For n-many points, collected in a matrix $X∈ℝ^{n×d}$, their pair wise inner products
-are the entries of the n×n Gram matrix $G=XX^T$,
-and the sum of the inner products is given by the sum of the entries of G.
+For $n$ points collected as rows of $X∈ℝ^{n×d}$, pairwise inner products are
+the entries of the $n×n$ Gram matrix $G=XXᵀ$. `separation_loss` aggregates its
+off-diagonal entries, and `wide_angle_sphere_init` provides starting points.
 """
 
 __all__ = [
@@ -56,7 +52,11 @@ def _sample_unique_sequences(
     device: Optional[str | torch.device] = None,
     batch_size: int = 4096,
 ) -> Tensor:
-    r"""Sample num_samples unique sequences of length seq_length from a set of items."""
+    r"""Sample `num_samples` distinct sequences from `range(size)`.
+
+    Each sequence has length `seq_length`; entries within a sequence may repeat.
+    Requires `num_samples ≤ size**seq_length` and `size ≤ 2**63 - 1`.
+    """
     if num_samples > size**seq_length:
         raise ValueError("num_samples must be less than or equal to size^seq_length.")
     if size > 2**63 - 1:
@@ -103,7 +103,7 @@ def _randomize_orientation(
     points: Tensor,
     /,
 ) -> Tensor:
-    r"""Apply a random rotation to the points to avoid axis-alignment."""
+    r"""Apply a random orthogonal transformation and renormalize the points."""
     U = _random_orthogonal_matrix(
         points.shape[-1],
         dtype=points.dtype,
@@ -124,24 +124,59 @@ def wide_angle_sphere_init(
     seed: Optional[int] = None,
     uniform_grid: bool = False,
 ) -> Tensor:
-    """Initialize n points on Sᵈ⁻¹ with some guaranteed separation.
+    r"""Initialize $n$ points on the unit sphere $Sᵈ⁻¹⊂ℝᵈ$ from coordinate grids.
 
-    We wrap the hypersphere into a hypercube.
-    Each face of the hypercube is itself a full (d-1) - hypercube
-    We put a grid $G=Lᵈ⁻¹$ with $k$ points on each face,
-    sample points from this grid, and project them radially.
+    For $d>1$ and $n>1$, assign points to the $2d$ coordinate faces of a
+    hypercube. Each face has a Cartesian grid with $k$ coordinates per axis
+    and $kᵈ⁻¹$ candidate points. Sample distinct grid codes within each face,
+    project the points radially onto the sphere, and randomize their orientation.
 
-    Since there are 2d faces, there are p=2dkᵈ⁻¹ points to pick from.
-    We choose k such that the total number of points is large compared to n,
-    that is p≥λn, which gives k⁎=⌈(λn/(2d))^(1/(d-1))⌉
+    Choose the grid size so the total number of candidates $p$ is at least $2n²$:
 
-    As we will use rejection sampling, we pick lambda to ensure a small number of rejections
-    The expected number of collisions is n(n-1)/2p,
-    so we want p to be large compared to n², which gives λ≥n.
-    Using λ=r⋅n, we have k⁎=⌈(rn²/(2d))^(1/(d-1))⌉, p=2dk⁎ᵈ⁻¹≥rn²,
-    and the expected number of collisions is n(n-1)/(rn²)≈1/r.`
-    So even with r=1, we expect only a constant number of rejections.
-    We pick r=2 to be safe, which gives k⁎=⌈(n²/d)^(1/(d-1))⌉ and p≥2n².
+    $$  k = ⌈(n²/d)^{1/(d-1)}⌉, \qquad p = 2dkᵈ⁻¹ ≥ 2n²  $$
+
+    This construction does not optimize separation.
+
+    Note: Derivation of the grid size
+
+        The $2d$ faces each supply $kᵈ⁻¹$ candidates, giving $p=2dkᵈ⁻¹$.
+        For an oversampling factor $λ≥1$, require $p≥λn$. Solving for the
+        smallest integer grid size gives:
+
+        $$  2dkᵈ⁻¹ ≥ λn \quad ⇒ \quad k⁎ = ⌈(λn/(2d))^{1/(d-1)}⌉  $$
+
+        For $n$ independent uniform draws from $p$ candidates, each pair
+        collides with probability $1/p$, so the expected number of colliding
+        pairs is $n(n-1)/(2p)$. To keep this estimate bounded as $n$ grows,
+        choose $λ=rn$ with a constant $r≥1$. Then:
+
+        $$
+            k⁎ = ⌈(rn²/(2d))^{1/(d-1)}⌉,
+            \qquad p ≥ rn²,
+            \qquad \frac{n(n-1)}{2p} ≤ \frac{n-1}{2rn} < \frac{1}{2r}
+        $$
+
+        Thus even $r=1$ gives a constant collision bound. We use $r=2$,
+        yielding $k=k⁎=⌈(n²/d)^{1/(d-1)}⌉$ and $p≥2n²$, with an expected
+        number of colliding pairs at most $(n-1)/(4n)<¼$. This estimate
+        motivates the grid size for rejection sampling within each face.
+
+    Args:
+        num: Number of points $n≥1$.
+        dim: Ambient dimension $d≥1$; the sphere has dimension $d-1$.
+        dtype: Data type of the returned points.
+        device: Device of the returned points.
+        seed: Seed for PyTorch's global random number generator, if provided.
+        uniform_grid: Use equally spaced grid coordinates instead of the default
+            tangent-spaced coordinates.
+
+    Returns:
+        Unit vectors with shape `(num, dim)`. For `dim=1`, points are sampled
+        from $\{-1,+1\}$ with replacement, so repetitions are possible.
+
+    Raises:
+        ValueError: If `num` or `dim` is less than one, or a face is assigned
+            more points than its grid can supply.
     """
     if seed is not None:
         torch.manual_seed(seed)
@@ -217,16 +252,26 @@ def wide_angle_sphere_init(
 
 @signature("(..., n, d) -> (...)")
 def _log_mean_exp(x: Tensor, /) -> Tensor:
-    r"""Log-mean-exp over all elements."""
+    r"""Compute log-mean-exp over the final two axes.
+
+    The normalization uses the total element count, including batch dimensions.
+    """
     flat = x.flatten(-2, -1)
     return torch.logsumexp(flat, dim=-1) - math.log(flat.numel())
 
 
 @signature("(..., n, d) -> (...)")
 def separation_loss(x: Tensor, /, *, beta: float | Tensor) -> Tensor:
-    r"""Separation loss for Thomson initialization.
+    r"""Aggregate off-diagonal inner products for Thomson initialization.
 
-    .. math:: ℓᵦ(X) = \softmaxᵦ(XXᵀ - 2𝕀ₙ) ≈ \max_{i≠j} ⟨xᵢ∣xⱼ⟩
+    For an unbatched matrix $X∈ℝ^{n×d}$ with unit-length rows $xᵢ$, compute:
+
+    $$  ℓᵦ(X) = \frac{\log(∑_{i≠j} \exp((\log β)⟨xᵢ,xⱼ⟩)) - \log(n²)}{β}  $$
+
+    Diagonal entries of $XXᵀ$ are masked with $-∞$. The current implementation
+    scales inner products by $\log β$ and divides the result by $β$;
+    this differs from the usual log-mean-exp approximation to the maximum.
+    Requires $β>1$ and $n≥2$ for a finite loss.
     """
     mask = torch.eye(x.shape[0], dtype=torch.bool, device=x.device)
     Z = x @ x.T
@@ -238,9 +283,10 @@ def separation_loss(x: Tensor, /, *, beta: float | Tensor) -> Tensor:
 
 @signature("[(..., n), (..., n, d), (..., n, d)] -> (..., n, d)")
 def sphere_geodesic(t: Tensor, /, start: Tensor, direction: Tensor) -> Tensor:
-    r"""Exponential map on the sphere.
+    r"""Follow a unit-speed geodesic on the sphere.
 
-    Assumes both x and g are normalized, i.e. ‖x‖=1 and ‖g‖=1.
+    Requires `start` and `direction` to be unit vectors $x$ and $g$ with $⟨x,g⟩=0$.
+    The result $\cos(t)x + \sin(t)g$ then remains on the unit sphere.
     """
     t = t.unsqueeze(-1)
     return torch.cos(t) * start + torch.sin(t) * direction
@@ -255,7 +301,7 @@ def golden_section_search(
     *,
     maxiter: int = 20,
 ) -> Tensor:
-    r"""Torch implementation of bounded line search via golden-section search."""
+    r"""Minimize a unimodal function on `[lower, upper]` by golden-section search."""
     INV_PHI = 2.0 / (1.0 + math.sqrt(5.0))  # 1 over golden ratio.
 
     lower = torch.as_tensor(lower)
@@ -282,7 +328,10 @@ def bisection_line_search(
     *,
     maxiter: int = 20,
 ) -> Tensor:
-    r"""Torch implementation of bounded line search via bisection method."""
+    r"""Locate a minimum by bisecting the derivative on `[lower, upper]`.
+
+    Assumes the derivative is increasing and changes sign across the interval.
+    """
     grad_fn = torch.func.grad(fn)
     lower = torch.as_tensor(lower)
     upper = torch.as_tensor(upper)
@@ -305,7 +354,11 @@ def backtracking_line_search(
     rho: float = 0.5,
     c: float = 1e-3,
 ) -> Tensor:
-    r"""Torch implementation of backtracking line search (Armijo condition)."""
+    r"""Find a step from `lower` toward `upper` satisfying the Armijo condition.
+
+    The direction must be a descent direction. `rho` must lie in $(0,1)$
+    so successive trial steps shrink.
+    """
     grad_and_value_fn = torch.func.grad_and_value(fn)
     lower = torch.as_tensor(lower)
     upper = torch.as_tensor(upper)
@@ -336,10 +389,10 @@ def safe_bisection_line_search(
     *,
     maxiter: int = 20,
 ) -> Tensor:
-    r"""Bounded line search for gradient descent using left exploration + bisection.
+    r"""Combine backtracking and derivative bisection on `[lower, upper]`.
 
-    Assumes phi'(lower) < 0 (descent at the left endpoint).
-    Returns a point in [lower, upper] with fn(t) < fn(lower) among sampled points.
+    Assumes `lower < upper` and $ϕ′(lower)<0$, where $ϕ$ denotes `fn`.
+    Return whichever trial point has the smaller function value.
     """
     lower = torch.as_tensor(lower)
     upper = torch.as_tensor(upper)
@@ -356,7 +409,10 @@ def safe_bisection_line_search(
 
 @signature("(..., n, d) -> (..., n, d)")
 def sphere_gradient(x: Tensor, /, *, grad_euclidean: Tensor) -> Tensor:
-    r"""Project the Euclidean gradient onto the tangent space of the sphere."""
+    r"""Project the Euclidean gradient onto the sphere's tangent space at `x`.
+
+    Requires $‖x‖=1$ along the final axis.
+    """
     return grad_euclidean - x * vecdot(grad_euclidean, x, dim=-1).unsqueeze(-1)
 
 
@@ -392,7 +448,10 @@ class OptimizerResult:
 
 
 def _scaled_norm(x: Tensor, /, *, axis: None | int | tuple[int, ...] = None) -> Tensor:
-    r"""Computes $√(1/n ∑ₙ xₙ²)$."""
+    r"""Compute the root mean square $√((∑ᵢ xᵢ²)/n)$ over the selected axes.
+
+    Here $n$ counts the reduced elements. With `axis=None`, reduce all axes.
+    """
     # convert to tuple
     match axis:
         case None:
@@ -419,30 +478,37 @@ def thomson_initialization(
     device: Optional[str | torch.device] = None,
     seed: Optional[int] = None,
 ) -> OptimizerResult:
-    r"""Thomson initialization for sampling n points on the surface of a d-dimensional sphere.
+    r"""Optimize $n$ points on the unit sphere $Sᵈ⁻¹⊂ℝᵈ$ for separation.
 
-    The Thomson problem asks for the minimum energy configuration of n electrons on the surface of a sphere,
-    where the energy is given by the sum of the inverse distances between all pairs of electrons.
-    We generalize this problem to an initialization scheme for sampling points on the surface of a d-dimensional sphere.
+    Uses `separation_loss` to aggregate off-diagonal inner products, starting
+    from `wide_angle_sphere_init`. The gradients are projected onto the tangent space
+    and then the points are updated along sphere geodesics.
+    The loss is inspired by the Thomson problem but differs from its inverse-distance energy.
 
-    We optimize the following loss function:
+    $$  𝓛 = \softmaxᵦ(XXᵀ - 2𝕀ₙ) ≈ \max_{i≠j} ⟨xᵢ∣xⱼ⟩  $$
 
-    .. math:: 𝓛 &= \softmaxᵦ(XXᵀ - 2𝕀ₙ) ≈ \max_{i≠j} ⟨xᵢ∣xⱼ⟩
+    Special cases use direct constructions: random signs for `dim=1`,
+    equally spaced circle points for `dim=2`, a single random unit vector
+    for `num=1`, and antipodal points for `num=2` in higher dimensions.
+    For `dim=1`, repeated points are possible. For `num=1`, the separation
+    loss is $-∞$ because there are no off-diagonal pairs.
 
     Args:
-        num: number of points to sample.
-        dim: dimension of the sphere (i.e. points are in ℝᵈ).
-        beta: temperature for the separation loss (larger beta = more like max).
-        maxiter: maximum number of iterations for the optimization.
-        atol: absolute tolerance for convergence and constraint violation.
-        rtol: relative tolerance for convergence and constraint violation.
-        patience: number of iterations to look back for convergence check.
-        dtype: torch dtype of the returned points and optimization state.
-        device: torch device of the returned points and optimization state.
-        seed: random seed for initialization.
+        num: Number of points $n≥1$.
+        dim: Ambient dimension $d≥1$; points lie on $Sᵈ⁻¹⊂ℝᵈ$.
+        beta: Separation-loss parameter $β>1$. See `separation_loss` for its scaling.
+        maxiter: Maximum number of optimization iterations.
+        atol: Absolute tolerance for convergence and unit-norm constraints.
+        rtol: Relative tolerance for convergence and unit-norm constraints.
+        patience: Number of iterations to look back when checking convergence.
+        dtype: Data type of the returned points and optimization state.
+        device: Device of the returned points and optimization state.
+        seed: Seed passed to `wide_angle_sphere_init` in the iterative case.
 
     Returns:
-        OptimizerResult
+        Optimization result containing the points, loss, gradient, status,
+        and iteration history. Direct constructions return without iteration
+        history; `seed` is only applied in the iterative case.
     """
     loss_fn = partial(separation_loss, beta=beta)
     grad_fn = torch.func.grad(loss_fn)
