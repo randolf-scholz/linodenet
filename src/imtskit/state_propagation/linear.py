@@ -37,25 +37,26 @@ def linear_flow(
 ) -> Tensor:  # (..., $n, d)
     r"""Propagate an affine linear ODE by a matrix exponential.
 
-    Solves the time-homogeneous system
+    Solve the time-homogeneous system
 
-    .. math:: dxₜ/dt = Axₜ + b
+    $$ dxₜ/dt = Axₜ + b $$
 
-    for each requested time delta $t$. With $φ₀(Z)=e^Z$ and
-    $φₖ(Z)=Zφₖ₊₁(Z)+1/k!$, the solution is
+    for each requested time delta $t$. Define the matrix functions
+    $φ₀(Z) = \exp(Z)$ and $φ₁(Z) = ∑_{k=0}^∞ Zᵏ/(k+1)!$. The solution is
 
-    .. math:: xₜ = φ₀(tA)x₀ + φ₁(tA)bt.
+    $$ xₜ = φ₀(tA)x₀ + tφ₁(tA)b $$
 
     If `bias` is omitted, this reduces to $xₜ = φ₀(tA)x₀$.
+    The formula is valid for singular $A$, and $t = 0$ returns $x₀$.
 
     Args:
-        timedeltas: Evaluation time deltas, with shape ``(..., n)``.
-        x0: Initial state, with shape ``(..., d)``.
-        kernel: Linear drift matrix $A$, with shape ``(d, d)``.
-        bias: Optional affine drift vector $b$, with shape ``(d,)``.
+        timedeltas: Evaluation time deltas, with shape `(..., n)`.
+        x0: Initial state, with shape `(..., d)`.
+        kernel: Linear drift matrix $A$, with shape `(d, d)`.
+        bias: Optional affine drift vector $b$, with shape `(d,)`.
 
     Returns:
-        Propagated states at each requested time delta, with shape ``(..., n, d)``.
+        Propagated states at each requested time delta, with shape `(..., n, d)`.
     """
     if bias is None:
         Adt = torch.einsum("..., kl -> ...kl", timedeltas, kernel)
@@ -81,18 +82,17 @@ def linear_flow(
 class LinearFlow(nn.Module, ContinuousFlow):
     r"""Learnable affine linear flow with optional kernel constraints.
 
-    The module solves
+    With effective drift matrix $A$, the module evaluates
 
-    .. math:: x_{t+∆t} = φ₀(A∆t)xₜ
+    $$ x_{t+∆t} = φ₀(A∆t)xₜ + ∆tφ₁(A∆t)b $$
 
-    or, when ``use_bias=True``,
+    Here $φ₀$ and $φ₁$ are the matrix functions defined in `linear_flow`.
+    When `use_bias=False`, the affine term is omitted.
 
-    .. math:: x_{t+∆t} = φ₀(A∆t)xₜ + ∆tφ₁(A∆t)b.
-
-    The drift matrix may be constrained by a matrix parametrization $π$, for
-    example to enforce skew-symmetric or otherwise structured dynamics. When
-    enabled, the ReZero gate $ρ$ scales the parametrized drift, so the effective
-    system matrix is $ρ(π(A))$.
+    A matrix parametrization $π$ is applied to the raw weight $W$ before
+    ReZero gating $ρ$, giving the effective drift $A = ρ(π(W))$. Each disabled
+    transformation acts as the identity. ReZero scales only the drift matrix;
+    it does not scale the affine vector $b$.
     """
 
     # Constants
@@ -107,7 +107,7 @@ class LinearFlow(nn.Module, ContinuousFlow):
 
     # Parameters
     weight: Tensor
-    r"""PARAM: Cached drift matrix after parametrization and before ReZero gating."""
+    r"""Drift matrix after any parametrization and before ReZero gating."""
     bias: Tensor | None
     r"""PARAM: Optional learnable affine drift vector."""
     rezero: nn.Module
@@ -185,11 +185,11 @@ class LinearFlow(nn.Module, ContinuousFlow):
         r"""Propagate the flow for one scalar time delta per batch item.
 
         Args:
-            timedeltas: Scalar time delta or batched scalar deltas, with shape ``(...)``.
-            x0: Initial state, with shape ``(..., d)``.
+            timedeltas: Scalar time delta or batched scalar deltas, with shape `(...)`.
+            x0: Initial state, with shape `(..., d)`.
 
         Returns:
-            Propagated state after the requested delta, with shape ``(..., d)``.
+            Propagated state after the requested delta, with shape `(..., d)`.
         """
         return self.forward(timedeltas.unsqueeze(-1), x0).squeeze(-2)
 
@@ -201,11 +201,11 @@ class LinearFlow(nn.Module, ContinuousFlow):
         ReZero gate before evaluating the closed-form solution.
 
         Args:
-            timedeltas: Evaluation time deltas, with shape ``(..., n)``.
-            x0: Initial state, with shape ``(..., d)``.
+            timedeltas: Evaluation time deltas, with shape `(..., n)`.
+            x0: Initial state, with shape `(..., d)`.
 
         Returns:
-            Propagated states at each requested delta, with shape ``(..., n, d)``.
+            Propagated states at each requested delta, with shape `(..., n, d)`.
         """
         # update buffer
         self.kernel = self.rezero(self.weight)
@@ -221,16 +221,16 @@ class LinearFlow(nn.Module, ContinuousFlow):
     ) -> Tensor:
         r"""Evaluate the flow at absolute timestamps relative to an origin.
 
-        Converts timestamps to time deltas via ``timestamps - t0`` and delegates to
+        Convert timestamps to time deltas via `timestamps - t0` and delegate to
         `forward`.
 
         Args:
-            timestamps: Evaluation timestamps, with shape ``(..., n)``.
-            x0: Initial state at `t0`, with shape ``(..., d)``.
-            t0: Reference timestamp of `x0`.
+            timestamps: Evaluation timestamps, with shape `(..., n)`.
+            x0: Initial state at `t0`, with shape `(..., d)`.
+            t0: Reference timestamp of `x0`, broadcastable to `timestamps`.
 
         Returns:
-            Propagated states at each timestamp, with shape ``(..., n, d)``.
+            Propagated states at each timestamp, with shape `(..., n, d)`.
         """
         return self(timestamps - t0, x0)
 
@@ -247,34 +247,38 @@ def linear_gaussian_flow(
 
     The dynamics are
 
-    .. math:: \dd{Zₜ} = (AZₜ + b)\dd{t} + L\dd{Wₜ}
+    $$ \dd{Zₜ} = (AZₜ + b)\dd{t} + L\dd{Wₜ} $$
 
     with diffusion covariance $Q = LLᵀ$. Let $ℒ_A(X)=AX+XAᵀ$ and
-    $φₖ(Z)=Zφₖ₊₁(Z)+1/k!$ with $φ₀(Z)=e^Z$. If $Z₀ ∼ 𝓝(μ₀, Σ₀)$, then
-    $Zₜ ∼ 𝓝(μₜ, Σₜ)$ for all time deltas $t$, where
+    define $φ₀(Z)=\exp(Z)$ and $φ₁(Z)=∑_{k=0}^∞ Zᵏ/(k+1)!$.
+    If $Z₀ ∼ 𝓝(μ₀, Σ₀)$, then $Zₜ ∼ 𝓝(μₜ, Σₜ)$ for $t ≥ 0$, where
 
-    .. math::
-        μₜ &= φ₀(tA)μ₀ + φ₁(At)bt   \\
-        Σₜ &= φ₀(tℒ_A)(Σ₀) + φ₁(tℒ_A)(Qt)
+    $$\begin{aligned}
+        μₜ &= φ₀(tA)μ₀ + tφ₁(tA)b, \\
+        Σₜ &= φ₀(tℒ_A)(Σ₀) + tφ₁(tℒ_A)(Q).
+    \end{aligned}$$
 
-    The $φ₁(tℒ_A)(Q)$ term is evaluated with Van Loan's block-matrix
+    The diffusion contribution $tφ₁(tℒ_A)(Q)$ is evaluated with Van Loan's block-matrix
     exponential. When $b$ is absent, the implementation computes
 
-    .. math:: \exp(\bmat{ A & Q \\ 0 & -Aᵀ }t) = \bmat{ F & C \\ 0 & F⁻ᵀ }
+    $$ \exp(\bmat{ A & Q \\ 0 & -Aᵀ }t) = \bmat{ F & C \\ 0 & F⁻ᵀ } $$
 
     and returns $Σₜ = FΣ₀Fᵀ + CFᵀ$.
+    With an affine vector $b$, the block matrix is augmented to compute the mean
+    shift in the same exponential. At $t = 0$, the initial Gaussian state is returned.
+    Negative deltas are not rejected, but their covariance need not be positive semidefinite.
 
     Args:
-        delta_t: Evaluation time deltas, with shape $(..., n)$.
-        z0: Initial Gaussian state $(μ₀, Σ₀)$, with shapes $(..., d)$ and
-            $(..., d, d)$.
-        A: Linear drift matrix, with shape $(d, d)$.
-        Q: Diffusion covariance matrix $LLᵀ$, with shape $(d, d)$.
-        b: Optional affine drift vector, with shape $(d,)$.
+        delta_t: Nonnegative evaluation time deltas, with shape `(..., n)`.
+        z0: Initial Gaussian state $(μ₀, Σ₀)$, with shapes `(..., d)` and
+            `(..., d, d)`. The covariance $Σ₀$ must be positive semidefinite.
+        A: Linear drift matrix, with shape `(d, d)`.
+        Q: Positive-semidefinite diffusion covariance matrix $LLᵀ$, with shape `(d, d)`.
+        b: Optional affine drift vector, with shape `(d,)`.
 
     Returns:
         Pair $(μₜ, Σₜ)$ containing propagated means and covariances, with
-        shapes $(..., n, d)$ and $(..., n, d, d)$.
+        shapes `(..., n, d)` and `(..., n, d, d)`.
     """
     mu_0, sigma_0 = z0
     n = A.shape[-1]
@@ -322,23 +326,25 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
     The module parameterizes the drift matrix $A$, diffusion covariance $Q$, and
     affine drift vector $b$ in the linear SDE
 
-    .. math:: \dd{Zₜ} = (AZₜ + b)\dd{t} + L\dd{Wₜ}, \quad Q = LLᵀ.
+    $$ \dd{Zₜ} = (AZₜ + b)\dd{t} + L\dd{Wₜ}, \quad Q = LLᵀ $$
 
-    A Gaussian initial state remains Gaussian. Let $ℒ_A(X)=AX+XAᵀ$ and
-    $φₖ(z)=zφₖ₊₁(z)+1/k!$ with $φ₀(z)=eᶻ$. For $Z₀ ∼ 𝓝(μ₀, Σ₀)$,
-    the propagated state satisfies $Zₜ ∼ 𝓝(μₜ, Σₜ)$ with
+    A Gaussian initial state remains Gaussian for nonnegative time deltas.
+    Let $ℒ_A(X)=AX+XAᵀ$, with $φ₀$ and $φ₁$ defined in `linear_gaussian_flow`.
+    For $Z₀ ∼ 𝓝(μ₀, Σ₀)$, the propagated state satisfies $Zₜ ∼ 𝓝(μₜ, Σₜ)$ with
 
-    .. math::
-        μₜ &= φ₀(tA)μ₀ + φ₁(At)bt \\
-        Σₜ &= φ₀(tℒ_A)(Σ₀) + φ₁(tℒ_A)(Qt)
+    $$\begin{aligned}
+        μₜ &= φ₀(tA)μ₀ + tφ₁(tA)b, \\
+        Σₜ &= φ₀(tℒ_A)(Σ₀) + tφ₁(tℒ_A)(Q).
+    \end{aligned}$$
 
-    The covariance φ-term is computed exactly with Van Loan's block-matrix
-    exponential, as implemented by `linear_gaussian_flow`.
+    The covariance φ-term is evaluated with Van Loan's block-matrix exponential,
+    as implemented by `linear_gaussian_flow`, avoiding a separate time-stepping solver.
 
     References:
-        - | Computing integrals involving the matrix exponential
-          | Van Loan
-          | IEEE Transactions on Automatic Control, 1978
+        - Computing integrals involving the matrix exponential \
+          Charles Van Loan \
+          IEEE Transactions on Automatic Control, 1978 \
+          <https://doi.org/10.1109/TAC.1978.1101743>
     """
 
     A: Tensor
@@ -370,7 +376,7 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
         r"""Initialize the linear-Gaussian flow.
 
         Args:
-            input_size: State dimensionality `d`.
+            input_size: State dimensionality $d$.
             kernel_initialization: Initialization specification for the drift
                 matrix. Strings and tensors are resolved by `resolve_kernel_initialization`.
             kernel_parametrization: Optional matrix parametrization specification
@@ -399,12 +405,12 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow):
         r"""Evaluate the Gaussian flow at one or more time deltas.
 
         Args:
-            delta_t: Evaluation time deltas, with shape $(..., n)$.
-            z_0: Initial Gaussian state $(μ₀, Σ₀)$ with shapes $(..., d)$ and
-                $(..., d, d)$.
+            delta_t: Nonnegative evaluation time deltas, with shape `(..., n)`.
+            z_0: Initial Gaussian state $(μ₀, Σ₀)$ with shapes `(..., d)` and
+                `(..., d, d)`. The covariance $Σ₀$ must be positive semidefinite.
 
         Returns:
             Pair $(μₜ, Σₜ)$ containing propagated means and covariances,
-            with shapes $(..., n, d)$ and $(..., n, d, d)$.
+            with shapes `(..., n, d)` and `(..., n, d, d)`.
         """
         return linear_gaussian_flow(delta_t, z_0, self.A, self.Q, self.b)

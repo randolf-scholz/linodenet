@@ -1,7 +1,7 @@
 r"""Core protocols and base classes for state propagation.
 
-This module defines the structural interface and abstract base class for
-time-indexed operators that evolve a system state across one or more deltas.
+This module defines protocols for operators that evolve a system state over
+one or more time deltas or discrete step counts.
 """
 
 __all__ = [
@@ -25,7 +25,7 @@ class Propagator[State: Tensor | tuple[Tensor, ...]](Protocol):
     r"""Protocol for time-indexed state evolution operators."""
 
     input_shape: Final[tuple[int, ...]]
-    r"""CONST: The dimensionality of inputs."""
+    r"""CONST: Shape of the state coordinates, excluding batch and delta axes."""
 
     def __init__(self, input_shape: tuple[int, ...]) -> None:
         self.input_shape = input_shape
@@ -37,11 +37,15 @@ class Propagator[State: Tensor | tuple[Tensor, ...]](Protocol):
 
 
 class Flow[State: Tensor | tuple[Tensor, ...]](Propagator[State], Protocol):
-    r"""Flows are propagators satisfying a semigoup property.
+    r"""Protocol for propagators satisfying the semigroup property.
 
-    .. math::
-        Φ(0, x) = x
-        Φ(δ₁ + δ₂, x) = Φ(δ₁, Φ(δ₂, x))
+    $$\begin{aligned}
+        Φ(0, x) &= x, \\
+        Φ(δ₁ + δ₂, x) &= Φ(δ₁, Φ(δ₂, x))
+    \end{aligned}$$
+
+    Each requested delta is measured from the supplied initial state and is
+    evaluated independently.
     """
 
     @signature("[(..., $n_deltas), (..., *ds)] -> (..., $n_deltas, *ds)")

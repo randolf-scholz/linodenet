@@ -24,4 +24,4 @@ FLOWS: dict[str, type[Flow]] = {
     "LinearFlow" : LinearFlow,
     "LinearGaussianFlow" : LinearGaussianFlow
 }  # fmt: skip
-r"""Dictionary of all avaible flows."""
+r"""Dictionary of registered flow implementations."""
