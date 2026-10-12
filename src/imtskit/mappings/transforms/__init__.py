@@ -1,50 +1,38 @@
-r"""Diffeomorphisms, i.e. differentiable bijections with differentiable inverse.
+r"""Diffeomorphisms: bijections with differentiable inverses.
 
-We call a module a bijection if it satisfies 3 properties:
-
-1. It has both an ``encode`` and ``decode`` method.
-2. It is invertible, i.e. ``decode(encode(x)) = x`` and ``encode(decode(y)) = y``
-3. Both encode and decode are differentiable.
+Transform modules provide `encode` and `decode` methods satisfying
+`decode(encode(x)) = x` and `encode(decode(y)) = y`. Both directions are
+differentiable, and `encode_and_logabsdet` and `decode_and_logabsdet` return
+the transformed values together with their log absolute Jacobian determinants.
 
 Examples:
-    - Affine: $y = Ax+b$ and $x = A⁻¹(y-b)$
-        - A diagonal
-        - A triangular
-        - A tridiagonal
-    - Element-wise:
-        - Monotonic
-    - Shears (coupling flows): $y_A = f(x_A, x_B)$ and $y_B = x_B$
-        - Example: $y_A = x_A + e^{x_B}$ and $y_B = x_B$
-    - Residual: $y = x + F(x)$
-        - Contractive: $y = F(x)$ with $‖F‖<1$
-        - Low Rank Perturbation: $y = x + ABx$
-    - Continuous Time Flows: $ẋ=f(t, x)$
+    - Affine maps: $y=Ax+b$ and $x=A⁻¹(y-b)$ for invertible $A$, including
+        diagonal and triangular matrices with nonzero diagonal entries.
+    - Elementwise diffeomorphisms with nonzero derivatives.
+    - Coupling flows: $yₐ=xₐ+\exp(xᵦ)$ and $yᵦ=xᵦ$.
+    - Residual maps: $y=x+F(x)$ with a contractive residual $F$.
+    - Low-rank perturbations: $y=(𝕀+AB)x$ when $𝕀+AB$ is invertible.
+    - Continuous-time flows: $ẋ=f(t,x)$ under conditions ensuring a
+        differentiable flow and inverse.
 
+Note:
+    `torch.distributions.Transform.log_abs_det_jacobian` takes both the input
+    and output. This can avoid recomputing intermediate values: for $f(x)=xᵃ$
+    on $x>0$ with $a≠0$, $\log|f′(x)|=\log|a⋅y/x|$.
 
-Protocols and base classes for bijections and transforms.
+    Here, the combined value-and-log-determinant methods compute both results
+    in one call. For example:
 
-Note that `torch.distributions.Transform` has some differences:
+    ```pycon
+    >>> from imtskit.mappings.transforms import TriangularTransform
+    >>> import torch
+    >>> transform = TriangularTransform(3)
+    >>> x = torch.randn(2, 3)
+    >>> y, forward_logabsdet = transform.encode_and_logabsdet(x)
+    >>> recovered, inverse_logabsdet = transform.decode_and_logabsdet(y)
+    >>> assert torch.allclose(x, recovered)
 
-- It is not a protocol.
-- `log_abs_det_jacobian` always requires 2 arguments, $x$ and $y$.
-  The rationale is that for certain bijections, the Jacobian is
-  much faster to compute if the output is known.
-  For example: if $f(x) = xᵃ$, then $\log\abs{\det 𝐃f[x]} = \log\abs{a⋅y/x}$.
-  is more efficient than $\log\abs{a⋅xᵃ⁻¹}$.
-  However, for many bijections, this is not true and knowing $y$ is not that helpful.
-- Instead, it makes more sense to have 2 methods: ``log_abs_det_jacobian(x)``
-  and ``value_and_log_abs_det_jacobian(x) -> tuple[Tensor, Tensor]``,
-  similar to jax's ``value_and_grad``.
-  Alternatively, one can store ``y`` in a buffer and reuse it if needed, i.e.
-  methods that need ``y`` can call:
-
->>> from torch import Tensor
->>> def log_abs_det_jacobian(self, x: Tensor, y: None | Tensor = None) -> Tensor:
-...     if y is None:
-...         if id(x) == id(self._last_x):
-...             y = self._last_y
-...         else:
-...             y = self.encode(x)
+    ```
 """
 # ruff: file-ignore[F403]
 
