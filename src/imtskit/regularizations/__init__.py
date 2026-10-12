@@ -1,4 +1,4 @@
-r"""Regularizations for the Linear ODE Networks.
+r"""Regularizations for Linear ODE Networks.
 
 Notes:
     - See `imtskit.regularizations.functional` for functional implementations.
@@ -45,7 +45,7 @@ REGULARIZATION_FNS_WITHOUT_ARGS: dict[str, Regularization] = {
     "upper_triangular"      : functional.upper_triangular,
     "vector_norm"           : functional.vector_norm,
 }  # fmt: skip
-r"""Dictionary of all available regularizations (function)."""
+r"""Dictionary of regularization functions that require no extra positional arguments."""
 
 REGULARIZATION_FNS_WITH_ARGS: dict[str, RegularizationWithArgs] = {
     "banded"           : functional.banded,
@@ -54,13 +54,13 @@ REGULARIZATION_FNS_WITH_ARGS: dict[str, RegularizationWithArgs] = {
     "low_rank"         : functional.low_rank,
     "masked"           : functional.masked,
 }  # fmt: skip
-r"""Dictionary of all available regularizations (function)."""
+r"""Dictionary of regularization functions that require extra positional arguments."""
 
 REGULARIZATION_FNS: dict[str, Regularization | RegularizationWithArgs] = {
     **REGULARIZATION_FNS_WITHOUT_ARGS,
     **REGULARIZATION_FNS_WITH_ARGS,
 }
-r"""Dictionary of all available regularizations (function)."""
+r"""Dictionary of all registered regularization functions."""
 
 # TODO: Use Intersection type with nn.Module
 REGULARIZATIONS: dict[str, type[Regularization]] = {
@@ -88,4 +88,4 @@ REGULARIZATIONS: dict[str, type[Regularization]] = {
     "UnitVector"           : modules.UnitVector,
     "UpperTriangular"      : modules.UpperTriangular,
 }  # fmt: skip
-r"""Dictionary of all available regularizations (nn.Module)."""
+r"""Dictionary of registered regularization module classes."""

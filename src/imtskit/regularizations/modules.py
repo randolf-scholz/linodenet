@@ -1,8 +1,12 @@
-r"""Regularizations for the Linear ODE Networks.
+r"""Regularization modules for Linear ODE Networks.
+
+Each module returns one penalty per input vector or matrix. By default,
+`size_normalize=True` divides residual norms by the vector length or number
+of matrix columns. `LogDetExp` instead normalizes the trace before taking
+its absolute value and raising it to the power $p$.
 
 Notes:
     - See `imtskit.regularizations.functional` for functional implementations.
-    - See `imtskit.regularizations.modules` for module-based implementations.
 """
 
 __all__ = [
@@ -48,13 +52,17 @@ from .functional import Regularization
 class LogDetExp(nn.Module, Regularization):
     r"""Bias $\det(eᴬ)$ towards 1.
 
-    By Jacobi's formula
+    For a real $n × n$ matrix $A$, the determinant identity
 
-    .. math:: \det(eᴬ) = e^{\tr(A)} ⟺ \log(\det(eᴬ)) = \tr(A)
+    $$ \det(eᴬ) = e^{\tr(A)} $$
 
-    In particular, we can regularize the LinODE model by adding a regularization term of the form
+    gives $\log(\det(eᴬ)) = \tr(A)$. The penalty is
 
-    .. math:: \abs{\tr(A)}ᵖ
+    $$ |\tr(A)/s|ᵖ $$
+
+    where $s = n$ if `size_normalize` is true and $s = 1$ otherwise.
+
+    Calling the module returns one penalty per input matrix.
     """
 
     p: Final[float]
@@ -67,12 +75,15 @@ class LogDetExp(nn.Module, Regularization):
 
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias $\det(eᴬ)$ towards 1."""
+        r"""Return the log-determinant penalty for $x$."""
         return F.log_det_exp(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class MatrixNorm(nn.Module, Regularization):
-    r"""Return the matrix regularization term."""
+    r"""Compute a matrix norm as a regularization penalty.
+
+    If `size_normalize` is true, divide the norm by the number of columns.
+    """
 
     p: Final[str | int]
     size_normalize: Final[bool]
@@ -84,7 +95,7 @@ class MatrixNorm(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards zero matrix."""
+        r"""Return the matrix norm penalty for $x$."""
         return F.matrix_norm(x, p=self.p, size_normalize=self.size_normalize)
 
 
@@ -102,7 +113,7 @@ class Identity(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards the identity matrix."""
+        r"""Return the identity penalty for $x$."""
         return F.identity(x, p=self.p, size_normalize=self.size_normalize)
 
 
@@ -119,16 +130,18 @@ class DiagonallyDominant(nn.Module, Regularization):
 
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards diagonal dominance."""
+        r"""Return the diagonal dominance penalty for $x$."""
         return F.diagonally_dominant(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class LowRank(nn.Module, Regularization):
-    r"""Bias the matrix towards being low-rank.
+    r"""Bias the matrix towards having rank at most $k$.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $rank(X) ≤ k$
+    Here $k$ is `rank`, and $Π(A)$ is obtained by keeping the leading $k$
+    singular values of $A$. It is a closest matrix of rank at most $k$ in
+    Frobenius norm.
     """
 
     rank: Final[int]
@@ -145,18 +158,20 @@ class LowRank(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards low-rank matrix."""
+        r"""Return the low rank penalty for $x$."""
         return F.low_rank(
             x, rank=self.rank, p=self.p, size_normalize=self.size_normalize
         )
 
 
 class RankOne(nn.Module, Regularization):
-    r"""Bias the matrix towards being rank-1.
+    r"""Bias the matrix towards having rank at most one.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A)$ is the closest rank-1 matrix to $A$.
+    Here $Π(A)$ is obtained by keeping only the leading singular value of $A$.
+    It is a closest matrix of rank at most one in Frobenius norm.
+    The projection of the zero matrix has rank zero.
     """
 
     p: Final[str | int]
@@ -169,14 +184,16 @@ class RankOne(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards rank-1 matrix."""
+        r"""Return the rank-one penalty for $x$."""
         return F.rank_one(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Symmetric(nn.Module, Regularization):
     r"""Bias the matrix towards being symmetric.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ Π(A) = \argmin_X ½‖X-A‖² s.t. Xᵀ = +X
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
+
+    Here $Π(A) = ½(A + Aᵀ)$ is the closest symmetric matrix in Frobenius norm.
     """
 
     p: Final[str | int]
@@ -189,14 +206,16 @@ class Symmetric(nn.Module, Regularization):
 
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards symmetric matrix."""
+        r"""Return the symmetry penalty for $x$."""
         return F.symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class SkewSymmetric(nn.Module, Regularization):
     r"""Bias the matrix towards being skew-symmetric.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ Π(A) = \argmin_X ½‖X-A‖² s.t. Xᵀ = -X
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
+
+    Here $Π(A) = ½(A - Aᵀ)$ is the closest skew-symmetric matrix in Frobenius norm.
     """
 
     p: Final[str | int]
@@ -209,16 +228,17 @@ class SkewSymmetric(nn.Module, Regularization):
 
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards skew-symmetric matrix."""
+        r"""Return the skew-symmetry penalty for $x$."""
         return F.skew_symmetric(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Orthogonal(nn.Module, Regularization):
     r"""Bias the matrix towards being orthogonal.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $XᵀX = 𝕀$
+    Here $Π(A)$ is a closest orthogonal matrix to $A$ in Frobenius norm,
+    satisfying $Π(A)ᵀΠ(A) = 𝕀$. For an SVD $A = UΣVᵀ$, a minimizer is $Π(A) = UVᵀ$.
     """
 
     p: Final[str | int]
@@ -231,7 +251,7 @@ class Orthogonal(nn.Module, Regularization):
 
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards orthogonal matrix."""
+        r"""Return the orthogonality penalty for $x$."""
         return F.orthogonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
@@ -248,16 +268,20 @@ class Traceless(nn.Module, Regularization):
 
     @signature("(..., n, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards normal matrix."""
+        r"""Return the tracelessness penalty for $x$."""
         return F.traceless(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Normal(nn.Module, Regularization):
-    r"""Bias the matrix towards being orthogonal.
+    r"""Bias the matrix towards being normal.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $XᵀX = 𝕀$
+    Here $Π(A)$ denotes a closest normal matrix in Frobenius norm.
+    For real matrices, the constraint is $Π(A)ᵀΠ(A) = Π(A)Π(A)ᵀ$.
+
+    Raises:
+        NotImplementedError: The normal projection is not implemented.
     """
 
     p: Final[str | int]
@@ -269,16 +293,26 @@ class Normal(nn.Module, Regularization):
         self.size_normalize = size_normalize
 
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards normal matrix."""
+        r"""Return the normality penalty for $x$.
+
+        Raises:
+            NotImplementedError: The normal projection is not implemented.
+        """
         return F.normal(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Symplectic(nn.Module, Regularization):
     r"""Bias the matrix towards being symplectic.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $JᵀXJ = X$
+    Here $Π(A)$ denotes a closest symplectic matrix in Frobenius norm,
+    satisfying $Π(A)ᵀJΠ(A) = J$, where
+
+    $$ J = \bmat{ 0 & 𝕀ₙ \\ -𝕀ₙ & 0 } $$
+
+    Raises:
+        NotImplementedError: The symplectic projection is not implemented.
     """
 
     p: Final[str | int]
@@ -291,16 +325,26 @@ class Symplectic(nn.Module, Regularization):
 
     @signature("(..., 2n, 2n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards normal matrix."""
+        r"""Return the symplectic penalty for $x$.
+
+        Raises:
+            NotImplementedError: The symplectic projection is not implemented.
+        """
         return F.symplectic(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Hamiltonian(nn.Module, Regularization):
-    r"""Bias the matrix towards being hamiltonian.
+    r"""Bias the matrix towards being Hamiltonian.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $(JX)ᵀ = JX$
+    Here $Π(A)$ denotes a closest Hamiltonian matrix in Frobenius norm,
+    satisfying $(JΠ(A))ᵀ = JΠ(A)$, where
+
+    $$ J = \bmat{ 0 & 𝕀ₙ \\ -𝕀ₙ & 0 } $$
+
+    Raises:
+        NotImplementedError: The Hamiltonian projection is not implemented.
     """
 
     p: Final[str | int]
@@ -313,7 +357,11 @@ class Hamiltonian(nn.Module, Regularization):
 
     @signature("(..., 2n, 2n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards normal matrix."""
+        r"""Return the Hamiltonian penalty for $x$.
+
+        Raises:
+            NotImplementedError: The Hamiltonian projection is not implemented.
+        """
         return F.hamiltonian(x, p=self.p, size_normalize=self.size_normalize)
 
 
@@ -324,9 +372,9 @@ class Hamiltonian(nn.Module, Regularization):
 class Diagonal(nn.Module, Regularization):
     r"""Bias the matrix towards being diagonal.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $𝕀⊙X = X$
+    Here $Π(A)$ retains the main diagonal of $A$ and sets all other entries to zero.
     """
 
     p: Final[str | int]
@@ -339,16 +387,17 @@ class Diagonal(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards diagonal matrix."""
+        r"""Return the diagonal penalty for $x$."""
         return F.diagonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class LowerTriangular(nn.Module, Regularization):
     r"""Bias the matrix towards being lower triangular.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $L⊙X = X$
+    Here $Π(A)$ retains entries on and below the diagonal with offset `lower`
+    and sets all other entries to zero. An offset of zero selects the main diagonal.
     """
 
     p: Final[str | int]
@@ -365,7 +414,7 @@ class LowerTriangular(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards lower triangular matrix."""
+        r"""Return the lower triangular penalty for $x$."""
         return F.lower_triangular(
             x, lower=self.lower, p=self.p, size_normalize=self.size_normalize
         )
@@ -374,9 +423,10 @@ class LowerTriangular(nn.Module, Regularization):
 class UpperTriangular(nn.Module, Regularization):
     r"""Bias the matrix towards being upper triangular.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $U⊙X = X$
+    Here $Π(A)$ retains entries on and above the diagonal with offset `upper`
+    and sets all other entries to zero. An offset of zero selects the main diagonal.
     """
 
     p: Final[str | int]
@@ -393,7 +443,7 @@ class UpperTriangular(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards upper triangular matrix."""
+        r"""Return the upper triangular penalty for $x$."""
         return F.upper_triangular(
             x, upper=self.upper, p=self.p, size_normalize=self.size_normalize
         )
@@ -402,9 +452,10 @@ class UpperTriangular(nn.Module, Regularization):
 class Banded(nn.Module, Regularization):
     r"""Bias the matrix towards being banded.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $B⊙X = X$
+    Here $Π(A)$ retains entries with diagonal offsets between `lower` and
+    `upper`, inclusive, and sets all other entries to zero.
     """
 
     p: Final[str | int]
@@ -428,7 +479,7 @@ class Banded(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards banded matrix."""
+        r"""Return the banded penalty for $x$."""
         return F.banded(
             x,
             lower=self.lower,
@@ -441,9 +492,10 @@ class Banded(nn.Module, Regularization):
 class Tridiagonal(nn.Module, Regularization):
     r"""Bias the matrix towards being tridiagonal.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A)$ is the closest tridiagonal matrix to $A$.
+    Here $Π(A)$ retains the main diagonal and the first diagonals above and
+    below it, setting all other entries to zero.
     """
 
     p: Final[str | int]
@@ -456,16 +508,17 @@ class Tridiagonal(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards tridiagonal matrix."""
+        r"""Return the tridiagonal penalty for $x$."""
         return F.tridiagonal(x, p=self.p, size_normalize=self.size_normalize)
 
 
 class Masked(nn.Module, Regularization):
-    r"""Bias the matrix towards being masked.
+    r"""Bias the matrix towards having support on a Boolean mask.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $M⊙X = X$
+    Here $Π(A) = M⊙A$, where $M$ is the Boolean `mask` and $⊙$ denotes
+    elementwise multiplication. Entries outside the mask are set to zero.
     """
 
     p: Final[str | int]
@@ -486,7 +539,7 @@ class Masked(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards masked matrix."""
+        r"""Return the masked penalty for $x$."""
         return F.masked(x, mask=self.mask, p=self.p, size_normalize=self.size_normalize)
 
 
@@ -495,11 +548,16 @@ class Masked(nn.Module, Regularization):
 
 # region other regularizations ---------------------------------------------------------
 class Contraction(nn.Module, Regularization):
-    r"""Bias the matrix towards being a contraction.
+    r"""Bias the matrix towards having spectral norm at most $γ < 1$.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤1$
+    Here $γ$ is `lipschitz_bound`, which must satisfy $0 < γ < 1$, and
+    $Π(A)$ is a closest matrix to $A$ in spectral norm subject to $‖Π(A)‖₂ ≤ γ$.
+    For a nonzero matrix, $Π(A) = \min(1, γ/‖A‖₂)A$.
+
+    Raises:
+        ValueError: The Lipschitz bound is not strictly between zero and one.
     """
 
     lipschitz_bound: Final[float]
@@ -521,18 +579,20 @@ class Contraction(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards contraction."""
+        r"""Return the contraction penalty for $x$."""
         return F.contraction(
             x, self.lipschitz_bound, p=self.p, size_normalize=self.size_normalize
         )
 
 
 class LipschitzBounded(nn.Module, Regularization):
-    r"""Bias the matrix towards having spectral norm at most γ.
+    r"""Bias the matrix towards having spectral norm at most $γ$.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤γ$
+    Here $γ ≥ 0$ is `lipschitz_bound`, and $Π(A)$ is a closest matrix to $A$
+    in spectral norm subject to $‖Π(A)‖₂ ≤ γ$. For a nonzero matrix,
+    $Π(A) = \min(1, γ/‖A‖₂)A$.
     """
 
     lipschitz_bound: Final[float]
@@ -553,7 +613,7 @@ class LipschitzBounded(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards a Lipschitz-bounded matrix."""
+        r"""Return the Lipschitz bound penalty for $x$."""
         return F.lipschitz_bounded(
             x,
             self.lipschitz_bound,
@@ -565,9 +625,11 @@ class LipschitzBounded(nn.Module, Regularization):
 class SpectrallyNormalized(nn.Module, Regularization):
     r"""Bias the matrix towards having unit spectral norm.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂=1$
+    For a nonzero matrix, $Π(A) = A/‖A‖₂$ is a closest matrix to $A$ in
+    spectral norm subject to $‖Π(A)‖₂ = 1$.
+    The zero matrix is not supported; division by zero produces nonfinite values.
     """
 
     p: Final[str | int]
@@ -580,14 +642,20 @@ class SpectrallyNormalized(nn.Module, Regularization):
 
     @signature("(..., m, n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards a spectrally normalized matrix."""
+        r"""Return the spectral normalization penalty for $x$."""
         return F.spectrally_normalized(x, p=self.p, size_normalize=self.size_normalize)
 
 
 # endregion other regularizations ------------------------------------------------------
 # region vector groups -----------------------------------------------------------------
 class UnitVector(nn.Module, Regularization):
-    r"""Bias the vector towards having unit norm."""
+    r"""Bias the vector towards having unit Euclidean norm.
+
+    $$ x ↦ ‖x - Π(x)‖ₚ $$
+
+    For a nonzero vector, $Π(x) = x/‖x‖₂$ is the closest unit vector to $x$.
+    The zero vector is not supported; division by zero produces nonfinite values.
+    """
 
     p: Final[float]
     size_normalize: Final[bool]
@@ -599,7 +667,7 @@ class UnitVector(nn.Module, Regularization):
 
     @signature("(..., n) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Bias x towards a unit vector."""
+        r"""Return the unit-vector penalty for $x$."""
         return F.unit_vector(x, p=self.p, size_normalize=self.size_normalize)
 
 

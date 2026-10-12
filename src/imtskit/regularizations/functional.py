@@ -1,7 +1,11 @@
-r"""Regularizations for the Linear ODE Networks.
+r"""Functional regularization penalties for Linear ODE Networks.
+
+Each function returns one penalty per input vector or matrix. For penalties
+based on a residual norm, `size_normalize=True` divides that norm by the vector
+length or number of matrix columns. `log_det_exp` instead normalizes the trace
+before taking its absolute value and raising it to the power $p$.
 
 Notes:
-    - See `imtskit.regularizations.functional` for functional implementations.
     - See `imtskit.regularizations.modules` for module-based implementations.
 """
 
@@ -50,16 +54,17 @@ from signatures import signature
 
 @runtime_checkable
 class Regularization(Protocol):
-    r"""Protocol for Regularization Components."""
+    r"""Protocol for callable regularization components."""
 
     def __call__(
         self, x: Tensor, /, *, p: int = ..., size_normalize: bool = ...
     ) -> Tensor:
-        r"""Forward pass of the regularization.
+        r"""Compute a regularization penalty for each input tensor.
 
-        If size_normalize is True, a scaled norm will be used:
-
-        .. math :: (1/n ∑ |xₙ|ᵖ)¹/ᵖ instead of (∑ |xₙ|ᵖ)¹/ᵖ
+        The exponent or norm order is controlled by `p`. The meaning of
+        `size_normalize` depends on the implementation: residual norms are divided
+        by the vector length or number of matrix columns, while `log_det_exp`
+        normalizes the trace before taking its power.
         """
         ...
 
@@ -71,7 +76,10 @@ type RegularizationWithArgs = Callable[Concatenate[Tensor, ...], Tensor]
 def matrix_norm(
     r: Tensor, /, *, p: str | int = "fro", size_normalize: bool = True
 ) -> Tensor:
-    r"""Return the normalized matrix."""
+    r"""Return the matrix norm for each input matrix.
+
+    If `size_normalize` is true, divide the norm by the number of columns.
+    """
     s = torch.linalg.matrix_norm(r, ord=p, dim=(-2, -1))
 
     if size_normalize:
@@ -81,7 +89,10 @@ def matrix_norm(
 
 @signature("(..., n) -> (...)")
 def vector_norm(r: Tensor, /, *, p: float = 2.0, size_normalize: bool = True) -> Tensor:
-    r"""Return the normalized vector."""
+    r"""Return the $p$-norm for each input vector.
+
+    If `size_normalize` is true, divide the norm by the vector length.
+    """
     s = torch.linalg.vector_norm(r, ord=p, dim=-1)
 
     if size_normalize:
@@ -94,12 +105,18 @@ def vector_norm(r: Tensor, /, *, p: float = 2.0, size_normalize: bool = True) ->
 def log_det_exp(x: Tensor, /, *, p: float = 1.0, size_normalize: bool = True) -> Tensor:
     r"""Bias $\det(eᴬ)$ towards 1.
 
+    For a real $n × n$ matrix $A$, the determinant identity
+
+    $$ \det(eᴬ) = e^{\tr(A)} $$
+
+    gives $\log(\det(eᴬ)) = \tr(A)$. The penalty is
+
+    $$ |\tr(A)/s|ᵖ $$
+
+    where $s = n$ if `size_normalize` is true and $s = 1$ otherwise.
+
     Returns:
-        .. math:: |\tr(A)|ᵖ
-
-    By Jacobi's formula
-
-    .. math:: \det(eᴬ) = e^{\tr(A)} ⟺ \log(\det(eᴬ)) = \tr(A)
+        penalty (Tensor): One penalty per input matrix.
     """
     diag = torch.diagonal(x, dim1=-1, dim2=-2)
     traces = diag.mean(dim=-1) if size_normalize else diag.sum(dim=-1)
@@ -113,7 +130,10 @@ def identity(
 ) -> Tensor:
     r"""Bias the matrix towards the identity matrix.
 
-    .. math:: A ↦ ‖A-𝕀‖ₚ
+    $$ A ↦ ‖A - 𝕀‖ₚ $$
+
+    Here $𝕀$ is the identity matrix with the same shape as $A$; for rectangular
+    inputs, its main diagonal contains ones and all other entries are zero.
     """
     identity = torch.eye(*x.shape[-2:], dtype=x.dtype, device=x.device)
     r = x - identity
@@ -124,11 +144,13 @@ def identity(
 def rank_one(
     x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
-    r"""Bias the matrix towards being rank-1.
+    r"""Bias the matrix towards having rank at most one.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A)$ is the closest rank-1 matrix to $A$.
+    Here $Π(A)$ is obtained by keeping only the leading singular value of $A$.
+    It is a closest matrix of rank at most one in Frobenius norm.
+    The projection of the zero matrix has rank zero.
     """
     r = x - projections.rank_one(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -140,9 +162,9 @@ def symmetric(
 ) -> Tensor:
     r"""Bias the matrix towards being symmetric.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $Xᵀ = +X$
+    Here $Π(A) = ½(A + Aᵀ)$ is the closest symmetric matrix in Frobenius norm.
     """
     r = x - projections.symmetric(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -154,9 +176,9 @@ def skew_symmetric(
 ) -> Tensor:
     r"""Bias the matrix towards being skew-symmetric.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $Xᵀ = -X$
+    Here $Π(A) = ½(A - Aᵀ)$ is the closest skew-symmetric matrix in Frobenius norm.
     """
     r = x - projections.skew_symmetric(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -168,9 +190,10 @@ def orthogonal(
 ) -> Tensor:
     r"""Bias the matrix towards being orthogonal.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖² s.t. XᵀX = 𝕀$
+    Here $Π(A)$ is a closest orthogonal matrix to $A$ in Frobenius norm,
+    satisfying $Π(A)ᵀΠ(A) = 𝕀$. For an SVD $A = UΣVᵀ$, a minimizer is $Π(A) = UVᵀ$.
     """
     r = x - projections.orthogonal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -180,16 +203,17 @@ def orthogonal(
 def traceless(
     x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
-    r"""Bias the matrix towards being normal.
+    r"""Bias the matrix towards being traceless.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $tr(X) = 0$
+    Here $Π(A) = A - \tr(A)𝕀ₙ/n$ is the closest traceless matrix in
+    Frobenius norm.
 
     Note:
         Traceless matrices are also called *trace-free* or *trace-zero* matrices.
-        They have the important property that $\det(\exp(X)) = 1$,
-        which follows from the fact that $\det(\exp(X)) = \exp(\r(X))$.
+        They satisfy $\det(\exp(A)) = 1$, since
+        $\det(\exp(A)) = \exp(\tr(A))$.
     """
     r = x - projections.traceless(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -201,9 +225,13 @@ def normal(
 ) -> Tensor:
     r"""Bias the matrix towards being normal.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $XᵀX = XXᵀ$
+    Here $Π(A)$ denotes a closest normal matrix in Frobenius norm.
+    For real matrices, the constraint is $Π(A)ᵀΠ(A) = Π(A)Π(A)ᵀ$.
+
+    Raises:
+        NotImplementedError: The normal projection is not implemented.
     """
     r = x - projections.normal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -213,11 +241,17 @@ def normal(
 def hamiltonian(
     x: Tensor, /, *, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
-    r"""Bias the matrix towards being hamiltonian.
+    r"""Bias the matrix towards being Hamiltonian.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $(JX)ᵀ = JX$
+    Here $Π(A)$ denotes a closest Hamiltonian matrix in Frobenius norm,
+    satisfying $(JΠ(A))ᵀ = JΠ(A)$, where
+
+    $$ J = \bmat{ 0 & 𝕀ₙ \\ -𝕀ₙ & 0 } $$
+
+    Raises:
+        NotImplementedError: The Hamiltonian projection is not implemented.
     """
     r = x - projections.hamiltonian(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -229,9 +263,15 @@ def symplectic(
 ) -> Tensor:
     r"""Bias the matrix towards being symplectic.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $JᵀXJ = X$
+    Here $Π(A)$ denotes a closest symplectic matrix in Frobenius norm,
+    satisfying $Π(A)ᵀJΠ(A) = J$, where
+
+    $$ J = \bmat{ 0 & 𝕀ₙ \\ -𝕀ₙ & 0 } $$
+
+    Raises:
+        NotImplementedError: The symplectic projection is not implemented.
     """
     r = x - projections.symplectic(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -247,9 +287,9 @@ def diagonal(
 ) -> Tensor:
     r"""Bias the matrix towards being diagonal.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $𝕀⊙X = X$
+    Here $Π(A)$ retains the main diagonal of $A$ and sets all other entries to zero.
     """
     r = x - projections.diagonal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -259,9 +299,12 @@ def diagonal(
 def diagonally_dominant(
     x: Tensor, /, *, p: float = 2.0, size_normalize: bool = False
 ) -> Tensor:
-    r"""Bias the matrix towards being diagonally dominant.
+    r"""Bias the matrix towards being row diagonally dominant.
 
-    .. math:: A ↦ ‖\max(0, ∑_{j≠i}|Aᵢⱼ| - |Aᵢᵢ|)‖ₚ
+    $$ A ↦ ‖d‖ₚ, \qquad dᵢ = \max(0, ∑_{j≠i}|Aᵢⱼ| - |Aᵢᵢ|) $$
+
+    Each $dᵢ$ is the deficit in row $i$; it is zero when
+    $|Aᵢᵢ| ≥ ∑_{j≠i}|Aᵢⱼ|$.
     """
     diagonal = torch.diagonal(x, dim1=-1, dim2=-2).abs()
     row_sums = x.abs().sum(dim=-1) - diagonal
@@ -275,9 +318,10 @@ def tridiagonal(
 ) -> Tensor:
     r"""Bias the matrix towards being tridiagonal.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A)$ is the closest tridiagonal matrix to $A$.
+    Here $Π(A)$ retains the main diagonal and the first diagonals above and
+    below it, setting all other entries to zero.
     """
     r = x - projections.tridiagonal(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -294,9 +338,10 @@ def lower_triangular(
 ) -> Tensor:
     r"""Bias the matrix towards being lower triangular.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $L⊙X = X$
+    Here $Π(A)$ retains entries on and below the diagonal with offset `lower`
+    and sets all other entries to zero. An offset of zero selects the main diagonal.
     """
     r = x - projections.lower_triangular(x, lower=lower)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -313,9 +358,10 @@ def upper_triangular(
 ) -> Tensor:
     r"""Bias the matrix towards being upper triangular.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $U⊙X = X$
+    Here $Π(A)$ retains entries on and above the diagonal with offset `upper`
+    and sets all other entries to zero. An offset of zero selects the main diagonal.
     """
     r = x - projections.upper_triangular(x, upper=upper)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -331,11 +377,13 @@ def upper_triangular(
 def low_rank(
     x: Tensor, /, rank: int, *, p: str | int = "fro", size_normalize: bool = False
 ) -> Tensor:
-    r"""Bias the matrix towards being low rank.
+    r"""Bias the matrix towards having rank at most $k$.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A)$ is the closest rank-k matrix to $A$.
+    Here $k$ is `rank`, and $Π(A)$ is obtained by keeping the leading $k$
+    singular values of $A$. It is a closest matrix of rank at most $k$ in
+    Frobenius norm.
     """
     r = x - projections.low_rank(x, rank=rank)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -353,9 +401,10 @@ def banded(
 ) -> Tensor:
     r"""Bias the matrix towards being banded.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $B⊙X = X$
+    Here $Π(A)$ retains entries with diagonal offsets between `lower` and
+    `upper`, inclusive, and sets all other entries to zero.
     """
     r = x - projections.banded(x, upper=upper, lower=lower)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -370,11 +419,12 @@ def masked(
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
-    r"""Bias the matrix towards being masked.
+    r"""Bias the matrix towards having support on a Boolean mask.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ½‖X-A‖²$ s.t. $M⊙X = X$
+    Here $Π(A) = M⊙A$, where $M$ is the Boolean `mask` and $⊙$ denotes
+    elementwise multiplication. Entries outside the mask are set to zero.
     """
     r = x - projections.masked(x, mask=mask)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -389,11 +439,16 @@ def contraction(
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
-    r"""Bias the matrix towards being a contraction.
+    r"""Bias the matrix towards having spectral norm at most $γ < 1$.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤1$
+    Here $γ$ is `lipschitz_bound`, which must satisfy $0 < γ < 1$, and
+    $Π(A)$ is a closest matrix to $A$ in spectral norm subject to $‖Π(A)‖₂ ≤ γ$.
+    For a nonzero matrix, $Π(A) = \min(1, γ/‖A‖₂)A$.
+
+    Raises:
+        ValueError: The Lipschitz bound is not strictly between zero and one.
     """
     r = x - projections.contraction(x, lipschitz_bound=lipschitz_bound)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -408,11 +463,13 @@ def lipschitz_bounded(
     p: str | int = "fro",
     size_normalize: bool = False,
 ) -> Tensor:
-    r"""Bias the matrix towards having spectral norm at most γ.
+    r"""Bias the matrix towards having spectral norm at most $γ$.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂≤γ$
+    Here $γ ≥ 0$ is `lipschitz_bound`, and $Π(A)$ is a closest matrix to $A$
+    in spectral norm subject to $‖Π(A)‖₂ ≤ γ$. For a nonzero matrix,
+    $Π(A) = \min(1, γ/‖A‖₂)A$.
     """
     r = x - projections.lipschitz_bounded(x, lipschitz_bound=lipschitz_bound)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -428,9 +485,11 @@ def spectrally_normalized(
 ) -> Tensor:
     r"""Bias the matrix towards having unit spectral norm.
 
-    .. math:: A ↦ ‖A-Π(A)‖ₚ
+    $$ A ↦ ‖A - Π(A)‖ₚ $$
 
-    where $Π(A) = \argmin_X ‖X-A‖₂$ s.t. $‖X‖₂=1$
+    For a nonzero matrix, $Π(A) = A/‖A‖₂$ is a closest matrix to $A$ in
+    spectral norm subject to $‖Π(A)‖₂ = 1$.
+    The zero matrix is not supported; division by zero produces nonfinite values.
     """
     r = x - projections.spectrally_normalized(x)
     return matrix_norm(r, p=p, size_normalize=size_normalize)
@@ -442,11 +501,12 @@ def spectrally_normalized(
 def unit_vector(
     x: Tensor, /, *, p: float = 2.0, size_normalize: bool = False
 ) -> Tensor:
-    r"""Bias the vector towards having unit norm.
+    r"""Bias the vector towards having unit Euclidean norm.
 
-    .. math:: x ↦ ‖x-Π(x)‖ₚ
+    $$ x ↦ ‖x - Π(x)‖ₚ $$
 
-    where $Π(x)$ is the closest unit vector to $x$.
+    For a nonzero vector, $Π(x) = x/‖x‖₂$ is the closest unit vector to $x$.
+    The zero vector is not supported; division by zero produces nonfinite values.
     """
     r = x - projections.unit_vector(x)
     return vector_norm(r, p=p, size_normalize=size_normalize)
