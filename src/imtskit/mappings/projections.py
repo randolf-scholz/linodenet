@@ -1,12 +1,10 @@
-r"""Projections for the Linear ODE Networks.
+r"""Module-based projections for vectors and matrices.
 
-Projections are mappings ϕ:X→X such that ϕ∘ϕ=ϕ.
-Then the identity map on the image of ϕ is its right inverse,
-i.e., ϕ∘\id_{\im ϕ} = \id_{\im ϕ}.
+Projections are mappings $ϕ:X→X$ such that $ϕ∘ϕ=ϕ$. Viewed as a surjection
+onto its image, a projection has the identity inclusion as its right inverse.
 
 Notes:
     - See `imtskit.mappings.functional` for functional implementations.
-    - See `imtskit.mappings.projections` for module-based implementations.
 """
 
 __all__ = [
@@ -50,16 +48,14 @@ from .abstract import Projection
 
 
 class LipschitzBounded(nn.Module, Projection):
-    r"""Return the closest matrix to X with spectral norm (=lipschitz constant) at most γ.
+    r"""Return the closest matrix to X with spectral norm at most $γ$.
 
-    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ γ
+    $$  \min_Y ‖X-Y‖₂ \qq{subject to} ‖Y‖₂ ≤ γ  $$
 
-    One can show analytically that the unique smallest norm minimizer is
-
-    .. math:: f(X) = \min(1, γ/‖X‖₂)⋅X
+    A spectral-norm minimizer is $f(X) = \min(1, γ/‖X‖₂)⋅X$.
 
     Args:
-        lipschitz_bound: The constant γ, the transformation ensures $$.
+        lipschitz_bound: The bound $γ≥0$, ensuring $‖Y‖₂≤γ$.
         atol: The absolute tolerance for the power method.
         rtol: The relative tolerance for the power method.
         maxiter: The maximum number of iterations for the power method.
@@ -69,14 +65,17 @@ class LipschitzBounded(nn.Module, Projection):
         This is especially useful for parametrization, but means this method expects
         the same input shape for each forward pass.
 
+        The bound is enforced using a power-iteration estimate of the spectral norm,
+        so its accuracy depends on convergence and the configured tolerances.
+
     Note:
         For $‖A‖₂<1$, it follows that $x↦Ax$ is a contraction mapping. In particular,
         the residual mapping $x↦x ± Ax$ is invertible in this case, and the inverse
-        can be computed via fixpoint iteration.
+        can be computed via fixed-point iteration.
 
     See Also:
-        - `SpectrallyNormalized` for the special case of γ=1.
-        - `Contraction` for the special case of $0<‖Y‖₂<1$.
+        - `SpectrallyNormalized` for normalization to $‖Y‖₂=1$.
+        - `Contraction` for the special case of $‖Y‖₂≤γ<1$.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
@@ -126,7 +125,7 @@ class LipschitzBounded(nn.Module, Projection):
 
     @signature("(..., m, n) -> (..., m, n)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Perform spectral normalization w ↦ w/‖w‖₂."""
+        r"""Bound the spectral norm via $X ↦ \min(1,γ/‖X‖₂)⋅X$."""
         # We use the cached singular vectors as initial guess for the power method.
         sigma, u, v = singular_triplet(
             x,
@@ -153,11 +152,9 @@ class LipschitzBounded(nn.Module, Projection):
 class SpectrallyNormalized(LipschitzBounded):
     r"""Return the closest matrix to X with unit spectral norm.
 
-    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ = 1
+    $$  \min_Y ‖X-Y‖₂ \qq{subject to} ‖Y‖₂ = 1  $$
 
-    One can show analytically that the unique smallest norm minimizer is
-
-    .. math:: f(X) = X/‖X‖₂
+    A spectral-norm minimizer is $f(X) = X/‖X‖₂$.
 
     Args:
         atol: The absolute tolerance for the power method.
@@ -169,9 +166,11 @@ class SpectrallyNormalized(LipschitzBounded):
         This is especially useful for parametrization, but means this method expects
         the same input shape for each forward pass.
 
+        The input must be nonzero; normalization is undefined for the zero matrix.
+
     See Also:
-        - `SpectralNormBounded` for the general case $‖Y‖₂≤γ$
-        - `Contraction` for the special case of $0<‖Y‖₂<1$.
+        - `LipschitzBounded` for the general case $‖Y‖₂≤γ$
+        - `Contraction` for the special case of $‖Y‖₂≤γ<1$.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
@@ -204,13 +203,11 @@ class SpectrallyNormalized(LipschitzBounded):
 
 
 class Contraction(LipschitzBounded):
-    r"""Return the closest matrix to X with spectral norm (=lipschitz constant) at most γ<1.
+    r"""Return the closest matrix to X with spectral norm at most $0<γ<1$.
 
-    .. math:: \min_Y ‖X-Y‖₂  s.t. ‖Y‖₂ ≤ 1
+    $$  \min_Y ‖X-Y‖₂ \qq{subject to} ‖Y‖₂ ≤ γ < 1  $$
 
-    One can show analytically that the unique smallest norm minimizer is
-
-    .. math:: f(X) = \min(1, γ/‖X‖₂)⋅X
+    A spectral-norm minimizer is $f(X) = \min(1, γ/‖X‖₂)⋅X$.
 
     Args:
         lipschitz_bound: The constant γ, the transformation ensures $‖Y‖₂≤γ<1$.
@@ -224,7 +221,7 @@ class Contraction(LipschitzBounded):
         the same input shape for each forward pass.
 
     See Also:
-        - `SpectralNormBounded` for the general case $‖Y‖₂≤γ$
+        - `LipschitzBounded` for the general case $‖Y‖₂≤γ$
         - `SpectrallyNormalized` for the special case of $‖Y‖₂=1$.
     """
 
@@ -251,9 +248,9 @@ class Contraction(LipschitzBounded):
 class Symmetric(nn.Module, Projection):
     r"""Return the closest symmetric matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ = Y
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} Yᵀ = Y  $$
 
-    One can show analytically that Y = ½(X + Xᵀ) is the unique minimizer.
+    The unique minimizer is $Y=½(X+Xᵀ)$.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
@@ -268,9 +265,9 @@ class Symmetric(nn.Module, Projection):
 class SkewSymmetric(nn.Module, Projection):
     r"""Return the closest skew-symmetric matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ = -Y
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} Yᵀ = -Y  $$
 
-    One can show analytically that Y = ½(X - Xᵀ) is the unique minimizer.
+    The unique minimizer is $Y=½(X-Xᵀ)$.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
@@ -285,13 +282,13 @@ class SkewSymmetric(nn.Module, Projection):
 class Orthogonal(nn.Module, Projection):
     r"""Return the closest orthogonal matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ Y = 𝕀 = YYᵀ
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} Yᵀ Y = 𝕀 = YYᵀ  $$
 
-    One can show analytically that $Y = UVᵀ$ is the unique minimizer,
-    where $X=UΣVᵀ$ is the SVD of $X$.
+    An SVD $X=UΣVᵀ$ gives a minimizer $Y=UVᵀ$. The minimizer is
+    unique when $X$ is nonsingular.
 
     References:
-        https://math.stackexchange.com/q/2215359
+        - [Nearest orthogonal matrix discussion](https://math.stackexchange.com/q/2215359)
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
@@ -304,11 +301,11 @@ class Orthogonal(nn.Module, Projection):
 
 
 class Traceless(nn.Module, Projection):
-    r"""Return the closest traceless matrix to X.
+    r"""Return the closest traceless matrix to $X$ in Frobenius norm.
 
-    .. math:: \min_Y ½‖X-Y‖² s.t. Yᵀ = -Y
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} \tr(Y)=0  $$
 
-    One can show analytically that Y = ½(X - Xᵀ) is the unique minimizer.
+    The unique minimizer is $Y=X-\tr(X)𝕀ₙ/n$.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
@@ -321,26 +318,29 @@ class Traceless(nn.Module, Projection):
 
 
 class Normal(nn.Module, Projection):
-    r"""Return the closest normal matrix to X.
+    r"""Describe the nearest-normal-matrix problem in Frobenius norm.
 
-    .. math:: \min_Y ½‖X-Y‖² s.t. YᵀY = YYᵀ
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} YYᵀ=YᵀY  $$
 
-    **The Lagrangian:**
+    The Lagrangian is
 
-    .. math:: ℒ(Y, Λ) = ½‖X-Y‖² + ⟨Λ, [Y, Yᵀ]⟩
+    $$  ℒ(Y,Λ)=½‖X-Y‖_F²+⟨Λ,YYᵀ-YᵀY⟩  $$
 
-    **First order necessary KKT condition:**
+    For a stationary point admitting a Lagrange multiplier, the first-order
+    condition is
 
-    .. math::
-            0 &= ∇ℒ(Y, Λ) = (Y-X) + Y(Λ + Λᵀ) - (Λ + Λᵀ)Y
-        \\⟺ Y &= X + [Y, Λ]
+    $$  0=Y-X+(Λ+Λᵀ)Y-Y(Λ+Λᵀ)  $$
 
-    **Second order sufficient KKT condition:**
+    For a perturbation $S$ satisfying the linearized constraint
+    $SYᵀ+YSᵀ-SᵀY-YᵀS=0$, the second variation is
 
-    .. math::
-             ⟨∇h|S⟩=0     &⟹ ⟨S|∇²ℒ|S⟩ ≥ 0
-         \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|𝕀⊗𝕀 + Λ⊗𝕀 − 𝕀⊗Λ|S⟩ ≥ 0
-         \\⟺ ⟨[Y, Λ]|S⟩=0 &⟹ ⟨S|S⟩ + ⟨[S, Λ]|S⟩ ≥ 0
+    $$  ∂²ℒ(Y,Λ)[S,S]=‖S‖_F²+2⟨Λ,SSᵀ-SᵀS⟩  $$
+
+    Nonnegativity is a second-order necessary condition under the usual
+    constraint regularity assumptions; it is not a sufficient condition.
+
+    Raises:
+        NotImplementedError: The nearest-normal-matrix solver is not implemented.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
@@ -353,20 +353,19 @@ class Normal(nn.Module, Projection):
 
 
 class Hamiltonian(nn.Module, Projection):
-    r"""Return the closest hamiltonian matrix to X.
+    r"""Describe the nearest-Hamiltonian-matrix problem in Frobenius norm.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   (JY)ᵀ = JA   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
+    $$  \min_Y ½‖X-Y‖_F² \quad \text{subject to } (JY)ᵀ=JY  $$
 
-    Alternatively, the above is equivalent to
+    Here $J$ is the canonical symplectic matrix
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   Yᵀ J Y = J   where   J= 𝔻₊₁-𝔻₋₁
+    $$  J=\begin{bmatrix}𝟎&𝕀ₙ\\-𝕀ₙ&𝟎\end{bmatrix}  $$
 
-    where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
+    Equivalently, $YᵀJ+JY=0$. The exponential of a Hamiltonian matrix is
+    symplectic.
 
-    Note:
-        The Hamiltonian matrices are the skew-symmetric matrices
-        with respect to the symplectic inner product.
-        - The matrix exponential of a Hamiltonian matrix is symplectic.
+    Raises:
+        NotImplementedError: The Hamiltonian projection is not implemented.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.EVEN_SQUARE
@@ -379,15 +378,16 @@ class Hamiltonian(nn.Module, Projection):
 
 
 class Symplectic(nn.Module, Projection):
-    r"""Return the closest symplectic matrix to X.
+    r"""Describe the nearest-symplectic-matrix problem in Frobenius norm.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀJY = J   where   J=[𝟎, 𝕀; -𝕀, 𝟎]
+    $$  \min_Y ½‖X-Y‖_F² \quad \text{subject to } YᵀJY=J  $$
 
-    Alternatively, the above is equivalent to
+    Here $J$ is the canonical symplectic matrix
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   YᵀJY = J   where   J= 𝔻₊₁-𝔻₋₁
+    $$  J=\begin{bmatrix}𝟎&𝕀ₙ\\-𝕀ₙ&𝟎\end{bmatrix}  $$
 
-    where $𝔻ₖ$ is the $2n×2n$ matrix with ones on the k-th diagonal.
+    Raises:
+        NotImplementedError: The symplectic projection is not implemented.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.EVEN_SQUARE
@@ -406,16 +406,16 @@ class Symplectic(nn.Module, Projection):
 class Diagonal(nn.Module, Projection):
     r"""Return the closest diagonal matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝕀⊙Y
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} Y = 𝕀⊙Y  $$
 
-    One can show analytically that the unique smallest norm minimizer is $Y = 𝕀⊙X$.
+    The unique minimizer is $Y = 𝕀⊙X$.
 
     See Also:
-        - `projections.Masked`
-        - `projections.Diagonal`
-        - `projections.LowerTriangular`
-        - `projections.UpperTriangular`
-        - `projections.Banded`
+        - `imtskit.mappings.projections.Masked`
+        - `imtskit.mappings.projections.Diagonal`
+        - `imtskit.mappings.projections.LowerTriangular`
+        - `imtskit.mappings.projections.UpperTriangular`
+        - `imtskit.mappings.projections.Banded`
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
@@ -430,23 +430,23 @@ class Diagonal(nn.Module, Projection):
 class UpperTriangular(nn.Module, Projection):
     r"""Return the closest upper triangular matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   U⊙Y = Y
+    $$  \min_Y ½‖X-Y‖_F² \quad \text{subject to } U⊙Y = Y  $$
 
-    One can show analytically that the unique smallest norm minimizer is $Y = U⊙X$.
+    The unique minimizer is $Y = U⊙X$.
 
     See Also:
-        - `projections.Masked`
-        - `projections.Diagonal`
-        - `projections.LowerTriangular`
-        - `projections.UpperTriangular`
-        - `projections.Banded`
+        - `imtskit.mappings.projections.Masked`
+        - `imtskit.mappings.projections.Diagonal`
+        - `imtskit.mappings.projections.LowerTriangular`
+        - `imtskit.mappings.projections.UpperTriangular`
+        - `imtskit.mappings.projections.Banded`
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.UPPER_TRIANGULAR
 
     upper: Final[int]
-    r"""CONST: The diagonal to consider"""
+    r"""CONST: The smallest retained diagonal offset."""
 
     def __init__(self, *, upper: int = 0) -> None:
         super().__init__()
@@ -461,23 +461,23 @@ class UpperTriangular(nn.Module, Projection):
 class LowerTriangular(nn.Module, Projection):
     r"""Return the closest lower triangular matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   𝕃⊙Y = Y
+    $$  \min_Y ½‖X-Y‖_F² \quad \text{subject to } L⊙Y = Y  $$
 
-    One can show analytically that the unique smallest norm minimizer is $Y = L⊙X$.
+    The unique minimizer is $Y = L⊙X$.
 
     See Also:
-        - `projections.Masked`
-        - `projections.Diagonal`
-        - `projections.LowerTriangular`
-        - `projections.UpperTriangular`
-        - `projections.Banded`
+        - `imtskit.mappings.projections.Masked`
+        - `imtskit.mappings.projections.Diagonal`
+        - `imtskit.mappings.projections.LowerTriangular`
+        - `imtskit.mappings.projections.UpperTriangular`
+        - `imtskit.mappings.projections.Banded`
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.LOWER_TRIANGULAR
 
     lower: Final[int]
-    r"""CONST: The diagonal to consider"""
+    r"""CONST: The largest retained diagonal offset."""
 
     def __init__(self, *, lower: int = 0) -> None:
         super().__init__()
@@ -492,9 +492,9 @@ class LowerTriangular(nn.Module, Projection):
 class Tridiagonal(nn.Module, Projection):
     r"""Return the closest tridiagonal matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖² s.t. Y = T⊙Y
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} Y = T⊙Y  $$
 
-    One can show analytically that the unique smallest norm minimizer is
+    The unique minimizer is
     $Y = T⊙X$.
     """
 
@@ -512,12 +512,15 @@ class Tridiagonal(nn.Module, Projection):
 
 # region other projections -------------------------------------------------------------
 class DiagonallyDominant(nn.Module, Projection):
-    r"""Return the closest diagonally dominant matrix to X.
+    r"""Describe the nearest-diagonally-dominant-matrix problem.
 
-    .. math:: \min_Y ‖X-Y‖_F  s.t. |Y_{ii}| ≥ ∑_{j≠i} |Y_{ij}| for all i = 1, …, n
+    $$  \min_Y ‖X-Y‖_F \qq{subject to} |Yᵢᵢ| ≥ ∑_{j≠i} |Yᵢⱼ| \qq{for all} i=1,…,n  $$
 
     References:
         Computing the nearest diagonally dominant matrix (Mendoza et al. 1998)
+
+    Raises:
+        NotImplementedError: The diagonally dominant projection is not implemented.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SQUARE
@@ -530,11 +533,11 @@ class DiagonallyDominant(nn.Module, Projection):
 
 
 class RankOne(nn.Module, Projection):
-    r"""Return the closest rank-1 matrix to X.
+    r"""Return the closest matrix of rank at most one to X.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ 1
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} \rank(Y) ≤ 1  $$
 
-    This is the special case of `LowRank` with ``rank=1``.
+    This is the special case of `LowRank` with `rank=1`.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
@@ -551,25 +554,25 @@ class RankOne(nn.Module, Projection):
 
 # region special -----------------------------------------------------------------------
 class Masked(nn.Module, Projection):
-    r"""Return the closest banded matrix to X.
+    r"""Return the closest matrix supported on the Boolean mask to X.
 
-    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝕄⊙Y
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} Y = M⊙Y  $$
 
-    One can show analytically that the unique smallest norm minimizer is $Y = M⊙X$.
+    The unique minimizer is $Y = M⊙X$.
 
     See Also:
-        - `projections.Masked`
-        - `projections.Diagonal`
-        - `projections.LowerTriangular`
-        - `projections.UpperTriangular`
-        - `projections.Banded`
+        - `imtskit.mappings.projections.Masked`
+        - `imtskit.mappings.projections.Diagonal`
+        - `imtskit.mappings.projections.LowerTriangular`
+        - `imtskit.mappings.projections.UpperTriangular`
+        - `imtskit.mappings.projections.Banded`
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.MASKED
 
     mask: Tensor
-    r"""CONST: Boolean mask to consider"""
+    r"""CONST: Boolean mask defining the retained entries."""
 
     def __init__(self, mask: bool | Tensor) -> None:
         super().__init__()
@@ -584,10 +587,10 @@ class Masked(nn.Module, Projection):
 class LowRank(nn.Module, Projection):
     r"""Return the closest low rank matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖²   s.t.   rank(Y) ≤ k
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} \rank(Y) ≤ k $$
 
-    One can show analytically that Y = UₖΣₖVₖᵀ is the unique minimizer,
-    where X=UΣVᵀ is the SVD of X.
+    An SVD $X=UΣVᵀ$ gives a minimizer $Y=UₖΣₖVₖᵀ$. If the truncation
+    cuts through equal nonzero singular values, the minimizer need not be unique.
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
@@ -607,25 +610,25 @@ class LowRank(nn.Module, Projection):
 class Banded(nn.Module, Projection):
     r"""Return the closest banded matrix to X.
 
-    .. math:: \min_Y ½‖X-Y‖² s.t. Y = 𝔹⊙Y
+    $$  \min_Y ½‖X-Y‖_F² \qq{subject to} Y = B⊙Y  $$
 
-    One can show analytically that the unique smallest norm minimizer is $Y = B⊙X$.
+    The unique minimizer is $Y = B⊙X$.
 
     See Also:
-        - `projections.Masked`
-        - `projections.Diagonal`
-        - `projections.LowerTriangular`
-        - `projections.UpperTriangular`
-        - `projections.Banded`
+        - `imtskit.mappings.projections.Masked`
+        - `imtskit.mappings.projections.Diagonal`
+        - `imtskit.mappings.projections.LowerTriangular`
+        - `imtskit.mappings.projections.UpperTriangular`
+        - `imtskit.mappings.projections.Banded`
     """
 
     DOMAIN: ClassVar[MatrixDomains] = MatrixDomains.RECTANGULAR
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.BANDED
 
     upper: Final[int]
-    r"""CONST: The upper diagonal to consider"""
+    r"""CONST: The largest retained diagonal offset."""
     lower: Final[int]
-    r"""CONST: The lower diagonal to consider"""
+    r"""CONST: The smallest retained diagonal offset."""
 
     def __init__(self, lower: int, upper: int) -> None:
         super().__init__()
@@ -644,7 +647,10 @@ class Banded(nn.Module, Projection):
 
 
 class UnitVector(nn.Module, Projection):
-    r"""Project vectors onto the unit sphere."""
+    r"""Project vectors onto the unit sphere.
+
+    The input must be nonzero; normalization is undefined for the zero vector.
+    """
 
     DOMAIN: Final[VectorDomains] = VectorDomains.NONZERO
     CODOMAIN: Final[VectorDomains] = VectorDomains.UNIT_VECTOR

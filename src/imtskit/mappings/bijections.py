@@ -22,11 +22,17 @@ from .abstract import Bijection
 class MatrixExponential(nn.Module, Bijection):
     r"""Parametrize a matrix via matrix exponential.
 
-    Note: The following restrictions hold:
-        - ``Mₙ(ℝ)  --exp-->  GLₙ(ℝ)∩{A ∣ A=B² for some B∈Mₙ(ℝ)}``
-        - ``Mₙ(ℂ)  --exp-->  GLₙ(ℂ)``
-        - ``𝕊ₙ(ℝ)  --exp-->  𝕊ₙ⁺(ℝ)``
-        - ``𝔸ₙ(ℝ)  --exp-->  Oₙ(ℝ)``
+    Note:
+        The exponential of any square matrix is invertible. Over $ℝ$, each
+        matrix in its image has a real square root, since
+        $\exp(X)=\exp(X/2)²$. Over $ℂ$, every invertible matrix has a logarithm.
+
+        On real symmetric matrices, the exponential is a bijection onto the
+        symmetric positive definite matrices. Real skew-symmetric matrices
+        exponentiate to special orthogonal matrices.
+
+        On general square matrices, the exponential is not injective. A matrix
+        logarithm recovers the input only on a domain with a consistent branch.
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.SQUARE
@@ -82,11 +88,15 @@ class PositiveDiagonal(nn.Module, Bijection):
 
 
 class CayleyMap(nn.Module, Bijection):
-    r"""Parametrize a matrix to be orthogonal via Cayley-Map.
+    r"""Map a real skew-symmetric matrix to an orthogonal matrix via the Cayley-Map.
+
+    $$ A ↦ (𝕀-A)(𝕀+A)⁻¹ $$
+
+    Its image excludes matrices with eigenvalue $-1$, which would make the inverse Cayley map undefined.
 
     References:
-        - https://pytorch.org/tutorials/intermediate/parametrizations.html
-        - https://en.wikipedia.org/wiki/Cayley_transform#Matrix_map
+        - [PyTorch parametrizations](https://pytorch.org/tutorials/intermediate/parametrizations.html)
+        - [Cayley matrix map](https://en.wikipedia.org/wiki/Cayley_transform#Matrix_map)
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.SKEW_SYMMETRIC

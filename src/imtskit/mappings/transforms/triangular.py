@@ -13,11 +13,11 @@ from signatures import signature
 
 
 class TriangularTransform(nn.Module, Transform):
-    r"""An invertible linear layer with unit lower-triangular Jacobian.
+    r"""An invertible linear layer that is unit lower triangular in a permuted basis.
 
     The transformation is parameterized as
 
-    .. math:: y = P⁻¹(𝕀ₙ + L)Px
+    $$ y = P⁻¹(𝕀ₙ + L)Px $$
 
     where $L$ is strictly lower triangular. This makes the weight matrix
     unit lower triangular in the permuted basis, hence always invertible

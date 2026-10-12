@@ -65,27 +65,23 @@ class Surjection[X = Tensor, Y = Tensor](Protocol):
 
 @runtime_checkable
 class Projection[T = Tensor](Surjection[T, T], Protocol):
-    r"""Protocol for projections.
+    r"""Protocol for idempotent self-maps.
 
-    Projections are a stronger form of surjections: we additionally require
-
-    - The domain is a subset of the codomain
-    - `right_inverse` is the identity map.
-
-    That is, a projection is a mapping $φ:X→X$ such that $φ∘φ=φ$. In particular,
-    $φ=i∘π$ for the embedding $i:\Im(φ)→X$ where $π:X→\Im(φ)$ is $φ$ viewed as a surjection onto its image.
-    Then the identity map on the image of $φ$ is the right inverse of $π$.
+    A projection is a mapping $ϕ:X→X$ such that $ϕ∘ϕ=ϕ$. Viewed as a surjection
+    $π:X→\operatorname{im}(ϕ), x ↦ ϕ(x)$, its right inverse is the inclusion
+    $i:\operatorname{im}(ϕ)→X$, which acts as the identity on the image.
+    Thus $ϕ=i∘π$ and $π∘i$ is the identity on $\operatorname{im}(ϕ)$.
 
     References:
-        - https://en.wikipedia.org/wiki/Projection_(mathematics)
-        - https://en.wikipedia.org/wiki/Projection_(linear_algebra)
+        - [Projection in mathematics](https://en.wikipedia.org/wiki/Projection_(mathematics))
+        - [Linear projections](https://en.wikipedia.org/wiki/Projection_(linear_algebra))
 
     See Also:
         - `ConditionalProjection`: Conditional projection protocol.
         - `Surjection`: More general protocol with a right inverse.
         - `Embedding`: Dual protocol with a left inverse.
         - `Bijection`: Invertible protocol combining both inverses.
-        - `Transform`: Diffeomorphism protocol, stronger than a projection.
+        - `Transform`: Diffeomorphism protocol.
     """
 
     @abstractmethod
@@ -230,7 +226,7 @@ class ConditionalProjection[T = Tensor, Z = Tensor](
         - `ConditionalSurjection`: More general conditional protocol with a right inverse.
         - `ConditionalEmbedding`: Dual conditional protocol with a left inverse.
         - `ConditionalBijection`: Conditional invertible protocol combining both inverses.
-        - `ConditionalTransform`: Conditional diffeomorphism protocol, stronger than a projection.
+        - `ConditionalTransform`: Conditional diffeomorphism protocol.
     """
 
     @abstractmethod

@@ -119,9 +119,9 @@ class Sigmoid(nn.Module, Transform):
 
 
 class Tanh(nn.Module, Transform):
-    r"""Maps tensor elementwise via via $x ↦ \tanh(x)$.
+    r"""Maps tensor elementwise via $x ↦ \tanh(x)$.
 
-    The inverse is $y ↦ \atanh(y) = ½\log((1+y)/(1-y))$.
+    The inverse is $y ↦ \operatorname{atanh}(y) = ½\log((1+y)/(1-y))$.
 
     The derivative is: $\frac{d}{dx}\tanh(x) = 1-\tanh²(x)$.
     """
@@ -244,9 +244,10 @@ class Softplus(nn.Module, Transform):
 class ELU(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ ⟦x > 0 ? x : α(eˣ -1)⟧$.
 
-    The inverse is y ↦ ⟦y > 0 ? y : \log(1 + y/α)⟧.
+    The inverse is $y ↦ ⟦y > 0 ? y : \log(1 + y/α)⟧$ for $y>-α$.
 
-    The derivative is: ⟦x > 0 ? 1 : αeˣ⟧.
+    The derivative away from zero is $⟦x > 0 ? 1 : αeˣ⟧$.
+    For $α≠1$, the map is not differentiable at zero.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
@@ -285,7 +286,8 @@ class CELU(nn.Module, Transform):
 
     The inverse is: $y ↦ ⟦y > 0 ? y : α \log(1 + y/α)⟧$.
 
-    The derivative is: ⟦x > 0 ? 1 : \exp(x/α)⟧.
+    The derivative is $⟦x > 0 ? 1 : \exp(x/α)⟧$.
+    The inverse requires $y>-α$.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
@@ -322,11 +324,14 @@ class CELU(nn.Module, Transform):
 class EntLU(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ ⟦x>0 ? x + 1 : eᴴ⁽¹⁻ˣ⁾⟧$.
 
-    The inverse is $y ↦ ⟦y > 1 ? y-1 : 1 - \log(1/y)/W(\log(1/y))⟧$.
+    For $0<y<1$, the inverse is $y ↦ 1-\log(1/y)/W(\log(1/y))$,
+    where $W$ is the principal Lambert W function. At $y=1$ the inverse is
+    zero, and for $y>1$ it is $y-1$.
 
-    The derivative is: ⟦x > 0 ? 1 : eᴴ⁽¹⁻ˣ⁾ (1 + \log(1-x))⟧.
+    The derivative is $⟦x > 0 ? 1 : eᴴ⁽¹⁻ˣ⁾ (1 + \log(1-x))⟧$.
 
-    Here, $H(x)$ is PyTorch's entropy primitive. (EntLU = Entropic Linear Unit)
+    Here $H(t)=-t\log(t)$ is PyTorch's entropy primitive. EntLU stands for
+    entropic linear unit. The inverse methods are not implemented.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
@@ -354,10 +359,13 @@ class EntLU(nn.Module, Transform):
 class Tanhshrink(nn.Module, Transform):
     r"""Maps tensor elementwise via $x ↦ x - tanh(x)$.
 
-    The inverse is $y ↦ ½ W(2y+2, 2y-2, -1)$, where $W$ is the generalized
+    The inverse is $y ↦ ½ W(-1, 2y+2, 2y-2)$, where $W$ is the generalized
     Lambert-W function, that is $W(⋅, t, s)$ is the inverse of $u ↦ eᵘ(u-t)/(u-s)$.
 
     The derivative is: $\frac{d}{dx}(x-\tanh(x)) = \tanh²(x)$.
+
+    The derivative vanishes at zero, so the inverse is not differentiable there.
+    The inverse methods are not implemented.
     """
 
     DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
@@ -381,11 +389,15 @@ class Tanhshrink(nn.Module, Transform):
 
 
 class ConjugatedAffineFlow(nn.Module, Transform):
-    r"""Maps tensors elements-wise via $x ↦ ϕ⁻¹(α(ε)⋅ϕ(x)+β(ε))$.
+    r"""Map tensor entries elementwise via $x ↦ ϕ⁻¹(α(ε)⋅ϕ(x)+β(ε))$.
 
-    Here, $ϕ$ is a diffeomorphism, and both $α(0)=1$, $β(0)=0$ are smooth with $α(ε)≠0$.
+    Here $ϕ$ is a diffeomorphism. The supplied functions $α$ and $β$ must be
+    smooth, with $α(ε)≠0$. If $α(0)=1$ and $β(0)=0$, the initial map is the
+    identity. The affine map must preserve the image of $ϕ$ for the composition
+    to be defined.
 
-    simple choices are: $α(z)=ℯᶜᶻ$, $β(z)=dz$ for some constants $c,d∈ℝ$.
+    For $ϕ:ℝ→ℝ$, simple choices are $α(ε)=\exp(cε)$ and $β(ε)=dε$ for
+    constants $c,d∈ℝ$.
     """
 
     def __init__(

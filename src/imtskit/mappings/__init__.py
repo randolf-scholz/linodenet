@@ -1,8 +1,8 @@
-r"""Projections for the Linear ODE Networks.
+r"""Mappings, inverse interfaces, and registries for neural network layers.
 
 Notes:
-    - See `imtskit.mappings.functional` for functional implementations.
-    - See `imtskit.mappings.projections` for module-based implementations.
+    - See `imtskit.mappings.functional` for functional projections.
+    - See `imtskit.mappings.projections` for module-based projections.
 """
 # ruff: file-ignore[F403, F405]
 
@@ -204,7 +204,7 @@ MATRIX_PROJECTIONS_WITH_ARGS: dict[str, ProjectionFnWithArgs] = {
     "contraction"       : functional.contraction,
     "lipschitz_bounded" : functional.lipschitz_bounded,
 }  # fmt: skip
-r"""Matrix projections that require additional arguments"""
+r"""Matrix projections that require additional arguments."""
 
 PROJECTION_FNS: dict[str, ProjectionFnWithArgs] = {
     **VECTOR_PROJECTION_FNS,

@@ -26,20 +26,22 @@ from imtskit.special import (
 class BimodalToGaussian(nn.Module, Transform):
     r"""Monotone transport from the symmetric bimodal mixture $½N(-μ,σ²)+½N(μ,σ²)$ to $N(0,1)$.
 
-    .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
+    $$  y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)  $$
 
-    with `inverse` evaluating the corresponding Gaussian-to-bimodal map.
+    Here $Φ$ is the standard normal CDF. The `decode` method evaluates the
+    corresponding Gaussian-to-bimodal map.
 
     The transport is evaluated with numerically stable lower-tail and upper-tail
     formulas based on `log_ndtr` and `ndtri_exp`.
 
-    Properties:
-        - strictly increasing
-        - smooth for $σ > 0$
-        - derivative bounded by
-          $\exp(-½(μ/σ)²)/σ ≤ ∂y/∂x ≤ 1/σ$
-        - asymptotically affine in the tails:
-          $y ≈ σ⁻¹(x-\sign(x)\abs{μ})$
+    The map has the following properties:
+
+    - strictly increasing
+    - smooth for $σ > 0$
+    - derivative bounded by
+        $\exp(-½(μ/σ)²)/σ ≤ ∂y/∂x ≤ 1/σ$
+    - asymptotically affine in the tails:
+        $y ≈ σ⁻¹(x-\sign(x)\abs{μ})$
     """
 
     def __init__(self) -> None:
@@ -81,21 +83,22 @@ class GaussianToBimodal(nn.Module, Transform):
 
     The map is the inverse of
 
-    .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
+    $$  y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)  $$
 
-    so `forward` returns the unique $x$ whose bimodal CDF matches $Φ(y)$.
-    The inverse map is not available in closed form and is computed with a
-    safeguarded Newton iteration. Evaluation of the underlying transport uses
+    Here $Φ$ is the standard normal CDF. Thus `encode` returns the unique $x$
+    whose bimodal CDF matches $Φ(y)$. This Gaussian-to-bimodal map has no closed
+    form and is computed with a safeguarded Newton iteration. Evaluation of the underlying transport uses
     numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
     and `ndtri_exp`.
 
-    Properties:
-        - strictly increasing
-        - smooth for $σ > 0$
-        - derivative bounded by
-          $σ ≤ ∂x/∂y ≤ σ\exp(½(μ/σ)²)$
-        - asymptotically affine in the tails:
-          $x ≈ σy + \sign(y)\abs{μ}$
+    The map has the following properties:
+
+    - strictly increasing
+    - smooth for $σ > 0$
+    - derivative bounded by
+        $σ ≤ ∂x/∂y ≤ σ\exp(½(μ/σ)²)$
+    - asymptotically affine in the tails:
+        $x ≈ σy + \sign(y)\abs{μ}$
     """
 
     def __init__(self) -> None:
@@ -135,19 +138,21 @@ class GaussianToBimodal(nn.Module, Transform):
 class MixtureToGaussian(nn.Module, Transform):
     r"""Monotone transport from the Gaussian mixture $∑ₖ ωₖ N(μₖ, σₖ²)$ to $N(0,1)$.
 
-    .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
+    $$  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)  $$
 
-    where $Φ$ is the standard normal CDF.
+    Here $Φ$ is the standard normal CDF, $zₖ=(x-μₖ)/σₖ$, $σₖ>0$, and the
+    positive mixture weights satisfy $∑ₖωₖ=1$.
     The transport is evaluated with numerically stable lower-tail and upper-tail
     formulas based on `log_ndtr` and `ndtri_exp`.
 
-    Properties:
-        - strictly increasing in $x$
-        - smooth for positive component scales
-        - Jacobian
-          $∂y/∂x = ∑ₖ (ωₖ/σₖ)\exp(½(y²-zₖ²))$ is strictly positive
-        - in the far tails it approaches the affine transport of the dominant
-          component, so $y ≈ (x-μₖ)/σₖ$
+    The map has the following properties:
+
+    - strictly increasing in $x$
+    - smooth for positive component scales
+    - Jacobian
+        $∂y/∂x = ∑ₖ (ωₖ/σₖ)\exp(½(y²-zₖ²))$ is strictly positive
+    - in the far tails it approaches the affine transport of the dominant
+        component, so $y ≈ (x-μₖ)/σₖ$
     """
 
     def __init__(self, num_components: int) -> None:
@@ -195,21 +200,23 @@ class GaussianToMixture(nn.Module, Transform):
 
     The map is defined implicitly as the inverse of
 
-    .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
+    $$  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)  $$
 
-    hence `forward` returns the unique $x$ with mixture CDF equal to $Φ(y)$.
-    The inverse map is not available in closed form and is computed with a
-    safeguarded Newton iteration. Evaluation of the underlying transport uses
+    Here $Φ$ is the standard normal CDF, $σₖ>0$, and the positive mixture
+    weights satisfy $∑ₖωₖ=1$. Thus `encode` returns the unique $x$ with mixture
+    CDF equal to $Φ(y)$. This Gaussian-to-mixture map has no closed form and is
+    computed with a safeguarded Newton iteration. Evaluation of the underlying transport uses
     numerically stable lower-tail and upper-tail formulas based on `log_ndtr`
     and `ndtri_exp`.
 
-    Properties:
-        - strictly increasing, since it is the inverse of a monotone CDF transport
-        - smooth for positive component scales
-        - Jacobian strictly positive, with bounds inherited from the reciprocal
-          slope of the mixture-to-Gaussian map
-        - asymptotically piecewise affine in the tails, matching the dominant
-          component behavior $x ≈ μₖ + σₖy$
+    The map has the following properties:
+
+    - strictly increasing, since it is the inverse of a monotone CDF transport
+    - smooth for positive component scales
+    - Jacobian strictly positive, with bounds inherited from the reciprocal
+        slope of the mixture-to-Gaussian map
+    - asymptotically piecewise affine in the tails, matching the dominant
+        component behavior $x ≈ μₖ + σₖy$
     """
 
     def __init__(self, num_components: int) -> None:

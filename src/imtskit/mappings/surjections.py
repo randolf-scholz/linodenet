@@ -110,7 +110,7 @@ class ConcatProjection(nn.Module, Surjection):
     r"""Maps $[x,y] ⟼ x$.
 
     See Also:
-        - `imtskit.embeddings.ConcatEmbedding`
+        - `imtskit.mappings.embeddings.ConcatEmbedding`
     """
 
     DOMAIN: Final[VectorDomains] = VectorDomains.REAL
@@ -174,7 +174,11 @@ class PositiveVector(nn.Module, Surjection):
 
 
 class StochasticVector(nn.Module, Surjection):
-    r"""Map vectors to the probability simplex."""
+    r"""Map vectors to the interior of the probability simplex via softmax.
+
+    The right inverse takes logarithms, so its input must have strictly positive
+    entries summing to one.
+    """
 
     DOMAIN: Final[VectorDomains] = VectorDomains.REAL
     CODOMAIN: Final[VectorDomains] = VectorDomains.STOCHASTIC
@@ -211,11 +215,11 @@ class SpecialOrthogonal(nn.Module, Surjection):
 
 
 class OrthogonalHouseholder(nn.Module, Surjection):
-    r"""Map square matrices to orthogonal matrices via Householder reflections.
+    r"""Map matrices to orthonormal columns or rows via Householder reflections.
 
     The input columns define a sequence of trailing-block Householder reflectors.
     This parametrization covers the full orthogonal group $O(n)$ and avoids the
-    SVD used by `OrthogonalProjection`.
+    SVD used by `imtskit.mappings.projections.Orthogonal`.
     """
 
     DOMAIN: Final[MatrixDomains] = MatrixDomains.TALL
@@ -258,7 +262,7 @@ class OrthogonalCayley(nn.Module, Surjection):
     r"""Map square matrices to orthogonal matrices via skew-symmetrization and Cayley.
 
     Note:
-        This construction is the composition $X ↦ ½(X-Xᵀ) ↦ (𝕀-A)(𝕀+A)^{-1}$.
+        This construction is the composition $X ↦ ½(X-Xᵀ) ↦ (𝕀-A)(𝕀+A)⁻¹$.
         Its image is `MatrixDomains.CAYLEY_ORTHOGONAL`, i.e. the orthogonal matrices
         without eigenvalue $-1$.
     """

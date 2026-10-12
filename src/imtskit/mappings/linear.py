@@ -1,25 +1,11 @@
-r"""Re-Implementation of Spectral Normalization Layer.
+r"""Linear contraction layers with constrained spectral norms.
 
 Notes:
-    The default implementation provided by torch is problematic [1]_:
-
-    - It only performs a single power iteration, without any convergence test.
-    - It internally uses pseudo-inverse, which causes a full SVD to be computed.
-        - This SVD can fail for ill-conditioned matrices.
-    - It does not implement any optimized backward pass.
-
-    Alternatively, torch.linalg.matrix_norm(A, ord=2) can be used to compute the spectral norm of a matrix A.
-    But here, again, torch computes the full SVD.
-
-    Our implementation addresses these issues:
-
-    - We use the analytic formula for the gradient: $∂‖A‖₂/∂A = uvᵀ$,
-      where $u$ and $v$ are the left and right singular vectors of $A$.
-    - We use the power iteration with convergence test.
-
-
-References:
-    .. [1] https://pytorch.org/docs/stable/_modules/torch/nn/utils/spectral_norm.html#spectral_norm
+    - `LinearContraction` constrains a dense weight matrix through
+        `imtskit.mappings.projections.Contraction`, which uses power iteration
+        with a convergence test and cached singular vectors.
+    - `RankOneContraction` normalizes the two vector factors of a rank-one matrix.
+    - `LowRankContraction` uses orthonormal factors and bounded singular values.
 """
 
 __all__ = ["LinearContraction", "RankOneContraction", "LowRankContraction"]
@@ -42,10 +28,11 @@ from .surjections import OrthogonalHouseholder
 
 
 class LinearContraction(nn.Linear):
-    r"""A linear layer $f(x) = A⋅x$ satisfying the contraction property $‖f(x)-f(y)‖₂ ≤ ‖x-y‖₂$.
+    r"""An affine layer $f(x)=A′x+b$ with Lipschitz constant at most $c<1$.
 
-    This is achieved by normalizing the weight matrix by
-    $A' = A⋅\min(\tfrac{c}{‖A‖₂}, 1)$, where $c<1$ is a hyperparameter.
+    The weight is parametrized as $A′=A⋅\min(c/‖A‖₂,1)$, so
+    $‖f(x)-f(y)‖₂≤c‖x-y‖₂$ for $0<c<1$. The optional bias does not affect
+    the Lipschitz constant.
     """
 
     input_size: Final[int]

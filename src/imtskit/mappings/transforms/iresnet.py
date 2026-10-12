@@ -18,11 +18,10 @@ class IResNet(TransformSequence[ResidualContraction]):
     r"""Invertible residual network built from contractive residual blocks.
 
     References:
-        - | Invertible Residual Networks
-          | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
-          | International Conference on Machine Learning 2019
-          | http://proceedings.mlr.press/v97/behrmann19a.html
-        - https://github.com/jhjacobsen/invertible-resnet
+        - [Invertible Residual Networks](https://proceedings.mlr.press/v97/behrmann19a.html).
+            Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud,
+            Jörn-Henrik Jacobsen. International Conference on Machine Learning, 2019.
+        - [Reference implementation](https://github.com/jhjacobsen/invertible-resnet).
     """
 
     input_size: Final[int]
@@ -34,7 +33,7 @@ class IResNet(TransformSequence[ResidualContraction]):
     latent_size: Final[int]
     r"""CONST: Hidden size used inside each residual block."""
     use_rezero: Final[bool]
-    r"""CONST: Whether to wrap blocks in `ReZeroContraction`."""
+    r"""CONST: Whether to apply `ReZero` gating to each residual branch."""
 
     def __init__(
         self,

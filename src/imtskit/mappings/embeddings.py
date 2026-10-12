@@ -1,11 +1,11 @@
 r"""Embedding components.
 
-An embedding is an injective mapping $f:X → Y$, that is:
+An embedding is an injective mapping $f:X→Y$.
+By injectivity, it has a left inverse $g:Y→X$ such that:
 
-1. It is left-invertible, i.e. there exists a mapping $g:Y → X$ such that
-   $g(f(x)) = x$ for all $x ∈ X$, but not necessarily $f(g(y)) = y$ for all $y ∈ Y$.
-2. The output dimensionality is (generally) larger than the input dimensionality.
-3. we require both an `forward` and a `left_inverse` method, aliased to `encode` and `decode`.
+1. $g(f(x))=x$ for all $x∈X$, while $f(g(y))=y$ need not hold for all $y∈Y$.
+2. The output dimensionality is generally at least the input dimensionality.
+3. Modules provide `forward` and `left_inverse` methods.
 """
 
 __all__ = [
@@ -32,7 +32,7 @@ class ConcatEmbedding(nn.Module, Embedding):
     This map is left-invertible via $[x,w] ⟼ x$.
 
     See Also:
-        - `imtskit.projections.ConcatProjection`
+        - `imtskit.mappings.surjections.ConcatProjection`
     """
 
     DOMAIN: Final[VectorDomains] = VectorDomains.REAL
@@ -89,12 +89,15 @@ class ConcatEmbedding(nn.Module, Embedding):
 
 
 class LinearEmbedding(nn.Module, Embedding):
-    r"""Maps $x ↦ Ax + b$ and $y ↦ A⁺(y-b)$.
+    r"""Map $x ↦ Ax+b$ with left inverse $y ↦ A⁺(y-b)$.
 
     Note:
-        x ↦ Ax + b is surjective if A has full row rank (input_size ≤ output_size).
-        x ↦ Ax + b is injective if A has full column rank (input_size ≥ output_size).
-        In the former case, the map is right-invertible, in the latter left-invertible.
+        The map is injective when $A$ has full column rank, which requires
+        `input_size ≤ output_size`. This is the rank condition needed for
+        `left_inverse` to recover the input.
+
+        Full row rank instead gives a surjection and requires
+        `input_size ≥ output_size`. The pseudoinverse is then a right inverse.
     """
 
     DOMAIN: Final[VectorDomains] = VectorDomains.REAL
@@ -110,7 +113,7 @@ class LinearEmbedding(nn.Module, Embedding):
 
     # PARAMS
     weight: Tensor
-    r"""PARAM: The weight matriz."""
+    r"""PARAM: The weight matrix."""
     bias: Tensor
     r"""PARAM: The bias vector."""
 
@@ -154,12 +157,12 @@ class LinearEmbedding(nn.Module, Embedding):
 
     @signature("(..., d) -> (..., e)")
     def forward(self, x: Tensor, /) -> Tensor:
-        r"""Concatenate the input with the padding."""
+        r"""Apply the affine map $x ↦ Ax+b$."""
         return functional.linear(x, self.weight, self.bias)
 
     @signature("(..., d) -> (..., e)")
     def left_inverse(self, y: Tensor, /) -> Tensor:
-        r"""Remove the padded state."""
+        r"""Recover the input by solving $Ax=y-b$ in the least-squares sense."""
         if self.with_bias:
             y = y - self.bias
         return torch.linalg.lstsq(self.weight, y)[0]

@@ -15,56 +15,56 @@ from signatures import signature
 class LowRankTransform(nn.Module, Transform):
     r"""An invertible, efficient diagonal-scaled low-rank perturbation layer.
 
-    .. math:: y = (𝕀ₙ + USVᵀ)x
+    $$  y = (𝕀ₙ + USVᵀ)x  $$
 
     where $U, V ∈ ℝⁿˣᵏ$ and $S = \diag(s)$ with
 
-    .. math:: sᵢ = \frac{ρ \tanh(θᵢ)}{‖Uᵀvᵢ‖₁ + δ}
+    $$  sᵢ = \frac{ρ \tanh(θᵢ)}{‖Uᵀvᵢ‖₁ + δ}  $$
 
     for unconstrained parameters $θ ∈ ℝᵏ$, contraction factor $0 < ρ < 1$, and
     stability constant $δ > 0$. Since the $i$-th row of $SVᵀU$ is
     $sᵢ (Uᵀvᵢ)ᵀ$, its row sum satisfies
 
-    .. math:: ‖(SVᵀU)ᵢ•‖₁ = |sᵢ| ‖Uᵀvᵢ‖₁ < ρ
+    $$  ‖(SVᵀU)ᵢ•‖₁ = |sᵢ| ‖Uᵀvᵢ‖₁ < ρ  $$
 
-    and therefore $‖SVᵀU‖∞ < ρ < 1$. Hence $𝕀ₖ + SVᵀU$ is always invertible by
+    and therefore $‖SVᵀU‖_∞ < ρ < 1$. Hence $𝕀ₖ + SVᵀU$ is always invertible by
     the Neumann series, which in turn guarantees that $𝕀ₙ + USVᵀ$ is invertible.
-    With the help of the Woodbury matrix identity [1]_, we have the general formula
+    The **Woodbury matrix identity** gives the general formula
 
-    .. math:: (A + UCVᵀ)⁻¹ = A⁻¹ - A⁻¹U(C⁻¹ + VᵀA⁻¹U)⁻¹VᵀA⁻¹
+    $$  (A + UCVᵀ)⁻¹ = A⁻¹ - A⁻¹U(C⁻¹ + VᵀA⁻¹U)⁻¹VᵀA⁻¹  $$
 
-    whenever the displayed inverses exist. Setting $A = 𝕀ₙ$ and $C = S$ yields
+    whenever the displayed inverses exist. A form that does not require $S⁻¹$
+    gives
 
-    .. math:: (𝕀ₙ + USVᵀ)⁻¹ = 𝕀ₙ - U(𝕀ₖ + SVᵀU)⁻¹SVᵀ
+    $$  (𝕀ₙ + USVᵀ)⁻¹ = 𝕀ₙ - U(𝕀ₖ + SVᵀU)⁻¹SVᵀ  $$
 
     Thus, to compute the inverse pass, we do not need to solve an $n×n$ system,
     but only a $k×k$ one. In particular, when $k = 1$, the formula reduces to
 
-    .. math:: (𝕀ₙ + suvᵀ)⁻¹ = 𝕀ₙ - \frac{s}{1 + s vᵀu} uvᵀ
+    $$  (𝕀ₙ + suvᵀ)⁻¹ = 𝕀ₙ - \frac{s}{1 + s vᵀu} uvᵀ  $$
 
-    To calculate the log determinant of the Jacobian, we use Sylvester's
-    determinant identity [2]_:
+    To calculate the log determinant of the Jacobian, we use **Sylvester's determinant identity**.
 
-    .. math:: \log|\det(𝕀ₙ + USVᵀ)| = \log|\det(𝕀ₖ + SVᵀU)|
+    $$  \log|\det(𝕀ₙ + USVᵀ)| = \log|\det(𝕀ₖ + SVᵀU)|  $$
 
     References:
-        .. [1] https://en.wikipedia.org/wiki/Woodbury_matrix_identity
-        .. [2] https://en.wikipedia.org/wiki/Sylvester%27s_determinant_theorem
+        - [Woodbury matrix identity](https://en.wikipedia.org/wiki/Woodbury_matrix_identity)
+        - [Sylvester's determinant identity](https://en.wikipedia.org/wiki/Sylvester%27s_determinant_theorem)
     """
 
     # CONSTANTS
     rank: Final[int]
     r"""CONST: The rank of the low rank matrix."""
     rho: Final[float]
-    r"""CONST: Strict upper bound for $‖SVᵀU‖∞$."""
+    r"""CONST: Strict upper bound for $‖SVᵀU‖_∞$."""
     delta: Final[float]
     r"""CONST: Stability offset used in the diagonal scale parameterization."""
 
     # PARAMETERS
     U: Tensor
-    r"""PARAM: $n×k$ tensor"""
+    r"""PARAM: Factor matrix of shape $n×k$."""
     V: Tensor
-    r"""PARAM: $n×k$ tensor"""
+    r"""PARAM: Factor matrix of shape $n×k$."""
     theta: Tensor
     r"""PARAM: Unconstrained length-$k$ tensor parameterizing the diagonal of $S$."""
     eye: Tensor
@@ -114,7 +114,7 @@ class LowRankTransform(nn.Module, Transform):
 
     @signature("(..., n) -> (..., n)")
     def encode(self, x: Tensor, /) -> Tensor:
-        r"""Computes $y = (𝕀ₙ + USVᵀ)x$."""
+        r"""Compute $y = (𝕀ₙ + USVᵀ)x$."""
         VtU = torch.einsum("ni, nj -> ij", self.V, self.U)
         s = self.diag_values(VtU)
         v = torch.einsum("nk, ...n -> ...k", self.V, x)  # v = Vᵀx
@@ -124,7 +124,7 @@ class LowRankTransform(nn.Module, Transform):
 
     @signature("(..., n) -> (..., n)")
     def decode(self, y: Tensor, /) -> Tensor:
-        r"""Computes $x = (𝕀 + USVᵀ)⁻¹y = y - U(𝕀ₖ + SVᵀU)⁻¹SVᵀy$."""
+        r"""Compute $x = (𝕀 + USVᵀ)⁻¹y = y - U(𝕀ₖ + SVᵀU)⁻¹SVᵀy$."""
         VtU = torch.einsum("ni, nj -> ij", self.V, self.U)
         s = self.diag_values(VtU)
         A = self.eye + s[:, None] * VtU  # A = 𝕀ₖ + SVᵀU
@@ -161,25 +161,25 @@ class LowRankTransform(nn.Module, Transform):
 class SPDLowRankTransform(nn.Module, Transform):
     r"""An invertible, efficient symmetric positive definite low-rank perturbation layer.
 
-    .. math:: y = (𝕀ₙ + UUᵀ)x
+    $$  y = (𝕀ₙ + UUᵀ)x  $$
 
-    where $U ∈ ℝⁿˣᵏ$. This is the symmetric specialization of the Woodbury identity [1]_
+    where $U ∈ ℝⁿˣᵏ$. The general Woodbury matrix identity[^1] is
 
-    .. math:: (A + UCVᵀ)⁻¹ = A⁻¹ - A⁻¹U(C⁻¹ + VᵀA⁻¹U)⁻¹VᵀA⁻¹
+    $$  (A + UCVᵀ)⁻¹ = A⁻¹ - A⁻¹U(C⁻¹ + VᵀA⁻¹U)⁻¹VᵀA⁻¹  $$
 
     obtained by setting $A = 𝕀ₙ$, $C = 𝕀ₖ$, and $V = U$, yielding
 
-    .. math:: (𝕀ₙ + UUᵀ)⁻¹ = 𝕀ₙ - U(𝕀ₖ + UᵀU)⁻¹Uᵀ
+    $$  (𝕀ₙ + UUᵀ)⁻¹ = 𝕀ₙ - U(𝕀ₖ + UᵀU)⁻¹Uᵀ  $$
 
     Thus, to compute the inverse pass, we only need to solve a $k×k$ system. To
-    calculate the log determinant of the Jacobian, we use Sylvester's determinant
-    identity [2]_:
+    calculate the log determinant of the Jacobian, we use
+    [Sylvester's determinant identity](https://en.wikipedia.org/wiki/Sylvester%27s_determinant_theorem):
 
-    .. math:: \log|\det(𝕀ₙ + UUᵀ)| = \log|\det(𝕀ₖ + UᵀU)|
+    $$  \log|\det(𝕀ₙ + UUᵀ)| = \log|\det(𝕀ₖ + UᵀU)|  $$
 
     References:
-        .. [1] https://en.wikipedia.org/wiki/Woodbury_matrix_identity
-        .. [2] https://en.wikipedia.org/wiki/Sylvester%27s_determinant_theorem
+        [^1]: https://en.wikipedia.org/wiki/Woodbury_matrix_identity
+        [^2]: https://en.wikipedia.org/wiki/Sylvester%27s_determinant_theorem
     """
 
     # CONSTANTS
@@ -188,7 +188,7 @@ class SPDLowRankTransform(nn.Module, Transform):
 
     # PARAMETERS
     U: Tensor
-    r"""PARAM: $n×k$ tensor"""
+    r"""PARAM: Factor matrix of shape $n×k$."""
     eye: Tensor
     r"""BUFFER: Identity matrix in latent rank space."""
 
@@ -209,14 +209,14 @@ class SPDLowRankTransform(nn.Module, Transform):
 
     @signature("(..., n) -> (..., n)")
     def encode(self, x: Tensor, /) -> Tensor:
-        r"""Computes $y = (𝕀ₙ + UUᵀ)x$."""
+        r"""Compute $y = (𝕀ₙ + UUᵀ)x$."""
         u = torch.einsum("nk, ...n -> ...k", self.U, x)  # u = Uᵀx
         v = torch.einsum("nk, ...k -> ...n", self.U, u)  # v = UUᵀx
         return x + v
 
     @signature("(..., n) -> (..., n)")
     def decode(self, y: Tensor, /) -> Tensor:
-        r"""Computes $x = (𝕀 + UUᵀ)⁻¹y = y - U(𝕀ₖ + UᵀU)⁻¹Uᵀy$."""
+        r"""Compute $x = (𝕀 + UUᵀ)⁻¹y = y - U(𝕀ₖ + UᵀU)⁻¹Uᵀy$."""
         A = self.eye + torch.einsum("ni, nj -> ij", self.U, self.U)  # A = 𝕀ₖ + UᵀU
         u = torch.einsum("nk, ...n -> ...k", self.U, y)  # u = Uᵀy
         z = torch.linalg.solve(A, u[..., None]).squeeze(-1)  # z = (𝕀ₖ + UᵀU)⁻¹Uᵀy

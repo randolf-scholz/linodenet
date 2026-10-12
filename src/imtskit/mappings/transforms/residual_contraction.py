@@ -1,4 +1,4 @@
-r"""ContractiveFlow implementation (iResNet-block)."""
+r"""Residual flows implementation."""
 
 __all__ = [
     "DEFAULT_REZERO_SCALAR_MAP",
@@ -52,8 +52,9 @@ def resolve_contraction_gate(
 class ResidualContractionBase[M: nn.Module](nn.Module, Transform):
     r"""Shared base class for residual contractions with implicit inverses.
 
-    Forward: y ← x + ρ(f(x))
-    Inverse: via fix-point iteration.
+    The forward map is $y=x+ρ(f(x))$. The inverse solves
+    $x=y-ρ(f(x))$ by fixed-point iteration. Convergence requires the composed
+    residual $ρ∘f$ to be a contraction.
     """
 
     maxiter: Final[int]
@@ -117,44 +118,42 @@ class ResidualContractionBase[M: nn.Module](nn.Module, Transform):
 class ResidualContraction[M: nn.Module](ResidualContractionBase):
     r"""A residual flow based on a contraction layer.
 
-    Forward: y ← x + ρ(f(x))
-    Inverse: via fix-point iteration.
+    The forward map is $y=x+ρ(f(x))$. Its inverse is computed by fixed-point
+    iteration, which requires the composed residual $ρ∘f$ to be a contraction.
 
     Standard gate options are:
 
-    - ``"rezero"``: use a learnable scalar gate with optional `scalar_map`.
-    - ``"identity"`` or `None`: use no additional gating.
-    - ``nn.Module``: use a custom user-provided gate.
+    - `"rezero"`: use a learnable scalar gate with optional `scalar_map`.
+    - `"identity"` or `None`: use no additional gating.
+    - `nn.Module`: use a custom user-provided gate.
 
-    The jacobian determinant of the forward transformation is:
+    The log determinant of the forward Jacobian is:
 
-    .. math:: \log\det(∂y/∂x) = \log\det(𝕀 + ∂(ρ∘f)/∂x) = \tr\log(𝕀 + ∂(ρ∘f)/∂x)
+    $$  \log\det(∂y/∂x) = \log\det(𝕀 + ∂(ρ∘f)/∂x) = \tr\log(𝕀 + ∂(ρ∘f)/∂x)  $$
 
     Using the power series, this is
 
-    .. math:: ∑_k (-1)ᵏ⁺¹ \tr((∂(ρ∘f)/∂x)ᵏ)/k
+    $$  ∑_{k=1}^∞ (-1)ᵏ⁺¹ \tr((∂(ρ∘f)/∂x)ᵏ)/k  $$
 
-    The trace of A can be estimated with the Hutchinson trace estimator:
+    The trace of $A$ can be estimated with the Hutchinson trace estimator:
 
-    .. math:: \tr(A) = 𝐄[vᵀAv] \qquad 𝐄[v]=0, \Cov[v]=𝕀
+    $$  \tr(A) = 𝐄[vᵀAv] \qquad 𝐄[v]=0, \Cov[v]=𝕀  $$
 
     References:
-        - https://github.com/jhjacobsen/invertible-resnet
-        - | Invertible Residual Networks
-          | Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud, Jörn-Henrik Jacobsen
-          | International Conference on Machine Learning 2019
-          | https://proceedings.mlr.press/v97/behrmann19a.html
-        - | A stochastic estimator of the trace of the influence matrix for laplacian smoothing splines
-          | M.F. Hutchinson
-          | Communications in Statistics - Simulation and Computation 1990
-          | https://doi.org/10.1080/03610919008812866
+        - [Reference implementation](https://github.com/jhjacobsen/invertible-resnet).
+        - [Invertible Residual Networks](https://proceedings.mlr.press/v97/behrmann19a.html).
+            Jens Behrmann, Will Grathwohl, Ricky T. Q. Chen, David Duvenaud,
+            Jörn-Henrik Jacobsen. International Conference on Machine Learning, 2019.
+        - [A stochastic estimator of the trace of the influence matrix for Laplacian smoothing splines](https://doi.org/10.1080/03610919008812866).
+            M. F. Hutchinson. Communications in Statistics — Simulation and
+            Computation, 1990.
 
     See Also:
-        - `ReZeroContraction`: adds a learnable scalar ε and parametrization
-            to the contraction layer:. $y ← x + φ(ε)⋅f(x)$ with $φ(ε) ∈ (-1, 1)$,
-            i.e. $ρ(u) = φ(ε)⋅u$. ε is initialized to 0, so that the initial
+        - `imtskit.nn.rezero.ReZero`: Adds a learnable scalar $ε$ and
+            parametrization $ρ(u)=ϕ(ε)⋅u$. The default scalar map ensures
+            $ϕ(ε)∈(-1,1)$. The parameter $ε$ is initialized to zero, so the initial
             transformation is the identity.
-        - `ResidualContractionFallback`: Uses a plain python loop rather than `torch.while_loop`.
+        - `ResidualContractionFallback`: Uses a plain Python loop for inversion.
     """
 
     contraction: M
@@ -205,11 +204,11 @@ class ResidualContraction[M: nn.Module](ResidualContractionBase):
 
 
 class ResidualContractionFallback[M: nn.Module](ResidualContraction[M]):
-    r"""Fallback implementation of ResidualContraction that uses a plain python loop.
+    r"""Fallback implementation of ResidualContraction that uses a plain Python loop.
 
     See Also:
         - `ResidualContraction`
-        - `ReZeroContraction`
+        - `imtskit.nn.rezero.ReZero`
     """
 
     def decode(self, y: Tensor, /) -> Tensor:
@@ -236,22 +235,27 @@ class ResidualBottleneck[M: nn.Module](ResidualContractionBase):
 
     The transformation is
 
-    .. math:: y = x + ρ(U f(Vᵀx))
+    $$  y = x + ρ(U f(Vᵀx))  $$
 
-    where $U,V∈ℝ^{n×k}$ have orthonormal columns, $f:ℝᵏ→ℝᵏ$ is an arbitrary
-    bottleneck module, and $ρ$ is the optional gate.
+    where $U,V∈ℝⁿˣᵏ$ have orthonormal columns, $f:ℝᵏ→ℝᵏ$ is the bottleneck
+    module, and $ρ$ is the optional gate. Invertibility requires
+    $x ↦ ρ(Uf(Vᵀx))$ to be a contraction; an arbitrary bottleneck module does
+    not guarantee this condition.
 
     Since there is no pre-activation, the inverse can be solved in bottleneck
     coordinates:
 
-    .. math:: z = Vᵀy - Vᵀρ(U f(z))
+    $$  z = Vᵀy - Vᵀρ(U f(z))  $$
 
     and then lifted back with $x = y - ρ(U f(z))$.
 
     The Jacobian determinant is computed exactly with the matrix determinant
     lemma:
 
-    .. math:: \log|det(𝕀ₙ + Dᵨ U Dₛ Vᵀ)| = \log|det(𝕀ₖ + Vᵀ Dᵨ U Dₛ)|.
+    $$  \log|det(𝕀ₙ + Dᵨ U Dₛ Vᵀ)| = \log|det(𝕀ₖ + Vᵀ Dᵨ U Dₛ)|  $$
+
+    Here $Dᵨ$ and $Dₛ$ denote the Jacobians of the gate and bottleneck module,
+    respectively, evaluated at their inputs.
     """
 
     input_size: Final[int]
