@@ -2,8 +2,8 @@ r"""Module wrappers for initializations.
 
 Notes:
     - See `imtskit.initializations.functional` for functional implementations.
-    - These wrappers bind structural shape arguments in `__init__` and accept only
-      sample shape at call time.
+    - These wrappers bind matrix dimensions in `__init__`. At call time, `size`
+        specifies the sample shape, while `dtype` and `device` control the output.
 """
 
 __all__ = [
@@ -30,7 +30,7 @@ from . import functional
 
 
 class Fixed(nn.Module):
-    r"""Module wrapper for a constant tensor."""
+    r"""Return independent copies of a constant tensor with the requested batch shape."""
 
     value: Tensor
 

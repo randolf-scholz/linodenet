@@ -1,11 +1,4 @@
-r"""Initializations for the Linear ODE Networks.
-
-All initializations are normalized such that if $x∼𝓝(0,1)$, then $Ax∼𝓝(0,1)$ as well.
-
-Notes:
-    - See `imtskit.initializations.functional` for functional implementations.
-    - See `imtskit.initializations.modules` for all module-based initializations.
-"""
+r"""Functional matrix initializations."""
 
 __all__ = [
     # Deterministic Initializations
@@ -61,8 +54,8 @@ def gaussian(
 ) -> Tensor:
     r"""Sample a random Gaussian matrix.
 
-    `size` is interpreted as sample shape and `dim` as the matrix dimension.
-    The standard deviation is normalized by the number of columns.
+    Entries are independent with mean `loc` and standard deviation $σ/√n$,
+    where $σ$ is `scale` and $n$ is the number of columns.
     """
     batch = _normalize_sample_shape(size)
     m, n = _normalize_matrix_dim(dim)
@@ -81,15 +74,14 @@ def diagonally_dominant(
 ) -> Tensor:
     r"""Sample a random diagonally dominant matrix.
 
-    We sample a random traceless matrix $B_{ij}∼𝓝(0,1/n)$, $B_{ii}=0$ and
-    then consider a linear combination with the identity matrix $𝕀ₙ$.
-    We choose the coefficients such that the resulting matrix is diagonally dominant.
+    $$  A = 𝕀ₙ + B/s, \qquad s = ∑ᵢⱼ |Bᵢⱼ|  $$
 
-    .. math:: A = 𝕀ₙ + B  \qq{with}  B_{ij}∼𝓝(0,1/n²)
+    Sample $B$ with $Bᵢᵢ=0$ and independent off-diagonal entries
+    $Bᵢⱼ∼𝓝(0,1/n)$. Normalize by the sum of absolute entries $s$:
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
-
-    `size` is interpreted as sample shape and `dim` as the matrix dimension.
+    For $s>0$, diagonal entries equal one and each off-diagonal row sum is at
+    most one, giving weak diagonal dominance. If $s=0$, division by zero
+    produces non-finite entries; this always occurs for $n=1$.
     """
     n = _normalize_square_dim(dim)
     B = traceless(size, dim=n, dtype=dtype, device=device)
@@ -110,12 +102,8 @@ def symmetric(
 
     Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
 
-    There are two common ways to sample a symmetric matrix:
-
-    1. Copy the upper triangular part to the lower triangular part.
-    2. Use the projection formula $(A+Aᵀ)/2$ with additional normalization.
-       The variance of off-diagonal elements is then $2σ²/4$, so we need to scale by $√2$.
-       The variance of diagonal elements is $4σ²/4$, so we don't need to scale.
+    $A$ is constructed by sampling an upper triangular matrix $𝓝(0,1/n)$
+    and copying the entries to their corresponding lower tringular entry.
     """
     batch = _normalize_sample_shape(size)
     n = _normalize_square_dim(dim)
@@ -134,7 +122,8 @@ def skew_symmetric(
 ) -> Tensor:
     r"""Sample a random skew-symmetric matrix, i.e. $Aᵀ = -A$.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+    Entries strictly above the diagonal are independent samples from $𝓝(0,1/n)$.
+    They are negated and copied below the diagonal; diagonal entries are zero.
     """
     batch = _normalize_sample_shape(size)
     n = _normalize_square_dim(dim)
@@ -153,10 +142,11 @@ def orthogonal(
 ) -> Tensor:
     r"""Sample a random matrix with orthonormal columns.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+    Sample an $m×n$ Gaussian matrix, take its QR factorization, and fix the
+    column signs using the diagonal of $R$. The result is uniform over matrices
+    with orthonormal columns and satisfies $AᵀA=𝕀ₙ$.
 
-    We sample a Gaussian matrix and take its QR factorization, then fix the signs
-    using the diagonal of $R$ so the result matches the standard Haar sampler.
+    Requires $m≥n$. For square matrices, this is the Haar distribution on $O(n)$.
     """
     batch = _normalize_sample_shape(size)
     m, n = _normalize_matrix_dim(dim)
@@ -181,12 +171,13 @@ def special_orthogonal(
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
 ) -> Tensor:
-    r"""Sample a random special orthogonal matrix, i.e. $Aᵀ = A⁻¹$ with $\det(A)=1$.
+    r"""Sample a special orthogonal matrix with $Aᵀ=A⁻¹$ and $\det(A)=1$.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+    Sample from the Haar distribution on $O(n)$ using `orthogonal`, then flip
+    the first column when the determinant is negative. This gives the Haar
+    distribution on $SO(n)$.
 
-    We first sample from O(n) with the QR-based Haar sampler above, then flip the
-    first col when the determinant is negative to project the sample into SO(n).
+    For $n=0$, return the empty $0×0$ matrix without a column flip.
     """
     n = _normalize_square_dim(dim)
     Q = orthogonal(size, dim=n, dtype=dtype, device=device)
@@ -209,9 +200,11 @@ def low_rank(
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
 ) -> Tensor:
-    r"""Sample a random low-rank m×n matrix, i.e. $A = UVᵀ$.
+    r"""Sample a random low-rank $m×n$ matrix as $A=UV$.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+    With $r≤\min(m,n)$ equal to `rank`, sample independent factors $U∈ℝ^{m×r}$ and $V∈ℝ^{r×n}$
+    with entries distributed as $𝓝(0,1/r)$ and $𝓝(0,1/n)$, respectively.
+    The product has rank at most $r$ and each entry has variance $1/n$.
     """
     batch = _normalize_sample_shape(size)
     m, n = _normalize_matrix_dim(dim)
@@ -233,9 +226,10 @@ def traceless(
     dtype: Optional[torch.dtype] = None,
     device: Optional[str | torch.device] = None,
 ) -> Tensor:
-    r"""Sample a random traceless matrix, i.e. $\tr(A)=0$.
+    r"""Sample a random matrix with zero diagonal and hence $\tr(A)=0$.
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+    Sample a Gaussian matrix with entry variance $1/n$, then set its diagonal
+    to zero. Off-diagonal entries remain independent samples from $𝓝(0,1/n)$.
     """
     n = _normalize_square_dim(dim)
     A = gaussian(size, dim=(n, n), dtype=dtype, device=device)
@@ -254,9 +248,10 @@ def symplectic(
 ) -> Tensor:
     r"""Return the canonical symplectic matrix of size $n=2k$.
 
-    .. math:: 𝕊_n = \begin{bmatrix}0 & 𝕀_k \\ -𝕀_k & 0\end{bmatrix}
+    $$ 𝕊ₙ = \begin{bmatrix}0 & 𝕀ₖ \\ -𝕀ₖ & 0\end{bmatrix} $$
 
-    Normalized such that if $x∼𝓝(0,1)$, then $A⋅x∼𝓝(0,1)$.
+    The result satisfies $𝕊ₙᵀ𝕊ₙ=𝕀ₙ$ and $𝕊ₙ²=-𝕀ₙ$, and preserves the
+    standard Gaussian distribution. Odd dimensions are rejected.
     """
     batch = _normalize_sample_shape(size)
     n = _normalize_square_dim(dim)

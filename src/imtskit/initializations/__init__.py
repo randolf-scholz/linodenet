@@ -1,10 +1,11 @@
-r"""Initializations for the Linear ODE Networks.
+r"""Matrix and sphere-point initializations for linear ODE networks.
 
-All initializations are normalized such that if $x∼𝓝(0,1)$, then $Ax∼𝓝(0,1)$ as well.
+Matrix samplers use dimension-dependent scaling or structural constraints.
+Their individual docstrings describe the distributions and invariants.
 
 Notes:
     - See `imtskit.initializations.functional` for functional implementations.
-    - See `imtskit.initializations.modules` for all module-based initializations.
+    - See `imtskit.initializations.modules` for module wrappers.
 """
 # ruff: file-ignore[F403]
 
@@ -44,7 +45,7 @@ INITIALIZATION_FNS: dict[str, InitializationFn] = {
     "symmetric"           : functional.symmetric,
     "traceless"           : functional.traceless,
 }  # fmt: skip
-r"""Dictionary containing all available initializations (functions)."""
+r"""Registry of matrix initialization functions."""
 
 
 INITIALIZATIONS: dict[str, type[Initialization]] = {
@@ -59,4 +60,4 @@ INITIALIZATIONS: dict[str, type[Initialization]] = {
     "Symplectic"         : modules.Symplectic,
     "Traceless"          : modules.Traceless,
 }  # fmt: skip
-r"""Dictionary containing all available initializations (nn.Modules)"""
+r"""Registry of initialization classes implemented as `torch.nn.Module` subclasses."""
