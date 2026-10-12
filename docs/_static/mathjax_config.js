@@ -193,22 +193,24 @@ window.MathJax = {
         displayMath: [["\\[", "\\]"]],
         macros: {
             // operators
-            E: "\\operatorname{\\mathbf{E}}",
-            KL: "\\operatorname{KL}",
+            Cov: "\\operatorname{Cov}",  // covariance
+            E: "\\operatorname{\\mathbf{E}}",  // expected value
+            KL: "\\operatorname{KL}",  // kullback-leibler divergence
             Median: "\\operatorname{Median}",
             NdtriExp: "\\operatorname{ndtri\\_exp}",
-            Var: "\\operatorname{\\mathbf{Var}}",
+            Var: "\\operatorname{\\mathbf{Var}}",  // variance
             argmax: "\\operatorname*{arg\\,max}",
             argmin: "\\operatorname*{arg\\,min}",
             chol: "\\operatorname{chol}",  // cholesky decomposition
             diag: "\\operatorname{diag}",
             dist: "\\operatorname{dist}",
-            mae: "\\operatorname{\\mathbf{MAE}}",
-            mse: "\\operatorname{\\mathbf{MSE}}",
-            nan: "\\texttt{NaN}",
             logsumexp: "\\operatorname{logsumexp}",
+            mae: "\\operatorname{\\mathbf{MAE}}",  // mean absolute error
+            mse: "\\operatorname{\\mathbf{MSE}}",  // mean squared error
+            nan: "\\texttt{NaN}",
             rank: "\\operatorname{rank}",
             relu: "\\operatorname{ReLU}",
+            sign: "\\operatorname{sign}",
             softplus: "\\operatorname{softplus}",
             sym: "\\operatorname{sym}",  // symmetric part
             tr: "\\operatorname{tr}",  // trace

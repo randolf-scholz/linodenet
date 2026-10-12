@@ -25,6 +25,7 @@ custom_dir = "zensical/_templates"
 language = "en"
 features = [
     "content.code.copy",
+    "content.footnote.tooltips",
     # "navigation.footer",
     "navigation.indexes",
     "navigation.sections",
@@ -115,6 +116,7 @@ signature_crossrefs = true
 type_parameter_headings = true
 
 [project.markdown_extensions]
+footnotes = { }
 admonition = { }
 attr_list = { }
 md_in_html = { }
