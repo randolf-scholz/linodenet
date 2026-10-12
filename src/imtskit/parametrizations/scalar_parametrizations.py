@@ -1,6 +1,7 @@
 r"""Parametrizations for scalars (rank-0 tensors).
 
-These can be applied element-wise to any higher rank tensor as well.
+Scalar parametrizations can also act elementwise on tensors of any rank.
+This module currently exports no parametrizations.
 """
 
 __all__ = []

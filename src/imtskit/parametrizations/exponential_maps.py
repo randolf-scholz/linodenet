@@ -1,13 +1,13 @@
-r"""Vector and matrix manifolds with explicit base-pointed exp/log maps.
+r"""Vector and matrix manifolds with exponential and logarithmic maps at a base point.
 
-This module intentionally exposes manifold operations at a general base point
-$x$, i.e. maps of the form $expₓ(v)$ with $v ∈ TₓM$.
+Manifold operations take an explicit base point $x ∈ M$, with exponential maps
+of the form $expₓ(v)$ for tangent vectors $v ∈ TₓM$.
 
 Only manifolds with a standard closed-form choice of metric are implemented:
 
-- `SphereManifold`: round metric on the unit sphere $Sⁿ⁻¹$
-- `SpecialOrthogonalManifold`: canonical bi-invariant metric on $SO(n)$
-- `PositiveDefiniteManifold`: affine-invariant metric on $SPD(n)$
+- `SphereManifold`: round metric on the unit sphere $Sⁿ⁻¹$.
+- `SpecialOrthogonalManifold`: canonical bi-invariant metric on $SO(n)$.
+- `PositiveDefiniteManifold`: affine-invariant metric on $SPD(n)$.
 """
 
 __all__ = [
@@ -94,7 +94,7 @@ class MatrixLieGroup(MatrixManifold, Protocol):
     @abstractmethod
     @signature("(..., n, n) -> (..., n, n)")
     def project_algebra(self, x: Tensor, /) -> Tensor:
-        r"""Project an ambient matrix onto the Lie algebra $𝔤 = TᴵG$."""
+        r"""Project an ambient matrix onto the Lie algebra $𝔤 = TₑG$ at the identity $e$."""
         ...
 
     @abstractmethod
@@ -123,7 +123,7 @@ class MatrixLieGroup(MatrixManifold, Protocol):
 
 
 class ManifoldBase(nn.Module, RiemannManifold):
-    r"""Base class for Riemannian manifolds with $\expₓ(v)$-style operations."""
+    r"""Base class for Riemannian manifolds with exponential maps $expₓ(v)$."""
 
     @signature("[(...), (...)] -> (...)")
     def forward(self, x: Tensor, v: Tensor, /) -> Tensor:
@@ -190,7 +190,13 @@ class SphereManifold(ManifoldBase):
     def exp(self, x: Tensor, v: Tensor, /) -> Tensor:
         r"""Compute the round-metric exponential on the sphere.
 
-        .. math:: expₓ(v) = \cos(‖v‖)x + \sin(‖v‖)(v/‖v‖)
+        Normalize the nonzero base point $x$ and project $v$ onto $TₓSⁿ⁻¹$
+        before evaluating
+
+        $$ expₓ(v) = \cos(‖v‖)x + \sin(‖v‖)\frac{v}{‖v‖} $$
+
+        For $v = 0$, the result is the normalized base point $x$. The denominator
+        is clamped to machine epsilon to avoid division by zero.
         """
         x = self.project_manifold(x)
         v = self.project_tangent(x, v)
@@ -203,9 +209,17 @@ class SphereManifold(ManifoldBase):
     def log(self, x: Tensor, y: Tensor, /) -> Tensor:
         r"""Compute the round-metric logarithm on the sphere.
 
-        .. math:: logₓ(y) = (y - \cos(θ)x)\frac{θ}{\sin(θ)}
+        For normalized, nonzero points $x$ and $y$ with $0 < θ < π$,
 
-        where $θ = \arccos(⟨x, y⟩)$.
+        $$ \logₓ(y) = (y - \cos(θ)x)\frac{θ}{\sin(θ)} $$
+
+        where $θ = \arccos(⟨x, y⟩)$. Inputs are normalized before evaluation.
+        The angle is computed using `atan2` for numerical stability.
+
+        If the tangent component of $y$ has norm at most machine epsilon,
+        return zero. This includes coincident points and antipodal points;
+        at antipodal points, the logarithm is not unique and zero is a fallback
+        rather than a valid logarithm.
         """
         x = self.project_manifold(x)
         y = self.project_manifold(y)
