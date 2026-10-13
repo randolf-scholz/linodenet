@@ -1,4 +1,4 @@
-r"""Checks for testing certain module properties."""
+r"""Checks for tensor standardization and module forward and backward stability."""
 
 __all__ = [
     # ABCs & Protocols
@@ -23,7 +23,7 @@ from signatures import signature
 
 
 class ModuleTest(Protocol):
-    r"""Protocol for Module Testing."""
+    r"""Protocol for callable module checks with relative and absolute tolerances."""
 
     def __call__(
         self,
@@ -33,7 +33,7 @@ class ModuleTest(Protocol):
         rtol: float = RTOL,
         atol: float = ATOL,
     ) -> bool:
-        r"""Test the module."""
+        r"""Return whether the module passes the check at the given tolerances."""
         ...
 
 
@@ -94,21 +94,30 @@ def is_standardized(
     dim: None | int | tuple[int, ...] | list[int] = -1,
     tol: Optional[float] = None,
 ) -> Tensor:  # Float[...]
-    r"""Check if a tensor has zero mean and unit variance.
+    r"""Check whether a tensor has approximately zero mean and unit variance.
 
     Args:
         values: The tensor to check.
-        dim: the axis over which to compute the mean and stdv.
-        tol: the tolerance
+        dim: The axis or axes over which to compute the mean and standard
+            deviation. `None` reduces over all axes.
+        tol: The absolute tolerance $τ$ for both statistics. Defaults to $3/√n$,
+            where $n$ is the number of elements along the reduced axes.
+
+    Returns:
+        A boolean tensor over the remaining axes, indicating whether both
+        $|μ| ≤ τ$ and $|s - 1| ≤ τ$ hold, where $s$ is the sample standard
+        deviation computed with Bessel's correction.
 
     Note:
-        Often, normality will be achieved approximately, in terms of the CTL.
-        As the sample mean of $n$-many samples from a normal distribution is
-        distributed as $N(μ, σ²/n)$, knowing that the input should be $N(0, 1)$,
-        we can expect the sample mean to be distributed as $N(0, 1/n)$,
-        that is with standard deviation $1/√n$.
-        Therefore, to get $k$-sigma confidence, we should check whether the mean is
-        inside the interval $[-k/√n, k/√n]$.
+        For $n$ independent samples from $𝓝(0, 1)$, the sample mean has
+        distribution $𝓝(0, 1/n)$ and standard deviation $1/√n$. The central
+        limit theorem (CLT) gives an approximate version for other distributions
+        with zero mean and unit variance. The default tolerance uses this
+        three-sigma heuristic for the mean; applying it to the standard deviation does not
+        give the same confidence level. This check does not test normality.
+
+        Slices with fewer than two elements have an undefined sample standard
+        deviation and fail the check. NaN statistics also fail.
     """
     dims = _get_dims(dim, values)
 
@@ -132,13 +141,25 @@ def is_forward_stable(
     num_runs: int = 100,
     tol: Optional[float] = None,
 ) -> bool:
-    r"""Check if the function is forward stable.
+    r"""Check whether a function preserves approximate standardization.
 
-    By definition, this is the case if, when given random zero mean and unit variance data,
-    the function returns values with zero mean and unit variance results.
+    In this context, forward stability means that standard normal inputs produce
+    outputs with approximately zero mean and unit variance within each batch item.
 
-    Given $f：ℝⁿ→ℝᵐ$, sample $xᵢ⁽ᵏ⁾∼𝓝(0,1)$, and compute $y⁽ᵏ⁾=f(x⁽ᵏ⁾)$.
-    Then
+    Given $f: ℝⁿ → ℝᵐ$, sample $xᵢ⁽ᵏ⁾ ∼ 𝓝(0, 1)$ independently and compute
+    $y⁽ᵏ⁾ = f(x⁽ᵏ⁾)$. Each output $y⁽ᵏ⁾$ must pass `is_standardized` over
+    all of its non-batch axes.
+
+    Args:
+        func: The function or module to check. It must return a finite floating
+            point tensor with at least two dimensions and preserve the batch size.
+        input_shapes: The input tensor shapes, excluding the leading batch axis.
+            At least one input is required.
+        num_runs: The number of independent samples in the batch.
+        tol: The tolerance passed to `is_standardized`.
+
+    Returns:
+        Whether every sampled output passes the standardization check.
     """
     # generate random N(0,1) inputs
     inputs = [torch.randn(num_runs, *shape) for shape in input_shapes]
@@ -157,14 +178,30 @@ def is_backward_stable(
     num_runs: int = 100,
     tol: Optional[float] = None,
 ) -> bool:
-    r"""Check if a function is backward stable.
+    r"""Check whether a function's gradients are approximately standardized.
 
-    In this context, a function is called backward stable, if its vector jacobian product,
-    i.e. the function $v↦vᵀ(∂f/∂x)$ is forward stable (at a given point $x$).
+    In this context, backward stability means that the vector-Jacobian product
+    $v ↦ vᵀ(∂f/∂x)$ preserves approximate standardization at sampled points $x$.
 
-    To test backward stability, we randomly sample $x∼𝓝(0,1)$ and $v∼𝓝(0,1)$
-    with the same shape as $f(x)$. Then we call ``.backward()`` on the scalar value $⟨v, f(x)⟩$.
-    We then check whether ``x.grad`` has zero mean and unit variance.
+    Sample the entries of $x$ and $v$ independently from $𝓝(0, 1)$, with $v$
+    shaped like $f(x)$. Call `.backward()` on the scalar $⟨v, f(x)⟩$, then check
+    whether `x.grad` has approximately zero mean and unit variance.
+
+    Args:
+        func: The function or module to check. It must return a finite floating
+            point tensor with at least two dimensions and preserve the batch size.
+        input_shapes: The input tensor shapes, excluding the leading batch axis.
+            At least one input is required, and every input must receive a gradient.
+        check_params: Whether to also check parameter gradients. Requires `func`
+            to be a module; parameters without gradients are skipped.
+        num_runs: The number of independent samples in the batch.
+        tol: The tolerance passed to `is_standardized`.
+
+    Returns:
+        Whether all checked gradients pass the standardization check.
+
+    Note:
+        The backward pass accumulates gradients in any module parameters.
     """
     # generate random N(0,1) inputs
     inputs = [
@@ -207,7 +244,7 @@ def assert_forward_stable(
     num_runs: int = 100,
     tol: Optional[float] = None,
 ) -> None:
-    r"""Raises AssertionError if the function is not forward stable."""
+    r"""Raise `AssertionError` if the function is not forward stable."""
     if not is_forward_stable(func, input_shapes, num_runs=num_runs, tol=tol):
         raise AssertionError(
             f"Function is not forward stable (tolerance: {tol}, runs: {num_runs})"
@@ -223,7 +260,7 @@ def assert_backward_stable(
     check_params: bool = False,
     tol: Optional[float] = None,
 ) -> None:
-    r"""Raises AssertionError if the function is not backward stable."""
+    r"""Raise `AssertionError` if the function is not backward stable."""
     if not is_backward_stable(
         func,
         input_shapes,

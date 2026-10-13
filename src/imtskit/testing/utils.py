@@ -34,7 +34,12 @@ type Func = Callable[..., Nested[Tensor]]
 
 
 def get_device(x: object, /) -> DeviceArg:
-    r"""Return the device of the model / parameters."""
+    r"""Return the device of a tensor or the first parameter of a module.
+
+    For mappings and iterables, recursively inspect the first value or element.
+    Empty containers and modules without parameters raise `StopIteration`.
+    Unsupported objects return `None`.
+    """
     match x:
         case Module() as model:
             return next(t.device for t in model.parameters())
@@ -65,7 +70,12 @@ def to_device[T](x: Sequence[T], /, *, device: DeviceArg = ...) -> list[T]: ...
 @overload
 def to_device[T](x: T, /, *, device: DeviceArg = ...) -> T: ...
 def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
-    r"""Move a nested tensor to a device."""
+    r"""Move modules and tensors in a nested structure to a device.
+
+    Tuples remain tuples; mappings, sets, and other sequences become dictionaries,
+    sets, and lists, respectively. Other objects pass through unchanged.
+    Module device transfers modify the module in place.
+    """
     match x:
         case Tensor() as tensor:
             target_device = None if device is None else torch.device(device)
@@ -89,7 +99,11 @@ def to_device(x: Any, /, *, device: DeviceArg = "cpu") -> Any:
 
 
 def iter_tensors(x: Module | Tree, /) -> Iterator[Tensor]:
-    r"""Yields the tensors of a model."""
+    r"""Yield tensors from a nested structure or the parameters of a module.
+
+    Scalar leaves are skipped. Module buffers are not included.
+    Unsupported leaf types raise `TypeError`.
+    """
     match x:
         case Tensor() as tensor:
             yield tensor
@@ -107,21 +121,24 @@ def iter_tensors(x: Module | Tree, /) -> Iterator[Tensor]:
 
 
 def iter_tensors_requiring_grad(x: Module | Tree, /) -> Iterator[Tensor]:
-    r"""Return the parameters of the model / parameters."""
+    r"""Yield tensors that require gradients from a module or nested structure."""
     for w in iter_tensors(x):
         if w.requires_grad:
             yield w
 
 
 def iter_parameters(x: Module | Tree, /) -> Iterator[nn.Parameter]:
-    r"""Yields the parameters of the model."""
+    r"""Yield `nn.Parameter` instances from a module or nested structure."""
     for w in iter_tensors(x):
         if isinstance(w, nn.Parameter):
             yield w
 
 
 def zero_grad(x: Module | Tree | Func, /) -> None:
-    r"""Sets gradients of the model / parameters to None."""
+    r"""Set gradients of module parameters or nested trainable tensors to `None`.
+
+    Callable objects other than modules are treated as stateless and skipped.
+    """
     if isinstance(x, Module):
         x.zero_grad(set_to_none=True)
         return
@@ -135,17 +152,24 @@ def zero_grad(x: Module | Tree | Func, /) -> None:
 
 
 def flatten_nested_tensor(x: Module | Tree, /) -> Tensor:
-    r"""Flattens element of general Hilbert space, skips over scalars."""
+    r"""Flatten and concatenate nested tensors or module parameters into one vector.
+
+    Scalar leaves are skipped. At least one tensor is required, and the tensors
+    must have compatible devices and dtypes for `torch.cat`.
+    """
     return torch.cat([x.flatten() for x in iter_tensors(x)])
 
 
 def get_shapes(x: Module | Tree, /) -> list[tuple[int, ...]]:
-    r"""Return the shapes of the tensors."""
+    r"""Return tensor shapes in traversal order for a module or nested structure."""
     return [item.shape for item in iter_tensors(x)]
 
 
 def get_grads(x: Module | Tree, /) -> list[Tensor]:
-    r"""Return a cloned detached copy of the gradients."""
+    r"""Return detached clones of gradients from a module or nested structure.
+
+    Tensors that do not require gradients or whose gradient is `None` are skipped.
+    """
     return [
         w.grad.clone().detach()
         for w in iter_tensors(x)
@@ -154,7 +178,15 @@ def get_grads(x: Module | Tree, /) -> list[Tensor]:
 
 
 def get_norm(x: Nested[Tensor], /, *, normalize: bool = True) -> Tensor:
-    r"""Compute the (normalized) 2-norm of a tensor."""
+    r"""Compute the optionally normalized 2-norm of nested real-valued tensors.
+
+    Flatten and concatenate the tensors into a vector $x$ of length $n$. With
+    `normalize=True`, return the root mean square $√(∑ᵢ xᵢ²/n)$; otherwise,
+    return $√(∑ᵢ xᵢ²)$. Scalar leaves are skipped.
+
+    At least one tensor is required. If all tensors are empty, the normalized
+    result is NaN and the unnormalized result is zero.
+    """
     flattened = flatten_nested_tensor(x)
     if normalize:
         return torch.sqrt(torch.mean(flattened**2))
@@ -174,7 +206,13 @@ def make_tensors_parameters[T](x: AbstractSet[T], /) -> set[T]: ...
 @overload
 def make_tensors_parameters[T](x: Sequence[T], /) -> list[T]: ...
 def make_tensors_parameters(arg: Any, /) -> Any:
-    r"""Make tensors parameters."""
+    r"""Recursively wrap tensors in `nn.Parameter`, enabling gradients by default.
+
+    Existing parameters retain their identity and gradient setting. Scalar leaves
+    pass through unchanged. Tuples remain tuples; mappings, sets, and other
+    sequences become dictionaries, sets, and lists, respectively.
+    Unsupported leaf types raise `TypeError`.
+    """
     # FIXME: https://github.com/python/cpython/issues/106246. Use match-case when fixed.
     match arg:
         case Tensor() as x:

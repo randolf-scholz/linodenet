@@ -2,9 +2,10 @@ r"""Utility functions for testing.
 
 Naming convention:
 
-- ``assert_*``: should return `None` if the assertion passes.
-- ``check_*``: should return the output of the function.
-- ``is_*``, ``all_*``, ``any_*``: should return a boolean / TypeIs / TypeGuard.
+- `assert_*`: return `None` if the assertion passes.
+- `check_*`: return the result of the operation being checked.
+- `is_*`, `all_*`, `any_*`: return a boolean, possibly annotated with
+    `TypeIs` or `TypeGuard` for type narrowing.
 """
 
 __all__ = [
@@ -54,7 +55,7 @@ type Tree = Nested[Tensor | Scalar]
 type Func = Callable[..., Nested[Tensor]]
 
 _EMPTY_MAP: Final[Mapping[Any, Never]] = {}  # FIXME: Use frozendict() in python 3.15
-r"""Immutable empty `Mapping`, used as a default in function signatures."""
+r"""Shared empty mapping used as a default argument; callers must not mutate it."""
 
 
 def assert_all_close(
@@ -66,7 +67,11 @@ def assert_all_close(
     atol: float = 1e-8,
     ctx: Mapping[str, Any] = _EMPTY_MAP,
 ) -> None:
-    r"""Assert that outputs and targets are close."""
+    r"""Assert that corresponding tensors in two nested structures are close.
+
+    Mapping keys and sequence lengths must match. Empty matching containers pass.
+    Tensor comparisons use `torch.allclose` with the given `rtol` and `atol`.
+    """
     match values:
         case Tensor() as tensor:
             assert isinstance(reference, Tensor)
@@ -137,7 +142,10 @@ def all_close(
 
 
 def all_finite(x: Nested[Tensor], /) -> bool:
-    r"""Check if all elements are finite."""
+    r"""Check whether every tensor element in a nested structure is finite.
+
+    Empty tensors and containers pass. Unsupported leaf types raise `TypeError`.
+    """
     match x:
         case Tensor() as tensor:
             return bool(torch.all(torch.isfinite(tensor)))
@@ -156,11 +164,11 @@ def check_initialization[M: Module](
     init_args: tuple[Any, ...],
     init_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
 ) -> M:
-    r"""Test if the module is initializable.
+    r"""Initialize a module with the supplied arguments and return it.
 
     Raises:
-        TypeError: if the `module_type` is not a subclass of `Module`.
-        AssertionError: if the initialization fails.
+        TypeError: If `module_type` is not a class derived from `Module`.
+        AssertionError: If initialization fails.
     """
     if not isinstance(module_type, type):
         raise TypeError(f"Expected type, got {type(module_type)}!")
@@ -189,8 +197,8 @@ def check_forward(
     r"""Test a forward pass.
 
     Raises:
-        AssertionError: if the forward pass fails, or if the outputs do not match the
-            reference values / shapes.
+        AssertionError: If the forward pass fails or the outputs do not match the
+            supplied reference values or shapes.
     """
     try:
         outputs = func(*call_args, **call_kwargs)
@@ -223,8 +231,8 @@ def check_backward(
     r"""Test a backward pass.
 
     Raises:
-        AssertionError: if the backward pass fails, or if the gradients do not match
-            the reference values / shapes.
+        AssertionError: If the forward or backward pass fails, gradients are not
+            finite, or gradients do not match the supplied reference values or shapes.
     """
     params: list[Tensor] = (
         list(iter_tensors_requiring_grad(module_or_func))
@@ -283,7 +291,7 @@ def check_jit_scriptable(
     r"""Test JIT compilation.
 
     Raises:
-        AssertionError: if JIT compilation fails.
+        AssertionError: If JIT compilation fails.
     """
     try:
         scripted = jit.script(arg)
@@ -293,10 +301,10 @@ def check_jit_scriptable(
 
 
 def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
-    r"""Test saving and loading of JIT compiled model.
+    r"""Save and reload a JIT-compiled module or function.
 
     Raises:
-        AssertionError: if saving or loading fails.
+        AssertionError: If JIT compilation, saving, or loading fails.
     """
     scripted = (
         arg
@@ -326,7 +334,7 @@ def check_export_serializable(exported_program: ExportedProgram, /) -> ExportedP
     r"""Test saving and loading an exported program.
 
     Raises:
-        AssertionError: if saving or loading fails.
+        AssertionError: If saving or loading fails.
     """
     with tempfile.NamedTemporaryFile(suffix=".pt2") as file:
         try:
@@ -356,8 +364,8 @@ def assert_is_trainable(
     r"""Check if the model can be optimized.
 
     Raises:
-        AssertionError: if the model has no trainable parameters, or if the loss does
-            not decrease after optimization.
+        AssertionError: If the model has no trainable parameters, the loss is not
+            finite, or the loss does not decrease after optimization.
     """
     if not any(p.requires_grad for p in module.parameters()):
         raise AssertionError("No trainable parameters!")
@@ -557,7 +565,10 @@ def assert_model_ok(
     test_jit: bool = True,
     test_optim: bool = False,
 ) -> None:
-    r"""Checks that a model (nn.Module or function) can perform forward/backward."""
+    r"""Check that a module or function can perform forward and backward passes.
+
+    Optionally check JIT compatibility and, for modules, optimization.
+    """
     # region get name and logger -------------------------------------------------------
     test_obj: Module | Func
     match module_or_func:
