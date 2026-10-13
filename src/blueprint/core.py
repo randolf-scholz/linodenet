@@ -69,7 +69,11 @@ type PrivateKey = str  # identifier & starts with _ (includes dunder and sunder)
 
 
 def _is_dunder_key(value: object, /) -> TypeGuard[DunderKey]:
-    r"""String that starts and ends with double underscores and is a valid identifier."""
+    r"""Check whether a value is an identifier wrapped in exactly two underscores.
+
+    The enclosed name must be nonempty. Triple leading or trailing underscores
+    are rejected.
+    """
     return (
         isinstance(value, str)
         and len(value) > 4
@@ -82,12 +86,15 @@ def _is_dunder_key(value: object, /) -> TypeGuard[DunderKey]:
 
 
 def _is_public_key(value: object, /) -> TypeGuard[Identifier]:
-    r"""String that is a valid identifier and does not start with an underscore."""
+    r"""Check whether a value is an identifier without a leading underscore."""
     return isinstance(value, str) and value.isidentifier() and not value.startswith("_")
 
 
 def _is_sunder_key(value: object, /) -> TypeGuard[SunderKey]:
-    r"""Strings of the form `_key_` that are valid identifiers, but not dunder keys."""
+    r"""Check whether a value is an identifier wrapped in exactly one underscore.
+
+    The enclosed name must be nonempty.
+    """
     return (
         isinstance(value, str)
         and len(value) > 2
@@ -100,7 +107,7 @@ def _is_sunder_key(value: object, /) -> TypeGuard[SunderKey]:
 
 
 def is_blueprint_key(value: object, /) -> TypeGuard[DunderKey | SunderKey]:
-    r"""Any Sunder/Dunder string is considered a blueprint key."""
+    r"""Check whether a value is a valid sunder or dunder blueprint key."""
     return _is_sunder_key(value) or _is_dunder_key(value)
 
 
@@ -109,16 +116,21 @@ def is_blueprint_key(value: object, /) -> TypeGuard[DunderKey | SunderKey]:
 
 # region blueprint types ---------------------------------------------------------------
 class Blueprint[T](TypedDict, extra_items=ReadOnly[object]):
-    r"""A dictionary that can be used to initialize an object of type T.
+    r"""Dictionary describing how to initialize an object of type `T`.
 
-    All keys must be dunder or sunder.
+    Reserved metadata keys use sunder or dunder names. Concrete formats determine
+    which additional keys are valid; key naming is not enforced by this type.
     """
 
     # dunder and sunder keys only (not expressible in the type system)
 
 
 class BasicBlueprint[T](Blueprint[T]):
-    r"""A basic blueprint that only contains the module and class name."""
+    r"""Blueprint identifying a target by `__module__` and `__name__`.
+
+    An optional `__args__` sequence holds positional arguments. Additional public
+    keys hold keyword arguments, as checked by `is_basic_blueprint`.
+    """
 
     __name__: ReadOnly[str]
     __module__: ReadOnly[str]
@@ -128,7 +140,11 @@ class BasicBlueprint[T](Blueprint[T]):
 
 
 class ObjectBlueprint[T](Blueprint[T]):
-    r"""A dictionary that allows initializing an object."""
+    r"""Blueprint storing an object's module, class name, and constructor arguments.
+
+    `__args__` holds positional arguments and `__kwargs__` holds keyword arguments
+    with public identifier keys. `__module_version__` is optional metadata.
+    """
 
     __module_name__: ReadOnly[str]
     __class_name__: ReadOnly[str]
@@ -190,15 +206,16 @@ def is_hydra_blueprint(arg: object, /) -> TypeGuard[HydraBlueprint]:
 
 
 def is_basic_blueprint(obj: object, /) -> TypeIs[BasicBlueprint]:
-    r"""Check if the object is a configuration dictionary.
+    r"""Check whether an object is a basic blueprint mapping.
 
-    A configuration is mapping with the following keys:
+    The mapping must have the following keys:
 
-    - ``__module__`` (`str`): The module name.
-    - ``__name__`` (`str`): The class name.
-    - ``__args__`` (`Sequence`, optional): The positional arguments for the class.
-    - any extra keys that are valid, non-private identifiers.
+    - `__module__` (`str`): The module name.
+    - `__name__` (`str`): The target name.
+    - `__args__` (`Sequence` or `None`, optional): The positional arguments.
 
+    Any additional keys must be valid identifiers without a leading underscore.
+    This check does not import the target or verify JSON serializability.
     """
     if not isinstance(obj, Mapping):
         return False
@@ -227,9 +244,13 @@ def is_basic_blueprint(obj: object, /) -> TypeIs[BasicBlueprint]:
 
 # region for inferring config from instance --------------------------------------------
 def _infer_args_from_init(arg: object, /) -> Args:
-    r"""Infers ``*args`` and ``**kwargs`` by matching model's attributes with ``__init__``.
+    r"""Infer constructor arguments by matching attributes to `__init__` parameters.
 
-    This only works for models that are essentially dataclasses.
+    Inspected parameters must have corresponding instance attributes.
+    Positional-only and variadic parameters are not supported.
+
+    Returns:
+        An empty positional argument list and a dictionary of keyword arguments.
     """
     signature = inspect.signature(arg.__init__)
     params = list(signature.parameters.values())
@@ -268,7 +289,11 @@ def _infer_args_from_init(arg: object, /) -> Args:
 
 
 class InferArgsRegistry(Mapping[type, Callable[[Any], Args]]):
-    r"""Registry for functions that infer model args and kwargs from instances."""
+    r"""Registry mapping exact model types to constructor-argument inference functions.
+
+    Each function returns a positional argument list and a keyword argument
+    dictionary. Registering the same type twice raises `ValueError`.
+    """
 
     def __init__(self) -> None:
         self._registry: dict[type, Callable[[Any], Args]] = {}
@@ -292,12 +317,19 @@ INFER_ARGS_REGISTRY = InferArgsRegistry()
 
 
 def infer_args(arg: object, /, *, verify_init: bool = True) -> Args:
-    r"""Infer the configuration dictionary for a model.
+    r"""Infer positional and keyword constructor arguments for an instance.
+
+    Prefer an instance's `config` dictionary, then an inference function registered
+    for its exact type, then attribute matching against its initializer signature.
 
     Args:
-        arg: The model to infer the configuration from.
-        verify_init: Whether to verify that the inferred config can be used
-            to initialize the model.
+        arg: The instance whose constructor arguments should be inferred.
+        verify_init: Whether to construct a new instance to verify that the
+            inferred arguments can initialize the same type.
+
+    Returns:
+        A pair `(args, kwargs)` containing a list of positional arguments and a
+        dictionary of keyword arguments.
     """
     args: POArgs
     kwargs: KWArgs
@@ -324,7 +356,12 @@ def infer_args(arg: object, /, *, verify_init: bool = True) -> Args:
 
 
 def _initialize_from_args[T](cls: type[T], args: POArgs, kwargs: KWArgs, /) -> T:
-    r"""Initialize a model from args and kwargs."""
+    r"""Initialize an object from positional and keyword arguments.
+
+    If `args` is empty and the class supports `from_config`, call
+    `cls.from_config(kwargs)`; otherwise, call `cls(*args, **kwargs)`.
+    Initialization failures are wrapped in `ValueError`.
+    """
     if not args and issubclass(cls, SupportsFromConfig):
         try:
             return cast("T", cls.from_config(kwargs))
@@ -468,7 +505,12 @@ type BlueprintSerializer[T] = Callable[[Blueprint[T]], JSON]
 
 
 class BlueprintRegistry:
-    r"""Registry for blueprint initializers, validators and makers."""
+    r"""Registry for blueprint initializers, validators, makers, and serializers.
+
+    Initializers, validators, and serializers use the first matching predicate in
+    registration order. Makers use the first registered type matching the instance,
+    with object-blueprint inference as the fallback.
+    """
 
     def __init__(self) -> None:
         self._blueprints: dict[type[Blueprint], object] = {}
@@ -588,13 +630,19 @@ def validate_blueprint[T](arg: T, spec: Blueprint[T], /) -> None:
 
 
 def initialize[T = Any](spec: T | type[T] | Blueprint[T], /) -> T:
-    r"""Initialize an object from a blueprint or return the object if it's not a blueprint.
+    r"""Initialize a class or blueprint, or return an existing object unchanged.
 
     Args:
-        spec: The blueprint to initialize from, or the object to return if it's not a blueprint.
+        spec: A class to initialize without arguments, a blueprint dictionary to
+            initialize through the registry, or an existing object to return.
+
+    Raises:
+        TypeError: If `spec` is a dictionary without blueprint keys or no
+            initializer accepts its blueprint format.
+        ValueError: If construction from arguments or a configuration fails.
     """
     if isinstance(spec, type):
-        return _initialize_from_args(spec, [], {})
+        return _initialize_from_args(spec, [], {})  # pyright: ignore[reportReturnType]
     if isinstance(spec, dict):
         if not is_blueprint(spec):
             raise TypeError("Expected a blueprint dictionary.")

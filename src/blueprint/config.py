@@ -24,8 +24,8 @@ def is_key(arg: object, /) -> TypeGuard[Key]:
 class SupportsConfig[K: Key, V](Protocol):
     r"""Models that support a hyperparameter dictionary.
 
-    A hyperparameter dictionary should be such that
-    ``type(model)(**model.config)`` recovers the model.
+    The dictionary should be accepted by `type(model)(**model.config)` to construct
+    an instance with the same configuration.
     """
 
     @property
@@ -47,7 +47,7 @@ def has_config(arg: object, /) -> TypeGuard[SupportsConfig]:
 
 
 class SupportsDefaultConfig(Protocol):
-    r"""Models that have a default configuration dataclass."""
+    r"""Protocol for models whose `DEFAULT_CONFIG` names a default configuration type."""
 
     DEFAULT_CONFIG: ClassVar[type]
 

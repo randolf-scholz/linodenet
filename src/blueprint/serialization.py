@@ -1,4 +1,4 @@
-r"""Functions for serializing and deserializing PyTorch models and tensors."""
+r"""Archive serialization for PyTorch modules and exported programs."""
 # ruff: file-ignore[SIM103]
 
 __all__ = [
@@ -70,16 +70,19 @@ type FileLike = FilePath | IO[bytes]
 
 
 class SavedModelBlueprint[T](TypedDict):
-    r"""In memory representation of a JSON-serializable model specification.
+    r"""JSON-serializable storage metadata for a saved model.
 
-    Storage schema (zip archive):
+    Store the archive path, payload format, schema version, and module version.
+    The archive written by `serialize_model` has the following layout:
+
+    ```text
     archive.zip
-    ├─ blueprint.json         (required) saved model blueprint, includes storage metadata
-    ├─ hyperparameters.json   (required) inferred or provided hyperparameters
-    ├─ model.<ext>            (required) serialized model file, e.g. .pt or .zip
-    ├─ pylock.toml            (optional) environment lockfile
-    ├─ requirements.txt       (optional) environment requirements
-    └─ etc.
+    ├─ blueprint.json         Storage metadata
+    ├─ hyperparameters.json   Inferred or provided hyperparameters
+    ├─ model.pt               Serialized payload
+    ├─ model_init.json        Constructor blueprint, for state-dict storage only
+    └─ requirements.txt       Environment snapshot, when available
+    ```
     """
 
     # new keys for serialized models
@@ -94,14 +97,16 @@ class SavedStateDictBlueprint[T: nn.Module](
     SavedModelBlueprint[T],
     TypedDict,
 ):
-    r"""State-dict storage layout.
+    r"""Storage metadata and archive layout for a module's state dictionary.
 
+    ```text
     archive.zip
-    ├─ blueprint.json         (required) includes storage metadata
-    ├─ hyperparameters.json   (required) inferred or provided hyperparameters
-    ├─ model_init.json        (required) model blueprint for initialization
-    ├─ model.pt               (required) torch state_dict
-    └─ assets/                (optional) tensors referenced by model_init.json
+    ├─ blueprint.json         Storage metadata
+    ├─ hyperparameters.json   Inferred or provided hyperparameters
+    ├─ model_init.json        Constructor blueprint
+    ├─ model.pt               PyTorch state dictionary
+    └─ requirements.txt       Environment snapshot, when available
+    ```
     """
 
     __storage_format__: ReadOnly[Literal["state_dict"]]
@@ -113,12 +118,15 @@ class SavedTorchScriptBlueprint[T: RecursiveScriptModule](
     SavedModelBlueprint[T],
     TypedDict,
 ):
-    r"""TorchScript storage layout.
+    r"""Storage metadata and archive layout for a TorchScript module.
 
+    ```text
     archive.zip
-    ├─ blueprint.json         (required) storage metadata only
-    ├─ hyperparameters.json   (required) inferred or provided hyperparameters
-    └─ model.pt               (required) torchscript payload
+    ├─ blueprint.json         Storage metadata
+    ├─ hyperparameters.json   Inferred or provided hyperparameters
+    ├─ model.pt               TorchScript payload
+    └─ requirements.txt       Environment snapshot, when available
+    ```
     """
 
     __storage_format__: ReadOnly[Literal["torchscript"]]
@@ -128,12 +136,15 @@ class SavedTorchExportBlueprint[T: ExportedProgram](
     SavedModelBlueprint[T],
     TypedDict,
 ):
-    r"""Torch export storage layout.
+    r"""Storage metadata and archive layout for a PyTorch exported program.
 
+    ```text
     archive.zip
-    ├─ blueprint.json         (required) storage metadata only
-    ├─ hyperparameters.json   (required) inferred or provided hyperparameters
-    └─ model.pt               (required) torch export payload
+    ├─ blueprint.json         Storage metadata
+    ├─ hyperparameters.json   Inferred or provided hyperparameters
+    ├─ model.pt               Exported program payload
+    └─ requirements.txt       Environment snapshot, when available
+    ```
     """
 
     __storage_format__: ReadOnly[Literal["torch_export"]]
@@ -193,7 +204,11 @@ def _collect_environment_requirements() -> list[str]:
 
 
 def write_environment(archive: ZipFile, filename: str, /) -> None:
-    r"""Write a simple requirements-style environment snapshot into the archive."""
+    r"""Write installed package names and versions to an archive entry.
+
+    Each line has the form `name==version`. If collecting the environment fails
+    or yields no packages, no entry is written; collection failures are logged.
+    """
     try:
         requirements = _collect_environment_requirements()
     except Exception as exc:
@@ -211,7 +226,26 @@ def serialize_model[M: nn.Module | ExportedProgram](
     *,
     hyperparameters: Optional[JSON] = None,
 ) -> SavedModelBlueprint[M]:
-    r"""Serialize a model to a file and return its blueprint spec."""
+    r"""Write a model archive and return its storage blueprint.
+
+    Args:
+        model: A module, TorchScript module, or exported program. Ordinary modules
+            are saved as a state dictionary with a separate constructor blueprint.
+        filepath: Archive path ending in `.pt` or `.zip`. Parent directories are
+            created, and an existing file is overwritten.
+        hyperparameters: Optional keyword arguments to record as metadata. If
+            omitted, infer them from the model; failed inference is logged and
+            produces empty hyperparameter metadata.
+
+    Returns:
+        Storage metadata containing the archive path, payload format, schema
+        version, and module version. State-dict storage also requires successful
+        constructor-blueprint inference, independently of hyperparameter metadata.
+
+    Raises:
+        ValueError: If the file extension is unsupported.
+        TypeError: If the model or supplied hyperparameters have an unsupported type.
+    """
     # ensure path ends with .pt or .zip
     path = Path(filepath)
     if path.suffix not in {".pt", ".zip"}:
@@ -275,7 +309,18 @@ def serialize_model[M: nn.Module | ExportedProgram](
 
 
 def deserialize_model(path: FilePath, /) -> nn.Module:
-    r"""Deserialize a model from a file."""
+    r"""Read an archive's storage blueprint and deserialize its model.
+
+    The blueprint's `__storage_path__` determines the archive opened for payload
+    loading. Both paths must identify existing files ending in `.pt` or `.zip`.
+
+    Returns:
+        The reconstructed module, including an executable module for export storage.
+
+    Raises:
+        FileNotFoundError: If an archive path does not identify an existing file.
+        ValueError: If a file extension or payload format is unsupported.
+    """
     path = Path(path)
     if not path.is_file():
         raise FileNotFoundError(f"Model file not found: {path}")
@@ -295,7 +340,17 @@ def deserialize_model(path: FilePath, /) -> nn.Module:
 def deserialize_model_from_blueprint[M: nn.Module | ExportedProgram](
     spec: SavedModelBlueprint[M], /
 ) -> M:
-    r"""Deserialize a model from a blueprint spec."""
+    r"""Load a model from the archive identified by a storage blueprint.
+
+    State-dict storage initializes a module from `model_init.json` and loads its
+    saved state. TorchScript storage loads a scripted module. Export storage loads
+    an exported program and returns its executable module.
+
+    Raises:
+        TypeError: If `spec` is not a serialized model blueprint.
+        FileNotFoundError: If `__storage_path__` does not identify an existing file.
+        ValueError: If the file extension or storage format is unsupported.
+    """
     if not is_serialized_model_blueprint(spec):
         raise TypeError("Expected a serialized model spec dictionary.")
 

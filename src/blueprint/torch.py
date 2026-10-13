@@ -37,11 +37,16 @@ from .core import (
 )
 
 MAX_SHAPE = (5, 5)
-r"""CONF: Maximum tensor shape to inline as lists in hyperparameters."""
+r"""Shape threshold for inlining tensors as JSON lists in hyperparameters.
+
+Non-scalar tensors must have at most `len(MAX_SHAPE)` dimensions, with their shape
+no greater than `MAX_SHAPE` under lexicographic tuple comparison. Tensors with
+one element are serialized as scalars regardless of shape.
+"""
 
 
 class ModelBlueprint[T: nn.Module = nn.Module](Blueprint[T]):
-    r"""A blueprint that allows initializing a ``nn.Module``."""
+    r"""Blueprint storing the module, class name, and arguments for an `nn.Module`."""
 
     __module_name__: ReadOnly[str]
     __class_name__: ReadOnly[str]
@@ -53,9 +58,11 @@ class ModelBlueprint[T: nn.Module = nn.Module](Blueprint[T]):
 
 
 def is_model_blueprint(arg: object, /) -> TypeGuard[ModelBlueprint]:
-    r"""Check if the argument is a valid model blueprint.
+    r"""Check whether an object blueprint identifies a subclass of `nn.Module`.
 
-    Note: This will import the module and check if the class is a subclass of nn.Module.
+    Note:
+        This check imports the named module and resolves its class. Missing
+        modules or attributes return `False`; constructor arguments are not tested.
     """
     if not is_object_blueprint(arg):
         return False
@@ -159,7 +166,11 @@ INFER_ARGS_REGISTRY.register(ExportedProgram, _infer_exported_module)
 
 
 class TensorBlueprint[T: Tensor = Tensor](Blueprint[T]):
-    r"""A pseudo-blueprint that wraps a tensor value."""
+    r"""Blueprint holding an existing tensor and its expected dtype and shape.
+
+    Initialization validates the metadata and returns the same tensor without
+    copying it.
+    """
 
     __tensor__: ReadOnly[Any]
     __dtype__: ReadOnly[str]
