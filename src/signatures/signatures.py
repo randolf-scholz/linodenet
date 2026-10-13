@@ -1,4 +1,4 @@
-r"""Implementation of the ``@signature`` decorator."""
+r"""Parsing and representation of function signatures for the `@signature` decorator."""
 
 __all__ = [
     # Config
@@ -61,7 +61,10 @@ def _arg_to_str(arg: ArgType, /) -> str:
 
 
 class Identifier(str):
-    r"""Class for representing identifier types."""
+    r"""String representing a Python identifier without a leading underscore.
+
+    Construction raises `ValueError` if the name fails `is_identifier`.
+    """
 
     __slots__ = ()
 
@@ -71,13 +74,16 @@ class Identifier(str):
 
 
 def is_identifier(s: str, /) -> TypeIs[Identifier]:
-    r"""Check if the string is a valid identifier."""
+    r"""Check whether a string is a Python identifier without a leading underscore."""
     return s.isidentifier() and not s.startswith("_")
 
 
 @dataclass(frozen=True, slots=True)
 class Arg:
-    r"""Base class for representing argument types."""
+    r"""Argument type paired with a flag indicating whether it is optional.
+
+    An optional argument is rendered with a trailing `?`.
+    """
 
     value: ArgType
     optional: bool
@@ -88,7 +94,11 @@ class Arg:
 
 @dataclass(frozen=True, slots=True)
 class KeyArg:
-    r"""Base class for representing argument types."""
+    r"""Named argument type paired with a flag indicating whether it is optional.
+
+    The string representation includes the value and optional `?` marker;
+    the name is stored separately.
+    """
 
     name: Identifier
     value: ArgType
@@ -100,7 +110,7 @@ class KeyArg:
 
 @dataclass(frozen=True, slots=True)
 class GenericType:
-    r"""Class for representing generic types with type arguments."""
+    r"""Type identifier with a list of type arguments, such as `Tensor[(m, n)]`."""
 
     id: Identifier
     arglist: ArgList
@@ -121,7 +131,7 @@ class DimKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Dim:
-    r"""Class for representing a single dimension."""
+    r"""Base representation for a shape dimension or a bundle of axes."""
 
     kind: ClassVar[DimKind]
 
@@ -131,9 +141,9 @@ class Dim:
 
 @dataclass(frozen=True, slots=True)
 class ConstantDim(Dim):
-    r"""Class for representing constant dimensions.
+    r"""Literal integer dimension, such as `3`, or a signed affine offset.
 
-    E.g. a single axis of fixed size `3` that is known at compile time.
+    The class stores the integer without validating dimension size bounds.
     """
 
     kind: ClassVar[Literal[DimKind.CONSTANT]] = DimKind.CONSTANT
@@ -146,10 +156,7 @@ class ConstantDim(Dim):
 
 @dataclass(frozen=True, slots=True)
 class StaticDim(Dim):
-    r"""Class for representing static dimensions.
-
-    E.g. a single axis `n` that is fixed at runtime.
-    """
+    r"""Named single-axis size fixed for a call, such as `n`."""
 
     kind: ClassVar[Literal[DimKind.STATIC]] = DimKind.STATIC
 
@@ -161,10 +168,7 @@ class StaticDim(Dim):
 
 @dataclass(frozen=True, slots=True)
 class VariadicDim(Dim):
-    r"""Class for representing variadic dimensions.
-
-    E.g. a bundle of axes ``*xs`` that is fixed at runtime.
-    """
+    r"""Named bundle of axes fixed for a call, such as `*xs`."""
 
     kind: ClassVar[Literal[DimKind.VARIADIC]] = DimKind.VARIADIC
 
@@ -176,10 +180,7 @@ class VariadicDim(Dim):
 
 @dataclass(frozen=True, slots=True)
 class DynamicDim(Dim):
-    r"""Class for representing dynamic dimensions.
-
-    E.g. a single axis ``$n`` that can vary in size at runtime.
-    """
+    r"""Named single-axis size that may vary across calls, such as `$n`."""
 
     kind: ClassVar[Literal[DimKind.VARIADIC]] = DimKind.VARIADIC
 
@@ -198,14 +199,21 @@ class Sign(IntEnum):
 
 @dataclass(frozen=True, slots=True)
 class AffineDim(Dim):
-    r"""Class for representing compound dimensions.
+    r"""Affine combination of static or dynamic dimensions with an optional offset.
 
-    Currently, affine combinations of static dimensions are supported, e.g.,
+    Each term contains a sign $sᵢ$, integer coefficient $cᵢ$, and variable $xᵢ$.
+    With offset $b$ (zero when omitted), the dimension is:
 
-    - ``2n`1``
-    - ``3n + 1``
-    - ``u + v``
-    - ``1a - 2b + 3c - 4d +5``
+    $$ d = ∑ᵢ sᵢ cᵢ xᵢ + b $$
+
+    Each static or dynamic variable may appear at most once; duplicate variables
+    raise `ValueError`. Supported expressions include:
+
+    - `2n - 1`
+    - `3n + 1`
+    - `u + v`
+    - `a - 2b + 3c - 4d + 5`
+    - `2$n + m`
     """
 
     kind: ClassVar[Literal[DimKind.AFFINE]] = DimKind.AFFINE
@@ -254,29 +262,38 @@ class AffineDim(Dim):
 
 @dataclass(frozen=True, slots=True)
 class FnType:
-    r"""Class for representing function types between vector spaces.
+    r"""Parsed function signature with input and output argument lists.
 
-    A function type is of the form:
+    Both sides of `->` may contain a single argument or a bracketed list:
 
-    - ``arg1 -> ret1`` for single input single output (SISO)
-      - ``[arg1] -> ret1`` is also allowed
-    - ``[arg1, arg2, ...] -> ret1`` for multiple input single output (MISO)
-    - ``arg1 -> [ret1, ret2, ...]`` for single input multiple output (SIMO)
-    - ``[arg1, arg2, ...] -> [ret1, ret2, ...]`` for multiple input multiple output (MIMO)
+    - `arg1 -> ret1`: One input and one output; `[arg1] -> ret1` is also allowed.
+    - `[arg1, arg2] -> ret1`: Multiple inputs and one output.
+    - `arg1 -> [ret1, ret2]`: One input and multiple outputs.
+    - `[arg1, arg2] -> [ret1, ret2]`: Multiple inputs and multiple outputs.
 
-    Arguments can be one of:
+    Empty lists represent no arguments or no return values. A trailing `?` marks
+    an optional argument. In bracketed lists, required arguments must precede
+    optional arguments.
 
-    - tensor shapes represented as literal tuples of dimensions
-    - tensor types represented as generic types
-    - python types like `int`, `float`, `str`, etc.
+    Arguments can be tensor shapes such as `(m, n)`, generic types such as
+    `Tensor[(m, n)]`, identifiers such as `int`, or nested function types such as
+    `{A -> B}`. Top-level signatures may omit their outer braces; nested function
+    types require braces.
 
-    Note: A single tensor is represented by a tuple with elements
-        - integers for fixed-size dimensions
-        - strings (``"name"`` ) for a single axis of fixed size
-        - strings (``"*name"`` ) for a single axis of variable size
-        - strings (``"**xs"``) for a variable number of axes of variable size
-        - Ellipsis (``...``) for axes that are vectorized over
-        - at maximum one Ellipsis is allowed per tensor.
+    Note:
+        Tensor shapes are represented internally as tuples of dimension objects
+        and, optionally, a leading `Ellipsis`. Their textual syntax includes:
+
+        - `3`: A literal axis size.
+        - `n`: A named static axis size.
+        - `*xs`: A named bundle of axes.
+        - `$n`: A named dynamic axis size.
+        - `2n + 1`: An affine combination of dimensions.
+        - `...`: Leading axes to vectorize over; at most one is allowed per shape,
+            and it must be first.
+
+        The empty shape `()` represents a scalar. Double-star dimensions such as
+        `**xs` are not supported by the parser.
     """
 
     argument_types: ArgList
@@ -293,7 +310,7 @@ class FnType:
 
 
 class TokenKind(StrEnum):
-    r"""Enumeration of token kinds for the ArgList / Signature parser."""
+    r"""Token categories for the argument-list and function-signature parser."""
 
     IDENT = r"[A-Za-z]\w*]"
     NUMBER = r"\d+"
@@ -316,7 +333,11 @@ class TokenKind(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Token:
-    r"""Class representing a token in the ArgList / Signature parser."""
+    r"""Token with its source character position, category, and text.
+
+    Identifier and number tokens require a custom value. All other tokens use
+    their kind's fixed text and reject custom values.
+    """
 
     pos: int  # character index in original string
     value: str
@@ -352,16 +373,19 @@ def tokenize(source: str, /) -> Iterator[Token]:
         source: Signature string to tokenize.
 
     Yields:
-        Token: A stream of `Token` objects (pos, kind, value) for each lexical token.
-               The final token yielded is always an EOF token.
+        Token: One token per lexical element, retaining its character position in
+            `source`. A valid input ends with an EOF token at `len(source)`.
 
     Raises:
         SyntaxError: If an unexpected or invalid character is encountered.
 
-    Notes:
+    Note:
         - Whitespace is skipped.
-        - Recognizes identifiers, integer literals, punctuation (``[ ] { } ( ) , * ?``),
-          the arrow ``->``, and the ellipsis ``...``.
+        - Identifiers start with a letter and continue with letters, digits, or
+            underscores, including Unicode letters and digits.
+        - Integer literals contain digits; signs are separate tokens.
+        - Punctuation includes `[ ] { } ( ) , * + - ? $`, the arrow `->`, and
+            the ellipsis `...`.
     """
     i = 0
     n = len(source)
@@ -418,7 +442,7 @@ def tokenize(source: str, /) -> Iterator[Token]:
 
 
 def _has_wrapping_braces(source: str, /) -> bool:
-    r"""Return whether `source` is enclosed by a single top-level ``{...}`` pair."""
+    r"""Return whether `source` is enclosed by a single top-level `{...}` pair."""
     stripped = source.strip()
     if len(stripped) < 2 or stripped[0] != "{" or stripped[-1] != "}":
         return False
@@ -438,11 +462,22 @@ def _has_wrapping_braces(source: str, /) -> bool:
 
 
 class Parser:
-    r"""Recursive-descent parser consuming an Iterator[Token]."""
+    r"""Recursive-descent parser consuming an iterator of `Token` objects.
+
+    The public parsing methods require EOF after the expected construct. Empty
+    token streams are treated as EOF at character position zero.
+    """
 
     @staticmethod
     def parse_signature(arg: str, /) -> SignatureType:
-        r"""Parse the grammar starting from SignatureType and ensure full consumption."""
+        r"""Parse a complete function signature with optional outer braces.
+
+        Raises:
+            SyntaxError: If the first token cannot be read.
+            RuntimeError: If a syntax error occurs after the first token is read.
+                The original error is retained as the cause and its message is
+                added as an exception note.
+        """
         self = Parser(tokenize(arg))
         try:
             result = (
@@ -460,7 +495,11 @@ class Parser:
 
     @staticmethod
     def parse_arglist(arg: str, /) -> ArgList:
-        r"""Parse the grammar starting from ArgList and ensure full consumption."""
+        r"""Parse a complete bracketed argument list, which may be empty.
+
+        Required arguments must precede optional arguments marked with `?`.
+        Unexpected tokens or trailing input raise `SyntaxError`.
+        """
         self = Parser(tokenize(arg))
 
         try:
@@ -474,7 +513,10 @@ class Parser:
 
     @staticmethod
     def parse_identifier(arg: str, /) -> Identifier:
-        r"""Parse the grammar starting from IdentifierType and ensure full consumption."""
+        r"""Parse a single identifier and reject trailing tokens.
+
+        Unexpected tokens or trailing input raise `SyntaxError`.
+        """
         self = Parser(tokenize(arg))
 
         try:
@@ -768,19 +810,37 @@ class Parser:
 
 
 LAZY_EVAL = False
-r"""Config flag to control whether to parse signatures lazily or eagerly."""
+r"""Default for the decorator's `lazy` argument, captured when the class is defined.
+
+`False` parses during decorator construction; `True` defers parsing until the
+`parsed` property or string representation is requested.
+"""
 
 
 class signature:
-    r"""To be used as a no-op decorator for annotating function signatures.
+    r"""Attach a parsed function signature as metadata without wrapping the function.
+
+    The decorator sets `fn.signature` and returns the same function. It does not
+    enforce argument types or tensor shapes at runtime.
+
+    Args:
+        sig_string: Signature text accepted by `Parser.parse_signature`.
+        lazy: Whether to defer parsing until the `parsed` property or string
+            representation is requested. Defaults to `LAZY_EVAL` as captured when
+            the class is defined.
 
     Signature DSL:
 
-    - ``3``: axis of size 3
-    - ``x``: single axis of statically known size
-    - ``*xs``: single axis of variable size
-    - ``**xs``: multiple axes of variable size
-    - ``...``: axes to vectorize over
+    - `3`: An axis of size three.
+    - `x`: A named static axis size.
+    - `*xs`: A named bundle of axes.
+    - `$n`: A named dynamic axis size.
+    - `2n + 1`: An affine combination of dimensions.
+    - `...`: Leading axes to vectorize over; it must be first in its shape.
+
+    Append `?` to an argument type to mark it as optional. Required arguments must
+    precede optional arguments in bracketed lists. Double-star dimensions such as
+    `**xs` are not supported.
     """
 
     def __init__(self, sig_string: str, /, lazy: bool = LAZY_EVAL) -> None:
@@ -805,6 +865,6 @@ class signature:
         return str(self.parsed)
 
     def __call__[Fn: Callable](self, fn: Fn) -> Fn:
-        r"""Decorator to annotate function signatures."""
+        r"""Set `fn.signature` to this decorator instance and return `fn` unchanged."""
         fn.signature = self  # type: ignore
         return fn
