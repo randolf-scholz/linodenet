@@ -1,51 +1,35 @@
-r"""Implementations of Kalman-inspired filters.
+r"""Kalman-inspired prototype state updates.
 
-For a linear observation model
+For a Gaussian prior $z ∼ 𝓝(μ, Σ)$ and observations $y = Hz + v$ with
+independent noise $v ∼ 𝓝(0, R)$, the classical measurement update is
 
-.. math:: y = Hx + v, \qquad v ∼ 𝓝(0, R)
-
-with prior mean $x$ and prior covariance $Σ$, the classical Kalman filter update is
-
-.. math::
+$$\begin{aligned}
     K &= ΣHᵀ(HΣHᵀ + R)⁻¹ \\
-    x' &= x + K(y - Hx) \\
-       &= x - ΣHᵀ(HΣHᵀ + R)⁻¹(Hx - y)
+    μ' &= μ + K(y - Hμ)  \\
+    Σ' &= Σ - KHΣ
+\end{aligned}$$
 
-In observation space, writing
+For missing observations, let $Πₘ$ select the coordinates marked true in an
+observation mask $m$. The restricted update uses
 
-.. math::
-    μ₞ &= Hμ \\
-    Σ₞ &= HΣHᵀ + R
+$$\begin{aligned}
+    Sₘ &= Πₘ(HΣHᵀ + R)Πₘᵀ  \\
+    Kₘ &= ΣHᵀΠₘᵀSₘ⁻¹  \\
+    μ' &= μ + KₘΠₘ(y - Hμ)  \\
+    Σ' &= Σ - KₘΠₘHΣ
+\end{aligned}$$
 
-the posterior observation mean and covariance are
+For a new independent observation with the same noise model, the posterior
+predictive mean and covariance are $Hμ'$ and $HΣ'Hᵀ + R$. These describe a
+future observation, not the already conditioned measurement.
 
-.. math::
-    μ₞' &= μ₞ + (Σ₞ - R) Σ₞⁻¹ (y - μ₞) \\
-        &= y - R Σ₞⁻¹ (y - μ₞) \\
-    Σ₞' &= HΣ'Hᵀ + R \\
-        &= Σ₞ - (Σ₞ - R) Σ₞⁻¹ (Σ₞ - R)
+The learned variants below replace covariance-derived gains with free
+matrices; they need not inherit the classical filter's covariance properties.
 
-When the observation contains missing values, let $m = ¬\operatorname{isnan}(y)$ be
-the observation mask and let $Πₘ$ denote the projection onto the observed coordinates.
-Then the Kalman update restricted to the observed subspace becomes
-
-.. math::
-    Kₘ &= ΣHᵀΠₘᵀ(Πₘ(HΣHᵀ + R)Πₘᵀ)⁻¹ \\
-    x' &= x + Kₘ Πₘ (y - Hx) \\
-       &= x - ΣHᵀΠₘᵀ(Πₘ(HΣHᵀ + R)Πₘᵀ)⁻¹ Πₘ(Hx - y)
-
-Again in observation space, with the masked innovation covariance
-
-.. math:: Σ̂₞ ≔ Πₘ Σ₞ Πₘᵀ
-
-the posterior observation mean and covariance become
-
-.. math::
-    μ₞' &= μ₞ + (Σ₞ - R) Πₘᵀ Σ̂₞⁻¹ Πₘ(y - μ₞) \\
-    Σ₞' &= HΣ'Hᵀ + R \\
-        &= Σ₞ - (Σ₞ - R) Πₘᵀ Σ̂₞⁻¹ Πₘ (Σ₞ - R)
-
-This is the form used by the missing-value-aware variants in this module.
+Note:
+    These classes are prototypes. Their constructors currently pass unsupported
+    state-size keywords to `nn.Module.__init__`. The expressions documented
+    below describe their forward calculations.
 """
 
 __all__ = [
@@ -79,30 +63,37 @@ class _Alpha(float, Enum):
 
 
 class PseudoKalmanUpdate(nn.Module, VectorStateUpdate):
-    r"""Implements a Kalman-inspired state update.
+    r"""Prototype update with learned residual transforms.
 
-    This module does not learn a single covariance but two separate matrices $A$
-    and $B$.
+    For an observed-coordinate diagonal mask $Dₘ$, the forward calculation is
 
-    .. math::  x' = x - αBHᵀΠₘᵀAΠₘ(Hx - y)
+    $$ x' = x - α(𝕀 + ε_B B)HᵀDₘ(𝕀 + ε_A A)Dₘ(Hx - y) $$
 
-    - $α = 1$ is the "last-value" filter
-    - $α = 0$ is the "first-value" filter
-    - $α = ½$ is the standard Kalman filter, which takes the average between the
-      state estimate and the observation.
+    The learnable residual scales $ε_A$ and $ε_B$ start at zero. True mask entries
+    mark observed coordinates; if no mask is supplied, observations are identified
+    by `~y.isnan()`.
+
+    For direct observations with $H = 𝕀$ and identity residual transforms, $α=1$
+    takes the observation, $α=0$ keeps the state, and $α=½$ averages the two.
+    A general Kalman gain depends on the prior and observation noise covariances;
+    it is not universally one half.
+
+    Note:
+        The transpose-observation method expects an `autoregressive` attribute
+        that is not initialized by this constructor.
     """
 
     # PARAMETERS
     H: Tensor
-    r"""PARAM: the observation matrix."""
+    r"""PARAM: Observation matrix $H$."""
     kernel: Tensor
-    r"""PARAM: The kernel matrix."""
+    r"""Legacy kernel annotation; no `kernel` tensor is initialized."""
 
     # BUFFERS
     ZERO: Tensor
     r"""BUFFER: A constant value of zero."""
     alpha: Tensor
-    r"""PARAM/BUFFER: The alpha parameter."""
+    r"""PARAM: Learnable or frozen correction strength $α$."""
 
     @property
     def config(self) -> dict:
@@ -156,7 +147,11 @@ class PseudoKalmanUpdate(nn.Module, VectorStateUpdate):
 
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
-        r"""Return $x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)$."""
+        r"""Apply masked residual transforms and subtract the scaled correction.
+
+        The residual transforms are $𝕀 + ε_A A$ and $𝕀 + ε_B B$, rather than the
+        unscaled matrices $A$ and $B$. True mask entries mark observed coordinates.
+        """
         mask = ~torch.isnan(y) if mask is None else mask
         z = self.h(x)
         z = torch.where(mask, z - y, self.ZERO)  # → [..., m]
@@ -168,59 +163,32 @@ class PseudoKalmanUpdate(nn.Module, VectorStateUpdate):
 
 
 class NonLinearKalmanUpdate(nn.Module, VectorStateUpdate):
-    r"""A Kalman-inspired nonlinear state update.
+    r"""Prototype learned gain returning a correction vector.
 
-    We assume that $y = h(x)$ and $y = H⋅x$ in the linear case. We adapt  the formula
-    provided by the regular Kalman Filter and replace the matrices with learnable
-    parameters $A$ and $B$ and insert an neural network block $ψ$, typically a
-    non-linear activation function followed by a linear layer $ψ(z)=Wϕ(z)$.
+    For an observed-coordinate diagonal mask $Dₘ$, the forward calculation is
 
-    .. math::
-        x̂' &= x̂ + P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (y - Hx̂)    \\
-           &⇝ x̂ + B⋅Hᵀ ∏ₘᵀA∏ₘ (y - Hx̂)                 \\
-           &⇝ x̂ + ψ(B Hᵀ ∏ₘᵀA ∏ₘ (y - Hx̂))
+    $$ c = BHᵀDₘADₘ(Hx - y) $$
 
-    Here $yₜ$ is the observation vector. and $x̂$ is the state vector.
+    Despite the class name, this expression contains no nonlinear activation.
+    The method returns $c$ directly; it does not subtract the correction from
+    $x$. True mask entries mark observed coordinates, and `~y.isnan()` supplies
+    the default mask.
 
-    .. math::
-        x̂' &= x̂ - P⋅Hᵀ ∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (Hx̂ - y)    \\
-           &⇝ x̂ - B⋅Hᵀ ∏ₘᵀA∏ₘ (Hx̂ - y)                 \\
-           &⇝ x̂ - ψ(B Hᵀ ∏ₘᵀA ∏ₘ (Hx̂ - y))
-
-    Note that in the autoregressive case, $H=𝕀$ and $P=R$. Thus
-
-    .. math::
-        x̂' &= x̂ - P∏ₘᵀ(2P)⁻¹Πₘ(x̂ - x)        \\
-           &= x̂ - ½ P∏ₘᵀP⁻¹Πₘ(x̂ - y)      \\
-
-    We consider a few cases:
-
-    .. math::  x̂' = x̂ - α(x̂ - x)
-
-    - $α = 1$ is the "last-value" filter
-    - $α = 0$ is the "first-value" filter
-    - $α = ½$ is the standard Kalman filter, which takes the average between the
-      state estimate and the observation.
-
-    So in this case, the filter precisely always chooses the average between the prediction and the measurement.
-
-    The reason for a another linear transform after $ϕ$ is to stabilize the distribution.
-    Also, when $ϕ=𝖱𝖾𝖫𝖴$, it is necessary to allow negative updates.
-
-    Note that in the autoregressive case, i.e. $H=𝕀$, the equation can be simplified
-    towards $x̂' ⇝ x̂ + ψ( B ∏ₘᵀ A ∏ₘ (y - Hx̂) )$.
+    The declared matrix shapes are compatible with this expression in the square
+    case `input_size == hidden_size`.
 
     References:
-        Kalman filter with outliers and missing observations
-        T. Cipra, R. Romera
-        https://link.springer.com/article/10.1007/BF02564705
+        - Kalman filter with outliers and missing observations \
+          T. Cipra and R. Romera \
+          TEST, 6, 379–395, 1997. \
+          <https://doi.org/10.1007/BF02564705>
     """
 
     # PARAMETERS
     H: Optional[Tensor]
-    r"""PARAM: the observation matrix."""
+    r"""PARAM: Observation matrix $H$."""
     kernel: Tensor
-    r"""PARAM: The kernel matrix."""
+    r"""Legacy kernel annotation; no `kernel` tensor is initialized."""
 
     # BUFFERS
     ZERO: Tensor
@@ -258,7 +226,11 @@ class NonLinearKalmanUpdate(nn.Module, VectorStateUpdate):
 
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
-        r"""Return $BΠAΠ(x - y)$."""
+        r"""Return the correction $BHᵀDₘADₘ(Hx - y)$.
+
+        Here $Dₘ$ is the diagonal mask of observed coordinates. This method returns
+        the correction vector directly.
+        """
         mask = ~torch.isnan(y) if mask is None else mask
         yhat = torch.einsum("ij, ...j -> ...i", self.H, x)
         r = torch.where(mask, yhat - y, self.ZERO)  # → [..., m]
@@ -268,15 +240,23 @@ class NonLinearKalmanUpdate(nn.Module, VectorStateUpdate):
 
 
 class NonLinearUpdate(nn.Module, VectorStateUpdate):
-    r"""Nonlinear layers stacked on top of a linear core."""
+    r"""Prototype residual update with a nonlinear correction.
+
+    $$ x' = x - αψ\Bigl(BHᵀDₘADₘ(Hx - y)\Bigr) $$
+
+    Here $ψ$ is `nonlinearity` and $Dₘ$ is the diagonal mask of observed
+    coordinates. True mask entries mark observed values, and `~y.isnan()`
+    supplies the default mask. The learnable or fixed scalar $α$ controls the
+    correction strength.
+    """
 
     # PARAMETERS
     H: Tensor
-    r"""PARAM: the observation matrix."""
+    r"""PARAM: Observation matrix $H$."""
     kernel: Tensor
-    r"""PARAM: The kernel matrix."""
+    r"""Legacy kernel annotation; no `kernel` tensor is initialized."""
     alpha: Tensor
-    r"""PARAM: The alpha parameter."""
+    r"""PARAM: Learnable or frozen correction strength $α$."""
 
     # BUFFERS
     ZERO: Tensor
@@ -321,15 +301,16 @@ class NonLinearUpdate(nn.Module, VectorStateUpdate):
 
     @signature("[(..., m), (..., n)] -> (..., n)")
     def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
-        r"""Return the updated state tensor.
+        r"""Return the state after the scaled nonlinear correction.
 
         Args:
-            y: The observation Tensor. May contain NaNs for missing values.
-            x: The state tensor
-            mask: An optional mask tensor indicating valid observations.
+            y: Observation tensor, possibly containing NaNs at missing coordinates.
+            x: Current state tensor.
+            mask: Boolean mask with true entries at observed coordinates.
+                If `None`, uses `~y.isnan()`.
 
         Returns:
-            The updated state tensor $x' = x - αBHᵀ∏ₘᵀAΠₘ(Hx - y)$.
+            The updated state $x' = x - αψ(BHᵀDₘADₘ(Hx - y))$.
         """
         mask = ~torch.isnan(y) if mask is None else mask
         yhat = torch.einsum("ij, ...j -> ...i", self.H, x)  # (..., m)

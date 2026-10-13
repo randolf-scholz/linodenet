@@ -1,4 +1,9 @@
-r"""Base imputer classes and functions."""
+r"""Impute missing observations before a state update.
+
+All imputers use true mask entries for coordinates to replace. If no mask is
+provided, missing coordinates are inferred with `y.isnan()`. This convention
+differs from the observed-coordinate masks used by state-update losses.
+"""
 
 __all__ = [
     # constants
@@ -26,7 +31,7 @@ from signatures import signature
 
 
 class ImputerProtocol(Protocol):
-    r"""Protocol for imputer."""
+    r"""Protocol for imputers using true mask entries for missing coordinates."""
 
     @signature("[(..., m), (..., n)] -> (..., m)")
     def __call__(
@@ -37,7 +42,8 @@ class ImputerProtocol(Protocol):
         Args:
             y_obs: Observed state.
             x: Estimated state.
-            mask: Mask indicating which values to impute. If `None`, uses ``y_obs.isnan()``.
+            mask: Mask indicating which values to impute.
+                If `None`, uses `y_obs.isnan()`.
 
         Returns:
             Imputed state, where the masked values have been replaced.
@@ -59,14 +65,17 @@ class LinearImputer(nn.Module):
         self.linear = nn.Linear(hidden_size, input_size, bias=use_bias)
 
     def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
-        r"""Impute missing values with a linear function.
+        r"""Impute missing values with a linear prediction from the hidden state.
 
-        .. math:: (y, x) ⟼ u, \quad u = ⟦m ? Hx+b : y⟧
+        $$ u = \where(m, Hx+b, y) $$
+
+        The bias $b$ is zero when `use_bias=False`.
 
         Args:
-            y: Observed state.
-            x: Estimated state.
-            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
+            y: Observation vector.
+            x: Estimated hidden state.
+            mask: Boolean mask with true entries at values to impute.
+                If `None`, uses `y.isnan()`.
         """
         mask = y.isnan() if mask is None else mask
         return torch.where(mask, self.linear(x), y)
@@ -78,12 +87,13 @@ class ZeroImputer(nn.Module):
     def forward(self, y: Tensor, _: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Impute missing values with zero.
 
-        .. math:: (y, *) ⟼ u, \quad u = ⟦m ? 0 : y⟧
+        $$ u = \where(m, 0, y) $$
 
         Args:
-            y: Observed state.
-            _: Hidden state. Unused.
-            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
+            y: Observation vector.
+            _: Hidden state, unused.
+            mask: Boolean mask with true entries at values to impute.
+                If `None`, uses `y.isnan()`.
         """
         mask = y.isnan() if mask is None else mask
         return torch.where(mask, 0.0, y)
@@ -93,21 +103,24 @@ class ConstantImputer(nn.Module):
     r"""Impute missing values with a constant."""
 
     value: Tensor
-    r"""Constant value to impute missing values."""
+    r"""Constant replacement value for missing observations."""
 
     def __init__(self, constant: float | Tensor, /) -> None:
         super().__init__()
         self.register_buffer("value", torch.as_tensor(constant))
 
     def forward(self, y: Tensor, _: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
-        r"""Impute missing values with a constant.
+        r"""Impute missing values with a fixed value $c$.
 
-        .. math:: (y, *) ⟼ u, \quad u = ⟦m ? c : y⟧
+        $$ u = \where(m, c, y) $$
+
+        The replacement value must broadcast to the observation shape.
 
         Args:
-            y: Observed state.
-            _: Hidden state. Unused.
-            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
+            y: Observation vector.
+            _: Hidden state, unused.
+            mask: Boolean mask with true entries at values to impute.
+                If `None`, uses `y.isnan()`.
         """
         mask = y.isnan() if mask is None else mask
         return torch.where(mask, self.value, y)
@@ -156,21 +169,25 @@ class CorrelationImputer(nn.Module):
     def forward(self, y: Tensor, x: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
         r"""Impute missing values with the conditional Gaussian posterior mean.
 
-        Let $ŷ = decoder(x)$ and assume the true observation follows
-        $y ∼ 𝓝(ŷ, Σ)$. If ``mask=True`` marks the coordinates to impute, then
-        conditioning on the observed coordinates selected by $Π = I - diag(mask)$
-        gives the full-vector update
+        Let $ŷ = decoder(x)$ and assume $y ∼ 𝓝(ŷ, Σ)$. For a missing-value
+        mask $m$, the matrix $Π = 𝕀 - \diag(m)$ selects observed
+        coordinates. Conditioning on those coordinates gives the full-vector mean
 
-        .. math:: y' = ŷ - Σ (ΠΣΠ + 𝕀 - Π)⁻¹ Π(ŷ - y)
+        $$ y' = ŷ - Σ (ΠΣΠ + 𝕀 - Π)⁻¹ Π(ŷ - y) $$
 
-        which is equivalent to
+        whose missing-coordinate component is
 
-        .. math:: y'ₘ = ŷₘ + Σₘₒ Σₒₒ⁻¹ (yₒ - ŷₒ)
+        $$ y'ₘ = ŷₘ + Σₘₒ Σₒₒ⁻¹ (yₒ - ŷₒ) $$
+
+        Here subscripts $m$ and $o$ denote missing and observed coordinates,
+        respectively. Observed coordinates retain their supplied values; if
+        all coordinates are missing, the result is the decoder prediction.
+        Residuals at missing coordinates are set to zero before evaluation.
 
         Args:
             y: Observed state, possibly containing NaNs at missing coordinates.
             x: Hidden state used by the decoder.
-            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
+            mask: Mask indicating which values to impute. If `None`, uses `y.isnan()`.
         """
         mask = y.isnan() if mask is None else mask
         observed_mask = ~mask
@@ -208,26 +225,34 @@ class LearnableImputer(nn.Module):
         self.value = nn.Parameter(torch.randn(self.input_shape))
 
     def forward(self, y: Tensor, _: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
-        r"""Impute missing values with a learnable value.
+        r"""Impute missing values with a learnable value $c$.
 
-        .. math:: (y, *) ⟼ u, \quad u = ⟦m ? c : y⟧
+        $$ u = \where(m, c, y) $$
+
+        The replacement value must broadcast to the observation shape.
 
         Args:
-            y: Observed state.
-            _: Hidden state. Unused.
-            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
+            y: Observation vector.
+            _: Hidden state, unused.
+            mask: Boolean mask with true entries at values to impute.
+                If `None`, uses `y.isnan()`.
         """
         mask = y.isnan() if mask is None else mask
         return torch.where(mask, self.value, y)
 
 
 class LastValueImputer(nn.Module):
-    r"""Impute missing values with the last observed value."""
+    r"""Impute missing observations using a stored value with optional smoothing.
+
+    The stored value starts at zero. With the default `decay=0`, observed
+    coordinates replace it and missing coordinates retain their previous value.
+    A nonzero decay also smooths observed coordinates.
+    """
 
     last_value: Tensor
-    r"""Last observed value."""
+    r"""Most recent stored value, including any decay smoothing."""
     decay: Tensor
-    r"""Decay factor for the last value."""
+    r"""Learnable or fixed smoothing coefficient; zero retains observations exactly."""
 
     def __init__(self, *, decay: float = 0.0, decay_learnable: bool = False) -> None:
         super().__init__()
@@ -235,14 +260,21 @@ class LastValueImputer(nn.Module):
         self.decay = nn.Parameter(torch.tensor(decay), requires_grad=decay_learnable)
 
     def forward(self, y: Tensor, _: Tensor, /, *, mask: Tensor | None = None) -> Tensor:
-        r"""Impute missing values with the last observed value.
+        r"""Impute missing entries and update the stored value.
 
-        .. math:: (yₖ, *) ⟼ u, \quad u = ⟦m ? \tilde{y}ₖ₋₁ : yₖ⟧
+        $$\begin{aligned}
+            zₖ &= \where(m, sₖ₋₁, yₖ)  \\
+            sₖ &= δsₖ₋₁ + (1-δ)zₖ.
+        \end{aligned}$$
+
+        Here $δ$ is `decay`; the returned value is $sₖ$. For nonzero decay, this
+        smooths observed coordinates as well as retaining missing ones.
 
         Args:
-            y: Observed state.
-            _: Hidden state. Unused.
-            mask: Mask indicating which values to impute. If `None`, uses ``y.isnan()``.
+            y: Observation vector.
+            _: Hidden state, unused.
+            mask: Boolean mask with true entries at values to impute.
+                If `None`, uses `y.isnan()`.
         """
         mask = y.isnan() if mask is None else mask
         # convex combination of last value and current value

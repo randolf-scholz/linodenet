@@ -27,20 +27,21 @@ from .base import SparseVectorStateUpdate, VectorStateUpdate
 
 
 class LinearRNNCell(nn.Module, VectorStateUpdate):
-    r"""Linear state update.
+    r"""Compute an affine linear state update.
 
-    .. math:: F(y，x) =  Ux + Vy + b
+    $$ F(y, x) = Ux + Vy + b $$
 
-    where $U$ and $V$ are learnable matrices, and $b$ is a learnable bias vector.
+    Here $U$ and $V$ are learnable state and observation matrices. The learnable
+    bias vector $b$ is omitted when `bias=False`.
     """
 
     # PARAMETERS
     U: Tensor
-    r"""PARAM: the hidden state matrix."""
+    r"""PARAM: Hidden-state matrix $U$."""
     V: Tensor
-    r"""PARAM: the observable matrix."""
+    r"""PARAM: Observation-to-state matrix $V$."""
     bias: Optional[Tensor]
-    r"""PARAM: the bias vector."""
+    r"""PARAM: Optional affine bias vector."""
 
     def __init__(
         self,
@@ -62,7 +63,7 @@ class LinearRNNCell(nn.Module, VectorStateUpdate):
     def forward(self, y: Tensor, x: Tensor) -> Tensor:
         r"""Forward pass of the state update.
 
-        .. math:: F(y，x) =  Ux + Vy + b
+        $$ F(y,x) =  Ux + Vy + b $$
         """
         return F.linear(x, self.U, None) + F.linear(y, self.V, self.bias)
 
@@ -70,7 +71,7 @@ class LinearRNNCell(nn.Module, VectorStateUpdate):
 class InnovationCell(nn.Module, SparseVectorStateUpdate):
     r"""State update that is linear/affine in the residual $h(x)-y$.
 
-    .. math:: x' = x - ρ(K(x)⋅(h(x) - y))
+    $$ x' = x - ρ(K(x)⋅(h(x) - y)) $$
 
     where $K(x)$ is a learnable innovation gain, $h$ is the observation map, and
     $ρ$ is a gate applied to the innovation correction. By default, $K$ is a
@@ -79,20 +80,25 @@ class InnovationCell(nn.Module, SparseVectorStateUpdate):
 
     The gain can be:
 
-    - ``"constant"``: use a learned constant gain matrix. This is the default.
-    - ``"attention"``: predict the gain matrix from $x$ with attention.
-    - ``nn.Module``: use a custom user-provided state-dependent gain module.
+    - `"constant"`: use a learned constant gain matrix. This is the default.
+    - `"attention"`: predict the gain matrix from $x$ with attention.
+    - `nn.Module`: use a custom user-provided state-dependent gain module.
 
     Standard gate options are:
 
-    - ``"rezero"``: use a learnable ReZero scalar $ρ(z)=αz$ with $α$ initialized
-      to zero, so that the cell starts as the identity map.
-    - ``"identity"``: use $ρ(z)=z$ with no additional scaling.
-    - `None`: alias for ``"identity"``.
+    - `"rezero"`: use a learnable ReZero scalar $ρ(z)=αz$ with $α$ initialized
+        to zero, so that the cell starts as the identity map.
+    - `"identity"`: use $ρ(z)=z$ with no additional scaling.
+    - `None`: alias for `"identity"`.
     - `nn.Module`: use a custom user-provided gate.
 
+    A custom gain module is called as `gain(residual, x)` and must return a
+    correction with the hidden-state shape. A supplied mask marks observed
+    coordinates and zeroes unobserved residuals. Without a mask, NaNs are not
+    inferred as missing values.
+
     The observation map must be an `nn.Module`. If it is omitted, this cell uses
-    $h(x)=x$, which requires ``input_size == hidden_size``.
+    $h(x)=x$, which requires `input_size == hidden_size`.
     """
 
     # PARAMETERS
@@ -111,15 +117,15 @@ class InnovationCell(nn.Module, SparseVectorStateUpdate):
 
         This constructor fixes $h(x)=x$ and initializes $K(x)=I$, yielding
 
-        .. math:: x' = x - ρ(x - y).
+        $$ x' = x - ρ(x - y) $$
 
         Special gate presets initialize a learnable ReZero scalar to recover
         standard observation blends at construction time:
 
-        - ``"last-value"``: initialize with $α=1$, so $x' = y$.
-        - ``"average-value"``: initialize with $α=1/2$, so $x' = (x+y)/2$.
-        - ``"first-value"`` / ``"keep-state"``: initialize with $α=0$, so
-          $x' = x$.
+        - `"last-value"`: initialize with $α=1$, so $x' = y$.
+        - `"average-value"`: initialize with $α=1/2$, so $x' = (x+y)/2$.
+        - `"first-value"` / `"keep-state"`: initialize with $α=0$, so
+            $x' = x$.
         """
         gate_module: str | nn.Module | None
         initial_gate_value: float | None = None
@@ -220,7 +226,10 @@ class InnovationCell(nn.Module, SparseVectorStateUpdate):
 
 
 class ConstantGain(nn.Module):
-    r"""Computes $(v, x) ↦ K(x)v$."""
+    r"""Apply a learned constant gain matrix to a residual vector.
+
+    The map is $(v, x) ↦ Kv$; the context argument $x$ is unused.
+    """
 
     def __init__(self, input_size: int, output_size: int) -> None:
         super().__init__()
@@ -236,12 +245,13 @@ class ConstantGain(nn.Module):
 class AttentionGain(nn.Module):
     r"""Predict a gain matrix with scaled dot-product attention.
 
-    For context vector $x$, the gain entries are computed as
+    For context vector $x$, the gain entries are
 
-    .. math:: Kᵢⱼ(x) = \softmax_j(\frac{qᵢ(x)ᵀkⱼ(x)}{\sqrt{dₐ}})
+    $$ Kᵢⱼ(x) = \softmaxⱼ\left(\frac{qᵢ(x)ᵀkⱼ(x)}{\sqrt{dₐ}}\right) $$
 
-    where $qᵢ(x)$ and $kⱼ(x)$ are row- and column-specific query/key vectors,
-    and $dₐ$ is the shared attention feature size.
+    Here $qᵢ(x)$ and $kⱼ(x)$ are row- and column-specific query and key vectors,
+    and $dₐ$ is their feature size. Softmax is taken over input columns, so each
+    gain row sums to one. The module returns $K(x)v$ for residual vector $v$.
     """
 
     query_proj: nn.Linear
@@ -339,36 +349,35 @@ class AttentionGain(nn.Module):
 
 
 class KalmanCell(nn.Module, SparseVectorStateUpdate):
-    r"""Kalman-style hidden-state update with masked observations.
+    r"""Update a hidden state with a gated, masked Kalman correction.
 
-    .. math::
-        x' = x - ρ\left(
-            Σ(x)𝐃h(x)ᵀMᵀ (M(𝐃h(x)Σ(x)𝐃h(x)ᵀ + R)Mᵀ)⁻¹ (Mh(x) - y)
-        \right)
+    Let $H = 𝐃h(x)$ be the Jacobian of the observation map at the current state,
+    $Σ = L(x)L(x)ᵀ$ the learned state covariance, and $R$ the observation noise
+    covariance. For a selector $Πₘ$ onto observed coordinates, the update is
 
-    Here, $h(x)$ is the observation map, $𝐃h(x)$ is its local linearization at
-    the current hidden state, and $Σ(x)$ is the hidden-state covariance. The
-    masked observation model is $y_{\text{obs}} = My$, with local observation
-    covariance $Σ₞₞(x) = 𝐃h(x)Σ(x)𝐃h(x)ᵀ + R$. In the implementation, $Σ(x)$ is
-    represented through a covariance factor $L(x)$, typically a Cholesky
-    factor, such that $Σ(x)=L(x)L(x)ᵀ$. The Jacobian action $𝐃h(x)L(x)$ is
-    obtained by pushing the columns of $L(x)$ through the JVP of $h$ at $x$.
-    $ρ$ is an optional gate applied to the Kalman correction. Standard gate
-    options are the same as for `LinearInnovationCell`: ``"rezero"``,
-    ``"identity"``, `None`, or a custom `nn.Module`.
+    $$\begin{aligned}
+        Kₘ &= ΣHᵀΠₘᵀ\left[Πₘ(HΣHᵀ + R)Πₘᵀ\right]⁻¹ \\
+        x' &= x - ρ\left(KₘΠₘ(h(x) - y)\right)
+    \end{aligned}$$
+
+    The module obtains $HL(x)$ by applying Jacobian-vector products to the
+    columns of the covariance factor. It performs the masked solve in the full
+    observation space, zeroing unobserved residuals and Jacobian rows and replacing
+    unobserved noise blocks with the identity.
+
+    A supplied mask uses true entries for observed coordinates. Missing values
+    must be masked explicitly; without a mask, NaNs propagate into the solve.
+    The gate options match `InnovationCell`: `"rezero"`, `"identity"`,
+    `None`, or a custom `nn.Module`.
+
+    For nonlinear $h$, the Jacobian gives the local linearization used by an
+    extended Kalman filter. This cell updates the state vector; it does not
+    return an updated covariance.
 
     Notes:
-        LMMSE stands for linear minimum mean squared error: the best affine
-        estimator under squared loss among estimators linear in the observations.
-        BLUP stands for best linear unbiased predictor: the minimum-variance
-        unbiased estimator within the same linear class.
-
-    Remark:
-        When $h$ is non-linear, this update uses the local Jacobian $𝐃h(x)$ at
-        the current state, which is the same first-order linearization step used
-        by the extended Kalman filter. In that sense, `KalmanCell` implements an
-        EKF-style measurement update with a learned state covariance factor and
-        optional gated correction.
+        LMMSE means linear minimum mean squared error, the best affine estimator
+        under squared loss. BLUP means best linear unbiased predictor, the
+        minimum-variance unbiased estimator within the linear class.
     """
 
     observation_map: nn.Module
@@ -523,12 +532,14 @@ class AttentionCovarianceFactor(nn.Module):
     Let $ϕᵢ(x) ∈ ℝ^{dₐ}$ denote the feature vector for row $i$. The module builds
     a lower-triangular factor $L(x)$ as
 
-    .. math:: Lᵢⱼ(x) =
-        \begin{cases}
-            \frac{ϕᵢ(x)ᵀϕⱼ(x)}{\sqrt{dₐ}}, & i > j, \\
-            \softplus(dᵢ(x)) + ε, & i = j, \\
-            0, & i < j,
-        \end{cases}
+    $$
+    Lᵢⱼ(x) =
+    \begin{cases}
+        \frac{ϕᵢ(x)ᵀϕⱼ(x)}{\sqrt{dₐ}} :& i > j \\
+        \softplus(dᵢ(x)) + ε          :& i = j  \\
+        0                             :& i < j,
+    \end{cases}
+    $$
 
     where $dᵢ(x)$ are learned diagonal logits and $ε$ is machine epsilon for the
     current dtype, ensuring a strictly positive diagonal.

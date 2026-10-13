@@ -1,32 +1,22 @@
-r"""Different state-update models to be used in conjunction with imtskit.
+r"""Protocols and wrappers for state-update models.
 
-A state update is a map of the form $x' = F(y, x)$.
-The square case ``input_size == hidden_size`` is common, but not universal.
+A state update is a map $x' = F(y, x)$, with observation $y$ and current state
+estimate $x$. The square case `input_size == hidden_size` is common but
+not required.
 
-A state updater takes two positional inputs:
+Covariates $u$, such as control inputs or forecasts from another system, supply
+additional conditioning information. They may be passed separately by a richer
+interface or included in an enlarged state; the protocols here take two positional
+inputs.
 
-- An input tensor y: the current measurement of the system
-- An input tensor x: the current estimation of the state of the system
+For example, a linear state-space model without noise satisfies
 
-Sometimes, we have a third input, so called covariates $u$.
-There are two types of covariates:
+$$\begin{aligned}
+    ẋ(t) &= A(t)x(t) + B(t)u(t), \\
+    y(t) &= C(t)x(t) + D(t)u(t).
+\end{aligned}$$
 
-- Control inputs: These are external variables that influence the system
-- Exogenous inputs: Sometimes, there are two coupled systems, and we have access to
-  measurements / predictions of the other system (example: weather forecast).
-  In this case we can treat these variables as part of the state.
-
-These are external variables that influence the system,
-but are not part of the state.
-
-Example:
-    The linear state space system is given by the equations (without noise):
-
-    .. math::
-        ẋ(t) &= A(t)x(t) + B(t)u(t) \\
-        y(t) &= C(t)x(t) + D(t)u(t)
-
-    Here $u$ is the control input.
+Here $u$ is the control input.
 """
 
 __all__ = [
@@ -69,7 +59,7 @@ from .imputation import (
 class AbstractStateUpdate[X, Y](Protocol):
     r"""Abstract protocol for state-update callbacks.
 
-    .. math::  x' = F(y, x)
+    $$ x' = F(y, x) $$
     """
 
     def __call__(self, y: Y, x: X, /) -> X: ...
@@ -78,7 +68,7 @@ class AbstractStateUpdate[X, Y](Protocol):
 class VectorStateUpdate(AbstractStateUpdate[Tensor, Tensor], Protocol):
     r"""Protocol for vector-valued state updaters.
 
-    .. math::  x' = F(y, x)
+    $$ x' = F(y, x) $$
     """
 
     input_size: Final[int]
@@ -93,7 +83,11 @@ class VectorStateUpdate(AbstractStateUpdate[Tensor, Tensor], Protocol):
 
 
 class SparseVectorStateUpdate(VectorStateUpdate, Protocol):
-    r"""Protocol for vector-valued state updaters that can handle missing values."""
+    r"""Protocol for vector-valued state updaters with observation masks.
+
+    A true mask entry marks an observed coordinate. Concrete implementations
+    determine how to infer a mask when none is supplied.
+    """
 
     @signature("[(..., d), (..., h), (..., d)?] -> (..., h)")
     def __call__(
@@ -104,14 +98,18 @@ class SparseVectorStateUpdate(VectorStateUpdate, Protocol):
         Args:
             y: Observation vector.
             x: Current state estimate.
-            mask: Mask indicating which coordinates of `y` are observed. If
-                `None`, observed coordinates are inferred from finite values in `y`.
+            mask: Boolean mask with true entries at observed coordinates. If `None`,
+                mask inference is implementation-specific; some updaters require
+                complete observations.
         """
         ...
 
 
 def is_vector_state_updater(arg: object, /) -> TypeIs[VectorStateUpdate]:
-    r"""Check whether an object is a state updater."""
+    r"""Check for a callable with integer `input_size` and `hidden_size` attributes.
+
+    This structural check does not validate the call signature or output shape.
+    """
     return (
         callable(arg)
         and isinstance(getattr(arg, "input_size", None), int)
@@ -121,9 +119,12 @@ def is_vector_state_updater(arg: object, /) -> TypeIs[VectorStateUpdate]:
 
 # TODO: use Intersection type
 class CellSequence[C: VectorStateUpdate](ModuleSequence[C], VectorStateUpdate):  # type: ignore
-    r"""Apply multiple state updaters sequentially.
+    r"""Apply multiple state updaters sequentially to the same observation.
 
-    .. math:: xₖ₊₁ = Fₖ(y, xₖ)
+    $$ xₖ₊₁ = Fₖ(y, xₖ) $$
+
+    The sequence must be nonempty, and all cells must have the same input and
+    hidden-state sizes.
     """
 
     def __init__(self, cells: Iterable[C] = (), /) -> None:
@@ -162,21 +163,23 @@ class CellSequence[C: VectorStateUpdate](ModuleSequence[C], VectorStateUpdate): 
 
 
 class ResidualCellSequence[C: VectorStateUpdate](CellSequence[C]):
-    r"""Sequential state updater with residual connections.
+    r"""Apply sequential state updates with subtractive residual corrections.
 
-    .. math:: xₖ₊₁ = xₖ - αₖ⋅Fₖ(y, xₖ)
+    $$ xₖ₊₁ = xₖ - αₖFₖ(y, xₖ) $$
+
+    With `use_rezero=True`, the scales $αₖ$ are learnable and initialized to
+    zero, so the sequence initially leaves the state unchanged. Otherwise, the
+    scales are fixed at one and each stage subtracts its cell output.
 
     Args:
-        cells: An iterable of state updater modules to be applied sequentially.
-        use_rezero: Whether to use rezero (default: True)
-
-    A regular ResNet is obtained by setting all αₖ=1.0 and making them non-learnable.
+        cells: State-updater modules with matching input and hidden-state sizes.
+        use_rezero: Whether to use learnable residual scales initialized to zero.
     """
 
     alpha: Tensor
-    r"""PARAM: The residual scaling factors αₖ."""
+    r"""PARAM: Residual scaling factors $αₖ$."""
     use_rezero: Tensor
-    r"""Whether to use rezero"""
+    r"""Legacy flag annotation; only residual scales are stored by the constructor."""
 
     def __init__(
         self,
@@ -201,7 +204,7 @@ class ResidualCellSequence[C: VectorStateUpdate](CellSequence[C]):
 class ResidualCell[C: VectorStateUpdate](nn.Module, VectorStateUpdate):
     r"""Residual wrapper for state updaters.
 
-    .. math:: x' = x - ρ(F(y, x))
+    $$ x' = x - ρ(F(y, x)) $$
 
     where $F$ is a state updater and $ρ$ is an optional gate.
     """
@@ -223,26 +226,30 @@ class ResidualCell[C: VectorStateUpdate](nn.Module, VectorStateUpdate):
 
 
 class MissingValueCell[F: VectorStateUpdate](nn.Module, SparseVectorStateUpdate):
-    r"""Wraps an existing state updater $F$ so that it can handle missing values.
+    r"""Impute missing observations before passing them to a state updater.
 
-    .. math:: x' &= F(u，x)   &   u = impute(y, x; mask=m)
+    $$ u = \op{impute}(y, x; m), \qquad x' = F(u, x) $$
 
-    where $u$ is an imputed value that is free of missing values.
-    There are several available imputation strategies:
+    This wrapper uses true mask entries for values to impute. This is the opposite
+    of the observation-mask convention in `SparseVectorStateUpdate`.
+    If no mask is supplied, missing entries are identified by `y.isnan()`.
 
-    0. "default": uses "decoder", if available, and "zero" otherwise.
-    1. "zero": Replace missing values with zeros.
-    2. "constant": Replace missing values with a constant value.
-    3. "last": Replace missing values with the last observed value. (initialized with zero)
-    4. "decoder": Replace missing values with the output of the decoder: $s = h(x)$.
-    5. Tensor: replaces missing values with a fixed tensor. (for example, the mean of the data)
+    Supported values of `imputation` are:
 
-    Here ``m=True`` marks the coordinates that should be imputed. If ``m=None``,
-    the imputation mask defaults to ``y.isnan()``.
+    - `"zero"`: replace missing entries with zero.
+    - `"last"`: use the previous value, initially zero.
+    - `"learnable"`: use a learnable vector.
+    - `"linear"`: predict replacement values from the hidden state with a linear map.
+    - A float or tensor: use a fixed replacement value.
+    - An `nn.Module`: use a custom imputer accepting `(y, x, mask=mask)`.
 
-    Optionally, the imputation mask can be concatenated to the input.
+    When `concat_mask=True` (the default), the updater receives the imputed vector
+    followed by the missing-value mask:
 
-    .. math:: u' = concat([impute(y, x; mask=m)，m])
+    $$ u' = \op{concat}(u, m) $$
+
+    The wrapped updater must then have twice the observation input size. Without
+    mask concatenation, its input size must match the observation size.
     """
 
     state_updater: F
@@ -250,7 +257,7 @@ class MissingValueCell[F: VectorStateUpdate](nn.Module, SparseVectorStateUpdate)
 
     # CONSTANTS
     concat_mask: Final[bool]
-    r"""CONST: Whether to concatenate the mask to the input or not."""
+    r"""CONST: Whether to append the missing-value mask to the imputed input."""
     imputation_strategy: Final[str]
     r"""CONST: The strategy to use for imputation."""
     # BUFFERS
@@ -367,6 +374,7 @@ def is_consistent_update(
         batch_shape: Optional leading batch dimensions for the random test data.
         check_sparse_observations: Whether to also test the sparse-observation
             case where only a random subset of coordinates is observed.
+            The updater must interpret true mask entries as observed coordinates.
         rtol: Relative tolerance for the equality check.
         atol: Absolute tolerance for the equality check.
 
@@ -377,6 +385,7 @@ def is_consistent_update(
     Raises:
         ValueError: If `decoder` is `None` and the updater is not square, or if
             `decoder` returns a tensor with the wrong shape.
+        AssertionError: The sparse-observation update produces nonfinite values.
     """
     if decoder is None and update.input_size != update.hidden_size:
         raise ValueError(

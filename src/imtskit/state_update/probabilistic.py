@@ -1,21 +1,12 @@
-r"""Probabilistic state-update protocol.
+r"""Gaussian state updates using conditioning and KL regularization.
 
-Probabilistic State Update
---------------------------
-- We need sampling distribution. What if we have multiple independent measurements
-  of the same quantity at time t?
-  - ⟹ We approximate the observational distribution.
-  - Option 1: Empirical distribution
-  - Option 2: Posteriors from a Bayesian model
+The Kalman helpers describe conditioning a Gaussian state on an observation
+distribution. The Gaussian updater modules instead pull an observation through
+an invertible decoder and minimize a latent Gaussian observation loss with
+forward- or reverse-KL anchoring to the prior.
 
-Study Kalman Filter from a probabilistic perspective.
-Transfer observations to the latent linear state.
-
-Experiment with parametrized KalmanCell.
-
-.. math:: ΣH'(HΣ H' + R)⁻¹(Hx - y)
-
-R is observed or a hyperparameter.
+Retention parameters control how much of the prior is preserved. Their
+relationship to KL weights depends on the divergence direction.
 """
 
 __all__ = [
@@ -54,23 +45,37 @@ def probabilistic_kalman_update(
     /,
     H: Optional[Tensor] = None,
 ) -> MultivariateNormal:
-    r"""The classical Kalman Filter, rephrased in probabilistic terms.
+    r"""Form a Gaussian conditioning update from an observation distribution.
 
-    .. math::
-        μ' = μ - ΣH'(HΣH' + R)⁻¹(Hμ - y)
-        Σ' = Σ - ΣH'(HΣH' + R)⁻¹HΣ
+    For prior parameters $(μ, Σ)$ and observation parameters $(y, R)$, the
+    intended Kalman update is
 
-    Note that the formula for the update derives from the conditional distribution of a joint
-    normal distribution: If $p(x, y) = 𝓝([μ₁, μ₂], [[Σ₁₁, Σ₁₂], [Σ₂₁, Σ₂₂]])$, then
-    $p(x∣y) = 𝓝(μ', Σ')$ where $μ' = μ₁ - Σ₁₂Σ₂₂⁻¹(μ₂ - y)$ and $Σ' = Σ₁₁ - Σ₁₂Σ₂⁻¹Σ₂₁$.
+    $$\begin{aligned}
+        S &= HΣHᵀ + R    \\
+        μ' &= μ - ΣHᵀS⁻¹(Hμ - y)  \\
+        Σ' &= Σ - ΣHᵀS⁻¹HΣ
+    \end{aligned}$$
+
+    These equations follow from conditioning a joint Gaussian: for mean
+    $(μ₁, μ₂)$ and covariance blocks $Σᵢⱼ$, conditioning on $y$ gives
+
+    $$\begin{aligned}
+        μ' &= μ₁ + Σ₁₂Σ₂₂⁻¹(y - μ₂) \\
+        Σ' &= Σ₁₁ - Σ₁₂Σ₂₂⁻¹Σ₂₁
+    \end{aligned}$$
+
+    Note:
+        This implementation is provisional. With Cholesky-whitened cross-covariance
+        $P$, the current covariance contraction computes $PP$ rather than $PᵀP$.
+        It therefore does not generally realize the intended covariance update.
 
     Args:
-        obs: The observation distribution.
-        val: The state distribution.
-        H: The observation matrix.
+        obs: Observation distribution with mean $y$ and covariance $R$.
+        val: Prior state distribution with mean $μ$ and covariance $Σ$.
+        H: Observation matrix. If `None`, use direct observations with $H=𝕀$.
 
     Returns:
-        The updated state distribution.
+        A Gaussian distribution constructed from the computed mean and covariance.
     """
     μ: Tensor = val.mean
     Σ: Tensor = val.covariance_matrix  # ty: ignore[invalid-assignment]
@@ -108,19 +113,27 @@ def discrete_probabilistic_kalman_update(
     R: Tensor,
     H: Optional[Tensor] = None,
 ) -> MultivariateNormal:
-    """The classical Kalman Filter, rephrased in probabilistic terms.
+    r"""Prototype Kalman update for a point observation with missing coordinates.
 
-    Note that the observation is allowed to be sparse, i.e. contain missing values.
-    In this case, the update formula is obtained by marginalizing the observation distribution:
+    The intended update marginalizes the observation model to the observed
+    coordinates, using the corresponding rows of $H$ and submatrix of $R$.
 
-    .. math::
-        μ' = μ - ΣH'(HΣH' + R)⁻¹(Hμ - y)
-        Σ' = Σ - ΣH'(HΣH' + R)⁻¹HΣ
+    Note:
+        The current implementation selects NaN coordinates and passes the original
+        observation vector to `MultivariateNormal`. It does not correctly implement
+        the intended sparse update.
+
+    Args:
+        observation: Point observation represented by a `Dirac` distribution.
+        state: Prior Gaussian state distribution.
+        R: Observation noise covariance.
+        H: Observation matrix. If `None`, construct an identity observation matrix.
 
     References:
-        Kalman filter with outliers and missing observations,
-        T. Cipra & R. Romera, 1997
-        https://link.springer.com/article/10.1007/BF02564705
+        - Kalman filter with outliers and missing observations \
+          T. Cipra and R. Romera \
+          TEST, 6, 379–395, 1997 \
+          <https://doi.org/10.1007/BF02564705>
     """
     y = observation.data  # (..., m)
     mask = torch.isnan(y)  # (..., m)
@@ -173,35 +186,43 @@ def _make_retention_modules(
 
 
 class GaussianForwardUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
-    r"""Perform an exact Gaussian forward-KL update of the observation loss.
+    r"""Compute a Gaussian observation update with forward-KL anchoring.
 
-    .. math:: θ₊ = \argmin_θ -\log q(y_obs∣θ) + γ⋅\kl(𝓝(θ₋)，𝓝(θ))
+    Let $θ₋ = (μ₋, Σ₋)$ be the current latent Gaussian parameters. The decoder
+    must be an invertible map $ϕ$ independent of $θ$, with `inverse(y_obs)`
+    returning the latent observation tensor $z = ϕ⁻¹(y_obs)$. Its log-Jacobian
+    term is constant in $θ$ and does not affect the minimizer.
 
-    Let $θ₋$ denote the current latent Gaussian parameters and $q(y_obs∣θ)$
-    be the predictive density induced by the decoder.
-    The decoder is used only to pull the observation back into latent space:
-    if $(z, \log|\det 𝐃ϕ⁻¹(y_obs)|) = ϕ⁻¹(y_obs)$, then the Jacobian term
-    is constant with respect to $θ$, so the minimizer is exactly
+    For shared retention $ρ$ with $0 < ρ < 1$, the objective is
 
-    .. math:: θ₊ = \argmin_θ -\log 𝓝(z; θ) + γ⋅\kl(𝓝(θ₋, Σ₋)，𝓝(θ))
+    $$
+        θ₊ = \argmin_θ -\log 𝓝(z; θ) + λ\KL(𝓝(θ₋) ∥ 𝓝(θ)),
+        \qquad λ = \frac{ρ}{1-ρ}
+    $$
 
-    which is evaluated in closed form by `argmin_forward_kl`.
+    The retention is a fraction, not the KL weight itself. Shared retention
+    uses the same fraction for the mean and covariance. A pair supplies
+    separate fractions $(ρₘ, ρₛ)$. Writing $δ = z - μ₋$, the covariance-form update is
 
-    The parameter ``retention`` is the forward-KL weight $ρ∈[0,1]$:
+    $$\begin{aligned}
+        μ₊ &= ρₘμ₋ + (1-ρₘ)z     \\
+        Σ₊ &= ρₛΣ₋ + (1-ρₛ)ρₘδδᵀ
+    \end{aligned}$$
 
-    - larger $ρ$ keeps $θ₊$ closer to $θ₋$
-    - smaller $ρ$ lets the observation move the posterior more aggressively
+    The admissible ranges at evaluation are $ρₘ ∈ [0, 1]$ and $ρₛ ∈ (0, 1]$.
+    Unit retention preserves the corresponding prior parameter. Other covariance
+    representations are handled by `argmin_forward_kl`.
     """
 
     retention_mu: nn.Module
-    r"""MODULE: the forward-KL weight for the mean."""
+    r"""MODULE: Forward-KL retention fraction for the mean."""
     retention_sigma: nn.Module
-    r"""MODULE: the forward-KL weight for the covariance."""
+    r"""MODULE: Forward-KL retention fraction for the covariance."""
 
     rho_mu: Tensor
-    r"""BUFFER: the most recent computed ρ_mu."""
+    r"""BUFFER: Most recent mean retention $ρₘ$, unset before the first forward call."""
     rho_sigma: Tensor
-    r"""BUFFER: the most recent computed ρ_sigma."""
+    r"""BUFFER: Most recent covariance retention $ρₛ$, unset before the first forward call."""
 
     def __init__(
         self,
@@ -249,35 +270,45 @@ class GaussianForwardUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tens
 
 
 class GaussianReverseUpdater(nn.Module, AbstractStateUpdate[GaussianParams, Tensor]):
-    r"""Perform an exact Gaussian reverse-KL update of the observation loss.
+    r"""Compute a Gaussian observation update with reverse-KL anchoring.
 
-    .. math:: θ₊ = \argmin_θ -\log q(y_obs∣θ) + \kl(𝓝(θ)，𝓝(θ₋))
+    Let $θ₋ = (μ₋, Σ₋)$ be the current latent Gaussian parameters. The decoder
+    must be an invertible map $ϕ$ independent of $θ$, with `inverse(y_obs)`
+    returning the latent observation tensor $z = ϕ⁻¹(y_obs)$. Its log-Jacobian
+    term is constant in $θ$ and does not affect the minimizer.
 
-    Let $θ₋$ denote the current latent Gaussian parameters and $q(y_obs∣θ)$
-    be the predictive density induced by the decoder.
-    The decoder is used only to pull the observation back into latent space:
-    if $(z, \log|\det 𝐃ϕ⁻¹(y_obs)|) = ϕ⁻¹(y_obs)$, then the Jacobian term
-    is constant with respect to $θ$, so the minimizer is exactly
+    Writing $θ = (μ, Σ)$ in covariance coordinates, the updated parameters are
 
-    .. math:: θ₊ = \argmin_θ -\log 𝓝(z; θ) + \kl(𝓝(θ)，𝓝(θ₋))
+    $$ θ₊ = \argmin_θ J(θ; θ₋, z) $$
 
-    which is evaluated in closed form by `argmin_reverse_kl`.
+    For finite anchoring weights, the objective is
 
-    The parameter ``retention`` uses the reverse-KL retention coordinates:
+    $$\begin{aligned}
+        J(θ; θ₋, z) &= -\log 𝓝(z; θ) + \frac{λ_μ}{2}(μ-μ₋)ᵀΣ₋⁻¹(μ-μ₋) \\
+            &\quad + \frac{λ_Σ}{2}\left(\tr(ΣΣ₋⁻¹) - \log\det(ΣΣ₋⁻¹) - d\right)
+    \end{aligned}$$
 
-    - $ρ_μ ∈ [0, 1]$ nominally controls how strongly the mean is anchored
-    - $ρ_Σ ∈ (0, 1]$ controls the retained covariance fraction
+    Here $d$ is the latent-state dimension. When $λ_μ = λ_Σ = λ > 1$, this
+    reduces to the reverse-KL objective
+
+    $$ θ₊ = \argmin_θ -\log 𝓝(z; θ) + λ\KL(𝓝(θ) ∥ 𝓝(θ₋)) $$
+
+    The parameter `retention` uses the reverse-KL retention coordinates:
+
+    - $ρ_μ ∈ [0, 1]$ controls nominal mean anchoring, with
+        $λ_μ = ρ_μ/(1-ρ_μ)$. The realized mean retention also depends on the innovation.
+    - $ρ_Σ ∈ (0, 1]$ controls the retained covariance fraction, with $λ_Σ = 1/(1-ρ_Σ)$.
     """
 
     retention_mu: nn.Module
-    r"""MODULE: the reverse-KL nominal retention for the mean."""
+    r"""MODULE: Reverse-KL nominal mean retention."""
     retention_sigma: nn.Module
-    r"""MODULE: the reverse-KL retention for the covariance."""
+    r"""MODULE: Reverse-KL covariance retention."""
 
     rho_mu: Tensor
-    r"""BUFFER: the most recent computed ρ_mu."""
+    r"""BUFFER: Most recent mean retention $ρₘ$, unset before the first forward call."""
     rho_sigma: Tensor
-    r"""BUFFER: the most recent computed ρ_sigma."""
+    r"""BUFFER: Most recent covariance retention $ρₛ$, unset before the first forward call."""
 
     def __init__(
         self,

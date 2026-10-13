@@ -1,16 +1,17 @@
-r"""State-update models to be used in conjunction with imtskit.
+r"""State-update models for assimilating observations into state estimates.
 
-Background
-----------
+## Background
 
-The filtering problem is a fundamental problem in signal processing and control theory.
-Consider the following setup:
+Given a dynamical system and an observation model,
 
-1. (stochastic) Dynamical System: $x(t+∆t) = Φ(xₜ, ∆t)$
-2. (stochastic) Measurement System: $y(t) = H(x(t)) + ε(t)$
+$$\begin{aligned}
+    x(t+∆t) &= Φ(x(t), ∆t), \\
+    y(t) &= H(x(t)) + ε(t),
+\end{aligned}$$
 
-Then, given observations $\{y_{t₁}, y_{t₂}, …, y_{tₙ}\}$, we want to estimate the
-state $\{x_{q₁}, x_{q₂}, …, x_{qₙ}\}$ at the query times $\{q₁, q₂, …, qₙ\}$.
+state estimation uses observations $y(t₁), …, y(tₙ)$ to estimate states
+$x(q₁), …, x(qₘ)$ at requested query times $q₁, …, qₘ$. The state-update
+models in this package combine an observation with the current state estimate.
 """
 
 __all__ = [
@@ -88,4 +89,4 @@ STATE_UPDATERS: dict[str, type[VectorStateUpdate]] = {
     "ResidualCell": ResidualCell,
     "ResidualCellSequence": ResidualCellSequence,
 }  # fmt: skip
-r"""Dictionary of all available state updaters."""
+r"""Dictionary of registered state-updater classes."""
