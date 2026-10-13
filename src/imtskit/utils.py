@@ -22,17 +22,20 @@ from typing import Any, cast, overload
 
 
 def is_allcaps(s: str, /) -> bool:
-    r"""Check if a string is all caps."""
+    r"""Check whether a string is an uppercase alphabetic Python identifier.
+
+    Digits and underscores are rejected, even in otherwise valid identifiers.
+    """
     return s.isidentifier() and s.isupper() and s.isalpha()
 
 
 def is_dunder(s: str, /) -> bool:
-    r"""Check if name is a dunder method."""
+    r"""Check whether an identifier starts and ends with two underscores."""
     return s.isidentifier() and s.startswith("__") and s.endswith("__")
 
 
 def is_private(s: str, /) -> bool:
-    r"""Check if name is a private method."""
+    r"""Check whether an identifier starts with exactly one underscore."""
     return s.isidentifier() and s.startswith("_") and not s.startswith("__")
 
 
@@ -41,10 +44,21 @@ def get_module(obj_ref: object, /) -> str:
 
 
 def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict:
-    r"""Update nested dictionary recursively in-place with new dictionary.
+    r"""Recursively merge a mapping into a dictionary.
+
+    Args:
+        d: The dictionary to update. Existing values corresponding to nonempty
+            mappings in `new` must be dictionaries that can be updated recursively.
+        new: Values to merge. Nonempty mappings are merged recursively; all other
+            values, including empty mappings, replace the existing value.
+        inplace: Whether to modify `d` directly. Otherwise, deep-copy `d` before
+            merging. Replacement values from `new` are assigned without copying.
+
+    Returns:
+        The updated dictionary.
 
     References:
-        https://stackoverflow.com/a/30655448/9318372
+        [Recursive dictionary update](https://stackoverflow.com/a/30655448/9318372).
     """
     if not inplace:
         d = deepcopy(d)
@@ -62,9 +76,9 @@ def deep_dict_update(d: dict, new: Mapping, /, *, inplace: bool = False) -> dict
 
 
 type NestedDict[K, V] = dict[K, V | "NestedDict[K, V]"]
-r"""Generic Type Alias for nested `dict`."""
+r"""Dictionary with keys of type `K` and values of type `V` or nested dictionaries."""
 type NestedMapping[K, V] = Mapping[K, V | "NestedMapping[K, V]"]
-r"""Generic Type Alias for nested `Mapping`."""
+r"""Mapping with keys of type `K` and values of type `V` or nested mappings."""
 
 
 @overload
@@ -96,31 +110,46 @@ def flatten_dict[K, K2](
     r"""Flatten dictionaries recursively.
 
     Args:
-        d: dictionary to flatten
-        recursive: whether to flatten recursively.
-            If `recursive` is an integer, flattens that many levels.
-        join_fn: function to join keys
-            Defaults to ``'.'.join``, implicitly assuming that all keys are strings.
-        split_fn: function to split keys
-            Defaults to ``str.split('.')``, implicitly assuming that all keys are strings.
+        d: The mapping to flatten.
+        recursive: Whether to flatten all nested mappings. `False` preserves
+            nested values. A positive integer limits the number of key components
+            in each path: `1` preserves nested values, and `2` flattens one level.
+        join_fn: Function combining key components. Defaults to `".".join`,
+            which requires string keys.
+        split_fn: Function recovering key components from a joined key. Defaults
+            to splitting a string at `"."`.
 
-    Example: flattening with string keys.
+    Returns:
+        A dictionary whose keys represent paths through `d`.
+
+    Note:
+        Joined paths must be unique; collisions overwrite earlier values.
+        Empty nested mappings disappear when traversed recursively. For a
+        reversible conversion, `split_fn` must invert `join_fn` on key paths.
+
+    Examples:
+        **String keys.**
+
         When `join_fn` and `split_fn` are not provided, they default to
-        ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``,
+        `join_fn = ".".join` and `split_fn = lambda s: s.split(".")`,
         implicitly assuming that all keys are strings.
-        This will combine string keys like ``"a"`` and ``"b"`` into ``"a.b"``.
+        This combines successive keys `"a"` and `"b"` into the path `"a.b"`.
 
+        ```pycon
         >>> flatten_dict({"a": {"b": 1, "c": 2}})
         {'a.b': 1, 'a.c': 2}
 
         >>> flatten_dict({"a": {"b": {"x": 2}, "c": 2}})
         {'a.b.x': 2, 'a.c': 2}
 
-    Example: flattening with custom key functions.
-        Using ``join_fn = tuple`` and ``split_fn = lambda s: s`` will combine
-        keys like ``("a", "b")`` and ``("a", "c")`` into ``("a", "b", "c")``.
-        This choice works for arbitrary key types.
+        ```
 
+        **Custom key functions.**
+
+        Using `join_fn = tuple` and `split_fn = lambda s: s` stores each path as
+        a tuple of keys. This choice works for arbitrary hashable key types.
+
+        ```pycon
         >>> flatten_dict({"a": {"b": 1, "c": 2}}, join_fn=tuple, split_fn=lambda x: x)
         {('a', 'b'): 1, ('a', 'c'): 2}
 
@@ -131,7 +160,11 @@ def flatten_dict[K, K2](
         ... )
         {('a', 'b', 'x'): 2, ('a', 'c'): 2}
 
-    Example: partial flattening with `recursive`.
+        ```
+
+        **Partial flattening with `recursive`.**
+
+        ```pycon
         >>> flatten_dict({"a": {"i": {"x": 0}, "b": {"y": 1}}})
         {'a.i.x': 0, 'a.b.y': 1}
 
@@ -146,6 +179,8 @@ def flatten_dict[K, K2](
         ...     recursive=1,
         ... )
         {'a': {'i': {'x': 0}, 'b': {'y': 1}}}
+
+        ```
     """
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K2, Any] = {}
@@ -193,17 +228,42 @@ def unflatten_dict[K, K2](
 ) -> NestedDict[K, Any]:
     r"""Unflatten dictionaries recursively.
 
-    Example: Unflattening with string keys.
+    Args:
+        d: The mapping whose keys represent paths to expand.
+        recursive: Whether to expand paths fully. `False` splits each path once;
+            a positive integer limits the number of splits along each path.
+        join_fn: Function combining any unexpanded key components. Defaults to
+            `".".join`, which requires string keys.
+        split_fn: Function splitting a key into path components. Defaults to
+            splitting a string at `"."`. Each key must yield at least one component.
+
+    Returns:
+        A nested dictionary reconstructed from the key paths.
+
+    Raises:
+        KeyError: If a path needs to descend through an existing non-dictionary
+            value or a terminal key is already present.
+
+    Examples:
+        **String keys.**
+
         When `join_fn` and `split_fn` are not provided, they default to
-        ``join_fn = ".".join`` and ``split_fn = lambda s: s.split(".")``,
+        `join_fn = ".".join` and `split_fn = lambda s: s.split(".")`,
         implicitly assuming that all keys are strings.
-        This will split up keys like ``"a.b"`` into ``{"a": {"b": ...}}``.
+        This expands paths like `"a.b"` into `{"a": {"b": ...}}`.
+
+        ```pycon
         >>> unflatten_dict({"a.b": 1, "a.c": 2})
         {'a': {'b': 1, 'c': 2}}
 
-    Example: unflattening with custom join function.
-        Using ``join_fn = tuple`` and ``split_fn = lambda s: s`` will split up
-        keys like ``("a", "b", "c")`` into ``{"a": {"b": {"c": ...}}}``.
+        ```
+
+        **Custom key functions.**
+
+        Using `join_fn = tuple` and `split_fn = lambda s: s` expands tuple paths
+        like `("a", "b", "c")` into `{"a": {"b": {"c": ...}}}`.
+
+        ```pycon
         >>> unflatten_dict(
         ...     {("a", 17): "foo", ("a", 18): "bar"},
         ...     join_fn=tuple,
@@ -211,7 +271,11 @@ def unflatten_dict[K, K2](
         ... )
         {'a': {17: 'foo', 18: 'bar'}}
 
-    Example: partial unflattening with `recursive`.
+        ```
+
+        **Partial unflattening with `recursive`.**
+
+        ```pycon
         >>> unflatten_dict({"a.b.c.d": 0, "a.x.y.z": 1})
         {'a': {'b': {'c': {'d': 0}}, 'x': {'y': {'z': 1}}}}
 
@@ -220,6 +284,8 @@ def unflatten_dict[K, K2](
 
         >>> unflatten_dict({"a.b.c.d": 0, "a.x.y.z": 1}, recursive=1)
         {'a': {'b.c.d': 0, 'x.y.z': 1}}
+
+        ```
     """
     recursive = recursive if isinstance(recursive, bool) else recursive - 1
     result: dict[K, Any] = {}
@@ -245,9 +311,6 @@ def unflatten_dict[K, K2](
     return result
 
 
-r"""Progress bar update interval in milliseconds."""
-
-
 def _camel_to_snake(name: str, /) -> str:
     r"""Convert `CamelCase` names to `snake_case`."""
     return "".join(["_" + c.lower() if c.isupper() else c for c in name]).lstrip("_")
@@ -258,7 +321,11 @@ def _snake_to_kebab(string: str) -> str:
 
 
 def normalize_name(name: str, /) -> str:
-    r"""Normalize names to lowercase kebab-case, and removes certain prefixes."""
+    r"""Normalize a name to lowercase kebab-case after removing a leading `is_`.
+
+    Each uppercase letter starts a new component, so acronyms are split into
+    individual letters. Underscores become hyphens.
+    """
     name = name.removeprefix("is_")
     name = _camel_to_snake(name)
     name = _snake_to_kebab(name)

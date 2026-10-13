@@ -27,7 +27,10 @@ from .utils import normalize_name
 
 @dataclass(slots=True)
 class RegistryEntry:
-    r"""Connected public objects for a canonical structural name."""
+    r"""Related public objects for a canonical structural name.
+
+    Each optional field is `None` until an object is registered for that role.
+    """
 
     name: str
     domain: Domain | None = None
@@ -66,7 +69,20 @@ class Registry(Mapping[str, RegistryEntry]):
         initialization: Fn | None = None,
         parametrization: type | None = None,
     ) -> None:
-        r"""Register one or more objects under a canonical name."""
+        r"""Register objects under a name normalized by `normalize_name`.
+
+        Create the entry if needed. Arguments set to `None` leave fields
+        unchanged. Infer the domain from `mapping.CODOMAIN` when available.
+
+        Raises:
+            ValueError: If a supplied field is already set, even to the same
+                object, or the inferred domain conflicts with the specified or
+                existing domain.
+
+        Note:
+            Registration is not atomic: an entry may be created or earlier fields
+            updated before a conflicting field raises an error.
+        """
         entry = self._entry_for(name)
         canonical_name = normalize_name(name)
         candidate = RegistryEntry(
@@ -121,7 +137,13 @@ class Registry(Mapping[str, RegistryEntry]):
         initialization: Fn | None = None,
         parametrization: type | None = None,
     ) -> None:
-        r"""Register objects on an existing canonical name."""
+        r"""Fill unset fields of an existing entry after normalizing its name.
+
+        Raises:
+            KeyError: If the entry does not exist.
+            ValueError: If registration would set an existing field again or
+                introduce an inconsistent domain.
+        """
         canonical_name = normalize_name(name)
         if canonical_name not in self._entries:
             raise KeyError(f"Registry entry {canonical_name!r} does not exist.")
@@ -139,7 +161,12 @@ class Registry(Mapping[str, RegistryEntry]):
         )
 
     def register_test_on_domain(self, domain: Domain, test: Fn, /) -> None:
-        r"""Register a test for `domain`."""
+        r"""Register a named predicate on entries associated with `domain`.
+
+        The predicate must have a `__name__` beginning with `is_`. Update entries
+        whose domains match, then create or complete the entry derived from the
+        predicate's name. Existing test fields cannot be set again.
+        """
         for entry in self._entries.values():
             if entry.domain != domain:
                 continue
@@ -202,7 +229,7 @@ class Registry(Mapping[str, RegistryEntry]):
         return len(self._entries)
 
     def get[T = None](self, key: str, default: T = None) -> RegistryEntry | T:  # type: ignore
-        r"""Return the entry for `key` if present."""
+        r"""Return the entry for the normalized `key`, or `default` if absent."""
         return self._entries.get(normalize_name(key), default)
 
 
@@ -211,7 +238,7 @@ r"""Canonical registry of named structural objects."""
 
 
 def get_registry_entry(name: str, /) -> RegistryEntry:
-    r"""Return the registry entry associated with `name`."""
+    r"""Return the entry for the normalized `name`, raising `KeyError` if absent."""
     return REGISTRY[name]
 
 

@@ -22,9 +22,9 @@ if metadata.version(__package__ or __name__) != __version__:
 
 
 ATOL: Final[float] = 1e-6
-r"""CONST: Default absolute precision."""
+r"""Default absolute tolerance for numerical comparisons."""
 RTOL: Final[float] = 1e-6
-r"""CONST: Default relative precision."""
+r"""Default relative tolerance for numerical comparisons."""
 EPS: Final[dict[torch.dtype, float]] = {
     torch.bfloat16   : 2**-7,   # ~7.81e-3
     torch.float16    : 2**-10,  # ~9.77e-4
@@ -34,4 +34,7 @@ EPS: Final[dict[torch.dtype, float]] = {
     torch.complex64  : 2**-23,  # ~1.19e-7
     torch.complex128 : 2**-52,  # ~2.22e-16
 }  # fmt: skip
-r"""CONST: Default epsilon for each dtype."""
+r"""Machine epsilon for the supported floating-point and complex dtypes.
+
+For complex dtypes, use the epsilon of the corresponding real component dtype.
+"""

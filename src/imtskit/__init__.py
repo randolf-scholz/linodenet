@@ -1,4 +1,4 @@
-r"""Linear Ordinary Differential Equation Recurrent Neural Network."""
+r"""Toolkit for irregular multivariate time series."""
 
 __all__ = [
     # Constants

@@ -1,9 +1,9 @@
 r"""Experimental ODE solvers for PyTorch.
 
-The implementation in this module is intentionally small and conservative. The
-forward pass runs under `torch.no_grad` and the backward pass implements a
-discrete adjoint by recomputing one-step vector-Jacobian products from the
-stored no-grad trajectory.
+Integration runs under `torch.no_grad`, and the backward pass implements a
+discrete adjoint by recomputing one-step vector-Jacobian products from the stored
+trajectory. Gradients are returned for the initial state and explicit tensor
+arguments, but not for times or the step size.
 """
 
 __all__ = [
@@ -52,7 +52,9 @@ def euler_step(
 ) -> Tensor:  # (..., D)
     r"""Return one explicit Euler step.
 
-    .. math:: yₙ₊₁ = yₙ + Δt⋅f(tₙ, yₙ, θ)
+    $$ yₙ₊₁ = yₙ + Δt⋅f(tₙ, yₙ, θ) $$
+
+    Here $θ$ denotes the extra tensor arguments in `args`.
     """
     return state + step_size * vector_field(time, state, *args)
 
@@ -66,9 +68,11 @@ def midpoint_step(
 ) -> Tensor:  # (..., D)
     r"""Return one explicit midpoint step.
 
-    .. math::
-        k₁   &= f(tₙ, yₙ, θ) \\
-        yₙ₊₁ &= yₙ + Δt⋅f(tₙ + ½Δt, yₙ + ½k₁Δt, θ)
+    $$ k₁ = f(tₙ, yₙ, θ) $$
+
+    $$ yₙ₊₁ = yₙ + Δt⋅f(tₙ + ½Δt, yₙ + ½k₁Δt, θ) $$
+
+    Here $θ$ denotes the extra tensor arguments in `args`.
     """
     half_step = 0.5 * step_size
     midpoint = state + half_step * vector_field(time, state, *args)
@@ -82,12 +86,15 @@ def heun_step(
     step_size: Tensor,  # (...)
     args: tuple[Tensor, ...] = (),  # arbitrary tensor parameters
 ) -> Tensor:  # (..., D)
-    r"""Return one explicit trapezoidal/Heun step.
+    r"""Return one explicit trapezoidal step using Heun's method.
 
-    .. math::
-        k₁ &= f(tₙ, yₙ, θ) \\
-        k₂ &= f(tₙ + Δt, yₙ + k₁Δt, θ) \\
-        yₙ₊₁ &= yₙ + ½Δt(k₁ + k₂)
+    $$ k₁ = f(tₙ, yₙ, θ) $$
+
+    $$ k₂ = f(tₙ + Δt, yₙ + k₁Δt, θ) $$
+
+    $$ yₙ₊₁ = yₙ + ½Δt(k₁ + k₂) $$
+
+    Here $θ$ denotes the extra tensor arguments in `args`.
     """
     slope_start = vector_field(time, state, *args)
     slope_end = vector_field(
@@ -112,18 +119,26 @@ def _odeint_forward(
     r"""Integrate an ODE and return the full history and requested states.
 
     Args:
-        vector_field: Callable ``f(t, y, *args)`` returning ``dy/dt``.
+        vector_field: Callable `f(t, y, *args)` returning `dy/dt`,
+            with the same shape as `y`.
         y0: Initial state.
         t0: Scalar initial time.
         t_eval: Sorted evaluation times greater than or equal to `t0`.
-        step_size: Maximum fixed step size. A final remainder step lands exactly
-            on each requested evaluation time.
-        method: One of ``"euler"``, ``"midpoint"``, or ``"heun"``.
+        step_size: Positive maximum step size. A final remainder step lands
+            exactly on each requested evaluation time.
+        method: One of `"euler"`, `"midpoint"`, or `"heun"`.
         args: Extra tensor arguments passed to `vector_field`.
 
     Returns:
-        Tuple ``(solution, history, times, output_indices)``. ``solution`` has
-        shape ``(len(t_eval), *y0.shape)`` and contains the requested states.
+        Tuple `(solution, history, times, output_indices)`. `solution` has shape
+        `(t_eval.numel(), *y0.shape)` and contains the requested states. `history`
+        contains the initial state and every integration step; `times` contains
+        their times, and `output_indices` selects the requested states from
+        `history`. Evaluation times are flattened in their input order.
+
+    Note:
+        This helper assumes valid step sizes and evaluation times; validation is
+        performed by `solve_ivp`. Repeated times select the same history state.
     """
     t0 = torch.as_tensor(t0, device=y0.device, dtype=y0.dtype)
     t_eval = torch.as_tensor(t_eval, device=y0.device, dtype=y0.dtype).reshape(-1)
@@ -256,12 +271,36 @@ def solve_ivp(
     method: ODESolverMethod = "euler",
     args: tuple[Tensor, ...] = (),
 ) -> Tensor:
-    r"""Integrate ``dy/dt = f(t, y, *args)`` from `t0` to `t_eval`.
+    r"""Integrate `dy/dt = f(t, y, *args)` from `t0` to each evaluation time.
 
-    Evaluation times are currently assumed to be sorted and greater than or
-    equal to `t0`. This wrapper returns the state at each evaluation time and
-    uses a custom discrete adjoint for gradients with respect to `y0` and
-    tensor `args`.
+    Use a custom discrete adjoint for gradients with respect to `y0` and explicit
+    tensor `args`. Gradients are not returned for `t0`, `t_eval`, or `step_size`.
+    Parameters captured by `vector_field` must be passed through `args` to receive
+    gradients from this solver.
+
+    Args:
+        vector_field: Callable `f(t, y, *args)` returning `dy/dt`,
+            with the same shape as `y`.
+        y0: Real floating-point initial state tensor.
+            Scalar and batched states are supported.
+        t0: Scalar initial time.
+        t_eval: Scalar or tensor of evaluation times. Its flattened values must
+            be sorted in nondecreasing order and greater than or equal to `t0`.
+        step_size: Positive maximum step size. A shorter final step reaches each
+            requested time exactly.
+        method: One of `"euler"`, `"midpoint"`, or `"heun"`, or an `ODESolver` value.
+        args: Extra tensor arguments passed to `vector_field`. For backward
+            passes, every tensor in `args` must require gradients.
+
+    Returns:
+        States with shape `(N, *y0.shape)`, where `N` is the number of flattened
+        evaluation times. A scalar evaluation time retains a leading axis of
+        length one. Repeated times yield repeated states; an empty tensor yields
+        no requested states.
+
+    Raises:
+        ValueError: If `step_size` is nonpositive, evaluation times decrease or
+            precede `t0`, or `method` is not a supported solver method.
     """
     t0_t = torch.as_tensor(t0, device=y0.device, dtype=y0.dtype)
     t_eval_t = torch.as_tensor(t_eval, device=y0.device, dtype=y0.dtype)
