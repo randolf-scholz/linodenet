@@ -30,11 +30,12 @@ def linear_flow(
 ) -> Tensor:  # Float[..., $n, d]
     r"""Linear ODE.
 
-    .. math:: dxₜ/dt = Axₜ + b
+    $$ dxₜ/dt = Axₜ + b $$
 
-    Given x₀, then $xₜ = eᴬᵗx₀ + φ₁(At)bt$. Here, $φₖ(z) = ∑ₙ₌₀^∞ zⁿ/(n+k)!$ are the phi-functions,
-    which can be computed from the matrix exponential of an augmented block matrix.
-    In particular, φ₀(A) = eᴬ and φ₁(A) = (eᴬ - I)/A.
+    Given $x₀$, the solution is $xₜ = eᴬᵗx₀ + φ₁(At)bt$. The phi-functions
+    $φₖ(z) = ∑ₙ₌₀^∞ zⁿ/(n+k)!$ can be computed from the matrix exponential
+    of an augmented block matrix. In particular, $φ₀(A) = eᴬ$ and
+    $Aφ₁(A) = eᴬ - 𝕀$, including when $A$ is singular.
     """
     if bias is None:
         Adt = torch.einsum("..., kl -> ...kl", timedeltas, kernel)
@@ -58,7 +59,7 @@ def linear_flow(
 
 
 class LinearFlow(nn.Module):
-    r"""Linear Flow, solves $ẋ = Ax$, i.e. $x_{t+∆t} = e^{A{∆t}}xₜ$.
+    r"""Linear flow solving $ẋ = Ax$, with $x(t+∆t) = e^{A∆t}xₜ$.
 
     This is augmented by 2 techniques:
 
@@ -67,7 +68,7 @@ class LinearFlow(nn.Module):
     2. an optional ReZero gate applied to the kernel, which can be used to improve
        the learning dynamics.
 
-    .. math:: e^{ρ(π(A))∆t}x
+    $$ e^{ρ(π(A))∆t}x $$
     """
 
     # Constants
@@ -89,7 +90,7 @@ class LinearFlow(nn.Module):
     kernel: Tensor
     r"""BUFFER: The system matrix of the linear ODE component."""
     kernel_initialization: nn.Module
-    r"""MODULE: Optional Initialization of the kernel."""
+    r"""MODULE: Optional initialization of the kernel."""
     kernel_parametrization: nn.Module
     r"""MODULE: Optional parametrization of the kernel."""
 
@@ -162,7 +163,7 @@ class LinearFlow(nn.Module):
     ) -> Tensor:  # Float[..., d]
         r"""Propagate the linear ODE for a single time-delta.
 
-        .. math:: step(∆t, x) = e^{ρ(π(A))∆t}x
+        $$ step(∆t, x) = e^{ρ(π(A))∆t}x $$
         """
         return self.propagate(timedeltas.unsqueeze(-1), x0).squeeze(-2)
 
@@ -174,7 +175,7 @@ class LinearFlow(nn.Module):
     ) -> Tensor:  # Float[..., $n, d]
         r"""Propagate the linear ODE for a sequence of time-deltas.
 
-        .. math:: step(∆tₙ, x) = e^{ρ(π(A))∆tₙ}x
+        $$ step(∆tₙ, x) = e^{ρ(π(A))∆tₙ}x $$
         """
         # update buffer
         self.kernel = self.kernel_parametrization(self.weight)
@@ -189,9 +190,10 @@ class LinearFlow(nn.Module):
     ) -> Tensor:  # Float[..., $n, d]
         r"""Propagate the linear ODE for a sequence of timestamps.
 
-        .. math::
+        $$\begin{aligned}
             ∆tₙ &= tₙ - t₀ \\
             step(∆tₙ, x) &= e^{ρ(π(A))∆tₙ}x
+        \end{aligned}$$
         """
         return self(timestamps - t0, x0)
 
@@ -474,7 +476,7 @@ def make_linodenet(
     state_propagator: Mapping[str, Any],
     decoder: Mapping[str, Any],
 ) -> LinODEnet:
-    r"""Instantiate :class:`LinODEnet` from constructor kwargs mappings."""
+    r"""Instantiate [`LinODEnet`][imtskit_models.linodenet.LinODEnet] from constructor kwargs mappings."""
     decoder_module = nn.Linear(**dict(decoder))
     updater = GradientStepUpdater(decoder=decoder_module, **dict(state_updater))
     propagator = LinearFlow(**dict(state_propagator))

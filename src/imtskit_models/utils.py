@@ -42,13 +42,13 @@ class AbstractSplitTimeData(Protocol):
     r"""Protocol for split time representation.
 
     Attributes:
-        context_times:     ``Float[..., $N]``, padded NaN, non-decreasing
-        context_values:    ``Float[..., $N, D]``, padded NaN
-        context_mask:      ``Bool[..., $N, D]``, padded False
-        query_times:       ``Float[..., $K]``, padded NaN, non-decreasing
-        query_mask:        ``Bool[..., $K, F],``  padded False
-        target_values:     ``Float[..., $K, F],``  padded NaN
-        static_covariates: ``Float[..., M],``  padded NaN
+        context_times:     `Float[..., N]`, padded NaN, non-decreasing
+        context_values:    `Float[..., N, D]`, padded NaN
+        context_mask:      `Bool[..., N, D]`, padded False
+        query_times:       `Float[..., K]`, padded NaN, non-decreasing
+        query_mask:        `Bool[..., K, F]`, padded with `False`.
+        target_values:     `Float[..., K, F]`, padded with `NaN`.
+        static_covariates: `Float[..., M]`, padded with `NaN`.
     """
 
     if TYPE_CHECKING:
@@ -82,12 +82,12 @@ class AbstractMergedTimeData(Protocol):
     r"""Protocol for joint time representation.
 
     Attributes:
-        timestamps:        ``Float[..., $T]``, padded NaN, non-decreasing
-        context_mask:      ``Bool[..., $T, D]``, padded False
-        context_values:    ``Float[..., $T, D]``, padded NaN
-        query_mask:        ``Bool[..., $T, E]``, padded False
-        target_values:     ``Float[..., $T, E]``, padded NaN
-        static_covariates: ``Float[..., M]``, padded NaN
+        timestamps:        `Float[..., T]`, padded NaN, non-decreasing
+        context_mask:      `Bool[..., T, D]`, padded False
+        context_values:    `Float[..., T, D]`, padded NaN
+        query_mask:        `Bool[..., T, E]`, padded False
+        target_values:     `Float[..., T, E]`, padded NaN
+        static_covariates: `Float[..., M]`, padded NaN
     """
 
     if TYPE_CHECKING:
@@ -118,13 +118,13 @@ class AbstractTripletTimeData(Protocol):
     r"""Protocol for triplet time representation.
 
     Attributes:
-        context_times:     ``Float[..., $X]``, padded NaN, non-decreasing
-        context_channels:  ``Long[..., $X]``, padded -1
-        context_values:    ``Float[..., $X]``, padded NaN
-        query_times:       ``Float[..., $Q]``, padded NaN, non-decreasing
-        query_channels:    ``Long[..., $Q]``, padded -1
-        target_values:     ``Float[..., $Q]``, padded NaN
-        static_covariates: ``Float[..., M]``, padded NaN
+        context_times:     `Float[..., X]`, padded NaN, non-decreasing
+        context_channels:  `Long[..., X]`, padded -1
+        context_values:    `Float[..., X]`, padded NaN
+        query_times:       `Float[..., Q]`, padded NaN, non-decreasing
+        query_channels:    `Long[..., Q]`, padded -1
+        target_values:     `Float[..., Q]`, padded NaN
+        static_covariates: `Float[..., M]`, padded NaN
     """
 
     if TYPE_CHECKING:
@@ -191,12 +191,12 @@ def _triplet_row_indices(times: Tensor, channels: Tensor, /) -> tuple[Tensor, Te
     increasing channel indices while the original triplet order is preserved.
 
     Args:
-        times: Timestamps with shape ``(..., N)``, padded with NaN.
-        channels: Channel indices with shape ``(..., N)``, padded with ``-1``.
+        times: Timestamps with shape `(..., N)`, padded with NaN.
+        channels: Channel indices with shape `(..., N)`, padded with `-1`.
 
     Returns:
-        A pair ``(indices, counts)``. ``indices`` contains the dense row index of
-        every valid triplet and ``-1`` at padded positions. ``counts`` contains the
+        A pair `(indices, counts)`. `indices` contains the dense row index of
+        every valid triplet and `-1` at padded positions. `counts` contains the
         number of canonical dense rows per batch item.
     """
     valid = channels.ge(0)
@@ -223,11 +223,11 @@ class EventBatch(NamedTuple):
     context_mask: Tensor  # Bool[..., $T, D], padded False
     context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
     context_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., $N, D)`` from `context_mask`."""
+    r"""Advanced index tuple recovering `(..., N, D)` from `context_mask`."""
 
     query_mask: Tensor  # Bool[..., $T, F], padded False
     query_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., $K, F)`` from `query_mask`."""
+    r"""Advanced index tuple recovering `(..., K, F)` from `query_mask`."""
 
     target_values: Tensor | None = None  # Float[..., $T, F], padded NaN, sparse
     r"""Only available during training, otherwise `None`."""
@@ -370,11 +370,11 @@ class DiscreteTimeEventBatch(NamedTuple):
     context_mask: Tensor  # Bool[..., $T, D], padded False
     context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
     context_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., K, D)`` from `context_mask`."""
+    r"""Advanced index tuple recovering `(..., K, D)` from `context_mask`."""
 
     query_mask: Tensor  # Bool[..., $T, F], padded False
     query_indices: tuple[Tensor, ...]
-    r"""Advanced index tuple recovering ``(..., K, F)`` from `query_mask`."""
+    r"""Advanced index tuple recovering `(..., K, F)` from `query_mask`."""
 
     target_values: Tensor | None = None  # Float[..., $T, F], padded NaN, sparse
     r"""Only available during training, otherwise `None`."""
@@ -476,11 +476,11 @@ class SplitTimeData:
     r"""Batched forecasting arguments.
 
     Shapes:
-        K: max(Kᵢ) query size
-        N: max(Nᵢ) context size
-        D: input dimensionality
-        F: output dimensionality
-        M: static covariate dimensionality
+        - $K$: max(Kᵢ) query size.
+        - $N$: max(Nᵢ) context size.
+        - $D$: input dimensionality.
+        - $F$: output dimensionality.
+        - $M$: static covariate dimensionality.
 
     Assumptions: (up to tail padding)
         - context time stamps are finite and non-decreasing
@@ -498,7 +498,7 @@ class SplitTimeData:
     query_times: Tensor  # Float[..., $K], padded NaN, non-decreasing
     query_mask: Tensor  # Bool[..., $K, F]  padded False
     target_values: Tensor | None = None  # Float[..., $K, F]  padded NaN, sparse
-    r"""Only available during training, otherwise None."""
+    r"""Only available during training, otherwise `None`."""
 
     static_covariates: Tensor | None = None  # Float[..., M]  padded NaN, sparse
     r"""Optional time-independent data."""
@@ -702,8 +702,8 @@ class SplitTimeData:
         r"""Convert batch layout and optionally move tensors to a device.
 
         Args:
-            batch_first: Target batch layout. Retains the current layout when None.
-            device: Target device. Retains the current device when None.
+            batch_first: Target batch layout. Retains the current layout when `None`.
+            device: Target device. Retains the current device when `None`.
         """
         if batch_first is None and device is None:
             return self
@@ -740,11 +740,11 @@ class MergedTimeData:
     r"""Representation with concatenated context and query tensors.
 
     Shapes:
-        N: max(Nᵢ) context size
-        K: max(Kᵢ) query size
-        D: context data dimensionality
-        E: query data dimensionality
-        M: static covariate dimensionality
+        - $N$: max(Nᵢ) context size.
+        - $K$: max(Kᵢ) query size.
+        - $D$: context data dimensionality.
+        - $E$: query data dimensionality.
+        - $M$: static covariate dimensionality.
 
     Assumptions: (up to tail padding)
         - time stamps are finite and non-decreasing
@@ -760,7 +760,7 @@ class MergedTimeData:
     context_values: Tensor  # Float[..., $T, D], padded NaN, sparse
     query_mask: Tensor  # Bool[..., $T, E], padded False
     target_values: Tensor | None = None  # Float[..., $T, E], padded NaN, sparse
-    r"""Only available during training, otherwise None."""
+    r"""Only available during training, otherwise `None`."""
     static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
     r"""Optional time-independent data."""
 
@@ -1038,8 +1038,8 @@ class MergedTimeData:
         r"""Convert batch layout and optionally move tensors to a device.
 
         Args:
-            batch_first: Target batch layout. Retains the current layout when None.
-            device: Target device. Retains the current device when None.
+            batch_first: Target batch layout. Retains the current layout when `None`.
+            device: Target device. Retains the current device when `None`.
         """
         if batch_first is None and device is None:
             return self
@@ -1075,9 +1075,9 @@ class TripletTimeData:
     r"""Triplet representation of forecasting arguments.
 
     Shapes:
-        Q: max(Qᵢ) number of query values
-        O: max(Oᵢ) number of observed values
-        M: static covariate dimensionality
+        - $Q$: max(Qᵢ) number of query values.
+        - $O$: max(Oᵢ) number of observed values.
+        - $M$: static covariate dimensionality.
 
     Assumptions: (up to tail padding)
         - context time stamps are finite, non-decreasing
@@ -1095,7 +1095,7 @@ class TripletTimeData:
     query_times: Tensor  # Float[..., $Q], padded NaN, non-decreasing
     query_channels: Tensor  # Long[..., $Q], padded -1
     target_values: Tensor | None = None  # Float[..., $Q], padded NaN
-    r"""Only available during training, otherwise None."""
+    r"""Only available during training, otherwise `None`."""
 
     static_covariates: Tensor | None = None  # Float[..., M], padded NaN, sparse
     r"""Optional time-independent data."""
@@ -1400,8 +1400,8 @@ class TripletTimeData:
         r"""Convert batch layout and optionally move tensors to a device.
 
         Args:
-            batch_first: Target batch layout. Retains the current layout when None.
-            device: Target device. Retains the current device when None.
+            batch_first: Target batch layout. Retains the current layout when `None`.
+            device: Target device. Retains the current device when `None`.
         """
         if batch_first is None and device is None:
             return self

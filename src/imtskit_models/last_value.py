@@ -9,9 +9,9 @@ from torch import Tensor, nn
 class LastValue(nn.Module):
     r"""Forecast each feature with its latest observed context value.
 
-    Missing context features are represented by ``NaN`` and skipped independently
-    per feature. If no observed value exists at or before a query time, the model
-    falls back to the initial state.
+    The context mask selects observed values independently per feature.
+    If no observation exists at or before a query time, the model uses the
+    initial state, or `NaN` when no initial state is supplied.
     """
 
     def forward(
@@ -26,17 +26,17 @@ class LastValue(nn.Module):
         r"""Compute last-value forecasts.
 
         Args:
-            query_times: Query times with shape ``(..., num_queries)``.
-            context_times: Context times with shape ``(..., num_context)``.
-            context_mask: Boolean mask selecting observed entries in ``values``.
-            context_values: Context values with shape ``(..., num_context, dim)``.
-                Use ``NaN`` to indicate missing feature values.
-            initial_state: Optional initial state with shape ``(..., dim)``. This
+            query_times: Query times with shape `(..., num_queries)`.
+            context_times: Context times with shape `(..., num_context)`.
+            context_mask: Boolean mask selecting observed entries in `context_values`.
+            context_values: Context values with shape `(..., num_context, dim)`.
+                Use `NaN` to indicate missing feature values.
+            initial_state: Optional initial state with shape `(..., dim)`. This
                 is used as the last value for features that have no observed
                 context value at or before a query time.
 
         Returns:
-            Forecasts with shape ``(..., num_queries, dim)``.
+            Forecasts with shape `(..., num_queries, dim)`.
         """
         # sanitize arguments
         context_values = context_values.masked_fill(~context_mask, torch.nan)

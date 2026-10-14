@@ -69,7 +69,7 @@ def new_activation(name: str) -> nn.Module:
 
 
 class Encoder(nn.Module):
-    r"""Returns $yₜ, σₜ^{obs} = f_θ(xₜ)$."""
+    r"""Returns $yₜ, σₜ^\text{obs} = f_θ(xₜ)$."""
 
     def __init__(
         self,
@@ -121,7 +121,7 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
-    r"""Returns $oₜ, σₜ^{out} = g_ϕ(μₜ⁺, Σₜ⁺)$."""
+    r"""Returns $oₜ, σₜ^\text{out} = g_ϕ(μₜ⁺, Σₜ⁺)$."""
 
     def __init__(
         self,
@@ -387,47 +387,47 @@ class CRU(nn.Module):
 
     The basic setup is a latent linear SDE with Gaussian observations.
 
-    .. math:: dz = Azdt + Gdβ   \qquad   yₜ∼𝓝(Hzₜ, σₜ²𝕀)
+    $$ dz = Azdt + Gdβ   \qquad   yₜ∼𝓝(Hzₜ, σₜ²𝕀) $$
 
-    This is combined with an encoder decoder setup:
+    This is combined with an encoder and decoder:
 
-    .. code-block:: text
+    ```text
+    s ← t₀
+    μₜ₀⁺, Σₜ₀⁺ ← 0, σ₀⋅𝕀
+    for t ∈ {t₁, …, tₙ}:
+        yₜ, σₜᵒᵇˢ ← f_θ(xₜ)
+        μₜ⁻, Σₜ⁻ ← predict(μₛ⁺, Σₛ⁺, t - s)
+        μₜ⁺, Σₜ⁺ ← update(μₜ⁻, Σₜ⁻, yₜ, σₜᵒᵇˢ)
+        oₜ, σₜᵒᵘᵗ ← g_ϕ(μₜ⁺, Σₜ⁺)
+        s ← t
+    ```
 
-        μ_{t₀}⁺, Σ_{t₀}⁺ ← 0, σ₀⋅𝕀
-        for t ∈ {t₁, …, tₙ}:
-            yₜ, σₜ^{obs} ← f_θ(xₜ)
-            μₜ⁻, Σₜ⁻ ← predict(μₛ⁺, Σₛ⁺, t - s)
-            μₜ⁺, Σₜ⁺ ← update(μₜ⁻, Σₜ⁻, yₜ, σₜ^{obs})
-            oₜ, σₜ^{out} ← g_ϕ(μₜ⁺, Σₜ⁺)
-            s ← t
-
-    Where:
-        - f_θ, the encoder, is a neural network
-        - g_ϕ, the decoder, is a neural network
-        - predict is performed via matrix exponential solution to the linear SDE
-        - update is the regular kalman update
+    Here $f_θ$ and $g_ϕ$ are neural networks. Prediction uses a matrix
+    exponential to solve the linear SDE, and the update is a Kalman update.
 
     Additionally, CRU makes the following simplifying assumptions:
-        - latent space is twice the dimension of the latent observation space
-        - trivial observation model: H = [𝕀_d, 𝟎_d]
-        - block-wise diagonal covariance matrix: Σₜ = [[Σₜᵘ, Σₜˢ], [Σₜˢ, Σₜˡ]],
-          where each block is a diagonal matrix Σₜᵘ=σₜᵘ𝕀, Σₜˢ=σₜˢ𝕀, Σₜˡ=σₜˡ𝕀
-        - Hence, the kalman gain takes the form Kₜ=[Kₜᵘ; Kₜˡ], where
-          - Kₜᵘ = diag(σₜᵘ / (σₜᵘ + σₜ^{obs}))
-          - Kₜˡ = diag(σₜˢ / (σₜᵘ + σₜ^{obs}))
 
-    Note: Differences to the reference implementation.
+    - The latent state has twice the dimension of the latent observation space.
+    - The observation matrix is $H = [𝕀_d, 𝟎_d]$.
+    - The covariance is $Σₜ = [[Σₜᵘ, Σₜˢ], [Σₜˢ, Σₜˡ]]$, with diagonal
+        blocks $Σₜᵘ=\diag(σₜᵘ)$, $Σₜˢ=\diag(σₜˢ)$,
+        and $Σₜˡ=\diag(σₜˡ)$.
+    - The Kalman gain has blocks $Kₜ=[Kₜᵘ; Kₜˡ]$, where division is elementwise:
+        - $Kₜᵘ = \diag(σₜᵘ / (σₜᵘ + σₜᵒᵇˢ))$.
+        - $Kₜˡ = \diag(σₜˢ / (σₜᵘ + σₜᵒᵇˢ))$.
+
+    Note: Differences to the reference implementation
         - We do not make the initial covariance trainable, as this is not
           mentioned in the paper.
-        - ``latent_size`` corresponds to ``latent_observation_size``.
-        - ``bandwidth`` must be in the range ``[0, latent_size - 1]``.
+        - `latent_size` corresponds to `latent_observation_size`.
+        - `bandwidth` must be in the range `[0, latent_size - 1]`.
         - Batch-first layout is used by default.
 
     Note:
-        CRU does not support input missingness. In their experiments, for instance
-        on PhysioNet, missing features are simply imputed with zeros. The mask
-        is not forwarded to the model, so it cannot distinguish between
-        observed zeros and missing values.
+        This implementation requires each context event to be fully observed
+        or fully missing. The reference experiments impute missing features
+        with zeros without forwarding feature masks, so the reference model
+        cannot distinguish those values from observed zeros.
     """
 
     # Constants
@@ -616,18 +616,18 @@ class CRU(nn.Module):
         observed or fully missing (all context features present or none).
 
         Args:
-            timestamps: Float tensor of shape ``(..., $T)`` containing the combined context and query time points.
+            timestamps: Float tensor of shape `(..., T)` containing the combined context and query time points.
             query_mask: Boolean mask selecting requested forecast entries.
             context_values: Sparse observations at context/query time points.
             context_mask: Boolean mask selecting observed context entries.
-            initial_state: Optional initial latent state ``(mean, cov)`` where
-                ``mean`` has shape ``(..., 2d)`` and ``cov`` has shape
-                ``(..., d, 3)``.
-            initial_time: Optional initial time ``t₀``.
+            initial_state: Optional initial latent state `(mean, cov)` where
+                `mean` has shape `(..., 2d)` and `cov` has shape
+                `(..., d, 3)`.
+            initial_time: Optional initial time `t₀`.
 
         Returns:
             pred_means: Posterior predicted means at all time points, shape
-                ``(..., $N + $K, F)``. NaN at non-query positions.
+                `(..., T, F)`. NaN at non-query positions.
             pred_vars: Posterior predicted variances, same shape. NaN at
                 non-query positions.
         """
@@ -755,7 +755,7 @@ class CRU(nn.Module):
     ) -> Tensor:  # Float[..., $K]
         r"""Compute the time-marginal log-likelihood of the model.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p(Y(qₖ) = yₖ ∣ (t₁, y₁), …, (tₙ, yₙ)) $$
         """
         mean, var = self.predict(
             query_times=query_times,
@@ -788,7 +788,7 @@ class CRU(nn.Module):
     ) -> Tensor:  # Float[*S, ..., $K, F]
         r"""Sample from the time-marginal distribution.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p(Y(qₖ) = yₖ ∣ (t₁, y₁), …, (tₙ, yₙ)) $$
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, var = self.predict(
@@ -819,7 +819,7 @@ class CRU(nn.Module):
     ) -> tuple[Tensor, Tensor]:  # Float[*S, ..., $K, F], Float[*S, ..., $K]
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p(Y(qₖ) = yₖ ∣ (t₁, y₁), …, (tₙ, yₙ)) $$
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, var = self.predict(
@@ -836,11 +836,12 @@ class CRU(nn.Module):
         )
 
     def transition_matrix_model(self, mean: Tensor) -> Tensor:
-        """Locally linear transition model.
+        r"""Locally linear transition model.
 
-        Aₜ = ∑ₖαₖ(t)Aₖ, where αₖ(t) = w_ψ(μₜ⁺)
-        Here Aₖ = [Aₖ¹¹, Aₖ¹²; Aₖ²¹, Aₖ²²],
-        where each block is a band-matrix of bandwidth b.
+        $$ Aₜ = ∑ₖαₖ(t)Aₖ, \qquad α(t) = w_ψ(μₜ⁺) $$
+
+        Each matrix $Aₖ = [Aₖ¹¹, Aₖ¹²; Aₖ²¹, Aₖ²²]$ consists of four
+        banded blocks with bandwidth $b$.
         """
         *batch_shape, _ = mean.shape
         d = self.latent_size

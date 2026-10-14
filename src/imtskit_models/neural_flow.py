@@ -1,12 +1,12 @@
 r"""Neural Flow state propagation operators and forecasting model.
 
 This module reimplements the flow operators used in the Neural Flows
-experiments without depending on :mod:`stribor`. The operator modules follow
+experiments without depending on `stribor`. The operator modules follow
 the single-step propagation interface used by `GRU_ODE_Bayes`:
 
-``forward(delta_time, state) -> state``
+`forward(delta_time, state) -> state`
 
-where ``delta_time`` has shape ``(...)`` and ``state`` has shape ``(..., D)``.
+where `delta_time` has shape `(...)` and `state` has shape `(..., D)`.
 The `NeuralFlow` forecasting model adapts these operators to the
 GRU-ODE-Bayes forecasting interface.
 """
@@ -92,7 +92,7 @@ def _make_mlp(
 
 
 class TimeEmbedding(nn.Module):
-    r"""Time embedding with value zero at ``t = 0``.
+    r"""Time embedding with value zero at `t = 0`.
 
     Neural flows should start as the identity at zero elapsed time.  Each
     embedding therefore omits additive biases and uses features that vanish at
@@ -177,9 +177,9 @@ class CouplingFlowBlock(nn.Module):
     r"""Continuous affine coupling block.
 
     The block uses an affine update whose shift and log-scale vanish at
-    ``t = 0`` through a time gate:
+    `t = 0` through a time gate:
 
-    ``y_B = exp(s(x_A, t)) * x_B + b(x_A, t)``.
+    `y_B = exp(s(x_A, t)) * x_B + b(x_A, t)`.
     """
 
     input_size: Final[int]

@@ -18,41 +18,41 @@ from torch import Tensor, nn
 class LowRankTransform(nn.Module):
     r"""An invertible, efficient diagonal-scaled low-rank perturbation layer.
 
-    .. math:: y = (𝕀ₙ + USVᵀ)x
+    $$ y = (𝕀ₙ + USVᵀ)x $$
 
     where $U, V ∈ ℝⁿˣᵏ$ and $S = \diag(s)$ with
 
-    .. math:: sᵢ = \frac{ρ \tanh(θᵢ)}{‖Uᵀvᵢ‖₁ + δ}
+    $$ sᵢ = \frac{ρ \tanh(θᵢ)}{‖Uᵀvᵢ‖₁ + δ} $$
 
     for unconstrained parameters $θ ∈ ℝᵏ$, contraction factor $0 < ρ < 1$, and
     stability constant $δ > 0$. Since the $i$-th row of $SVᵀU$ is
     $sᵢ (Uᵀvᵢ)ᵀ$, its row sum satisfies
 
-    .. math:: ‖(SVᵀU)ᵢ•‖₁ = |sᵢ| ‖Uᵀvᵢ‖₁ < ρ
+    $$ ‖(SVᵀU)ᵢ•‖₁ = |sᵢ| ‖Uᵀvᵢ‖₁ < ρ $$
 
     and therefore $‖SVᵀU‖∞ < ρ < 1$. Hence $𝕀ₖ + SVᵀU$ is always invertible by
     the Neumann series, which in turn guarantees that $𝕀ₙ + USVᵀ$ is invertible.
-    With the help of the Woodbury matrix identity [1]_, we have the general formula
+    With the help of the Woodbury matrix identity [1], we have the general formula
 
-    .. math:: (A + UCVᵀ)⁻¹ = A⁻¹ - A⁻¹U(C⁻¹ + VᵀA⁻¹U)⁻¹VᵀA⁻¹
+    $$ (A + UCVᵀ)⁻¹ = A⁻¹ - A⁻¹U(C⁻¹ + VᵀA⁻¹U)⁻¹VᵀA⁻¹ $$
 
     whenever the displayed inverses exist. Setting $A = 𝕀ₙ$ and $C = S$ yields
 
-    .. math:: (𝕀ₙ + USVᵀ)⁻¹ = 𝕀ₙ - U(𝕀ₖ + SVᵀU)⁻¹SVᵀ
+    $$ (𝕀ₙ + USVᵀ)⁻¹ = 𝕀ₙ - U(𝕀ₖ + SVᵀU)⁻¹SVᵀ $$
 
     Thus, to compute the inverse pass, we do not need to solve an $n×n$ system,
     but only a $k×k$ one. In particular, when $k = 1$, the formula reduces to
 
-    .. math:: (𝕀ₙ + suvᵀ)⁻¹ = 𝕀ₙ - \frac{s}{1 + s vᵀu} uvᵀ
+    $$ (𝕀ₙ + suvᵀ)⁻¹ = 𝕀ₙ - \frac{s}{1 + s vᵀu} uvᵀ $$
 
     To calculate the log determinant of the Jacobian, we use Sylvester's
-    determinant identity [2]_:
+    determinant identity [2]:
 
-    .. math:: \log|\det(𝕀ₙ + USVᵀ)| = \log|\det(𝕀ₖ + SVᵀU)|
+    $$ \log|\det(𝕀ₙ + USVᵀ)| = \log|\det(𝕀ₖ + SVᵀU)| $$
 
     References:
-        .. [1] https://en.wikipedia.org/wiki/Woodbury_matrix_identity
-        .. [2] https://en.wikipedia.org/wiki/Sylvester%27s_determinant_theorem
+        1. <https://en.wikipedia.org/wiki/Woodbury_matrix_identity>
+        2. <https://en.wikipedia.org/wiki/Sylvester%27s_determinant_theorem>
     """
 
     # CONSTANTS
@@ -65,9 +65,9 @@ class LowRankTransform(nn.Module):
 
     # PARAMETERS
     U: Tensor
-    r"""PARAM: $n×k$ tensor"""
+    r"""PARAM: Factor matrix with shape `(n, k)`."""
     V: Tensor
-    r"""PARAM: $n×k$ tensor"""
+    r"""PARAM: Factor matrix with shape `(n, k)`."""
     theta: Tensor
     r"""PARAM: Unconstrained length-$k$ tensor parameterizing the diagonal of $S$."""
     eye: Tensor

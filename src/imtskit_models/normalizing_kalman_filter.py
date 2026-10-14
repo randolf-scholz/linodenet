@@ -1,10 +1,10 @@
 r"""Implementation of Normalizing Kalman Filter (NKF) for time series prediction.
 
 References:
-    - | Normalizing Kalman Filters for Multivariate Time Series Analysis
-      | de Bézenac et al.
-      | Advances in Neural Information Processing Systems (NeurIPS) 2020
-      | https://proceedings.neurips.cc/paper/2020/hash/1f47cef5e38c952f94c5d61726027439-Abstract.html
+    - Normalizing Kalman Filters for Multivariate Time Series Analysis \
+      de Bézenac et al. \
+      Advances in Neural Information Processing Systems (NeurIPS) 2020 \
+      <https://proceedings.neurips.cc/paper/2020/hash/1f47cef5e38c952f94c5d61726027439-Abstract.html>
 """
 
 __all__ = ["ContinuousTimeNKF", "DiscreteTimeNKF"]
@@ -60,17 +60,19 @@ class DiscreteTimeNKF(nn.Module):
 
     The implemented model follows Eq. (1) in the paper:
 
-    .. math::
+    $$\begin{aligned}
         lₜ &= F lₜ₋₁ + ϵₜ,      & ϵₜ &∼ 𝓝(0, Q) \\
         zₜ &= H lₜ + ηₜ,        & ηₜ &∼ 𝓝(0, R) \\
-        yₜ &= f(zₜ).
+        yₜ &= f(zₜ)
+    \end{aligned}$$
 
     Here `decoder` is the invertible map $f:z↦y$ and is assumed to satisfy the
     `imtskit.mappings.Transform` protocol. Filtering first pulls
     observations back to pseudo-observations $zₜ=f⁻¹(yₜ)$ as in Proposition 1.
     Likelihoods use the change-of-variables term from Eq. (2) / Proposition 3.
 
-    Note:
+    !!! note
+
         Exact sparse feature masks require a coordinate-wise/local decoder whose
         inverse and log-Jacobian factor over dimensions. For a global flow, partial
         observations require marginalization over missing flow dimensions, which
@@ -275,8 +277,8 @@ class DiscreteTimeNKF(nn.Module):
 
         The NKF predictive distribution is the nonlinear pushforward $Y=f(Z)$ of
         the Gaussian pseudo-observation $Z$. Since $Y$ is not generally Gaussian,
-        this method reports ``f(E[Z])`` and the marginal standard deviation of
-        $Z$. Use :meth:`log_prob` and :meth:`sample` for exact distributional
+        this method reports `f(E[Z])` and the marginal standard deviation of
+        $Z$. Use `log_prob` and `sample` for exact distributional
         operations.
         """
         assert not torch.is_floating_point(query_times)
@@ -410,16 +412,17 @@ class ContinuousTimeNKF(nn.Module):
 
     The model keeps the paper's observation equation (Eq. (1c)),
     $yₜ=f(Hlₜ+ηₜ)$, but uses the continuous latent dynamics implemented by
-    :class:`ContinuousTimeKalmanFilter`. Filtering still follows Proposition 1:
-    observations are pulled back to pseudo-observations $zₜ=f⁻¹(yₜ)$ before
+    [`ContinuousTimeKalmanFilter`][imtskit_models.kalman_filter.ContinuousTimeKalmanFilter].
+    Filtering still follows Proposition 1:
+    Observations are pulled back to pseudo-observations $zₜ=f⁻¹(yₜ)$ before
     applying ordinary Kalman updates. Likelihoods use the exact
     change-of-variables term from Eq. (2) / Proposition 3.
 
     Note:
-        As for :class:`DiscreteTimeNKF`, exact partial feature masks require a
-        coordinate-wise/local decoder. A global flow needs closed-form
-        marginalization over missing output dimensions, which the paper notes is
-        not available for the main global RealNVP NKF instantiation.
+        As for [`DiscreteTimeNKF`][imtskit_models.normalizing_kalman_filter.DiscreteTimeNKF],
+        exact partial feature masks require a coordinate-wise/local decoder.
+        A global flow needs closed-form marginalization over missing output dimensions,
+        which the paper notes is not available for the main global RealNVP NKF instantiation.
     """
 
     input_size: Final[int]
@@ -603,8 +606,8 @@ class ContinuousTimeNKF(nn.Module):
 
         The NKF predictive distribution is the nonlinear pushforward $Y=f(Z)$ of
         the Gaussian pseudo-observation $Z$. Since $Y$ is not generally Gaussian,
-        this method reports ``f(E[Z])`` and the marginal standard deviation of
-        $Z$. Use :meth:`log_prob` and :meth:`sample` for exact distributional
+        this method reports `f(E[Z])` and the marginal standard deviation of
+        $Z$. Use `log_prob` and `sample` for exact distributional
         operations.
         """
         mean, cov = self.predict_pseudo_observations(

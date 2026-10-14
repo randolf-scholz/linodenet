@@ -133,11 +133,11 @@ class GradientStepUpdater(nn.Module):
 
     This updater performs a single explicit gradient step on the observation loss:
 
-    .. math:: z₊ = z₋ - η∇₟ℓ(f(z₋), y)
+    $$ z₊ = z₋ - η∇₟ℓ(f(z₋), y) $$
 
     In this one-step setting, a smooth anchor penalty like $λ⋅d(z, z₋)$ does not
     influence the step when evaluated at $z = z₋$, because its gradient vanishes at
-    the anchor. The ``regularizer`` and ``regularization_strength`` arguments are
+    the anchor. The `regularizer` and `regularization_strength` arguments are
     therefore kept only for API compatibility and configuration round-tripping; they
     do not affect the update.
     """
@@ -244,7 +244,7 @@ class LinearRNNCell(nn.Module):
 class InnovationCell(nn.Module):
     r"""State update that is linear/affine in the residual $h(x)-y$.
 
-    .. math:: x' = x - ρ(K(x)⋅(h(x) - y))
+    $$ x' = x - ρ(K(x)⋅(h(x) - y)) $$
 
     where $K(x)$ is a learnable innovation gain, $h$ is the observation map, and
     $ρ$ is a gate applied to the innovation correction. By default, $K$ is a
@@ -253,20 +253,20 @@ class InnovationCell(nn.Module):
 
     The gain can be:
 
-    - ``"constant"``: use a learned constant gain matrix. This is the default.
-    - ``"attention"``: predict the gain matrix from $x$ with attention.
-    - ``nn.Module``: use a custom user-provided state-dependent gain module.
+    - `"constant"`: use a learned constant gain matrix. This is the default.
+    - `"attention"`: predict the gain matrix from $x$ with attention.
+    - `nn.Module`: use a custom user-provided state-dependent gain module.
 
     Standard gate options are:
 
-    - ``"rezero"``: use a learnable ReZero scalar $ρ(z)=αz$ with $α$ initialized
+    - `"rezero"`: use a learnable ReZero scalar $ρ(z)=αz$ with $α$ initialized
       to zero, so that the cell starts as the identity map.
-    - ``"identity"``: use $ρ(z)=z$ with no additional scaling.
-    - `None`: alias for ``"identity"``.
+    - `"identity"`: use $ρ(z)=z$ with no additional scaling.
+    - `None`: alias for `"identity"`.
     - `nn.Module`: use a custom user-provided gate.
 
     The observation map must be an `nn.Module`. If it is omitted, this cell uses
-    $h(x)=x$, which requires ``input_size == hidden_size``.
+    $h(x)=x$, which requires `input_size == hidden_size`.
     """
 
     # PARAMETERS
@@ -366,7 +366,7 @@ class AttentionGain(nn.Module):
 
     For context vector $x$, the gain entries are computed as
 
-    .. math:: Kᵢⱼ(x) = \softmax_j(\frac{qᵢ(x)ᵀkⱼ(x)}{\sqrt{dₐ}})
+    $$ Kᵢⱼ(x) = \operatorname{softmax}ⱼ(\frac{qᵢ(x)ᵀkⱼ(x)}{\sqrt{dₐ}}) $$
 
     where $qᵢ(x)$ and $kⱼ(x)$ are row- and column-specific query/key vectors,
     and $dₐ$ is the shared attention feature size.
@@ -452,10 +452,7 @@ class AttentionGain(nn.Module):
 class KalmanCell(nn.Module):
     r"""Kalman-style hidden-state update with masked observations.
 
-    .. math::
-        x' = x - ρ\left(
-            Σ(x)𝐃h(x)ᵀMᵀ (M(𝐃h(x)Σ(x)𝐃h(x)ᵀ + R)Mᵀ)⁻¹ (Mh(x) - y)
-        \right)
+    $$ x' = x - ρ\left( Σ(x)𝐃h(x)ᵀMᵀ (M(𝐃h(x)Σ(x)𝐃h(x)ᵀ + R)Mᵀ)⁻¹ (Mh(x) - y) \right) $$
 
     Here, $h(x)$ is the observation map, $𝐃h(x)$ is its local linearization at
     the current hidden state, and $Σ(x)$ is the hidden-state covariance. The
@@ -465,10 +462,10 @@ class KalmanCell(nn.Module):
     factor, such that $Σ(x)=L(x)L(x)ᵀ$. The Jacobian action $𝐃h(x)L(x)$ is
     obtained by pushing the columns of $L(x)$ through the JVP of $h$ at $x$.
     $ρ$ is an optional gate applied to the Kalman correction. Standard gate
-    options are the same as for `LinearInnovationCell`: ``"rezero"``,
-    ``"identity"``, `None`, or a custom `nn.Module`.
+    options are the same as for `InnovationCell`: `"rezero"`,
+    `"identity"`, `None`, or a custom `nn.Module`.
 
-    Notes:
+    Note:
         LMMSE stands for linear minimum mean squared error: the best affine
         estimator under squared loss among estimators linear in the observations.
         BLUP stands for best linear unbiased predictor: the minimum-variance
@@ -631,12 +628,13 @@ class AttentionCovarianceFactor(nn.Module):
     Let $ϕᵢ(x) ∈ ℝ^{dₐ}$ denote the feature vector for row $i$. The module builds
     a lower-triangular factor $L(x)$ as
 
-    .. math:: Lᵢⱼ(x) =
-        \begin{cases}
-            \frac{ϕᵢ(x)ᵀϕⱼ(x)}{\sqrt{dₐ}}, & i > j, \\
-            \softplus(dᵢ(x)) + ε, & i = j, \\
-            0, & i < j,
+    $$\begin{aligned}
+        Lᵢⱼ(x) &= \begin{cases}
+            \frac{ϕᵢ(x)ᵀϕⱼ(x)}{\sqrt{dₐ}}, & i > j \\
+            \operatorname{softplus}(dᵢ(x)) + ε, & i = j \\
+            0, & i < j
         \end{cases}
+    \end{aligned}$$
 
     where $dᵢ(x)$ are learned diagonal logits and $ε$ is machine epsilon for the
     current dtype, ensuring a strictly positive diagonal.

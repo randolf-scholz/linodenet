@@ -20,10 +20,10 @@ class MAB(nn.Module):
     r"""Multi-head attention block with configurable hidden dimension.
 
     References:
-        - | Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks
-          | Lee et al.
-          | International Conference on Machine Learning (ICML) 2019.
-          | http://proceedings.mlr.press/v97/lee19d.html
+        - Set Transformer: A Framework for Attention-based Permutation-Invariant Neural Networks \
+          Lee et al \
+          International Conference on Machine Learning (ICML) 2019 \
+          <http://proceedings.mlr.press/v97/lee19d.html>
     """
 
     def __init__(
@@ -62,14 +62,14 @@ class MAB(nn.Module):
         r"""Apply the attention block.
 
         Args:
-            Q: Query tensor with shape ``(..., query_len, dim_Q)``.
-            K: Key tensor with shape ``(..., key_len, dim_K)``.
-            V: Value tensor with shape ``(..., key_len, dim_V)``.
-            mask: Optional boolean attention mask with shape
-                ``(..., query_len, key_len)``. True entries participate in attention.
+            Q: Query tensor with shape `(..., query_len, dim_Q)`.
+            K: Key tensor with shape `(..., key_len, dim_K)`.
+            V: Value tensor with shape `(..., key_len, dim_V)`.
+            mask: Optional boolean attention mask with shape `(..., query_len, key_len)`.
+                True entries participate in attention.
 
         Returns:
-            Updated query embeddings with shape ``(..., query_len, dim_hidden)``.
+            Updated query embeddings with shape `(..., query_len, dim_hidden)`.
         """
         # H is the number of attention heads, M is dim_hidden, and each head
         # contracts over M/H features.
@@ -118,11 +118,11 @@ def gather_target_embeddings(
     r"""Select and pad edge embeddings at target positions.
 
     Args:
-        h_edge: Edge embeddings with shape ``(..., max_edges, hidden_dim)``.
-        target_mask: Boolean target mask with shape ``(..., max_edges)``.
+        h_edge: Edge embeddings with shape `(..., max_edges, hidden_dim)`.
+        target_mask: Boolean target mask with shape `(..., max_edges)`.
 
     Returns:
-        Target embeddings with shape ``(..., max_targets, hidden_dim)``.
+        Target embeddings with shape `(..., max_targets, hidden_dim)`.
     """
     assert target_mask.dtype == torch.bool
 
@@ -147,13 +147,13 @@ def reconstruct_y(
     r"""Reconstruct a dense tensor from flattened masked values.
 
     Args:
-        y_at_edge: Flattened values with shape ``(..., max_edges)``.
+        y_at_edge: Flattened values with shape `(..., max_edges)`.
         edge_mask: Boolean mask selecting valid entries from `y_at_edge`.
-        target_mask: Boolean mask with shape ``(..., time, dim)``.
+        target_mask: Boolean mask with shape `(..., time, dim)`.
             True entries mark dense positions that should be filled.
 
     Returns:
-        Reconstructed tensor with shape ``(..., time, dim)``.
+        Reconstructed tensor with shape `(..., time, dim)`.
     """
     assert target_mask.dtype == torch.bool
     assert edge_mask.dtype == torch.bool
@@ -166,16 +166,16 @@ def reconstruct_y(
 class Grafiti(nn.Module):
     r"""GraFITi forecaster for observed and target time-series entries.
 
-    Remark: (duplicate time stamps)
+    Note: Duplicate time stamps
         While not mentioned in the paper directly, Grafiti implicitly was designed with
         time series with strictly increasing time stamps in mind. When applied to time
         series with duplicate time stamps, these will end up being treated as separate nodes.
 
     References:
-        - | GraFITi: Graphs for Forecasting Irregularly Sampled Time Series
-          | Yalavarthi et al.
-          | The Thirty-Eighth AAAI Conference on Artificial Intelligence (AAAI-24)
-          | https://ojs.aaai.org/index.php/AAAI/article/view/29560
+        - GraFITi: Graphs for Forecasting Irregularly Sampled Time Series \
+          Yalavarthi et al.
+          The Thirty-Eighth AAAI Conference on Artificial Intelligence (AAAI-24) \
+          <https://ojs.aaai.org/index.php/AAAI/article/view/29560>
     """
 
     output_mode: Final[Literal["forecast", "embeddings"]]
@@ -197,8 +197,8 @@ class Grafiti(nn.Module):
             dim_latent: Latent embedding size.
             num_layers: Number of GraFITi layers.
             num_heads: Number of attention heads.
-            output_mode: Whether :meth:`forward` returns dense forecasts or
-                target-edge embeddings.
+            output_mode: Whether [`forward`][imtskit_models.grafiti.Grafiti.forward]
+                returns dense forecasts or target-edge embeddings.
             bias: Whether to use bias in attention layers.
         """
         super().__init__()

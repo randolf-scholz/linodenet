@@ -73,15 +73,15 @@ class ConditionalTransform(Protocol):
 class Shiesh(nn.Module, Transform):
     r"""Elementwise Shiesh transform used by ProFITi flows.
 
-    .. math:: fₜ(x) = (1/a)\sinh⁻¹(ℯᵃᵗ\sinh(a⋅x))
+    $$ fₜ(x) = (1/a)\sinh⁻¹(ℯᵃᵗ\sinh(a⋅x)) $$
 
     Its inverse is $f₋ₜ$, and its derivative is
 
-    .. math:: fₜ'(x) = \frac{ℯᵃᵗ\cosh(a⋅x)}{\sqrt{1 + ℯ²ᵃᵗ\sinh²(a⋅x)}}
+    $$ fₜ'(x) = \frac{ℯᵃᵗ\cosh(a⋅x)}{\sqrt{1 + ℯ²ᵃᵗ\sinh²(a⋅x)}} $$
 
-    Shiesh is the solution of the following IVP at time t:
+    For $a>0$, Shiesh solves the following initial-value problem at time $t$:
 
-    .. math:: du/dt =\tanh(a⋅u(t)), u(0) = x
+    $$ du/dt =\tanh(a⋅u(t)), u(0) = x $$
     """
 
     LOG2: Final[float] = math.log(2.0)
@@ -149,7 +149,7 @@ class Shiesh(nn.Module, Transform):
 class TriangularAttention(nn.Module):
     r"""Implements (sorted) invertible triangular attention (equation 10).
 
-    .. math:: σ(QKᵀ)V = A(H, H)⋅X
+    $$ σ(QKᵀ)V = A(H, H)⋅X $$
     """
 
     def __init__(self, *, dim_context: int, dim_hidden: int, eps: float = 1e-6) -> None:
@@ -218,9 +218,12 @@ class TriangularAttention(nn.Module):
 
 
 class ProFITiBlock(nn.Module, ConditionalTransform):
-    r"""Implements profiti-block (equation 15).
+    r"""Apply a ProFITi flow block (Equation 15).
 
-    .. math:: shiesh(el(sita(y, x), x)
+    $$ \operatorname{shiesh}(\operatorname{el}(\operatorname{sita}(y, x), x)) $$
+
+    The block composes triangular attention, a context-conditioned elementwise
+    affine transformation, and the invertible Shiesh activation.
     """
 
     scale_net: nn.Module
@@ -466,11 +469,11 @@ class ProFITi(nn.Module):
     ) -> Tensor:  # Float[*S, ...]
         r"""Compute the joint log-likelihood of the target values under the model.
 
-        .. math:: \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ)))
+        $$ \log(p_{Y_{q₁}, ..., Y_{qₖ}}(y_1, ..., y_k ∣ (t₁, x₁), ..., (tₙ, xₙ))) $$
 
-        The leading ``*S`` dims of `values` beyond the batch shape are treated
+        The leading `*S` dims of `values` beyond the batch shape are treated
         as sample dims; all samples must share the same query mask (e.g. samples
-        drawn by :meth:`sample_and_log_prob`).
+        drawn by `sample_and_log_prob`.
         """
         *shape, qry_size, qry_dim = values.shape  # shape = sample_shape + batch_shape
         *_, ctx_size, ctx_dim = context_values.shape

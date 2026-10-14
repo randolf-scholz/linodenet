@@ -182,7 +182,7 @@ class ContinuousLinearSDE(nn.Module):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NCDSSMConfig:
-    r"""Configuration used by :meth:`NCDSSM.from_config`."""
+    r"""Configuration used by [`NCDSSM.from_config`][imtskit_models.ncdssm.NCDSSM.from_config]."""
 
     input_size: int
     output_size: int
@@ -199,12 +199,12 @@ class NCDSSMConfig:
 class NCDSSM(nn.Module):
     r"""Neural continuous-discrete state-space model for sparse forecasting.
 
-    .. math::
-
-        dzₜ &= Fzₜdt + Ldβₜ, \\
-        aₖ∣zₖ &∼ 𝓝(Hzₖ,R), \\
+    $$\begin{aligned}
+        dzₜ           &= Fzₜdt + Ldβₜ, \\
+        aₖ∣zₖ         &∼ 𝓝(Hzₖ,R), \\
         q_ϕ(aₖ∣yₖ,Mₖ) &= 𝓝(μₐ,diag(σₐ²)), \\
-        yₖ∣𝒟 &≈ 𝓝(μᵧ,diag(σᵧ²)).
+        yₖ∣𝒟          &≈ 𝓝(μᵧ,diag(σᵧ²))
+    \end{aligned}$$
 
     This is the linear time-invariant specialization in Equation (10) of
     Ansari et al. (2023), with the initial and emission distributions from
@@ -226,11 +226,11 @@ class NCDSSM(nn.Module):
     min_stdv: Final[float]
 
     pred_means: Tensor
-    r"""BUFFER: Predictive means from the latest :meth:`predict` call."""
+    r"""BUFFER: Predictive means from the latest `predict` call."""
     pred_stdvs: Tensor
-    r"""BUFFER: Predictive standard deviations from the latest :meth:`predict` call."""
+    r"""BUFFER: Predictive standard deviations from the latest `predict` call."""
     pred_log_stdvs: Tensor
-    r"""BUFFER: Log standard deviations from the latest :meth:`predict` call."""
+    r"""BUFFER: Log standard deviations from the latest `predict` call."""
 
     @classmethod
     def from_config(cls, config: NCDSSMConfig | Mapping[str, Any], /) -> NCDSSM:
@@ -417,9 +417,9 @@ class NCDSSM(nn.Module):
 
         Returns:
             predicted_means: Output means for the combined event sequence. Values
-                outside `query_mask` are ``NaN``.
+                outside `query_mask` are `NaN`.
             predicted_stdvs: Output standard deviations for the combined event sequence.
-                Values outside `query_mask` are ``NaN``.
+                Values outside `query_mask` are `NaN`.
         """
         has_context = context_mask.any(dim=-1)  # (..., T)
         has_query = query_mask.any(dim=-1)  # (..., T)

@@ -1,10 +1,11 @@
 r"""Clean state-space scaffold for GRU-ODE-Bayes.
 
-References:
-    - | GRU-ODE-Bayes: Continuous modeling of sporadically-observed time series
-      | Edward De Brouwer, Jaak Simm, Adam Arany, Yves Moreau
-      | NeurIPS 2019
-      | https://github.com/edebrouwer/gru_ode_bayes
+### References
+
+- [GRU-ODE-Bayes: Continuous modeling of sporadically-observed time series][paper-4].
+    Edward De Brouwer, Jaak Simm, Adam Arany, Yves Moreau. NeurIPS 2019.
+
+[paper-4]: https://github.com/edebrouwer/gru_ode_bayes
 
 This module intentionally starts from the model variant used by the reference
 experiments: full autonomous GRU-ODE dynamics with log-variance Gaussian
@@ -245,14 +246,19 @@ class ODE_Flow(nn.Module):
 
 
 class GRU_ODE(nn.Module):
-    r"""GRU-ODE $d𝐡(t)/dt = (1-𝐳(t))⊙(𝐠(t)-𝐡(t)).
+    r"""Autonomous GRU-ODE dynamics for the hidden state.
 
-    .. note:: we assume $𝐱ₜ=0$ (autonomous case)
+    $$ d𝐡(t)/dt = (1-𝐳(t))⊙(𝐠(t)-𝐡(t)) $$
 
-    .. math::
-        𝐫(t) = σ(Wᵣ𝐱ₜ + Uᵣ𝐡ₜ₋₁ + bᵣ)
-        𝐳(t) = σ(W₟𝐱ₜ + U₟𝐡ₜ₋₁ + b₟)
-        𝐠(t) = tanh(Wₕ𝐱ₜ + Uₕ(𝐫(t)⊙𝐡ₜ₋₁) + bₕ)
+    !!! note
+
+        The input is fixed at $𝐱(t)=0$, so the dynamics are autonomous.
+
+    $$\begin{aligned}
+        𝐫(t) &= σ(Uᵣ𝐡(t) + bᵣ) \\
+        𝐳(t) &= σ(U₟𝐡(t) + b₟) \\
+        𝐠(t) &= \tanh(Uₕ(𝐫(t)⊙𝐡(t)) + bₕ)
+    \end{aligned}$$
     """
 
     def __init__(self, hidden_size: int, *, bias: bool = True) -> None:
@@ -297,7 +303,7 @@ class Decoder(nn.Module):
 
     # (..., H) -> (..., D), (..., D)
     def forward(self, state: Tensor, /) -> tuple[Tensor, Tensor]:
-        r"""Return Gaussian observation parameters ``(mean, logvar)``."""
+        r"""Return Gaussian observation parameters `(mean, logvar)`."""
         mean, logvar = self.net(state).chunk(2, dim=-1)
         return mean, logvar
 
@@ -305,14 +311,15 @@ class Decoder(nn.Module):
 class GRU_Bayes(nn.Module):
     r"""Bayesian jump update network for partially observed Gaussian data.
 
-    .. math::
-        h₊ = GRU(h₋, f_{feat}(y, m, h₋))
-        μ, log(σ²) = Decoder(h₋)
-        s = (y - μ)/σ
-        q = [y, μ, σ, s]
-        f = m⊙relu(Wq)
+    $$\begin{aligned}
+        (μ, \log(σ²)) &= \operatorname{Decoder}(h₋) \\
+        s &= (y - μ)/σ \\
+        q &= [y, μ, σ, s] \\
+        f &= m⊙\operatorname{relu}(Wq) \\
+        h₊ &= \operatorname{GRU}(f, h₋)
+    \end{aligned}$$
 
-    The decoder provides ``(mean, logvar)``. This module only computes the
+    The decoder provides `(mean, logvar)`. This module only computes the
     normalized residual features needed for the GRU update; it does not compute
     or return objective terms.
     """
@@ -398,7 +405,7 @@ class GRUODEBayesConfig:
 
 
 class GRUODEBayesTrace(NamedTuple):
-    r"""Filtering trace returned by :meth:`GRU_ODE_Bayes.filter`."""
+    r"""Filtering trace returned by [`GRU_ODE_Bayes.filter`][imtskit_models.gru_ode_bayes.GRU_ODE_Bayes.filter]."""
 
     prior_means: Tensor
     prior_logvars: Tensor
@@ -409,23 +416,27 @@ class GRUODEBayesTrace(NamedTuple):
 class GRU_ODE_Bayes(nn.Module):
     r"""GRU-ODE-Bayes as a state-space model.
 
-    Assumptions:
-        - Latent Gaussian-linear system with diagonal covariance.
-        - autonomous ODE for μ(t) and \log σ²(t)
-        - latent ODE: dh/dt = (1-zₜ)⊙(gₜ - hₜ)
+    ### Assumptions
 
-    State:
-        ``hₜ`` is the latent recurrent state.
+    - An autonomous latent ODE evolves the recurrent state $hₜ$.
+    - A neural decoder maps $hₜ$ to diagonal Gaussian observation parameters.
+    - The latent dynamics satisfy $dh/dt = (1-zₜ)⊙(gₜ - hₜ)$.
 
-    Propagation:
-        ``hₜ⁻ = propagate_state(Δt, hₛ⁺)`` integrates the autonomous GRU-ODE.
+    ### State
 
-    Update:
-        ``hₜ⁺ = update_state(xₜ, mₜ, hₜ⁻)`` applies the Bayesian GRU jump from
-        the Gaussian prediction ``p_θ(hₜ⁻) = (μₜ, log σ²ₜ)``.
+    `hₜ` is the latent recurrent state.
+
+    ### Propagation
+
+    `hₜ⁻ = propagate_state(Δt, hₛ⁺)` integrates the autonomous GRU-ODE.
+
+    ### Update
+
+    `hₜ⁺ = update_state(xₜ, mₜ, hₜ⁻)` applies the Bayesian GRU jump from
+    the Gaussian prediction `p_θ(hₜ⁻) = (μₜ, log σ²ₜ)`.
 
     This is a scaffold for the cleaned reimplementation. It deliberately does
-    not preserve the reference implementation's ``time_ptr``/``obs_idx`` forward
+    not preserve the reference implementation's `time_ptr`/`obs_idx` forward
     API; that batching format should be handled by an adapter if needed.
     """
 
@@ -434,13 +445,25 @@ class GRU_ODE_Bayes(nn.Module):
     batch_first: Final[bool]
 
     prior_means: Tensor
-    r"""BUFFER: Prior predictive means from the last :meth:`predict` call."""
+    r"""BUFFER: Prior predictive means.
+
+    Populated by the most recent [`predict`][imtskit_models.gru_ode_bayes.GRU_ODE_Bayes.predict] call.
+    """
     prior_logvars: Tensor
-    r"""BUFFER: Prior predictive log-variances from the last :meth:`predict` call."""
+    r"""BUFFER: Prior predictive log-variances.
+
+    Populated by the most recent [`predict`][imtskit_models.gru_ode_bayes.GRU_ODE_Bayes.predict] call.
+    """
     posterior_means: Tensor
-    r"""BUFFER: Posterior predictive means from the last :meth:`predict` call."""
+    r"""BUFFER: Posterior predictive means.
+
+    Populated by the most recent [`predict`][imtskit_models.gru_ode_bayes.GRU_ODE_Bayes.predict] call.
+    """
     posterior_logvars: Tensor
-    r"""BUFFER: Posterior predictive log-variances from the last :meth:`predict` call."""
+    r"""BUFFER: Posterior predictive log-variances.
+
+    Populated by the most recent [`predict`][imtskit_models.gru_ode_bayes.GRU_ODE_Bayes.predict] call.
+    """
 
     @classmethod
     def from_config(
@@ -566,9 +589,7 @@ class GRU_ODE_Bayes(nn.Module):
             p_post: the posterior predictive distribution parameters (μ, log σ²)
             p_obs: the observational distribution. Allowed to contain NaNs.
 
-        .. math::
-            Dₖₗ(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²))
-            = ½(log(σ₂²/σ₁²) + σ₁²/σ₂² + (μ₁ - μ₂)²/σ₂² - 1)
+        $$ \KL(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²)) = ½(log(σ₂²/σ₁²) + σ₁²/σ₂² + (μ₁ - μ₂)²/σ₂² - 1) $$
         """
         # Note: the reference code contains a deviation from the description in the paper:
         #   The publication specifies the KL term as d_KL(p_bayes || p_post), p_bayes ∝ p_pre ⋅ p_obs
@@ -780,7 +801,7 @@ class GRU_ODE_Bayes(nn.Module):
     ) -> Tensor:  # Float[..., $K]
         r"""Compute the time-marginal log-likelihood of the model.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ)) $$
         """
         mean, logvar = self.predict(
             query_times=query_times,
@@ -813,7 +834,7 @@ class GRU_ODE_Bayes(nn.Module):
     ) -> Tensor:  # (*S, ..., $K, D)
         r"""Sample from the time-marginal distribution.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ)) $$
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, logvar = self.predict(
@@ -848,7 +869,7 @@ class GRU_ODE_Bayes(nn.Module):
     ) -> tuple[Tensor, Tensor]:  # (*S, ..., $K, D), (*S, ..., $K)
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ)) $$
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, logvar = self.predict(
@@ -876,9 +897,7 @@ def gaussian_kl(
 ) -> Tensor:  # Float[...]
     r"""Return the KL divergence between two diagonal Gaussians.
 
-    .. math::
-        Dₖₗ(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²))
-        = ½(log(σ₂²) - log(σ₁²) + (σ₁² + (μ₁ - μ₂)²) / σ₂² - 1)
+    $$ \KL(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²)) = ½(log(σ₂²) - log(σ₁²) + (σ₁² + (μ₁ - μ₂)²) / σ₂² - 1) $$
     """
     mu_1, var_1 = left  # μ₁, σ₁²
     mu_2, var_2 = right  # μ₂, σ₂²
@@ -897,9 +916,7 @@ def gaussian_kl_logvar(
 ) -> Tensor:  # (...)
     r"""Return the KL divergence between two diagonal Gaussians.
 
-    .. math::
-        Dₖₗ(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²))
-        = ½(log(σ₂²/σ₁²) + σ₁²/σ₂² + (μ₁ - μ₂)²/σ₂² - 1)
+    $$ \KL(𝓝(μ₁, σ₁²), 𝓝(μ₂, σ₂²)) = ½(log(σ₂²/σ₁²) + σ₁²/σ₂² + (μ₁ - μ₂)²/σ₂² - 1) $$
     """
     mu_1, logvar_1 = left
     mu_2, logvar_2 = right

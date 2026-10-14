@@ -55,24 +55,30 @@ class DiagonalLinear(nn.Module):
 
 
 class GRU_D(nn.Module):
-    r"""GRU-D model for time series forecasting with missing values.
+    r"""GRU-D model for time-series forecasting with missing values.
 
-    Processes a combined sequence of context and query time points sorted in
-    non-decreasing order.  At each context step the state is updated with the
-    GRU-D imputation rule; at each query step the decoder produces predictions.
+    Processes combined context and query events in non-decreasing time order.
+    Context events update the state using feature-wise imputation; query events
+    decode predictions from the current state.
 
-    GRU-D equations (Che et al., 2018):
-        delta_k per feature: reset if observed, accumulate otherwise
-        gamma_x = exp(-max(0, W_gamma_x * delta + b)),  W_gamma_x diagonal
-        gamma_h = exp(-max(0, W_gamma_h * delta + b))
-        x_hat = m * x + (1-m) * (gamma_x * x' + (1-gamma_x) * x_tilde)
-        h = GRU(x_hat, gamma_h * h, m)
+    The elapsed time $δ$ is tracked separately for each feature. The decay and
+    imputation equations are
 
-    Reference:
-        - | Recurrent Neural Networks for Multivariate Time Series with Missing Values
-          | Zhengping Che, Sanjay Purushotham, Kyunghyun Cho, David Sontag & Yan Liu
-          | Nature Scientific Reports
-          | https://www.nature.com/articles/s41598-018-24271-9
+    $$\begin{aligned}
+        γₓ &= \exp(-\max(0, Wₓδ+bₓ)) \\
+        γₕ &= \exp(-\max(0, Wₕδ+bₕ)) \\
+        x̂ &= m⊙x + (1-m)⊙(γₓ⊙x' + (1-γₓ)⊙x̃) \\
+        h₊ &= \operatorname{GRU}(x̂, γₕ⊙h₋, m)
+    \end{aligned}$$
+
+    Here $Wₓ$ is diagonal, $x'$ is the last observed value, $x̃$ is the
+    feature mean, and $m$ is the observation mask.
+
+    References:
+        - Recurrent Neural Networks for Multivariate Time Series with Missing Values \
+          Zhengping Che, Sanjay Purushotham, Kyunghyun Cho, David Sontag, and Yan Liu \
+          Scientific Reports, 2018 \
+          <https://www.nature.com/articles/s41598-018-24271-9>
     """
 
     input_size: Final[int]

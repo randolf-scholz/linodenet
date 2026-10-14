@@ -1,4 +1,4 @@
-r"""Parametrizations utilities."""
+r"""Utilities for parameterizing scalars and matrices."""
 
 __all__ = [
     "ReZero",
@@ -21,7 +21,7 @@ class ReZero[
 ](nn.Module):
     r"""ReZero module, learnable scalar with optional transformation.
 
-    .. math:: x ⟼ φ(ε) ⋅ f(x)
+    $$ x ⟼ ϕ(ε) ⋅ f(x) $$
     """
 
     scalar: Tensor
