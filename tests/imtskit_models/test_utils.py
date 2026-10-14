@@ -1029,7 +1029,7 @@ def _simple_test_data(
         for batch_type, candidate_shape in BATCH_SHAPES.items()
         if candidate_shape == batch_shape
     )
-    return TEST_DATA["simple", batch_type, batch_first]
+    return TEST_DATA["simple", batch_type, batch_first]  # pyright: ignore[reportArgumentType]
 
 
 class TestModuleTestData:
