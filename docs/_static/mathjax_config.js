@@ -198,6 +198,7 @@ window.MathJax = {
             KL: "\\operatorname{KL}",  // kullback-leibler divergence
             Median: "\\operatorname{Median}",
             NdtriExp: "\\operatorname{ndtri\\_exp}",
+            Seq: "\\operatorname{Seq}",  // sequence space
             Var: "\\operatorname{\\mathbf{Var}}",  // variance
             argmax: "\\operatorname*{arg\\,max}",
             argmin: "\\operatorname*{arg\\,min}",
