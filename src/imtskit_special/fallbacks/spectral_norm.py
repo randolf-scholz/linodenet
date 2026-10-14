@@ -139,23 +139,23 @@ def _spectral_norm_forward_impl(
 
 
 class _SpectralNormImpl(torch.autograd.Function):
-    r"""$‖A‖₂=λ_\max(AᵀA)$.
+    r"""Compute the spectral norm by power iteration and differentiate it.
 
-    The spectral norm $‖A‖₂ ≔ \sup_x ‖Ax‖₂ / ‖x‖₂$ can be shown to be equal to
-    $σ_{\max}(A) = \sqrt{λ_{\max} (AᵀA)}$, the largest singular value of $A$.
+    The spectral norm $‖A‖₂ ≔ \sup_{x ≠ 0} ‖Ax‖₂ / ‖x‖₂$ is equal to
+    $σₘₐₓ(A) = √(λₘₐₓ(AᵀA))$, the largest singular value of $A$.
 
-    It can be computed efficiently via Power iteration.
+    For a simple, positive largest singular value, the derivative is
 
-    One can show that the derivative is equal to:
+    $$ ∂‖A‖₂/∂A = uvᵀ $$
 
-    .. math::  \pdv{½‖A‖₂}{A} = uvᵀ
-
-    where $u,v$ are the left/right-singular vector corresponding to $σ_\max$
+    where $u$ and $v$ are the corresponding unit left and right singular vectors.
+    At repeated largest singular values, this gradient is not unique.
 
     References:
-        `Spectral Normalization for Generative Adversarial Networks <https://openreview.net/forum?id=B1QRgziT->`_
-        Takeru Miyato, Toshiki Kataoka, Masanori Koyama, Yuichi Yoshida
-        `International Conference on Learning Representations 2018 <https://iclr.cc/Conferences/2018>`_
+        - Spectral Normalization for Generative Adversarial Networks
+          Takeru Miyato, Toshiki Kataoka, Masanori Koyama, and Yuichi Yoshida.
+          International Conference on Learning Representations, 2018.
+          <https://openreview.net/forum?id=B1QRgziT->
     """
 
     @staticmethod

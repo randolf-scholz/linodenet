@@ -112,11 +112,11 @@ class _FixpointSolve_Impl(torch.autograd.Function):
     The backward pass uses the implicit function theorem. For an upstream
     cotangent $g$, it solves
 
-    .. math:: u = g + (∂f/∂x)ᵀu
+    $$ u = g + (∂f/∂x)ᵀu $$
 
     and then returns the parameter gradients $(∂f/∂θ)ᵀu$.
 
-    Notes:
+    Note:
         This implementation is intended for eager-mode experimentation.
         It does not differentiate with respect to the initial guess.
     """
@@ -189,11 +189,17 @@ def fixpoint_solve_functional(
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:
-    r"""Solve ``x = f(x, *ys)`` by fixed point iteration.
+    r"""Solve `x = fn(x, *args)` by fixed point iteration.
+
+    Convergence requires suitable conditions on `fn`, such as contraction.
+    The forward iteration stops when the elementwise change is at most
+    $\mathrm{atol} + \mathrm{rtol}|x|$, or the iteration budget is exhausted.
+    Gradients use implicit differentiation at the approximate fixed point;
+    the initial guess receives zero gradient.
 
     Args:
         fn: Mapping defining the fixed point equation $x = f(x, θ)$.
-            The callable must accept $x$ as its first argument.
+            The callable must accept $x$ as its first argument
             and any additional tensor parameters afterwards.
         x0: Starting point of the iteration.
         args: Tensor parameters passed through to `fn`.
@@ -217,7 +223,14 @@ def fixpoint_solve(
     atol: float = 1e-6,
     rtol: float = 1e-6,
 ) -> Tensor:
-    r"""Solve $x = f(x, \\ast ys)$ by fixed point iteration.
+    r"""Solve `x = fn(x, *args)` by fixed point iteration.
+
+    Convergence requires suitable conditions on `fn`, such as contraction.
+    The forward iteration stops when the elementwise change is at most
+    $\mathrm{atol} + \mathrm{rtol}|x|$, or the iteration budget is exhausted.
+    The returned value includes one additional evaluation of `fn` so that
+    gradients reach tensor arguments and module parameters. A backward hook
+    applies implicit differentiation at the approximate fixed point.
 
     Args:
         fn: Mapping defining the fixed point equation $x = f(x, θ)$.

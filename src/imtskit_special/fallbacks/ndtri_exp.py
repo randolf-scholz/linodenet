@@ -1,7 +1,7 @@
 r"""Reimplementation of `scipy.special.ndtri_exp` for PyTorch.
 
-SCIPY LICENSE
-=============
+## SciPy license
+
 Copyright (c) 2001-2002 Enthought, Inc. 2003, SciPy Developers.
 All rights reserved.
 
@@ -157,7 +157,7 @@ def _poly1eval8(x: Tensor, coeffs: Tensor, /) -> Tensor:
 
 
 def _ndtri_exp_small(log_p: Tensor, /) -> Tensor:
-    r"""Rational approximation of Φ⁻¹√(-2 log p) when log_p < -2."""
+    r"""Approximate $Φ⁻¹(p)$ using $z = √(-2\log p)$ for `log_p < -2`."""
     # cast the coefficients to the same dtype and device as log_p
     p1, q1, p2, q2 = _get_coeffs(device=log_p.device, dtype=log_p.dtype)
     x = torch.sqrt(-2 * log_p)
@@ -172,21 +172,34 @@ def _ndtri_exp_small(log_p: Tensor, /) -> Tensor:
 
 
 def ndtri_exp_naive(log_p: Tensor) -> Tensor:
-    r"""Computes the inverse of `log_ndtr` using the naive implementation."""
+    r"""Evaluate $Φ⁻¹(p)$ using `p = log_p.exp()`.
+
+    This naive composition can lose precision through underflow for very
+    negative inputs and rounding of the probability to one near zero.
+    """
     return ndtri(log_p.exp())
 
 
 def ndtri_exp(log_p: Tensor) -> Tensor:
-    r"""Inverse of `log_ndtr`, i.e. the log-quantile function of the standard normal distribution.
+    r"""Invert the log CDF of the standard normal distribution.
 
-    domain: (-∞, 0]   (image of [0,1] under log)
-    codomain: [-∞, +∞]
+    For log probability $ℓ$ and standard normal CDF $Φ$,
 
-    torch currently does not implement the inverse of `log_ndtr`,
-    this is simply a placeholder using the naive implementation.
+    $$ x = Φ⁻¹(ℯ^{ℓ}) $$
+
+    Lower-tail rational approximations avoid underflow, while upper-tail
+    evaluation uses `expm1` to avoid cancellation near zero.
+
+    Args:
+        log_p: Log probability in $[-∞, 0]$.
+
+    Returns:
+        Standard normal quantiles with the same shape as `log_p`.
+        Inputs $-∞$ and $0$ map to $-∞$ and $+∞$, respectively.
+        Positive inputs and NaNs produce NaN.
 
     References:
-        - scipy.special.ndtri_exp
+        - [scipy.special.ndtri_exp](https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.ndtri_exp.html)
     """
     invalid_mask = log_p.isnan() | (log_p > 0)
     neginf_mask = log_p.isneginf()

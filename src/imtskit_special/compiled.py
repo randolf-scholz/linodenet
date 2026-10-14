@@ -273,7 +273,7 @@ def gaussian_to_bimodal_value_and_grad(
 def bimodal_to_gaussian(
     y: Tensor, /, mu: Tensor | float = 2.0, sigma: Tensor | float = 1.0
 ) -> Tensor:
-    r"""Optimal Transport from mixture ½N(-μ, σ²) + ½N(μ, σ²) to N(0, 1)."""
+    r"""Optimal transport from mixture $½N(-μ, σ²) + ½N(μ, σ²)$ to $N(0, 1)$."""
     assert _bimodal_to_gaussian is not None, "missing kernel"
     mu = torch.as_tensor(mu, dtype=y.dtype, device=y.device)
     sigma = torch.as_tensor(sigma, dtype=y.dtype, device=y.device)
@@ -291,13 +291,22 @@ def bimodal_to_gaussian_value_and_grad(
 
 
 def ndtri_exp(log_p: Tensor, /) -> Tensor:
-    r"""Inverse of `log_ndtr`, i.e. the log-quantile function of the standard normal distribution.
+    r"""Invert the log CDF of the standard normal distribution with the compiled kernel.
 
-    torch currently does not implement the inverse of `log_ndtr`,
-    this is simply a placeholder using the naive implementation.
+    For log probability $ℓ$ and standard normal CDF $Φ$,
+
+    $$ x = Φ⁻¹(ℯ^{ℓ}) $$
+
+    Args:
+        log_p: Log probability in $[-∞, 0]$.
+
+    Returns:
+        Standard normal quantiles with the same shape as `log_p`.
+        Inputs $-∞$ and $0$ map to $-∞$ and $+∞$, respectively.
+        Positive inputs and NaNs produce NaN.
 
     References:
-        - scipy.special.ndtri_exp
+        - [scipy.special.ndtri_exp](https://docs.scipy.org/doc/scipy/reference/generated/scipy.special.ndtri_exp.html)
     """
     assert _ndtri_exp is not None, "missing kernel"
     return _ndtri_exp(log_p)

@@ -169,7 +169,7 @@ class HardBend(Protocol):
 
 
 class NdtriExp(Protocol):
-    r"""Protocol of the ndtri_exp class."""
+    r"""Protocol for implementations of the inverse standard normal log CDF."""
 
     def __call__(self, log_p: Tensor, /) -> Tensor: ...
 
@@ -195,12 +195,13 @@ class SingularTriplet(Protocol):
             A: The input matrix (shape: M×N).
             u0: The initial guess for the left singular vector (shape: M).
             v0: The initial guess for the right singular vector (shape: N).
-            maxiter: The maximum number of iterations. (Default: O(M+N))
+            maxiter: Maximum number of iterations.
+                If omitted, the implementation selects its default iteration budget.
             atol: The absolute tolerance. (Default: 1e-6)
             rtol: The relative tolerance. (Default: 1e-6)
 
         Returns:
-            sigma: The singular value (scaler).
+            sigma: The largest singular value (scalar tensor).
             u: The left singular vector (shape: M).
             v: The right singular vector (shape: N).
         """
@@ -228,12 +229,13 @@ class SpectralNorm(Protocol):
             A: The input matrix (shape: M×N).
             u0: The initial guess for the left singular vector (shape: M).
             v0: The initial guess for the right singular vector (shape: N).
-            maxiter: The maximum number of iterations. (Default: O(M+N))
+            maxiter: Maximum number of iterations.
+                If omitted, the implementation selects its default iteration budget.
             atol: The absolute tolerance. (Default: 1e-6)
             rtol: The relative tolerance. (Default: 1e-6)
 
         Returns:
-            sigma: The singular value (scaler).
+            sigma: The spectral norm, equal to the largest singular value (scalar).
         """
         ...
 

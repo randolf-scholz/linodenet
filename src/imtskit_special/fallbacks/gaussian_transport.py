@@ -1,4 +1,8 @@
-r"""Implementation of the optimal transport based activation function."""
+r"""Optimal transport maps between standard normal and Gaussian mixture distributions.
+
+All transports assume positive standard deviations. General mixture weights
+must be nonnegative and sum to one along the final, component dimension.
+"""
 # mypy: disable-error-code="no-untyped-def"
 
 __all__ = [
@@ -65,10 +69,13 @@ def _bimodal_to_gaussian_derivatives(
 ) -> tuple[Tensor, Tensor, Tensor]:
     r"""Compute stable partial derivatives for the bimodal-to-Gaussian transport.
 
+    Let $y$ be the transport value, $z₊ = (x+μ)/σ$, $z₋ = (x-μ)/σ$,
+    and $E₊ = ℯ^{½(y²-z₊²)}$, $E₋ = ℯ^{½(y²-z₋²)}$.
+
     Returns:
-        ∂y/∂x:  ½σ⁻¹(E₊ + E₋)
-        ∂y/∂μ:  ½σ⁻¹(E₊ - E₋)
-        ∂y/∂σ: -½σ⁻¹(z₊E₊ + z₋E₋)
+        d_x: The gradient $∂y/∂x = ½σ⁻¹(E₊ + E₋)$
+        d_mu: The gradient $∂y/∂μ = ½σ⁻¹(E₊ - E₋)$,
+        d_sigma: The gradient $∂y/∂σ = -½σ⁻¹(z₊E₊ + z₋E₋)$.
     """
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
@@ -103,12 +110,12 @@ def _bimodal_to_gaussian_derivatives2(
     r"""Compute first and second derivatives for the bimodal-to-Gaussian transport.
 
     Returns:
-        ∂y/∂x:  ½σ⁻¹(E₊ + E₋)
-        ∂y/∂μ:  ½σ⁻¹(E₊ - E₋)
-        ∂y/∂σ: -½σ⁻¹(z₊E₊ + z₋E₋)
-        ∂g/∂x: -½σ⁻²(z₊E₊ + z₋E₋)   + yg(∂y/∂x)
-        ∂g/∂μ: -½σ⁻²(z₊E₊ - z₋E₋)   + yg(∂y/∂μ)
-        ∂g/∂σ: +½σ⁻²(z₊²E₊ + z₋²E₋) + yg(∂y/∂σ) -g/σ
+        d_x:     $∂y/∂x =  ½σ⁻¹(E₊ + E₋)$
+        d_mu:    $∂y/∂μ =  ½σ⁻¹(E₊ - E₋)$
+        d_sigma: $∂y/∂σ = -½σ⁻¹(z₊E₊ + z₋E₋)$
+        d2_x:    $∂g/∂x = -½σ⁻²(z₊E₊ + z₋E₋)   + yg(∂y/∂x)$
+        d2_mu:   $∂g/∂μ = -½σ⁻²(z₊E₊ - z₋E₋)   + yg(∂y/∂μ)$
+        d2_sigma:$∂g/∂σ = +½σ⁻²(z₊²E₊ + z₋²E₋) + yg(∂y/∂σ) -g/σ$
     """
     LOG_HALF: Final[float] = -0.6931471805599453  # log(½)
 
@@ -127,7 +134,7 @@ def _bimodal_to_gaussian_derivatives2(
     w_plus = torch.exp(log_phi_plus - log_norm)
     w_minus = torch.exp(log_phi_minus - log_norm)
     d_mu_abs = d_x * (w_plus - w_minus)
-    d_sigma_exact = -(0.5 * (z_plus + z_minus) * d_x + (m / sigma) * d_mu_abs)
+    d_sigma = -(0.5 * (z_plus + z_minus) * d_x + (m / sigma) * d_mu_abs)
 
     # The analytic slope lives in [exp(-½(m/σ)²)/σ, 1/σ]; clamp only to absorb drift.
     lower_bound = torch.exp(-0.5 * (m / sigma) ** 2) / sigma
@@ -146,18 +153,19 @@ def _bimodal_to_gaussian_derivatives2(
     # Here g = ∂y/∂x, so these are the second derivatives that feed the Jacobian output.
     d2_x = y * d_x.square() - z_term_sum
     d2_mu = mu_sign * (y * d_x * d_mu_abs - z_term_diff)
-    d2_sigma = y * d_x * d_sigma_exact - d_x / sigma + z2_term_sum
-    return d_x, d_mu, d_sigma_exact, d2_x, d2_mu, d2_sigma
+    d2_sigma = y * d_x * d_sigma - d_x / sigma + z2_term_sum
+    return d_x, d_mu, d_sigma, d2_x, d2_mu, d2_sigma
 
 
 def _gaussian_to_bimodal_guess(x: Tensor, mu: Tensor, sigma: Tensor, /) -> Tensor:
     r"""Approximate $Ψ⁻¹(x, μ, σ)$ by the matching `hard_bend` inverse.
 
-    Here $λ = Ψ'(0, μ, σ) = σ⁻¹ℯ^{-½(μ/σ)²}$ is the slope at the origin.
+    Here $Ψ$ maps the bimodal mixture to the standard normal distribution, and
+    $λ = Ψ'(0, μ, σ) = σ⁻¹ℯ^{−½(μ/σ)²}$ is its slope at the origin.
 
     Using
 
-    .. math::  y = hard\_bend(x, 1/λ, μ, σ) \iff x = hard\_bend(y, λ, μ, 1/σ),
+    $$ y = \op{hard\_bend}(x, 1/λ, μ, σ) ⟺ x = \op{hard\_bend}(y, λ, μ/σ, 1/σ) $$
 
     we obtain a cheap initial guess for the safeguarded Newton solve.
     """
@@ -224,11 +232,23 @@ def _mixture_to_gaussian_derivatives(
 ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     r"""Compute stable partial derivatives for the mixture-to-Gaussian transport.
 
+    Let $y$ be the transport value, $zₖ = (x-μₖ)/σₖ$, and $Eₖ = ℯ^{½(y²-zₖ²)}$.
+    For $n$ components, the derivatives are
+
+    $$\begin{aligned}
+        ∂y/∂x  &= ∑ₖ(ωₖ/σₖ)Eₖ \\
+        ∂y/∂ωₖ &= √(2π)ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ)) \\
+        ∂y/∂μₖ &= -(ωₖ/σₖ)Eₖ \\
+        ∂y/∂σₖ &= -(ωₖ/σₖ)zₖEₖ
+    \end{aligned}$$
+
+    Weight derivatives are projected onto the tangent space of the probability simplex.
+
     Returns:
-        ∂y/∂x  = ∑ₖ(ωₖ/σₖ)Eₖ
-        ∂y/∂ωₖ = √(2π)ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))
-        ∂y/∂μₖ = -(ωₖ/σₖ)Eₖ
-        ∂y/∂σₖ = -(ωₖ/σₖ)zₖEₖ
+        d_x:       $∂y/∂x  = ∑ₖ(ωₖ/σₖ)Eₖ$
+        d_weights: $∂y/∂ωₖ = √(2π)ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))$
+        d_mus:     $∂y/∂μₖ = -(ωₖ/σₖ)Eₖ$
+        d_sigmas:  $∂y/∂σₖ = -(ωₖ/σₖ)zₖEₖ$
     """
     LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
 
@@ -265,15 +285,21 @@ def _mixture_to_gaussian_derivatives2(
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
     r"""Compute first and second derivatives for the mixture-to-Gaussian transport.
 
+    Let $y$ be the transport value, $g = ∂y/∂x$, $zₖ = (x-μₖ)/σₖ$,
+    and $Eₖ = ℯ^{½(y²-zₖ²)}$. For $n$ components,
+
+    $$\begin{aligned}
+        ∂g/∂x  &= yg(∂y/∂x) - ∑ₖ(ωₖ/σₖ²)zₖEₖ \\
+        ∂g/∂ωₖ &= yg(∂y/∂ωₖ) + Eₖ/σₖ - (1/n)∑ⱼEⱼ/σⱼ \\
+        ∂g/∂μₖ &= yg(∂y/∂μₖ) + (ωₖ/σₖ²)zₖEₖ \\
+        ∂g/∂σₖ &= yg(∂y/∂σₖ) + (ωₖ/σₖ²)(zₖ²-1)Eₖ
+    \end{aligned}$$
+
     Returns:
-        ∂y/∂x  = ∑ₖ(ωₖ/σₖ)Eₖ
-        ∂y/∂ωₖ = √(2π)ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))
-        ∂y/∂μₖ = -(ωₖ/σₖ)Eₖ
-        ∂y/∂σₖ = -(ωₖ/σₖ)zₖEₖ
-        ∂g/∂x  = y⋅g⋅(∂y/∂x)  - ∑ₖ(ωₖ/σₖ²)zₖEₖ
-        ∂g/∂ωₖ = y⋅g⋅(∂y/∂ωₖ) + Eₖ/σₖ - (1/n)∑ⱼEⱼ/σⱼ
-        ∂g/∂μₖ = y⋅g⋅(∂y/∂μₖ) + (ωₖ/σₖ²)zₖEₖ
-        ∂g/∂σₖ = y⋅g⋅(∂y/∂σₖ) + (ωₖ/σₖ²)(zₖ²-1)Eₖ
+        Eight tensors: the four partial derivatives of $y$ from
+        `_mixture_to_gaussian_derivatives`, followed by the corresponding
+        partial derivatives of $g$. Weight derivatives are projected onto
+        the tangent space of the probability simplex.
     """
     LOG_2PI: Final[float] = 1.8378770664093453  # log(2π)
 
@@ -344,53 +370,63 @@ def _gaussian_to_mixture_value_and_grad(
 class _BimodalToGaussian(torch.autograd.Function):
     r"""Optimal Transport from mixture $p = ½N(-μ, σ²) + ½N(μ, σ²)$ to $q = N(0, 1)$.
 
-    If $F_p$ and $F_q$ are the CDFs of $p$ and $q$, then the optimal transport map is given by
+    Let $Fₚ$ be the CDF of $p$ and $Φ$ the standard normal CDF.
+    The optimal transport map is
 
-    .. math:: y = F_q⁻¹(Fₚ(x))
+    $$ y = Φ⁻¹(Fₚ(x)) $$
 
-    Letting Φ be the CDF of $N(0,1)$, then we have
+    Equivalently,
 
-    .. math:: y = Φ⁻¹\Bigl( ½Φ((x+μ)/σ) + ½Φ((x-μ)/σ) \Bigr)
-                = √2 \erf⁻¹\Bigl(½\erf((x+μ)/√2σ) + ½\erf((x-μ)/√2σ) \Bigr)
+    $$\begin{aligned}
+        y &= Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr) \\
+          &= √2\erf⁻¹\Bigl(½\erf((x+μ)/(√2σ))
+            + ½\erf((x-μ)/(√2σ))\Bigr)
+    \end{aligned}$$
 
-    Asymptotic Expansion with $g(x)=\frac{x-\sign(x)|μ|}{σ}$:
+    For $μ ≠ 0$, set $h(x) = (x-\sign(x)|μ|)/σ$.
+    The tail approximation as $x → ±∞$ is
 
-    .. math:: y ~ g(x) + \log(2)/g(x) as x → ±∞
+    $$ y ≈ h(x) + \log(2)/h(x) $$
 
-    Unlike the general mixture case, the two components share the mean $±μ$ and scale $σ$.
+    When $μ = 0$, the transport reduces exactly to $y = x/σ$.
+    The two components have opposite means $±μ$ and a common scale $σ$.
 
     Using the shorthands
 
-    .. math::
+    $$\begin{aligned}
         z₊ &= \frac{x+μ}{σ}     &   z₋ &= \frac{x-μ}{σ} \\
         E₊ &= ℯ^{½(y²-z₊²)}     &   E₋ &= ℯ^{½(y²-z₋²)}
+    \end{aligned}$$
 
     The first order derivatives can be written as:
 
-    .. math::
+    $$\begin{aligned}
         ∂y/∂x &=  ½σ⁻¹(E₊ + E₋)    \\
         ∂y/∂μ &=  ½σ⁻¹(E₊ - E₋)    \\
         ∂y/∂σ &= -½σ⁻¹(z₊E₊ + z₋E₋)
+    \end{aligned}$$
 
-    And the derivatives of $g(x) = ∂y/∂x$ are
+    With $g(x) = ∂y/∂x$, its derivatives are
 
-    .. math::
+    $$\begin{aligned}
         ∂g/∂x &= -½σ⁻²(z₊E₊ + z₋E₋)   + yg(∂y/∂x)      \\
         ∂g/∂μ &= -½σ⁻²(z₊E₊ - z₋E₋)   + yg(∂y/∂μ)      \\
         ∂g/∂σ &= +½σ⁻²(z₊²E₊ + z₋²E₋) + yg(∂y/∂σ) -g/σ
+    \end{aligned}$$
 
-    Proof:
+    Note: Derivative derivation
 
         Let $u = ½Φ(z₊) + ½Φ(z₋)$, then, by the chain rule,
 
-        .. math:: \dv{y}{u} = \frac{1}{Φ'(Φ⁻¹(u))} = \sqrt{2π} ℯ^{½y²}
+        $$ dy/du = 1/Φ'(Φ⁻¹(u)) = √(2π)ℯ^{½y²} $$
 
-        Using $Φ'(z) = \frac{1}{\sqrt{2π}}ℯ^{-½z²}$ and the coupling of the parameters,
+        Using $Φ'(z) = ℯ^{−½z²}/√(2π)$ and the shared parameters,
 
-        .. math::
-            \dv{u}{x} &= ½(√2πσ)⁻¹(ℯ^{-½z₊²} + ℯ^{-½z₋²}) \\
-            \dv{u}{μ} &= ½(√2πσ)⁻¹(ℯ^{-½z₊²} - ℯ^{-½z₋²}) \\
-            \dv{u}{σ} &= -½(√2πσ)⁻¹(z₊ℯ^{-½z₊²} + z₋ℯ^{-½z₋²})
+        $$\begin{aligned}
+            ∂u/∂x &= ½(√(2π)σ)⁻¹(ℯ^{−½z₊²} + ℯ^{−½z₋²}) \\
+            ∂u/∂μ &= ½(√(2π)σ)⁻¹(ℯ^{−½z₊²} - ℯ^{−½z₋²}) \\
+            ∂u/∂σ &= -½(√(2π)σ)⁻¹(z₊ℯ^{−½z₊²} + z₋ℯ^{−½z₋²})
+        \end{aligned}$$
 
         Combining these terms yields the formulas above.
     """
@@ -449,7 +485,7 @@ class _GaussianToBimodal(torch.autograd.Function):
         Here $T$ is the transport from the symmetric bimodal mixture to $N(0,1)$.
         Since $T'(0) = σ⁻¹ℯ^{-½|μ/σ|²}$, the inverse slope at the origin is
 
-        .. math:: (T⁻¹)'(0) = σℯ^{½|μ/σ|²}
+        $$ (T⁻¹)'(0) = σℯ^{½|μ/σ|²} $$
 
         The transport only depends on $|μ|$. The tails satisfy
         $T(x, μ, σ) ≈ σ⁻¹(x-\sign(x)|μ|)$, so
@@ -465,22 +501,24 @@ class _GaussianToBimodal(torch.autograd.Function):
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, None]:
         r"""Use the derivatives of $T$ to differentiate the inverse map.
 
-        .. math::  ∂T(x(y, μ, σ), μ, σ) = y
+        $$ T(x(y, μ, σ), μ, σ) = y $$
 
         Hence
 
-        .. math::
+        $$\begin{aligned}
             ∂x/∂y &= (∂T/∂x)⁻¹ \\
             ∂x/∂μ &= -(∂T/∂x)⁻¹ ∂T/∂μ \\
             ∂x/∂σ &= -(∂T/∂x)⁻¹ ∂T/∂σ
+        \end{aligned}$$
 
         For the inverse Jacobian $j = ∂x/∂y = (∂T/∂x)⁻¹$, differentiating once
         more gives
 
-        .. math::
+        $$\begin{aligned}
             ∂j/∂y &= -(∂²T/∂x²)(∂T/∂x)⁻³ \\
             ∂j/∂μ &= (∂²T/∂x²)(∂T/∂μ)(∂T/∂x)⁻³ - (∂²T/∂x∂μ)(∂T/∂x)⁻² \\
-            ∂j/∂σ &= (∂²T/∂x²)(∂T/∂σ)(∂T/∂x)⁻³ - (∂²T/∂x∂σ)(∂T/∂x)⁻².
+            ∂j/∂σ &= (∂²T/∂x²)(∂T/∂σ)(∂T/∂x)⁻³ - (∂²T/∂x∂σ)(∂T/∂x)⁻²
+        \end{aligned}$$
         """
         (g,) = outer
         y, mu, sigma, x = ctx.saved_tensors
@@ -519,12 +557,15 @@ class _GaussianToBimodalValueAndGrad(torch.autograd.Function):
     def backward(ctx, *outer: Tensor) -> tuple[Tensor, Tensor, Tensor, None]:
         r"""Use the derivatives of $T$ to differentiate the inverse map.
 
-        .. math::  ∂T(x(y, μ, σ), μ, σ) = y
+        $$ T(x(y, μ, σ), μ, σ) = y $$
 
-        .. math::
+        For $j = ∂x/∂y = (∂T/∂x)⁻¹$,
+
+        $$\begin{aligned}
             ∂j/∂y &= -(∂²T/∂x²)(∂T/∂x)⁻³ \\
             ∂j/∂μ &= (∂²T/∂x²)(∂T/∂μ)(∂T/∂x)⁻³ - (∂²T/∂x∂μ)(∂T/∂x)⁻² \\
-            ∂j/∂σ &= (∂²T/∂x²)(∂T/∂σ)(∂T/∂x)⁻³ - (∂²T/∂x∂σ)(∂T/∂x)⁻².
+            ∂j/∂σ &= (∂²T/∂x²)(∂T/∂σ)(∂T/∂x)⁻³ - (∂²T/∂x∂σ)(∂T/∂x)⁻²
+        \end{aligned}$$
         """
         grad_x, grad_dx = outer
         y, mu, sigma, x = ctx.saved_tensors
@@ -560,32 +601,32 @@ class _MixtureToGaussian(torch.autograd.Function):
 
     If $Fₚ$ is the CDF of the mixture and $Φ$ is the standard normal CDF, then
 
-    .. math:: y = Φ⁻¹(Fₚ(x)) = Φ⁻¹\Bigl(∑ₖ ωₖ Φ((x-μₖ)/σₖ)\Bigr)
+    $$ y = Φ⁻¹(Fₚ(x)) = Φ⁻¹\Bigl(∑ₖ ωₖ Φ((x-μₖ)/σₖ)\Bigr) $$
 
     Numerically, we evaluate the mixture CDF in log space and switch between the
     lower-tail and upper-tail representations to avoid cancellation near $0$ and $1$.
 
-    Using the shorthands
+    With $zₖ = (x-μₖ)/σₖ$ and $Eₖ = ℯ^{½(y²-zₖ²)}$,
+    the first order derivatives are
 
-    .. math:: zₖ &= (x-μₖ)/σₖ  &  Eₖ &= ℯ^{½(y²-zₖ²)}
-
-    then the first order derivatives are
-
-    .. math::
+    $$\begin{aligned}
         ∂y/∂x  &= ∑ₖ(ωₖ/σₖ)Eₖ    \\
         ∂y/∂ωₖ &= √(2π)ℯ^{½y²}(Φ(zₖ) - (1/n)∑ⱼΦ(zⱼ))    \\
         ∂y/∂μₖ &= -(ωₖ/σₖ)Eₖ     \\
         ∂y/∂σₖ &= -(ωₖ/σₖ)zₖEₖ
+    \end{aligned}$$
 
-    Note that in the case of ∂y/∂ωₖ, we include the projection on the tangent space of ∆ⁿ⁻¹.
+    For $n$ mixture components, weight derivatives are projected onto the
+    tangent space of the probability simplex $∆ⁿ⁻¹$.
 
     And the derivatives of $g(x) = ∂y/∂x$ are
 
-    .. math::
+    $$\begin{aligned}
         ∂g/∂x  &= y⋅g⋅(∂y/∂x)  - ∑ₖ(ωₖ/σₖ²)zₖEₖ         \\
         ∂g/∂ωₖ &= y⋅g⋅(∂y/∂ωₖ) + Eₖ/σₖ - (1/n)∑ⱼEⱼ/σⱼ   \\
         ∂g/∂μₖ &= y⋅g⋅(∂y/∂μₖ) + (ωₖ/σₖ²)zₖEₖ           \\
         ∂g/∂σₖ &= y⋅g⋅(∂y/∂σₖ) + (ωₖ/σₖ²)(zₖ²-1)Eₖ
+    \end{aligned}$$
     """
 
     @staticmethod
@@ -665,14 +706,15 @@ class _GaussianToMixture(torch.autograd.Function):
 
         Writing $T(x, ω, μ, σ)=y$ and $x=x(y, ω, μ, σ)$, implicit differentiation gives
 
-        .. math::  ∂T(x(y, ω, μ, σ), ω, μ, σ) = y
+        $$ T(x(y, ω, μ, σ), ω, μ, σ) = y $$
 
         Hence
 
-        .. math::
+        $$\begin{aligned}
             ∂x/∂y &= (∂T/∂x)⁻¹ \\
             ∂x/∂θ &= -(∂T/∂x)⁻¹ ∂T/∂θ
             \qquad θ∈\{ω, μ, σ\}
+        \end{aligned}$$
         """
         (g,) = outer
         y, weights, mus, sigmas, x = ctx.saved_tensors
@@ -694,21 +736,23 @@ class _GaussianToMixtureValueAndGrad(torch.autograd.Function):
 
     Writing $T(x, ω, μ, σ)=y$ and $x=x(y, ω, μ, σ)$, implicit differentiation gives
 
-    .. math::  ∂T(x(y, ω, μ, σ), ω, μ, σ) = y
+    $$ T(x(y, ω, μ, σ), ω, μ, σ) = y $$
 
     Hence
 
-    .. math::
+    $$\begin{aligned}
         ∂x/∂y &= (∂T/∂x)⁻¹ \\
         ∂x/∂θ &= -(∂T/∂x)⁻¹ ∂T/∂θ
         \qquad θ∈\{ω, μ, σ\}
+    \end{aligned}$$
 
     For the inverse Jacobian $j = ∂x/∂y = (∂T/∂x)⁻¹$, differentiating once more gives
 
-    .. math::
+    $$\begin{aligned}
         ∂j/∂y &= -(∂²T/∂x²)(∂T/∂x)⁻³ \\
         ∂j/∂θ &= (∂²T/∂x²)(∂T/∂θ)(∂T/∂x)⁻³ - (∂²T/∂x∂θ)(∂T/∂x)⁻²
-        \qquad θ∈\{ω, μ, σ\}.
+        \qquad θ∈\{ω, μ, σ\}
+    \end{aligned}$$
     """
 
     @staticmethod
@@ -761,7 +805,7 @@ def bimodal_to_gaussian(
 ) -> Tensor:
     r"""Map the symmetric mixture $½N(-μ,σ²) + ½N(μ,σ²)$ to $N(0,1)$.
 
-    .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
+    $$ y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr) $$
 
     The transport is evaluated with numerically stable lower-tail and upper-tail
     formulas based on `log_ndtr` and `ndtri_exp`.
@@ -785,7 +829,7 @@ def mixture_to_gaussian(
 ) -> Tensor:
     r"""Map the mixture $∑ₖ ωₖ N(μₖ,σₖ²)$ to $N(0,1)$.
 
-    .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
+    $$ y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr) $$
 
     The transport is evaluated with numerically stable lower-tail and upper-tail
     formulas based on `log_ndtr` and `ndtri_exp`.
@@ -812,7 +856,7 @@ def gaussian_to_bimodal(
 
     This is the inverse of
 
-    .. math:: y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr)
+    $$ y = Φ⁻¹\Bigl(½Φ((x+μ)/σ) + ½Φ((x-μ)/σ)\Bigr) $$
 
     The inverse map is not available in closed form and is computed with a
     safeguarded Newton iteration. Evaluation of the underlying transport uses
@@ -855,7 +899,7 @@ def gaussian_to_mixture(
 
     This is the inverse of
 
-    .. math::  y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr)
+    $$ y = Φ⁻¹\Bigl(∑ₖ ωₖΦ((x-μₖ)/σₖ)\Bigr) $$
 
     The inverse map is not available in closed form and is computed with a
     safeguarded Newton iteration. Evaluation of the underlying transport uses
