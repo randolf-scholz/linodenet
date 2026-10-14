@@ -208,8 +208,12 @@ window.MathJax = {
             mae: "\\operatorname{\\mathbf{MAE}}",  // mean absolute error
             mse: "\\operatorname{\\mathbf{MSE}}",  // mean squared error
             nan: "\\texttt{NaN}",
+            nd: "\\operatorname{\\mathbf{ND}}",
+            nrmse: "\\operatorname{\\mathbf{NRMSE}}",
+            orth: "\\operatorname{orth}",  // orthogonal projection / QR decom
             rank: "\\operatorname{rank}",
             relu: "\\operatorname{ReLU}",
+            rsme: "\\operatorname{\\mathbf{RSME}}",
             sign: "\\operatorname{sign}",
             softplus: "\\operatorname{softplus}",
             sym: "\\operatorname{sym}",  // symmetric part
