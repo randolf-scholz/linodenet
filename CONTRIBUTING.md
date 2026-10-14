@@ -61,7 +61,7 @@ Markdown**, replacing the Sphinx workflow. Write new documentation for the
 Zensical site under [docs/zensical](docs/zensical); its configuration is
 [docs/zensical.toml](docs/zensical.toml).
 
-### Conventions
+### Docstring Conventions
 
 - Use Google-style docstrings, with sections such as `Args`, `Returns`, `Raises`,
   and `Examples` where useful.
@@ -73,6 +73,8 @@ Zensical site under [docs/zensical](docs/zensical); its configuration is
 - Prefer readable Unicode symbols in mathematical formulas: `ℝ`, `ϕ`, `∑`,
   `xᵢⱼ`, and `f⁻¹`. Use `$...$` for inline math and `$$...$$` for display math
   in Markdown pages.
+- functions returning a multiple values via tuple should generally document them
+  similar to function arguments when appropriate.
 
 ### Building the documentation
 

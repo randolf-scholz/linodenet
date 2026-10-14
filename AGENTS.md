@@ -41,6 +41,8 @@ Project conventions for automated agents contributing to `imtskit`.
   rather that $\phi$, $∑$ rather than $\sum$, etc. This includes super- and subscripts, e.g. $xᵢⱼ$ rather than $x_{ij}$
   and $f⁻¹$ rather than $f^{-1}$.
 - Keep single line equations to a single line `$$ <eq> $$` rather than `$$\n <eq>\n $$`
+- Use `$$\begin{aligned}\n <eq>\n \end{aligned}$$` for multiline equations, rather than
+  `$$\n\begin{aligned}\n <eq>\n \end{aligned}\n$$`
 - Equations shouldn't have a trailing dot.
 
 ## Typing
