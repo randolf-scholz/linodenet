@@ -70,23 +70,29 @@ def linear_gaussian_flow(
     b: Optional[Tensor] = None,  # Float[d]
     /,
 ) -> tuple[Tensor, Tensor]:  # Float[...., $n, d], Float[..., $n, d, d]
-    r"""Propagate a linear-gaussian system.
+    r"""Propagate the mean and covariance of a linear Gaussian system.
 
-    .. math:: dZₜ = AZₜdt + bdt + C dWₜ
+    The SDE is $dZₜ = AZₜdt + bdt + CdWₜ$, with process covariance $Q=CCᵀ$.
+    Given $Z₀∼𝓝(μ₀, Σ₀)$, the propagated distribution is $Zₜ∼𝓝(μₜ, Σₜ)$:
 
-    Given Z₀∼𝓝(μ₀, Σ₀), then Zₜ∼𝓝(μₜ, Σₜ) for all $t$, with
+    $$\begin{aligned}
+        μₜ &= eᴬᵗμ₀ + ϕ₁(At)bt \\
+        Σₜ &= eᴬᵗΣ₀e^{Aᵀt} + ∫₀ᵗ e^{A(t-s)}Qe^{Aᵀ(t-s)}ds
+    \end{aligned}$$
 
-    .. math::
-        μₜ &= eᴬᵗμ₀ + φ₁(At)bt \\
-        Σₜ &= eᴬᵗΣ₀eᴬᵀᵗ + ??
+    The integral is evaluated with a block matrix exponential, including when
+    $A$ is singular.
 
     Args:
-        delta_t: The time-delta(s) to propagate for, of shape (..., $n).
-        z0: initial state given as a pair of mean and covariance matrix,
-            of shapes (..., d) and (..., d, d) respectively.
-        A: The system matrix of the linear ODE component, of shape (d, d).
-        Q: The diffusion matrix of the linear SDE component, of shape (d, d). Must be symmetric positive definite.
-        b: Optional affine bias of the linear ODE component, of shape (d,). If None, then no bias is applied.
+        delta_t: Time intervals to propagate over, with shape `(..., n)`.
+        z0: Initial mean and covariance, with shapes `(..., d)` and `(..., d, d)`.
+        A: Drift matrix with shape `(d, d)`.
+        Q: Symmetric positive semidefinite process covariance, with shape `(d, d)`.
+        b: Optional affine drift with shape `(d,)`. No bias is applied when `None`.
+
+    Returns:
+        mu: Propagated means with shape `(..., n, d)`.
+        cov: Propagated covariance, with shape `(..., n, d, d)`.
     """
     mu_0, sigma_0 = z0
     n = A.shape[-1]
@@ -133,20 +139,23 @@ class LinearGaussianFlow(nn.Module):
 
     That is, $z₀∼𝓝(μ₀, Σ₀)$ is propagated under the linear ODE/SDE
 
-    .. math:: dZₜ = AZₜdt + bdt + C dWₜ
+    $$ dZₜ = AZₜdt + bdt + C dWₜ $$
 
     Then, at time $t$ the solution is $zₜ∼𝓝(μₜ, Σₜ)$, where
 
-    .. math::
-        μₜ &= eᴬᵗμ₀ + φ₁(At)bt  \\
+    $$\begin{aligned}
+        μₜ &= eᴬᵗμ₀ + ϕ₁(At)bt  \\
         Σₜ &= eᴬᵗΣ₀e^{Aᵀt} + ∫₀ᵗ eᴬ⁽ᵗ⁻ˢ⁾ Q e^{Aᵀ(t-s)} ds
+    \end{aligned}$$
 
-    The last integral can be computed in closed form using a block matrix exponential.
+    Here $Q=CCᵀ$ is the process covariance. The integral is evaluated using
+    a block matrix exponential, which also supports singular drift matrices.
 
     References:
-        - | Computing integrals involving the matrix exponential
-          | Van Loan
-          | IEEE Transactions on Automatic Control, 1978
+        - Computing integrals involving the matrix exponential \
+          Van Loan \
+          IEEE Transactions on Automatic Control, 1978 \
+          <https://ieeexplore.ieee.org/document/1101743>
     """
 
     input_size: Final[int]
@@ -158,7 +167,7 @@ class LinearGaussianFlow(nn.Module):
     noise: Tensor  # C = √Q
 
     kernel_initialization: nn.Module
-    r"""MODULE: Optional Initialization of the drift kernel."""
+    r"""MODULE: Optional initialization of the drift kernel."""
     kernel_parametrization: nn.Module
     r"""MODULE: Optional parametrization of the drift kernel."""
 
@@ -243,9 +252,8 @@ class LinearGaussianFlow(nn.Module):
 class LinodenetProbabilistic(nn.Module):
     r"""Latent Gaussian-linear ODE Network.
 
-    - latent linear gaussian system
-    - Normalizing flow decoder
-    - special update rule for the latent parameters.
+    The model combines a latent linear Gaussian system, a normalizing flow
+    decoder, and an update rule for the latent distribution parameters.
 
     This version does not support missing values.
     """
@@ -305,21 +313,21 @@ class LinodenetProbabilistic(nn.Module):
         r"""Compute the posterior latent states.
 
         Args:
-            timestamps: The timestamps of the observations, of shape (..., $T).
+            timestamps: Combined context and query timestamps, with shape `(..., T)`.
                 Must be padded with NaN for missing values and must be non-decreasing.
             query_mask: The mask indicating which timestamps are valid queries,
-                of shape (..., $T, F). Must be padded with False for missing values.
-            context_values: The observed context values, of shape (..., $T, D).
+                of shape `(..., T, F)`. Must be padded with False for missing values.
+            context_values: The observed context values, of shape `(..., T, D)`.
                 Must be padded with NaN for missing values and must be sparse.
             context_mask: The mask indicating which context values are valid,
-                of shape (..., $T, D). Must be padded with False for missing values.
-            initial_state: Optional initial state of the latent ODE,
-                of shape (..., L). If None, then the initial state is inferred from the context.
-            initial_time: Optional initial time of the latent ODE,
-                of shape () or (...). If None, then the initial time is inferred from the timestamps.
+                of shape `(..., T, D)`. Each event must be fully observed or fully missing.
+            initial_state: Optional initial mean and covariance, with shapes
+                `(..., L)` and `(..., L, L)`. If `None`, uses the learned initial state.
+            initial_time: Optional initial time with shape `()` or `(...)`.
+                If `None`, uses the first timestamp.
 
         Returns:
-            A tuple of the predicted latent states and their covariances,
+            Posterior latent means and covariances at the combined event times.
         """
         # does not support missing values.
         assert torch.equal(context_mask.any(dim=-1), context_mask.all(dim=-1))
@@ -429,7 +437,7 @@ class LinodenetProbabilistic(nn.Module):
     ) -> Tensor:  # Float[..., $K]
         r"""Compute the time-marginal log-likelihood of the model.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p(Y(qₖ) = yₖ ∣ (t₁, y₁), …, (tₙ, yₙ)) $$
         """
         mean, cov = self.predict(
             query_times=query_times,
@@ -535,7 +543,10 @@ def make_linodenet(
     batch_first: bool = True,
     state_propagator: Mapping[str, Any] | None = None,
 ) -> LinodenetProbabilistic:
-    r"""Backward-compatible alias for :func:`make_linodenet_prob`."""
+    r"""Backward-compatible constructor alias.
+
+    See [`make_linodenet_prob`][imtskit_models.linodenet_probabilistic.make_linodenet_prob].
+    """
     return make_linodenet_prob(
         input_size=input_size,
         state_update=state_updater,
@@ -613,17 +624,22 @@ def make_linodenet_prob(
 
 
 class KoopmanFilter(nn.Module):
-    r"""Working title.
+    r"""Latent Gaussian filter with nonlinear, noisy observations.
 
-    - high dimensional latent space ℝᴺ, low dimensional data space ℝⁿ
-    - latent linear gaussian system.
-    - non-linear decoder g: ℝᴺ -> ℝᴺ (possibly normalizing flow)
-    - y = π(g(u)) + ε, π projection that drops last N-n coordinates, ε∼𝓝(0, R) noise
+    A linear Gaussian system evolves in latent space $ℝᴺ$. A nonlinear
+    decoder $g: ℝᴺ → ℝᴺ$ maps its states to observation coordinates, and
+    a projection $π$ retains the first $n$ coordinates, with $N ≥ n$:
 
-    Bound on the log-likelihood of partial observations:
+    $$ y = π(g(z)) + ε, \qquad ε∼𝓝(0, R) $$
 
-    .. math:: log p(y_obs) ≥ 𝐄_{z∼q(z)} [ log 𝓝(y_obs ∣ μ_obs(z), R_obs) ]
-        - KL(q(z) || 𝓝(μₜ⁻, Σₜ⁻))
+    Observations update the latent Gaussian through an iterated extended
+    Kalman filter. The decoder need not be invertible. Partial observations
+    admit the following variational bound:
+
+    $$\begin{aligned}
+        \log p(y_\text{obs}) &≥ 𝐄_{z∼q(z)}[\log 𝓝(y_\text{obs} ∣ μ_\text{obs}(z), R_\text{obs})] \\
+        &\quad - \KL(q(z)，𝓝(μₜ⁻, Σₜ⁻))
+    \end{aligned}$$
     """
 
     input_size: Final[int]
@@ -719,7 +735,7 @@ class KoopmanFilter(nn.Module):
         prior: tuple[Tensor, Tensor],
         /,
     ) -> Tensor:
-        r"""Compute ``KL(posterior || prior)`` for batched dense Gaussians."""
+        r"""Compute `KL(posterior || prior)` for batched dense Gaussians."""
         mean, cov = posterior
         prior_mean, prior_cov = prior
         prior_scale = cholesky(prior_cov)
@@ -767,21 +783,24 @@ class KoopmanFilter(nn.Module):
     ) -> tuple[Tensor, Tensor]:
         r"""Update a Gaussian state using a masked iterated extended Kalman filter.
 
-        The update applies Gauss--Newton to the MAP objective induced by the
+        The update applies Gauss–Newton to the MAP objective induced by the
         nonlinear Normal observation model. It is a Laplace approximation, not
-        the exact minimizer of the Gaussian ELBO returned by :meth:`log_prob`.
+        the exact minimizer of the Gaussian ELBO returned by `log_prob`.
 
         The iteration is:
 
-            # r = y - h(μ⁽ⁱ⁻¹⁾) - 𝐃h(μ⁽ⁱ⁻¹⁾)(μ₋ - μ⁽ⁱ⁻¹⁾)
-            # S = 𝐃h(μ⁽ⁱ⁻¹⁾) Σ₋ 𝐃h(μ⁽ⁱ⁻¹⁾)ᵀ + R
-            # K = Σ₋ 𝐃h(μ⁽ⁱ⁻¹⁾)ᵀ S⁻¹
-            # μ⁽ⁱ⁾ = μ₋ + K r
-            # Σ⁽ⁱ⁾ = Σ₋ - K S Kᵀ
+        $$\begin{aligned}
+            r &= y - h(μ⁽ⁱ⁻¹⁾) - 𝐃h(μ⁽ⁱ⁻¹⁾)(μ₋ - μ⁽ⁱ⁻¹⁾) \\
+            S &= 𝐃h(μ⁽ⁱ⁻¹⁾)Σ₋𝐃h(μ⁽ⁱ⁻¹⁾)ᵀ + R \\
+            K &= Σ₋𝐃h(μ⁽ⁱ⁻¹⁾)ᵀS⁻¹ \\
+            μ⁽ⁱ⁾ &= μ₋ + Kr \\
+            Σ⁽ⁱ⁾ &= Σ₋ - KSKᵀ
+        \end{aligned}$$
 
         References:
-            - | Algorithm 7.9, Bayesian Filtering and Smoothing, 2nd Edition
-              | Simo Särkkä and Lennart Svensson
+            - Bayesian Filtering and Smoothing, 2nd Edition \
+              Simo Särkkä and Lennart Svensson \
+              Algorithm 7.9
         """
         assert n_iter >= 1
         assert mask is None or (mask.shape == y_obs.shape and mask.dtype == torch.bool)
@@ -961,9 +980,9 @@ class KoopmanFilter(nn.Module):
 
         The nonlinear decoder makes the predictive density intractable in
         general. This therefore returns a Monte Carlo estimate of a *lower
-        bound* on ``log p(values | context)`` rather than an exact log-density.
+        bound* on `log p(values | context)` rather than an exact log-density.
         `num_samples` controls the reparameterized expectation under the
-        Gaussian iEKF posterior; it must not exceed ``max_num_samples``.
+        Gaussian iEKF posterior; it must not exceed `max_num_samples`.
         """
         return self.log_prob_bound(
             values,
@@ -991,7 +1010,7 @@ class KoopmanFilter(nn.Module):
         initial_time: Tensor | None = None,
         num_samples: int = 16,
     ) -> Tensor:
-        r"""Return the Monte Carlo ELBO used by :meth:`log_prob`.
+        r"""Return the Monte Carlo estimate of the observation ELBO.
 
         This is an estimated lower bound, not an exact marginal log-likelihood.
         Common random numbers are used only to make equivalent batch layouts
