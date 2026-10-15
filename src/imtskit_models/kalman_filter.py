@@ -1144,7 +1144,7 @@ class DiscreteTimeKalmanFilter(nn.Module):
             steps, context_values, context_mask, valid_steps, strict=True
         ):
             # Within the loop we use batch-first.
-            delta = torch.where(active, step_obs - step, 0.0)
+            delta = torch.where(active, step_obs - step, 0)
             step = torch.where(active, step_obs, step)
 
             # Propagate forward in discrete time.
