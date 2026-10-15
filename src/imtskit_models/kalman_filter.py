@@ -1,4 +1,4 @@
-r"""Discrete Kalman Filter implementation."""
+r"""Continuous- and discrete-time Kalman filters with masked observations."""
 
 __all__ = [
     "ContinuousTimeKalmanFilter",
@@ -195,25 +195,28 @@ def marginal_gaussian_sample_and_log_prob(
 
 
 class ContinuousTimeKalmanFilter(nn.Module):
-    r"""Continuous time, time-invariant Kalman Filter.
+    r"""Continuous-time Kalman filter with time-invariant dynamics.
 
-    .. math::
-        ∂ₜxₜ &= Fxₜ + wₜ  &  wₜ &∼ 𝓝(0, Qₜ)  \\
-          yₜ &= Hxₜ + vₜ  &  vₜ &∼ 𝓝(0, Rₜ)
+    The latent state follows a linear SDE, with discrete Gaussian observations:
 
-    In the case of missing data, substitute $yₜ← Sₜ⋅yₜ$, $Hₜ ← Sₜ⋅Hₜ$ and
-    $Rₜ ← Sₜ⋅Rₜ⋅Sₜᵀ$ where $Sₜ$ is the $\abs{mₜ}×m$ projection matrix of the missing values.
+    $$\begin{aligned}
+        dxₜ &= Fxₜdt + LdWₜ, & Q &= LLᵀ \\
+         yₖ &= Hx(tₖ) + vₖ,  & vₖ &∼ 𝓝(0, R)
+    \end{aligned}$$
 
-    In this case, with $∏ₘ = S⁺S = \diag(mₜ)$
+    A selection matrix $S$ retains the observed features. For prior mean
+    $x̂$ and covariance $P$, the masked measurement update is
 
-    .. math::
-        x̂' &= x̂ + P⋅Hᵀ⋅Sᵀ(SHPHᵀSᵀ + SRSᵀ)⁻¹ (Sy - SHx̂) \\
-           &= x̂ + P⋅Hᵀ⋅Sᵀ(S (HPHᵀ + R) Sᵀ)⁻¹ S(y - Hx̂) \\
-           &= x̂ + P⋅Hᵀ⋅(S⁺S)ᵀ (HPHᵀ + R)⁻¹ (S⁺S) (y - Hx̂) \\
-           &= x̂ + P⋅Hᵀ⋅∏ₘᵀ (HPHᵀ + R)⁻¹ ∏ₘ (y - Hx̂) \\
-        P' &= P - P⋅Hᵀ⋅Sᵀ(S H P⁻¹ Hᵀ Sᵀ + SRSᵀ)⁻¹ SH P⁻¹ \\
-           &= P - P⋅Hᵀ⋅(S⁺S)ᵀ (H P⁻¹ Hᵀ + R)⁻¹ (S⁺S) H P⁻¹ \\
-           &= P - P⋅Hᵀ⋅∏ₘᵀ (H P⁻¹ Hᵀ + R)⁻¹ ∏ₘ H P⁻¹
+    $$\def\obs{\mathsf{obs}}\begin{aligned}
+        H_{\obs} &= SH, \qquad R_{\obs} = SRSᵀ \\
+        V &= H_{\obs}PH_{\obs}ᵀ + R_{\obs} \\
+        K &= PH_{\obs}ᵀV⁻¹ \\
+        x̂' &= x̂ + K(Sy - H_{\obs}x̂) \\
+        P' &= (𝕀 - KH_{\obs})P(𝕀 - KH_{\obs})ᵀ + KR_{\obs}Kᵀ
+    \end{aligned}$$
+
+    The implementation uses a padded masked system and the Joseph covariance
+    update. Events with no observed features retain their prior state.
     """
 
     input_size: Final[int]
@@ -601,7 +604,7 @@ class ContinuousTimeKalmanFilter(nn.Module):
     ) -> Tensor:  # Float[..., $K]
         r"""Compute the time-marginal log-likelihood of the model.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ)) $$
         """
         mean, cov = self.predict(
             query_times=query_times,
@@ -634,7 +637,7 @@ class ContinuousTimeKalmanFilter(nn.Module):
     ) -> Tensor:  # (*S, ..., $K, D)
         r"""Sample from the time-marginal distribution.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ)) $$
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, cov = self.predict(
@@ -669,7 +672,7 @@ class ContinuousTimeKalmanFilter(nn.Module):
     ) -> tuple[Tensor, Tensor]:  # Float[*S, ..., $K, D], Float[*S, ..., $K]
         r"""Sample from the time-marginal distribution and yield log-probabilities.
 
-        .. math:: pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ))
+        $$ pₖ = p_{Y_{qₖ}}(yₖ | (t₁, y₁), ..., (tₙ, yₙ)) $$
         """
         sample_shape = (size,) if isinstance(size, int) else size
         mean, cov = self.predict(
@@ -780,12 +783,12 @@ class ContinuousTimeKalmanFilter(nn.Module):
         r"""Compute Kalman gain $K = P Hᵀ S⁻¹$.
 
         Args:
-            P: Prior covariance Σₖ of shape ``(*B, n, n)``.
-            H: Masked observation matrix H of shape ``(*B, m, n)``.
-            R: Masked measurement covariance of shape ``(*B, m, m)``.
+            P: Prior covariance Σₖ of shape `(*B, n, n)`.
+            H: Masked observation matrix H of shape `(*B, m, n)`.
+            R: Masked measurement covariance of shape `(*B, m, m)`.
 
         Returns:
-            K: Kalman gain of shape ``(*B, n, m)``.
+            K: Kalman gain of shape `(*B, n, m)`.
         """
         S = R + einsum("...ik, ...kl, ...jl -> ...ij", H, P, H)
 
@@ -811,18 +814,18 @@ class ContinuousTimeKalmanFilter(nn.Module):
         H: Tensor,
         R: Tensor,
     ) -> Tensor:
-        """Compute Joseph form update for covariance.
+        r"""Compute the Joseph covariance update.
 
-        Σₖ' = (I - KH) Σₖ (I - KH)ᵀ + K R Kᵀ
+        $$ Σₖ' = (𝕀 - KH)Σₖ(𝕀 - KH)ᵀ + KRKᵀ $$
 
         Args:
-            P: Prior covariance Σₖ of shape (*B, n, n)
-            K: Kalman gain K of shape (*B, n, m)
-            H: Masked observation matrix H of shape (*B, m, n)
-            R: Masked measurement covariance of shape (*B, m, m)
+            P: Prior covariance $Σₖ$ with shape `(*B, n, n)`.
+            K: Kalman gain with shape `(*B, n, m)`.
+            H: Masked observation matrix with shape `(*B, m, n)`.
+            R: Masked measurement covariance with shape `(*B, m, m)`.
 
         Returns:
-            P_new: Updated covariance Σₖ' of shape (*B, n, n)
+            P_new: Updated covariance $Σₖ'$ with shape `(*B, n, n)`.
         """
         I_KH = self.identity_matrix - einsum("...ik, ...kj -> ...ij", K, H)
         P_new = (
@@ -835,9 +838,10 @@ class ContinuousTimeKalmanFilter(nn.Module):
 class DiscreteTimeKalmanFilter(nn.Module):
     r"""Discrete, time-invariant Kalman Filter.
 
-    .. math::
-        xₖ₊₁ &= Fxₖ + wₖ   &   wₖ &~ N(0, Q) \\
-        yₖ   &= Hxₖ + vₖ   &   vₖ &~ N(0, R)
+    $$\begin{aligned}
+        xₖ₊₁ &= Fxₖ + wₖ   &   wₖ &∼ 𝓝(0, Q) \\
+        yₖ   &= Hxₖ + vₖ   &   vₖ &∼ 𝓝(0, R)
+    \end{aligned}$$
     """
 
     input_size: Final[int]
@@ -1392,12 +1396,12 @@ class DiscreteTimeKalmanFilter(nn.Module):
         r"""Compute Kalman gain $K = P Hᵀ S⁻¹$.
 
         Args:
-            P: Prior covariance Σₖ of shape ``(*B, n, n)``.
-            H: Masked observation matrix Hₖ of shape ``(*B, m, n)``.
-            R: Masked measurement covariance Rₖ of shape ``(*B, m, m)``.
+            P: Prior covariance Σₖ of shape `(*B, n, n)`.
+            H: Masked observation matrix Hₖ of shape `(*B, m, n)`.
+            R: Masked measurement covariance Rₖ of shape `(*B, m, m)`.
 
         Returns:
-            K: Kalman gain of shape ``(*B, n, m)``
+            K: Kalman gain of shape `(*B, n, m)`
         """
         S = R + einsum("...ik, ...kl, ...jl -> ...ij", H, P, H)
 
@@ -1424,16 +1428,16 @@ class DiscreteTimeKalmanFilter(nn.Module):
     ) -> Tensor:
         r"""Compute Joseph form update for covariance.
 
-        .. math:: Σₖ' = (I - KH) Σₖ (I - KH)ᵀ + K R Kᵀ
+        $$ Σₖ' = (I - KH) Σₖ (I - KH)ᵀ + K R Kᵀ $$
 
         Args:
-            P: Prior covariance Σₖ of shape ``(*B, n, n)``
-            K: Kalman gain K of shape ``(*B, n, m)``
-            H: Masked observation matrix H of shape ``(*B, m, n)``
-            R: Masked measurement covariance of shape ``(*B, m, m)``
+            P: Prior covariance Σₖ of shape `(*B, n, n)`
+            K: Kalman gain K of shape `(*B, n, m)`
+            H: Masked observation matrix H of shape `(*B, m, n)`
+            R: Masked measurement covariance of shape `(*B, m, m)`
 
         Returns:
-            P_new: Updated covariance Σₖ' of shape ``(*B, n, n)``
+            P_new: Updated covariance Σₖ' of shape `(*B, n, n)`
         """
         I_KH = self.identity_matrix - einsum("...ik, ...kj -> ...ij", K, H)
         P_new = (
