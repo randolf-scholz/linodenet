@@ -228,15 +228,15 @@ class ProbabilisticLSSM(Protocol):
 
     The corresponding state updates can operate in observation or latent space:
 
-    1. $ωₜ' = f(ωₜ, yₒᵦₛ)$, followed by $θₜ' = ϕ⁻¹(ωₜ')$.
-    2. $θₜ' = g(θₜ, ϕ, yₒᵦₛ)$.
+    1. $ωₜ' = f(ωₜ, y_{\mathsf{obs}})$, followed by $θₜ' = ϕ⁻¹(ωₜ')$.
+    2. $θₜ' = g(θₜ, ϕ, y_{\mathsf{obs}})$.
 
     Exact Bayesian updates are generally intractable. A possible approximation
     is a gradient step on a variational loss:
 
-    $$ ℒ = Dₖₗ(p(x∣θₜ) ∥ p(x∣θₜ')) - 𝐄_{x∼p(x∣θₜ)}[\log p(yₒᵦₛ∣x)] $$
+    $$ ℒ = Dₖₗ(p(x∣θₜ) ∥ p(x∣θₜ')) - 𝐄_{x∼p(x∣θₜ)}[\log p(y_{\mathsf{obs}}∣x)] $$
 
     For $y = g(x) + ε$ with $ε ∼ 𝓝(0, R)$, the observation log-density is
 
-    $$ \log p(yₒᵦₛ ∣ x) = \mathrm{const} - ½(yₒᵦₛ - g(x))ᵀR⁻¹(yₒᵦₛ - g(x)) $$
+    $$ \log p(y_{\mathsf{obs}} ∣ x) = \mathrm{const} - ½(y_{\mathsf{obs}} - g(x))ᵀR⁻¹(y_{\mathsf{obs}} - g(x)) $$
     """
