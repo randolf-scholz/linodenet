@@ -614,10 +614,10 @@ class LearnableLRS(nn.Module):
         r"""Compute the forward flow and its log absolute Jacobian determinant.
 
         Args:
-            x: input tensor of shape `(..., *n_heads, $K)`
+            x: input tensor of shape `(..., *n_heads, K)`
 
         Returns:
-            y: transformed tensor of shape `(..., *n_heads, $K)`
+            y: transformed tensor of shape `(..., *n_heads, K)`
             ldj: log determinant of the Jacobian of shape `(..., *n_heads)`
         """
         batch_shape = x.shape[: -len(self.n_heads)] if self.n_heads else x.shape
@@ -636,10 +636,10 @@ class LearnableLRS(nn.Module):
         r"""Compute the inverse flow and its log absolute Jacobian determinant.
 
         Args:
-            y: Input tensor of shape `(..., *n_heads, $K)`.
+            y: Input tensor of shape `(..., *n_heads, K)`.
 
         Returns:
-            x: transformed tensor of shape `(..., *n_heads, $K)`
+            x: transformed tensor of shape `(..., *n_heads, K)`
             ldj: log determinant of the Jacobian of shape `(..., *n_heads)`
         """
         batch_shape = y.shape[: -len(self.n_heads)] if self.n_heads else y.shape
@@ -961,8 +961,12 @@ class SplineFlow(ModuleSequence[LearnableLRS]):
 def inverse_softplus(y: Tensor) -> Tensor:
     r"""Compute the inverse of the softplus function.
 
-    y = softplus(x) = log(1 + exp(x))
-    x = inverse_softplus(y) = log(exp(y) - 1) = y + log(1 - exp(-y)) = y + log(-expm1(-y))
+    For $y=\log(1+eˣ)>0$, the inverse is
+
+    $$ x = \log(eʸ-1) = y + \log(1-e⁻ʸ) $$
+
+    The implementation evaluates the last term as `log(-expm1(-y))` to avoid
+    cancellation near zero.
     """
     return y + torch.log(-torch.expm1(-y))
 
@@ -973,13 +977,13 @@ class MultiHeadGaussian(nn.Module):
     normalization_constant: Tensor
     r"""CONST: Normalization constant of a Gaussian distribution."""
     num_heads: Final[int]
-    r"""CONST: Shape of heads"""
+    r"""CONST: Shape of heads."""
     num_features: Final[int]
     r"""CONST: Number of features in input."""
 
     # parameters/buffers
     means: Tensor
-    r"""PARAM: Means of the gaussians."""
+    r"""PARAM: Means of the Gaussians."""
     scale_tril: Tensor  # shape: (n_gaussians, n_inputs, n_inputs)
     r"""PARAM: Parameters determining the covariances."""
 
@@ -987,7 +991,7 @@ class MultiHeadGaussian(nn.Module):
     eye: Tensor
     r"""BUFFER: Identity matrix."""
     covs: Tensor
-    r"""BUFFER: Covariances of the gaussians."""
+    r"""BUFFER: Covariances of the Gaussians."""
     cholesky_factor: Tensor  # shape: (n_gaussians, n_inputs, n_inputs)
     r"""BUFFER: Cholesky factor of the covariance matrix."""
     samples: Tensor
@@ -1102,15 +1106,24 @@ class MultiHeadGaussian(nn.Module):
     ) -> MultiHeadGaussian:
         r"""Condition the distribution on the given indices and values.
 
+        For a joint Gaussian $p(u,v)=𝓝(μ,Σ)$ with mean blocks $μᵤ, μᵥ$ and
+        covariance blocks $Σᵤᵤ, Σᵤᵥ, Σᵥᵤ, Σᵥᵥ$, the conditional distribution is
+
+        $$ p(u∣v=v⁎) = 𝓝(μᵤ + ΣᵤᵥΣᵥᵥ⁻¹(v⁎-μᵥ), Σᵤᵤ - ΣᵤᵥΣᵥᵥ⁻¹Σᵥᵤ) $$
+
+        The implementation factors $Σᵥᵥ=LLᵀ$ and uses triangular solves:
+
+        $$\begin{aligned}
+            S &= L⁻¹Σᵥᵤ, & s &= L⁻¹(v⁎-μᵥ) \\
+            μᵤ∣ᵥ &= μᵤ + Sᵀs, & Σᵤ∣ᵥ &= Σᵤᵤ - SᵀS
+        \end{aligned}$$
+
         Args:
-            variables: The indices to condition on.
-            values: The values to condition on.
+            variables: Indices of the features to condition on.
+            values: Observed values for those features.
 
-        Given p(u,v) = 𝓝(μ, Σ), μ=[μᵤ, μᵥ], Σ=[[Σᵤᵤ, Σᵤᵥ], [Σᵥᵤ, Σᵥᵥ]],
-        the conditional distribution is given by
-
-        p(u∣v=v⁎) = 𝓝(u ∣ μᵤ + Σᵤᵥ Σᵥᵥ⁻¹ (v⁎-μᵥ), Σᵤᵤ - Σᵤᵥ Σᵥᵥ⁻¹ Σᵥᵤ)
-        note that for the cholesky factorization,
+        Returns:
+            A new Gaussian over the remaining features, with copied parameters.
         """
         device = self.means.device
         values = torch.as_tensor(values, device=device)
@@ -1159,15 +1172,15 @@ class MultiHeadGaussian(nn.Module):
         return cond_model
 
     def _map_diagonal(self, diag: Tensor) -> Tensor:
-        r"""Map the diagonal of the cholesky factor to positive values."""
+        r"""Map the diagonal of the Cholesky factor to positive values."""
         return F.softplus(diag) + 1e-6
 
     def _map_diagonal_inverse(self, diag: Tensor) -> Tensor:
-        r"""Map the diagonal of the cholesky factor to unconstrained values."""
+        r"""Map the diagonal of the Cholesky factor to unconstrained values."""
         return inverse_softplus(diag - 1e-6)
 
     def get_cholesky(self) -> Tensor:
-        r"""Compute cholesky factor of covariance matrix."""
+        r"""Compute Cholesky factor of covariance matrix."""
         lower = self.scale_tril.tril()
         diag = lower.diagonal(dim1=-2, dim2=-1)
         diag = self._map_diagonal(diag)
@@ -1176,33 +1189,33 @@ class MultiHeadGaussian(nn.Module):
         return self.cholesky_factor
 
     def get_covariance(self) -> Tensor:
-        r"""Compute covariance matrix from cholesky factor."""
+        r"""Compute covariance matrix from Cholesky factor."""
         L = self.get_cholesky()  # M x D x D
         self.covs = torch.einsum("mij,mkj->mik", L, L)  # L Lᵀ
         return self.covs
 
     def forward(self, x: Tensor) -> Tensor:
-        r"""Transform $x -> y = Lx + μ$.
+        r"""Transform $x ↦ y = Lx + μ$.
 
         Args:
-            x (..., H, D): input tensor
+            x: Input tensor with shape `(..., H, D)`.
 
         Returns:
-            y (..., H, D): transformed tensor
+            y: Transformed tensor with shape `(..., H, D)`.
         """
         L = self.get_cholesky()
         y = self.means + torch.einsum("...mj, mij -> ...mi", x, L)
         return y
 
     def inverse(self, y: Tensor) -> tuple[Tensor, Tensor]:
-        r"""Transform $y -> x = L⁻¹(y-μ)$.
+        r"""Transform $y ↦ x = L⁻¹(y-μ)$.
 
         Args:
-            y (..., H, D): input tensor
+            y: Input tensor with shape `(..., H, D)`.
 
         Returns:
-            x (..., H, D): transformed tensor
-            ldj (H): log determinant of the Jacobian
+            x: Transformed tensor with shape `(..., H, D)`.
+            ldj: Log absolute Jacobian determinant with shape `(H,)`.
         """
         L = self.get_cholesky()
 
@@ -1224,11 +1237,11 @@ class MultiHeadGaussian(nn.Module):
         r"""Sample from the model.
 
         Args:
-            size (int | tuple[int, ...]): size of the sample
+            size: Leading sample shape.
             rng: Optional random number generator to use for sampling.
 
         Returns:
-            u (..., H, D): sample
+            u: Sample with shape `(..., H, D)`.
         """
         shape = (size,) if isinstance(size, int) else size
         shape = (*shape, self.num_heads, self.num_features)
@@ -1245,10 +1258,10 @@ class MultiHeadGaussian(nn.Module):
         r"""Compute the log-likelihood of the input.
 
         Args:
-            u (..., H, D): input tensor
+            u: Input tensor with shape `(..., H, D)`.
 
         Returns:
-            log_prob (..., H): log likelihood
+            log_prob: Log-likelihoods with shape `(..., H)`.
         """
         self.latents = u  # store buffer for post-hoc analysis
 
@@ -1282,7 +1295,7 @@ class MarginalizableNormalizingFlow(nn.Module):
 
     # buffers
     mixture_weights: Tensor
-    r"""BUFFER: Mixture weights of the gaussians."""
+    r"""BUFFER: Mixture weights of the Gaussians."""
     mixture_logits: Tensor
     r"""BUFFER: Mixture weight logits log wₖ."""
     sample_indices: Tensor
@@ -1454,7 +1467,6 @@ class MarginalizableNormalizingFlow(nn.Module):
         Since p(x) = ∑ₖ wₖpₖ(f⁻¹(x))|det Jₖ(f⁻¹(x))|, we can compute the conditional mixture weights as follows:
         we have p(x∣y) = ∑ₖ wₖ'pₖ(f⁻¹(x)∣y)|det Jₖ(f⁻¹(x))|,
         where log wₖ' = log wₖ + log pₖ(y) - log p(y).
-
         """
         device = self.mixture_params.device
         dtype = self.mixture_params.dtype
@@ -1499,8 +1511,8 @@ class PositionalEmbedding(nn.Module):
     r"""Time2Vec positional embedding.
 
     References:
-        Time2Vec: Learning a Vector Representation of Time
-        https://arxiv.org/abs/1907.05321
+        - Time2Vec: Learning a Vector Representation of Time \
+          <https://arxiv.org/abs/1907.05321>
     """
 
     def __init__(self, num_frequencies: int) -> None:
@@ -1538,8 +1550,10 @@ class ChannelEmbedding(nn.Module):
 class MultiHeadAttention(nn.Module):
     r"""Computes residual multi-head attention.
 
-    .. math:: hᵢ &= Attn(QWᵢ𐞥, KWᵢᵏ, VWᵢᵛ)    \\
-               y &= Q + concat(h₁, …, h_H)Wᵒ
+    $$\begin{aligned}
+        hᵢ &= \operatorname{Attn}(QWᵢᵠ, KWᵢᵏ, VWᵢᵛ)    \\
+        y &= Q + \operatorname{concat}(h₁, …, h_{H})Wᵒ
+    \end{aligned}$$
     """
 
     def __init__(
@@ -1614,16 +1628,16 @@ class MultiHeadAttention(nn.Module):
 class MixtureWeightsModel(nn.Module):
     r"""Implements the mixture model used by moses.
 
-    Given mixture-query embeddings ``β ∈ ℝᶜˣᴹ`` and a sequence of encoder
-    embeddings ``h ∈ ℝᴺˣᴰ``, this module returns one mixture log-weight vector
+    Given mixture-query embeddings `β ∈ ℝᶜˣᴹ` and a sequence of encoder
+    embeddings `h ∈ ℝᴺˣᴰ`, this module returns one mixture log-weight vector
     per batch element.
 
     The paper writes
 
-    .. math:: w = softmax(MHA(β, 𝐡, 𝐡)).
+    $$ w = softmax(MHA(β, 𝐡, 𝐡)) $$
 
     We interpret this as a shorthand for the attention map induced by the
-    learned queries ``β`` over the sequence ``h``: multi-head attention
+    learned queries `β` over the sequence `h`: multi-head attention
     produces one attended embedding per query, which is then projected to a
     scalar logit and normalized across the query axis.
     """
@@ -1696,12 +1710,12 @@ class MixtureWeightsModel(nn.Module):
         r"""Compute one mixture log-weight vector per batch element.
 
         Args:
-            embeddings: Sequence embeddings with shape ``(..., $N, M)``.
+            embeddings: Sequence embeddings with shape `(..., N, M)`.
             valid_mask: Optional boolean mask selecting valid sequence entries.
                 If omitted, it is inferred from finite rows of `embeddings`.
 
         Returns:
-            Mixture log-weights with shape ``(..., D)``. Each batch element
+            Mixture log-weights with shape `(..., D)`. Each batch element
             log-normalizes across the mixture-query axis.
         """
         *batch_shape, seq_len, dim = embeddings.shape
@@ -1801,13 +1815,17 @@ class MixtureWeightsModel(nn.Module):
 
 
 class SeparableEncoder(nn.Module):
-    r"""Implements the encoder used by moses.
+    r"""Encode context observations and query positions with attention.
 
-    .. math::
-        𝐱 = [pos_embed(t), one-hot(c), v]
-        𝐪 = [pos_embed(t), one-hot(c)]
-        𝐡ᵒᵇˢ = MHA(Wˣ𝐱, Wˣ𝐱, Wˣ𝐱)
-        𝐡 = Wʰ MHA(Wᵠ𝐪, 𝐡ᵒᵇˢ, 𝐡ᵒᵇˢ)
+    $$
+    \def\onehot{\operatorname{one\_hot}}
+    \def\posembed{\operatorname{pos\_embed}}
+    \begin{aligned}
+        𝐱 &= [\posembed(t), \onehot(c), v] \\
+        𝐪 &= [\posembed(t), \onehot(c)] \\
+        𝐡ᵒᵇˢ &= \operatorname{MHA}(Wˣ𝐱, Wˣ𝐱, Wˣ𝐱) \\
+        𝐡 &= Wʰ\operatorname{MHA}(Wᵠ𝐪, 𝐡ᵒᵇˢ, 𝐡ᵒᵇˢ)
+    \end{aligned}$$
     """
 
     def __init__(
@@ -1860,30 +1878,30 @@ class SeparableEncoder(nn.Module):
         context_values: Tensor,  # Float[..., $X], padded with NaN
         context_valid: Tensor | None = None,  # Bool[..., $X],
     ) -> tuple[Tensor, Tensor]:  # Float[..., $X, M], Float[..., *H, $Q, M]
-        r"""Compute per-query embeddings and mixture weights.
+        r"""Compute context embeddings and embeddings for each query and head.
 
         Args:
-            query_times: Query timestamps with shape ``(..., $Q)``.
-                Invalid or padded positions should be encoded as ``NaN``
+            query_times: Query timestamps with shape `(..., Q)`.
+                Invalid or padded positions should be encoded as `NaN`
                 when `query_valid` is omitted.
-            query_channels: Query channel indices with shape ``(..., $Q)``.
-                Invalid or padded positions should be encoded as ``-1``.
-            query_valid: Optional boolean mask with shape ``(..., $Q)`` marking
+            query_channels: Query channel indices with shape `(..., Q)`.
+                Invalid or padded positions should be encoded as `-1`.
+            query_valid: Optional boolean mask with shape `(..., Q)` marking
                 valid query positions. If omitted, validity is inferred from `query_times`.
-            context_times: Context timestamps with shape ``(..., $X)``.
-                Invalid or padded positions should be encoded as ``NaN``
+            context_times: Context timestamps with shape `(..., X)`.
+                Invalid or padded positions should be encoded as `NaN`
                 when `context_valid` is omitted.
-            context_channels: Context channel indices with shape ``(..., $X)``.
-                Invalid or padded positions should be encoded as ``-1``.
-            context_values: Context values with shape ``(..., $X)``.
-                Invalid or padded positions should be encoded as ``NaN``.
-            context_valid: Optional boolean mask with shape ``(..., $X)``
+            context_channels: Context channel indices with shape `(..., X)`.
+                Invalid or padded positions should be encoded as `-1`.
+            context_values: Context values with shape `(..., X)`.
+                Invalid or padded positions should be encoded as `NaN`.
+            context_valid: Optional boolean mask with shape `(..., X)`
                 marking valid context positions. If omitted, validity is
                 inferred from `context_times` and `context_values`.
 
         Returns:
-            𝐡ᵒᵇˢ: Context embeddings with shape ``(..., $X, M)``.
-            𝐡: Per-query embeddings with shape ``(..., D, $Q, M)``.
+            𝐡ᵒᵇˢ: Context embeddings with shape `(..., X, M)`.
+            𝐡: Per-query embeddings with shape `(..., *head_shape, Q, M)`.
         """
         qry_valid = ~query_times.isnan() if query_valid is None else query_valid
         ctx_valid = (
@@ -1931,22 +1949,20 @@ class SeparableEncoder(nn.Module):
 
 
 class ConditionalGaussian(nn.Module):
-    r"""Implements the conditional Gaussian distribution used by moses.
+    r"""Conditional Gaussian with a low-rank covariance update.
 
-    This implementation has one small tweak compared to the original paper:
-    We add a learnable covariance scale parameter $σ$, that is we parametrize:
+    Compared with the original model, this implementation adds a learnable
+    positive isotropic covariance scale $σ$:
 
-    .. math::   μ(𝐡) = 𝐡W    \qquad    Σ(𝐡) = σ²𝕀 + (𝐡θ)(𝐡θ)ᵀ/√M.
+    $$ μ(𝐡) = 𝐡W, \qquad Σ(𝐡) = σ²𝕀 + (𝐡θ)(𝐡θ)ᵀ/(4M) $$
 
-    Given context embedding $𝐡∈ℝ^{D×K×M}$, where
+    The context embedding $𝐡$ has shape `(..., *head_shape, K, M)`, where
+    $K$ is the number of query values and $M$ is the embedding dimension.
+    In a mixture model, the head dimension indexes mixture components.
+    The configured covariance rank $r$ determines the number of columns in $𝐡θ$.
 
-        D: number of mixture components
-        K: number of query values
-        M: dimensionality of each embedding,
-
-    Since $Σ(𝐡)$ is a low-rank update of an isotropic covariance, we can compute
-    the log-likelihood and sample from the distribution efficiently using the
-    Woodbury identity in $O(MK²)$ time instead of $O(K³)$ time.
+    The Woodbury identity reduces density evaluation to an $r×r$ solve, with
+    cost $O(Kr²+r³)$ per component instead of a dense $O(K³)$ factorization.
     """
 
     eye: Tensor
@@ -2101,7 +2117,7 @@ class ConditionalGaussian(nn.Module):
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
         rng: Generator | None = None,
     ) -> Tensor:  # Float[*S, ..., *H, $K]
-        r"""Sample a Gaussian distribution from the conditional distribution."""
+        r"""Draw samples from the conditional Gaussian distribution."""
         mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
         return self._sample(size, mean, cov_factor, cov_scale, rng=rng)
 
@@ -2114,7 +2130,7 @@ class ConditionalGaussian(nn.Module):
         valid_mask: Tensor | None = None,  # Bool[..., *H, $K]
         rng: Generator | None = None,
     ) -> tuple[Tensor, Tensor]:  # Float[*S, ..., *H, $K], Float[*S, ..., *H]
-        r"""Sample a Gaussian distribution from the conditional distribution."""
+        r"""Draw samples from the conditional Gaussian distribution."""
         mean, cov_factor, cov_scale = self.embed(context, valid_mask=valid_mask)
         samples = self._sample(size, mean, cov_factor, cov_scale, rng=rng)
         log_prob = self._log_prob(
@@ -2126,23 +2142,23 @@ class ConditionalGaussian(nn.Module):
 class Moses(nn.Module):
     r"""Context-conditioned mixture normalizing flow for irregular time-series forecasting.
 
-    Combines a separable encoder with a per-query mixture of spline flows.  The
-    encoder maps context observations and query positions to per-query
-    embeddings ``H (..., $K, M)``, which are projected to per-query mixture
-    logits and Gaussian means.  One learned spline flow per mixture component
-    maps Gaussian latents to the data space.
+    A separable encoder maps observations to context embeddings and query
+    positions to component-specific embeddings with shape `(..., D, K, M)`.
+    Context embeddings determine one mixture-weight vector per batch element.
+    Query embeddings condition each component's Gaussian distribution and
+    coordinate-wise spline flow. Each Gaussian can correlate query values
+    through its low-rank covariance factor.
 
-    Since the spline flows have context-independent parameters, the analytical
-    marginalisation property of `MarginalizableNormalizingFlow` is
-    preserved (though not yet exposed on this class).
+    Sampling draws one mixture component for the entire query vector. Density
+    evaluation combines the component joint densities with those mixture weights.
 
     Args:
-        input_dim: Number of observed channels ``E``.
-        latent_dim: GraFITi / linear-projection embedding size ``M``.
-        num_mixture_components: Number of mixture components ``D``.
+        input_dim: Number of observed channels `E`.
+        latent_dim: GraFITi / linear-projection embedding size `M`.
+        num_mixture_components: Number of mixture components `D`.
         num_flow_layers: Number of spline layers per component.
         num_bins: Number of rational-spline bins.
-        bounds: Symmetric spline input/output domain ``(lo, hi)``.
+        bounds: Symmetric spline input/output domain `(lo, hi)`.
         num_encoder_heads: Number of separable-encoder attention heads.
         covariance_rank: Low-rank covariance factor rank for the conditional Gaussian.
     """
@@ -2338,19 +2354,20 @@ class Moses(nn.Module):
     ) -> Tensor:  # (*S, ...)
         r"""Compute the joint log-likelihood of the target values.
 
-        Evaluates the marginal mixture-flow log-prob at each query position
-        and sums across query positions (joint under independence).
+        Evaluates each component's joint Gaussian density and flow Jacobian,
+        then combines the component scores with the context-dependent mixture
+        weights. Query values can be correlated within each component.
 
         Args:
             values: Observed target values; finite at every `True` position in `query_mask`.
             query_times: Sorted time stamps for all query time steps.
             query_mask: Boolean mask selecting query (target) positions.
             context_times: Sorted time stamps for all context time steps.
-            context_values: Context observations; ``NaN`` at unobserved positions.
+            context_values: Context observations; `NaN` at unobserved positions.
             context_mask: Boolean mask selecting observed context positions.
 
         Returns:
-            Joint log-likelihood with shape ``(*S, ...)``.
+            Joint log-likelihood with shape `(*S, ...)`.
         """
         sample_shape = values.shape[:-2]
         context_times = context_times.expand(*sample_shape, -1)
@@ -2380,19 +2397,19 @@ class Moses(nn.Module):
         context_mask: Tensor,  # Bool[..., $X, E], padded False
         rng: Generator | None = None,
     ) -> Tensor:  # (*S, ..., $Q, F)
-        r"""Sample from the conditional marginal distribution at each query position.
+        r"""Sample joint query vectors from the conditional mixture distribution.
 
         Args:
-            size: Number of samples (leading sample dimensions ``*S``).
+            size: Number of samples (leading sample dimensions `*S`).
             query_times: Sorted time stamps for all query time steps.
             query_mask: Boolean mask selecting query (target) positions.
             context_times: Sorted time stamps for all context time steps.
-            context_values: Context observations; ``NaN`` at unobserved positions.
+            context_values: Context observations; `NaN` at unobserved positions.
             context_mask: Boolean mask selecting observed context positions.
             rng: Optional random number generator to use for sampling.
 
         Returns:
-            Samples with shape ``(*S, ..., $Q, F)``, ``NaN`` at non-query positions.
+            Samples with shape `(*S, ..., Q, F)`, `NaN` at non-query positions.
         """
         triplets = TripletTimeData.from_request(
             context_times=context_times,
