@@ -921,7 +921,9 @@ def test_bifurcation_models(model_name: str) -> None:
         num_steps=NUM_STEPS,
         device=DEVICE,
     )
-    model, loss_history = run_experiment(model_name, {}, dataset)
+    model, loss_history = run_experiment(
+        model_name, _default_config(model_name), dataset
+    )
     assert loss_history["validation"]
 
     fig, ax = plt.subplots(figsize=(8, 5), constrained_layout=True)
