@@ -707,6 +707,7 @@ class RealDomain(ScalarDomain, Collection[Interval]):
 class ScalarDomains(ScalarDomain, PosetEnum):
     r"""Enumeration of some scalar domains."""
 
+    _value_: ScalarDomain
     ALIASES: ClassVar[Mapping[str, Self]]
 
     ANY = Interval("[-inf, +inf]")

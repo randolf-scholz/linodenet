@@ -140,6 +140,7 @@ class NonZero(Tensor):
 class TensorDomains(TensorDomain, PosetEnum):
     r"""Enumeration of some tensor domains for tensors of arbitrary rank."""
 
+    _value_: TensorDomain
     ALIASES: ClassVar[Mapping[str, Self]]
 
     ANY = Tensor()  # top node

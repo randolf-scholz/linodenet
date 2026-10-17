@@ -82,7 +82,7 @@ r"""Mapping with keys of type `K` and values of type `V` or nested mappings."""
 
 
 @overload
-def flatten_dict(  # pyrefly: ignore[inconsistent-overload-default]
+def flatten_dict(
     d: NestedMapping[str, Any],
     /,
     *,
@@ -201,7 +201,7 @@ def flatten_dict[K, K2](
 
 
 @overload
-def unflatten_dict(  # pyrefly: ignore[inconsistent-overload-default]
+def unflatten_dict(
     d: Mapping[str, Any],
     /,
     *,

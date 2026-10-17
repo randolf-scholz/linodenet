@@ -507,9 +507,9 @@ class PosetEnum(Enum, metaclass=_PosetType):
     KNOWN_MEETS: ClassVar[Sequence[tuple[Self, Self | Meet[Self]]]]  # type: ignore
     r"""Named meets: if $x ≤ aᵢ$ for every factor $aᵢ$, then $x ≤ m$."""
     # TODO: use typing.ReadOnly for covariance.
-    ANY: ClassVar[Self | Any | None]
+    ANY: ClassVar[Self | Any]
     r"""The greatest domain, which is a supertype of every domain."""
-    EMPTY: ClassVar[Self | Any | None]
+    EMPTY: ClassVar[Self | Any]
     r"""The least domain, which is a subtype of every domain."""
 
     def __init_subclass__(cls) -> None:

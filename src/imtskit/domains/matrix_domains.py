@@ -937,6 +937,7 @@ class Identity(Diagonal, Permutation):
 class MatrixDomains(MatrixDomain, PosetEnum):
     r"""Enumeration of some matrix domains."""
 
+    _value_: MatrixDomain
     ALIASES: ClassVar[Mapping[str, Self]]
 
     ANY = Rectangular()  # top node

@@ -255,6 +255,7 @@ class UnitL1Sphere(UnitL1Ball):
 class VectorDomains(VectorDomain, PosetEnum):
     r"""Enumeration of some vector domains."""
 
+    _value_: VectorDomain
     ALIASES: ClassVar[Mapping[str, Self]]
 
     ANY = Vector()  # top node
