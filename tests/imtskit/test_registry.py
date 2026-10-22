@@ -30,7 +30,7 @@ def test_register_rejects_overwriting_existing_field() -> None:
     registry.register("existing-entry", mapping_fn=old_marker)
 
     with pytest.raises(ValueError, match=r"already has 'mapping_fn' set"):
-        registry.register("existing-entry", mapping_fn=object())  # type: ignore[arg-type]
+        registry.register("existing-entry", mapping_fn=object())  # type: ignore
 
 
 def test_update_existing_requires_existing_entry() -> None:
@@ -38,7 +38,7 @@ def test_update_existing_requires_existing_entry() -> None:
     registry = Registry()
 
     with pytest.raises(KeyError, match=r"'missing-entry'"):
-        registry.update_existing("missing-entry", mapping_fn=object())  # type: ignore[arg-type]
+        registry.update_existing("missing-entry", mapping_fn=object())  # type: ignore
 
 
 def test_update_existing_registers_unset_field() -> None:

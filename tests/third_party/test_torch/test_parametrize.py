@@ -70,16 +70,16 @@ def test_torch_parametrize_compile() -> None:
     # test compiled version
     compiled = torch.compile(parametrized)
     assert torch.allclose(compiled(x), y)
-    Q = compiled.weight  # type: ignore[attr-defined]
+    Q = compiled.weight  # type: ignore
     assert isinstance(Q, Tensor)
     assert torch.allclose(Q @ Q.T, torch.eye(n), atol=ATOL, rtol=RTOL)
 
     # test training step
-    optim = SGD(compiled.parameters(), lr=1e-3)  # type: ignore[attr-defined]
+    optim = SGD(compiled.parameters(), lr=1e-3)  # type: ignore
     loss_before = compiled(x).sum()
     loss_before.backward()
     optim.step()
-    Q = compiled.weight  # type: ignore[attr-defined]
+    Q = compiled.weight  # type: ignore
     assert isinstance(Q, Tensor)
     assert torch.allclose(Q @ Q.T, torch.eye(n), atol=ATOL, rtol=RTOL)
 

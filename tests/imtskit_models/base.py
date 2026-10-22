@@ -833,7 +833,7 @@ class TestContinuousTimeModel[M: nn.Module](ABC):
 
 class TestProbabilisticModel[
     M: ProbabilisticForecastingModel,
-](TestContinuousTimeModel[M]):  # type: ignore[type-var]
+](TestContinuousTimeModel[M]):  # type: ignore
     @pytest.mark.parametrize("batch_shape", [(), (1,), (1, 2, 3)], ids=str)
     def test_log_prob_succeeds(
         self,
@@ -841,7 +841,7 @@ class TestProbabilisticModel[
         batch_shape: tuple[int, ...],
     ) -> None:
         r"""Log probability should succeed on a simple request."""
-        model = self.make_model(model_config).eval()  # type: ignore[attr]
+        model = self.make_model(model_config).eval()  # type: ignore
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -875,7 +875,7 @@ class TestProbabilisticModel[
         size: int | tuple[int, ...],
     ) -> None:
         r"""Sampling should succeed on a simple request."""
-        model = self.make_model(model_config).eval()  # type: ignore[attr]
+        model = self.make_model(model_config).eval()  # type: ignore
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -910,7 +910,7 @@ class TestProbabilisticModel[
         size: int | tuple[int, ...],
     ) -> None:
         r"""Sampling with log probabilities should preserve leading sample axes."""
-        model = self.make_model(model_config).eval()  # type: ignore[attr]
+        model = self.make_model(model_config).eval()  # type: ignore
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -948,7 +948,7 @@ class TestProbabilisticModel[
         size: int | tuple[int, ...],
     ) -> None:
         r"""`sample_and_log_prob` should agree with `log_prob` on returned samples."""
-        model = self.make_model(model_config).eval()  # type: ignore[attr]
+        model = self.make_model(model_config).eval()  # type: ignore
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -985,7 +985,7 @@ class TestProbabilisticModel[
         assert_close(log_probs, log_prob_via_sample)
 
 
-class TestPathModel[M: PathForecastingModel](TestContinuousTimeModel[M]):  # type: ignore[type-var]
+class TestPathModel[M: PathForecastingModel](TestContinuousTimeModel[M]):  # type: ignore
     @pytest.mark.parametrize("batch_shape", [(), (1,), (1, 2, 3)], ids=str)
     def test_log_prob_succeeds(
         self,
@@ -993,7 +993,7 @@ class TestPathModel[M: PathForecastingModel](TestContinuousTimeModel[M]):  # typ
         batch_shape: tuple[int, ...],
     ) -> None:
         r"""Log probability should succeed on a simple request."""
-        model = self.make_model(model_config).eval()  # type: ignore[attr]
+        model = self.make_model(model_config).eval()  # type: ignore
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -1026,7 +1026,7 @@ class TestPathModel[M: PathForecastingModel](TestContinuousTimeModel[M]):  # typ
         size: int | tuple[int, ...],
     ) -> None:
         r"""Sampling should succeed on a simple request."""
-        model = self.make_model(model_config).eval()  # type: ignore[attr]
+        model = self.make_model(model_config).eval()  # type: ignore
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -1061,7 +1061,7 @@ class TestPathModel[M: PathForecastingModel](TestContinuousTimeModel[M]):  # typ
         size: int | tuple[int, ...],
     ) -> None:
         r"""Sampling with log probabilities should preserve leading sample axes."""
-        model = self.make_model(model_config).eval()  # type: ignore[attr]
+        model = self.make_model(model_config).eval()  # type: ignore
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(
@@ -1098,7 +1098,7 @@ class TestPathModel[M: PathForecastingModel](TestContinuousTimeModel[M]):  # typ
         size: int | tuple[int, ...],
     ) -> None:
         r"""`sample_and_log_prob` should agree with `log_prob` on returned samples."""
-        model = self.make_model(model_config).eval()  # type: ignore[attr]
+        model = self.make_model(model_config).eval()  # type: ignore
         generator = torch.Generator().manual_seed(0)
 
         data = self.make_request(

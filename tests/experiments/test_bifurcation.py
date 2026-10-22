@@ -324,7 +324,7 @@ def run_experiment(
     device = dataset["train_times"].device
     model: nn.Module = _make_model(model_name, model_config).to(device=device)
     if compile_model:
-        model = torch.compile(model, fullgraph=True)  # type: ignore[assignment]
+        model = torch.compile(model, fullgraph=True)  # type: ignore
 
     optimizer = torch.optim.AdamW(
         model.parameters(),

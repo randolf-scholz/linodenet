@@ -44,8 +44,8 @@ def test_export() -> None:
         MultivariateNormal,
         lambda dist: ([dist.loc, dist.covariance_matrix], None),
         lambda values, _: MultivariateNormal(
-            values[0],  # type: ignore[index]
-            covariance_matrix=values[1],  # type: ignore[index]
+            values[0],  # type: ignore
+            covariance_matrix=values[1],  # type: ignore
             validate_args=False,
         ),
     )
