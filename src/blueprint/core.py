@@ -639,7 +639,6 @@ def initialize[T = Any](spec: T | type[T] | Blueprint[T], /) -> T:
     Raises:
         TypeError: If `spec` is a dictionary without blueprint keys or no
             initializer accepts its blueprint format.
-        ValueError: If construction from arguments or a configuration fails.
     """
     if isinstance(spec, type):
         return _initialize_from_args(spec, [], {})  # pyright: ignore[reportReturnType]
