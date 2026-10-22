@@ -1,6 +1,6 @@
 r"""Test error of linear ODE against odeint."""
 
-import datetime
+import datetime as dt
 import logging
 import random
 import subprocess
@@ -218,7 +218,7 @@ def get_error_plots(
                 ax[i, j].set_xlabel(f"scaled, relative L{p} distance")
 
     # add current date and time to the figure
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     fig.text(0.99, 0.01, now, ha="right", va="bottom", fontsize=8, color="gray")
 
     # add current git commit hash to the figure
