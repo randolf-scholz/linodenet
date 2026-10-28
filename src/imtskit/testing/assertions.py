@@ -54,7 +54,7 @@ from .utils import (
 type Tree = Nested[Tensor | Scalar]
 type Func = Callable[..., Nested[Tensor]]
 
-_EMPTY_MAP: Final[Mapping[Any, Never]] = {}  # FIXME: Use frozendict() in python 3.15
+_EMPTY_MAP: Final[Mapping[Any, Never]] = frozendict()
 r"""Shared empty mapping used as a default argument; callers must not mutate it."""
 
 

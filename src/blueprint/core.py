@@ -35,14 +35,13 @@ from inspect import Parameter
 from typing import (
     Any,
     NotRequired,
-    ReadOnly,  # using extra_items (3.15)
+    ReadOnly,
+    TypedDict,
     TypeGuard,
     TypeIs,
     cast,
     overload,
 )
-
-from typing_extensions import TypedDict
 
 from .config import SupportsFromConfig, has_config, is_config
 
