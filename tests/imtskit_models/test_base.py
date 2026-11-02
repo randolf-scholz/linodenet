@@ -21,13 +21,18 @@ def test_make_forecasting_request_is_deterministic_and_valid(
     batch_shape: tuple[int, ...],
     input_missingness: bool,
 ) -> None:
+    rng = 123
+    min_steps = 2
+    max_steps = 5
+    context_shape = (3,)
+    output_shape = (2,)
     kwargs = {
-        "rng": 123,
+        "rng": rng,
         "batch_shape": batch_shape,
-        "min_steps": 2,
-        "max_steps": 5,
-        "context_shape": (3,),
-        "output_shape": (2,),
+        "min_steps": min_steps,
+        "max_steps": max_steps,
+        "context_shape": context_shape,
+        "output_shape": output_shape,
         "input_missingness": input_missingness,
     }
 
@@ -43,23 +48,11 @@ def test_make_forecasting_request_is_deterministic_and_valid(
     assert repeat.target_values is not None
     assert_close(actual.target_values, repeat.target_values, equal_nan=True)
 
-    assert actual.context_times.shape == (*batch_shape, kwargs["max_steps"])
-    assert actual.context_values.shape == (
-        *batch_shape,
-        kwargs["max_steps"],
-        *kwargs["context_shape"],
-    )
-    assert actual.query_times.shape == (*batch_shape, kwargs["max_steps"])
-    assert actual.query_mask.shape == (
-        *batch_shape,
-        kwargs["max_steps"],
-        *kwargs["output_shape"],
-    )
-    assert actual.target_values.shape == (
-        *batch_shape,
-        kwargs["max_steps"],
-        *kwargs["output_shape"],
-    )
+    assert actual.context_times.shape == (*batch_shape, max_steps)
+    assert actual.context_values.shape == (*batch_shape, max_steps, *context_shape)
+    assert actual.query_times.shape == (*batch_shape, max_steps)
+    assert actual.query_mask.shape == (*batch_shape, max_steps, *output_shape)
+    assert actual.target_values.shape == (*batch_shape, max_steps, *output_shape)
 
     for request in actual.unbatch():
         assert request.target_values is not None
