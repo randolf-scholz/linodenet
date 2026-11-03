@@ -10,7 +10,7 @@ Useful links:
 - https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html
 """
 
-import datetime
+import datetime as dt
 import logging
 import re
 import sys
@@ -28,7 +28,7 @@ sys.path.insert(0, str(SPHINX_DIR / "extensions"))
 sys.path.insert(1, str(SOURCE_DIR))
 URL = f"https://github.com/randolf-scholz/{MODULE}"
 VERSION = metadata.version(MODULE)
-YEAR = datetime.datetime.now().year
+YEAR = dt.datetime.now().year
 
 # region General Configuration ---------------------------------------------------------
 # SEE: https://www.sphinx-doc.org/en/master/usage/configuration.html
