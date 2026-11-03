@@ -1,3 +1,20 @@
+# /// script
+# requires-python = ">=3.14"
+# dependencies = [
+#   "nbsphinx>=0.9.8",
+#   "piccolo-theme>=0.24.0",
+#   "pydata-sphinx-theme>=0.24.0",
+#   "sphinx>=9.2.0",
+#   "sphinx-autoapi>=3.9.0",
+#   "sphinx-autodoc2>=0.5.0",
+#   "sphinx-automodapi>=0.22.1",
+#   "sphinx-copybutton>=0.5.2",
+#   "sphinx-immaterial>=0.13.9",
+#   "sphinx-math-dollar>=1.3",
+#   "sphinx-togglebutton>=0.4.5",
+#   "sphinx-typo3-theme>=4.9.0",
+# ]
+# ///
 r"""Configuration file for the Sphinx documentation builder.
 
 This file only contains a selection of the most common options. For a full list see the documentation:
