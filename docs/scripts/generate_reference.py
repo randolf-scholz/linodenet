@@ -2,6 +2,7 @@ r"""Generate Zensical API pages for public modules, classes, and functions."""
 
 import ast
 import posixpath
+from collections.abc import Collection, Mapping, Sequence, Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
@@ -12,8 +13,6 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 SOURCE_DIR = ROOT_DIR / "src"
 REFERENCE_DIR = Path("reference")
 REFERENCE_INDEX = REFERENCE_DIR / "index.md"
-NAV = mkdocs_gen_files.Nav()
-DOCUMENTED_IDENTIFIERS: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -22,39 +21,46 @@ class Module:
 
     identifier: str
     doc_path: Path
-    exports: list[str]
+    exports: Sequence[str]
     is_package: bool
-    kinds: dict[str, str]
-    nodes: list[ast.stmt]
+    kinds: Mapping[str, str]
+    nodes: Sequence[ast.stmt]
     source_path: Path
 
 
 def write_page(
     identifier: str,
     doc_path: Path,
+    *,
     source_path: Path,
     nav_parts: tuple[str, ...],
     symbol_type: str,
-    members: list[str] | None = None,
+    members: Sequence[str] = (),
+    nav: mkdocs_gen_files.Nav,
+    documented_identifiers: set[str],
 ) -> None:
-    r"""Create a virtual API page and add it to the generated navigation."""
-    if identifier in DOCUMENTED_IDENTIFIERS:
+    r"""Create an API page and navigation entry; empty `members` omit the override."""
+    if identifier in documented_identifiers:
         return
 
-    DOCUMENTED_IDENTIFIERS.add(identifier)
-    NAV[nav_parts] = doc_path.relative_to(REFERENCE_DIR).as_posix()
+    documented_identifiers.add(identifier)
+    nav[nav_parts] = doc_path.relative_to(REFERENCE_DIR).as_posix()
     with mkdocs_gen_files.open(doc_path, "w") as file:
         title = identifier.rsplit(".", 1)[-1]
-        file.write(f"---\ntitle: {title}\nsymbol_type: {symbol_type}\n---\n\n")
-        file.write(f"::: {identifier}\n")
-        if members is not None:
-            file.write("    options:\n      members:\n")
-            file.writelines(f"        - {name!r}\n" for name in members)
+        file.write(
+            f"---\ntitle: {title}\nsymbol_type: {symbol_type}\n---\n\n"
+            f"::: {identifier}\n"
+        )
+        if members:
+            file.write(
+                "    options:\n      members:\n"
+                + "".join(f"        - {name!r}\n" for name in members)
+            )
     mkdocs_gen_files.set_edit_path(doc_path, source_path.relative_to(ROOT_DIR))
 
 
-def get_exports(nodes: list[ast.stmt]) -> list[str]:
-    r"""Return the names declared by a literal module ``__all__``."""
+def get_exports(nodes: Sequence[ast.stmt]) -> list[str]:
+    r"""Return the names declared by a literal module `__all__`."""
     for node in nodes:
         match node:
             case ast.Assign(targets=targets, value=value) if any(
@@ -69,7 +75,7 @@ def get_exports(nodes: list[ast.stmt]) -> list[str]:
     return []
 
 
-def get_kinds(nodes: list[ast.stmt], exports: list[str]) -> dict[str, str]:
+def get_kinds(nodes: Sequence[ast.stmt], exports: Collection[str]) -> dict[str, str]:
     r"""Classify directly declared public classes, functions, and constants."""
     kinds: dict[str, str] = {}
     for node in nodes:
@@ -96,7 +102,7 @@ def get_kinds(nodes: list[ast.stmt], exports: list[str]) -> dict[str, str]:
     return kinds
 
 
-def get_class_members(nodes: list[ast.stmt]) -> list[str]:
+def get_class_members(nodes: Sequence[ast.stmt]) -> list[str]:
     r"""Return the public methods and attributes declared directly by a class."""
     members: list[str] = []
     for node in nodes:
@@ -116,41 +122,48 @@ def get_class_members(nodes: list[ast.stmt]) -> list[str]:
     return members
 
 
-MODULES: dict[str, Module] = {}
-for source_path in sorted(SOURCE_DIR.rglob("*.py")):
-    module_parts = source_path.relative_to(SOURCE_DIR).with_suffix("").parts
-    is_package = module_parts[-1] == "__init__"
-    match module_parts[-1]:
-        case "__main__":
-            continue
-        case "__init__":
+def get_modules(source_dir: Path, /) -> dict[str, Module]:
+    r"""Discover public modules, excluding private paths and `__main__` scripts."""
+    modules: dict[str, Module] = {}
+    for source_path in sorted(source_dir.rglob("*.py")):
+        module_parts = source_path.relative_to(source_dir).with_suffix("").parts
+        is_package = module_parts[-1] == "__init__"
+        if is_package:
             module_parts = module_parts[:-1]
 
-    if not module_parts or any(part.startswith("_") for part in module_parts):
-        continue
+        if not module_parts or any(part.startswith("_") for part in module_parts):
+            continue
 
-    identifier = ".".join(module_parts)
-    tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
-    exports = get_exports(tree.body)
-    MODULES[identifier] = Module(
-        identifier=identifier,
-        doc_path=REFERENCE_DIR.joinpath(*module_parts, "index.md"),
-        exports=exports,
-        is_package=is_package,
-        kinds=get_kinds(tree.body, exports),
-        nodes=tree.body,
-        source_path=source_path,
-    )
+        identifier = ".".join(module_parts)
+        source = source_path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(source_path))
+        exports = get_exports(tree.body)
+        modules[identifier] = Module(
+            identifier=identifier,
+            doc_path=REFERENCE_DIR.joinpath(*module_parts, "index.md"),
+            exports=exports,
+            is_package=is_package,
+            kinds=get_kinds(tree.body, exports),
+            nodes=tree.body,
+            source_path=source_path,
+        )
+    return modules
 
 
-PAGE_PATHS = {
-    f"{module.identifier}.{name}": module.doc_path.parent / name / "index.md"
-    if kind == "classes"
-    else module.doc_path.parent / f"{name}.md"
-    for module in MODULES.values()
-    for name, kind in module.kinds.items()
-    if kind in {"classes", "functions"}
-}
+def get_page_paths(modules: Mapping[str, Module], /) -> dict[str, Path]:
+    r"""Map declared classes and functions to their generated documentation paths."""
+    page_paths: dict[str, Path] = {}
+    for module in modules.values():
+        for name, kind in module.kinds.items():
+            match kind:
+                case "classes":
+                    path = module.doc_path.parent / name / "index.md"
+                case "functions":
+                    path = module.doc_path.parent / f"{name}.md"
+                case _:
+                    continue
+            page_paths[f"{module.identifier}.{name}"] = path
+    return page_paths
 
 
 def get_imports(module: Module) -> dict[str, str]:
@@ -173,148 +186,174 @@ def get_imports(module: Module) -> dict[str, str]:
     return imports
 
 
-def get_target(module: Module, name: str, seen: set[str] | None = None) -> str | None:
-    r"""Resolve a directly declared or re-exported object to its canonical identifier."""
+def get_target(
+    module: Module,
+    name: str,
+    *,
+    modules: Mapping[str, Module],
+    page_paths: Mapping[str, Path],
+    seen: AbstractSet[str] = frozenset(),
+) -> str | None:
+    r"""Resolve a canonical identifier without mutating `seen`; return `None` on cycles."""
     identifier = f"{module.identifier}.{name}"
-    if identifier in PAGE_PATHS:
+    if identifier in page_paths:
         return identifier
 
-    seen = set() if seen is None else seen
     if identifier in seen:
         return None
-    seen.add(identifier)
 
     target = get_imports(module).get(name)
     if target is None:
         return None
-    if target in PAGE_PATHS:
+    if target in page_paths:
         return target
 
     target_module, _, target_name = target.rpartition(".")
-    if target_module in MODULES:
-        return get_target(MODULES[target_module], target_name, seen)
+    if target_module in modules:
+        return get_target(
+            modules[target_module],
+            target_name,
+            modules=modules,
+            page_paths=page_paths,
+            seen=seen | {identifier},
+        )
     return None
 
 
-def get_kind(module: Module, name: str) -> str:
-    r"""Return the documented category for a direct or re-exported module member."""
-    if name in module.kinds:
-        return module.kinds[name]
-
-    target = get_target(module, name)
-    if target is not None:
-        target_module, _, target_name = target.rpartition(".")
-        return MODULES[target_module].kinds[target_name]
-    return "constants"
-
-
 def get_relative_path(source: Path, target: Path) -> str:
-    r"""Return a Markdown link from one generated document to another."""
+    r"""Return the relative path from one generated document to another."""
     return posixpath.relpath(target.as_posix(), start=source.parent.as_posix())
 
 
-def write_contents(module: Module, file: TextIO) -> None:
+def write_contents(
+    module: Module,
+    file: TextIO,
+    *,
+    modules: Mapping[str, Module],
+    page_paths: Mapping[str, Path],
+) -> None:
     r"""Write the typed overview of a module's public API."""
     categories = {"classes": [], "functions": [], "submodules": [], "constants": []}
     names = module.exports or list(module.kinds)
     for name in names:
-        kind = get_kind(module, name)
-        target = get_target(module, name)
-        if target is None:
-            categories[kind].append(f"`{name}`")
-        else:
-            categories[kind].append(
-                f"[{name}]({get_relative_path(module.doc_path, PAGE_PATHS[target])})"
-            )
+        target = get_target(module, name, modules=modules, page_paths=page_paths)
+        kind = module.kinds.get(name, "constants")
 
-    prefix = f"{module.identifier}."
-    for identifier, submodule in MODULES.items():
-        if (
-            identifier.startswith(prefix)
-            and identifier.count(".") == module.identifier.count(".") + 1
-        ):
-            categories["submodules"].append(
-                f"[{identifier.rsplit('.', 1)[-1]}]({get_relative_path(module.doc_path, submodule.doc_path)})"
-            )
+        if target is None:
+            entry = f"`{name}`"
+        else:
+            if name not in module.kinds:
+                target_module, _, target_name = target.rpartition(".")
+                kind = modules[target_module].kinds[target_name]
+            path = get_relative_path(module.doc_path, page_paths[target])
+            entry = f"[{name}]({path})"
+
+        categories[kind].append(entry)
+
+    for identifier, submodule in modules.items():
+        parent, _, name = identifier.rpartition(".")
+        if parent == module.identifier:
+            path = get_relative_path(module.doc_path, submodule.doc_path)
+            categories["submodules"].append(f"[{name}]({path})")
 
     if not any(categories.values()):
         return
+
     file.write("\n## Contents\n")
     for heading, entries in categories.items():
         if entries:
-            file.write(f"\n### {heading.title()}\n\n")
-            file.writelines(f"- {entry}\n" for entry in entries)
+            file.write(
+                f"\n### {heading.title()}\n\n"
+                + "".join(f"- {entry}\n" for entry in entries)
+            )
 
 
-def document_module_definitions(module: Module) -> None:
+def document_module_definitions(
+    module: Module,
+    *,
+    page_paths: Mapping[str, Path],
+    nav: mkdocs_gen_files.Nav,
+    documented_identifiers: set[str],
+) -> None:
     r"""Create pages for public module-level classes and functions."""
     positions = {name: index for index, name in enumerate(module.exports)}
-    definitions = [
+    defs = [
         node
         for node in module.nodes
         if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
         and not node.name.startswith("_")
     ]
-    for node in sorted(
-        definitions, key=lambda node: positions.get(node.name, len(positions))
-    ):
+    for node in sorted(defs, key=lambda n: positions.get(n.name, len(positions))):
         match node:
-            case ast.ClassDef(name=name, body=body):
-                write_page(
-                    f"{module.identifier}.{name}",
-                    PAGE_PATHS[f"{module.identifier}.{name}"],
-                    module.source_path,
-                    (*module.identifier.split("."), name),
-                    "class",
-                    get_class_members(body),
-                )
-            case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
-                write_page(
-                    f"{module.identifier}.{name}",
-                    PAGE_PATHS[f"{module.identifier}.{name}"],
-                    module.source_path,
-                    (*module.identifier.split("."), name),
-                    "function",
-                )
+            case ast.ClassDef(body=body):
+                symbol_type = "class"
+                members = get_class_members(body)
+            case _:
+                symbol_type = "function"
+                members = ()
+        identifier = f"{module.identifier}.{node.name}"
+        write_page(
+            identifier,
+            page_paths[identifier],
+            source_path=module.source_path,
+            nav_parts=(*module.identifier.split("."), node.name),
+            symbol_type=symbol_type,
+            members=members,
+            nav=nav,
+            documented_identifiers=documented_identifiers,
+        )
 
 
 def main() -> None:
-    for module in MODULES.values():
+    r"""Discover the public API and generate its pages with fresh navigation state."""
+    modules = get_modules(SOURCE_DIR)
+    page_paths = get_page_paths(modules)
+    nav = mkdocs_gen_files.Nav()
+    documented_identifiers: set[str] = set()
+    for module in modules.values():
         write_page(
             module.identifier,
             module.doc_path,
-            module.source_path,
-            tuple(module.identifier.split(".")),
-            "module",
+            source_path=module.source_path,
+            nav_parts=tuple(module.identifier.split(".")),
+            symbol_type="module",
+            nav=nav,
+            documented_identifiers=documented_identifiers,
         )
         with mkdocs_gen_files.open(module.doc_path, "a") as file:
-            write_contents(module, file)
+            write_contents(module, file, modules=modules, page_paths=page_paths)
             constants = [
                 name for name, kind in module.kinds.items() if kind == "constants"
             ]
             if constants:
-                file.write("\n## Constants\n\n")
-                file.write(f"::: {module.identifier}\n")
-                file.write("    options:\n")
-                file.write("      heading_level: 3\n")
-                file.write("      show_docstring_description: false\n")
-                file.write("      show_root_heading: false\n")
-                file.write("      show_root_toc_entry: false\n")
-                file.write("      members:\n")
-                file.writelines(f"        - {name!r}\n" for name in constants)
-        document_module_definitions(module)
+                file.write(
+                    "\n## Constants\n\n"
+                    f"::: {module.identifier}\n"
+                    "    options:\n"
+                    "      heading_level: 3\n"
+                    "      show_docstring_description: false\n"
+                    "      show_root_heading: false\n"
+                    "      show_root_toc_entry: false\n"
+                    "      members:\n"
+                    + "".join(f"        - {name!r}\n" for name in constants)
+                )
+        document_module_definitions(
+            module,
+            page_paths=page_paths,
+            nav=nav,
+            documented_identifiers=documented_identifiers,
+        )
 
     with mkdocs_gen_files.open(REFERENCE_INDEX, "w") as file:
-        file.write("# API reference\n\n")
-        file.write("## Packages\n\n")
-        for module in MODULES.values():
+        file.write("# API reference\n\n## Packages\n\n")
+        for module in modules.values():
             if "." not in module.identifier:
                 path = get_relative_path(REFERENCE_INDEX, module.doc_path)
                 file.write(f"- [{module.identifier}]({path})\n")
 
     with mkdocs_gen_files.open(REFERENCE_DIR / "SUMMARY.md", "w") as file:
-        file.write("- [API reference](index.md)\n")
-        file.writelines(NAV.build_literate_nav())
+        file.write("- [API reference](index.md)\n" + "".join(nav.build_literate_nav()))
 
 
-main()
+if __name__ == "__main__":
+    main()
