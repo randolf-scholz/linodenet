@@ -56,9 +56,8 @@ from the active environment. Run all project-local Python commands through
 
 ## 2. Documentation
 
-Documentation is a work in progress. We are moving towards **Zensical and
-Markdown**, replacing the Sphinx workflow. Write new documentation for the
-Zensical site under [docs/zensical](docs/zensical); its configuration is
+Documentation uses **Zensical and Markdown**. Write new documentation for the
+site under [docs](docs); its configuration is
 [docs/zensical.toml](docs/zensical.toml).
 
 ### Docstring Conventions
@@ -81,17 +80,17 @@ Zensical site under [docs/zensical](docs/zensical); its configuration is
 From the repository root, run:
 
 ```bash
-just docs::zensical
+just docs
 ```
 
 This recipe regenerates the API reference Markdown from `src/`, builds the site
-with strict validation, and copies static assets. The HTML output is written to
+with strict validation, and includes static assets. The HTML output is written to
 `docs/build/zensical/`; open `docs/build/zensical/index.html` to inspect it. API
-pages under `docs/zensical/reference/` are generated, so update the source
+pages under `docs/reference/` are generated, so update the source
 docstrings or the generator instead of editing those pages directly.
 
-The migration is incomplete: `just docs` still defaults to Sphinx. Use the
-explicit `just docs::zensical` recipe for the new documentation workflow.
+`just docs::zensical` explicitly selects the same builder. The Sphinx and
+ProperDocs recipes remain available but are deprecated.
 
 ## 3. Linting & Formatting
 

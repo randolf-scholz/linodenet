@@ -8,7 +8,7 @@ from typing import TextIO
 
 import mkdocs_gen_files
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
+ROOT_DIR = Path(__file__).resolve().parents[2]
 SOURCE_DIR = ROOT_DIR / "src"
 REFERENCE_DIR = Path("reference")
 REFERENCE_INDEX = REFERENCE_DIR / "index.md"

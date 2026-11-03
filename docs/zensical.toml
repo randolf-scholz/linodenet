@@ -1,6 +1,19 @@
 [project]
-docs_dir = "zensical"
+docs_dir = "."
 site_dir = "build/zensical"
+# Keep build artifacts, tooling, and legacy documentation out of the site.
+exclude_docs = """
+/build/
+/content/
+/notes/
+/properdocs/
+/scripts/
+/sphinx/
+/theory/
+/_templates/
+/justfile
+/zensical.toml
+"""
 site_name = "imtskit"
 site_description = "Irregular Multivariate Time Series Toolkit"
 site_url = "https://github.com/randolf-scholz/imtskit"
@@ -21,7 +34,7 @@ nav = [
 ]
 
 [project.theme]
-custom_dir = "zensical/_templates"
+custom_dir = "_templates"
 language = "en"
 features = [
     "content.code.copy",

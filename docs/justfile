@@ -2,50 +2,41 @@
 export PYTORCH_JIT := "0"
 
 [default]
-[doc("Build the Sphinx HTML documentation (the current default).")]
-make *sphinx_args:
-    just --justfile {{ justfile() }} sphinx {{ sphinx_args }}
+[doc("Build the Zensical documentation (the default builder).")]
+make *zensical_args: (zensical zensical_args)
 
 [doc("Show documentation commands.")]
 help:
-    @just --justfile {{ justfile() }} --list docs
+    @just --justfile {{ source_directory() / "justfile" }} --list
 
-[doc("Remove Sphinx output and generated API source files.")]
+[doc("Deprecated: remove Sphinx output and generated API source files.")]
 sphinx-clean:
     rm -rf build/sphinx sphinx/_autosummary sphinx/autoapi sphinx/apidoc
 
-#[doc("Remove MkDocs output.")]
-#mkdocs-clean:
-#    rm -rf build/mkdocs
-
-[doc("Remove ProperDocs output.")]
+[doc("Deprecated: remove ProperDocs output.")]
 properdocs-clean:
     rm -rf build/properdocs
 
 [doc("Remove Zensical output and generated API Markdown.")]
 zensical-clean:
-    rm -rf build/zensical zensical/reference
+    rm -rf build/zensical reference
 
 [doc("Remove all generated documentation output.")]
 clean: sphinx-clean properdocs-clean zensical-clean
 
-#[doc("Build the MkDocs proof-of-concept site with strict validation.")]
-#mkdocs *mkdocs_args: mkdocs-clean
-#    uv run mkdocs build --strict --config-file mkdocs/mkdocs.yaml {{ mkdocs_args }}
-
-[doc("Build the ProperDocs proof-of-concept site with strict validation.")]
+[doc("Deprecated: build the ProperDocs site; use Zensical instead.")]
 properdocs *properdocs_args: properdocs-clean
+    @echo "Warning: ProperDocs is deprecated; use 'just docs' instead." >&2
     uv run properdocs build --strict --config-file properdocs/properdocs.yaml {{ properdocs_args }}
 
-[doc("Build the Zensical proof-of-concept site with generated API Markdown.")]
+[doc("Build the Zensical site with generated API Markdown and strict validation.")]
 zensical *zensical_args: zensical-clean
-    uv run python zensical/scripts/generate_reference.py
+    uv run python scripts/generate_reference.py
     uv run zensical build --clean --strict --config-file zensical.toml {{ zensical_args }}
-    # Zensical does not copy a symlink whose target is outside its docs directory.
-    cp -RL zensical/_static build/zensical/
 
-[doc("Rebuild the Sphinx API docs and HTML output.")]
+[doc("Deprecated: rebuild the Sphinx docs; use Zensical instead.")]
 sphinx *sphinx_args: sphinx-clean
+    @echo "Warning: Sphinx is deprecated; use 'just docs' instead." >&2
     uv run sphinx-build -M html sphinx build/sphinx {{ sphinx_args }}
     # Sphinx Immaterial omits user static files when bundling theme assets.
     cp -RL _static/* build/sphinx/html/_static/
