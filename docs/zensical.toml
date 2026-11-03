@@ -81,12 +81,8 @@ bug = "octicons/bug-16"
 example = "octicons/beaker-16"
 quote = "octicons/quote-16"
 
-
 [project.plugins.mkdocstrings]
 default_handler = "python"
-
-[project.plugins.literate-nav]
-nav_file = "SUMMARY.md"
 
 [project.plugins.mkdocstrings.handlers.python]
 paths = ["../src"]
@@ -116,10 +112,7 @@ show_submodules = false
 # docstrings
 docstring_style = "google"
 docstring_section_style = "list"
-docstring_options = {
-    ignore_init_summary = true,
-    trim_doctest_flags = true
-}
+docstring_options = { ignore_init_summary = true, trim_doctest_flags = true }
 # signatures
 line_length = 88
 overloads_only = true
@@ -127,6 +120,9 @@ separate_signature = true
 show_signature_annotations = true
 signature_crossrefs = true
 type_parameter_headings = true
+
+[project.plugins.literate-nav]
+nav_file = "SUMMARY.md"
 
 [project.markdown_extensions]
 footnotes = { }

@@ -166,8 +166,8 @@ forbid_circular_dependencies = true
 exact = true
 
 [tool.tombi]
-[tool.tombi.format.rules]
-indent-width = 4
+lint.rules.tables-out-of-order = "off"
+format.rules.indent-width = 4
 
 [[tool.tombi.schemas]]
 # XREF: https://tombi-toml.github.io/tombi/docs/formatter/auto-sorting/

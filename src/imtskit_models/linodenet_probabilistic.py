@@ -842,6 +842,7 @@ class KoopmanFilter(nn.Module):
             K = torch.linalg.solve(HL @ HL.mT + R, ΣHt.mT).mT
             μ = μ_prior + einsum("...ij, ...j -> ...i", K, r)
 
+        # type checker thinks these can be unbound, but they are since n_iter >= 1.
         Σ = Σ_prior - ΣHt @ K.mT  # type: ignore
         Σ = (Σ + Σ.mT) / 2  # ensure symmetry.
         return μ, Σ
