@@ -1,13 +1,12 @@
 r"""Tests for forecasting utility containers."""
 
 from dataclasses import replace
-from typing import Literal, cast
+from typing import Literal, TypedDict, cast
 
 import pytest
 import torch
 from torch import Tensor, nan
 from torch.testing import assert_close
-from typing_extensions import TypedDict
 
 from imtskit_models.utils import (
     DiscreteTimeEventBatch,

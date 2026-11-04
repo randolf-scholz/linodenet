@@ -24,14 +24,13 @@ import os
 from importlib import metadata
 from pathlib import Path
 from types import ModuleType
-from typing import IO, Literal, Optional, ReadOnly, TypeGuard, cast
+from typing import IO, Literal, Optional, ReadOnly, TypedDict, TypeGuard, cast
 from zipfile import ZipFile
 
 import torch
 from torch import nn
 from torch.export import ExportedProgram
 from torch.jit import RecursiveScriptModule
-from typing_extensions import TypedDict
 
 from .core import (
     JSON,

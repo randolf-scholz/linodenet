@@ -3,7 +3,7 @@
 -e .
 cuda-toolkit==13.2.2 ; sys_platform == 'linux'
     # via torch
-filelock==4.2.7
+filelock==4.2.8
     # via torch
 fsspec==2026.9.0
     # via torch
@@ -78,6 +78,4 @@ triton==3.9.0 ; sys_platform == 'linux'
 typeguard==2.13.3
     # via torchtyping
 typing-extensions==4.16.0
-    # via
-    #   imtskit
-    #   torch
+    # via torch

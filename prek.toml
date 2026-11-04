@@ -3,7 +3,7 @@
 #:schema https://www.schemastore.org/prek.json
 
 exclude = ".idea/|.vscode/|bugs/|dev/"
-minimum_prek_version = "0.5.4"
+minimum_prek_version = "0.5.10"
 fail_fast = false
 update.cooldown_days = 7
 default_language_version = { python = "3.15", node = "26.3.0" }
@@ -18,21 +18,31 @@ hooks = [
     { id = "end-of-file-fixer" },
     { id = "file-contents-sorter" },
     { id = "fix-byte-order-marker" },
+    # { id = "forbid-new-submodules" },
     { id = "check-json" },
     { id = "check-json5" },
+    { id = "check-jsonc" },
     # { id = "pretty-format-json" },
     { id = "check-toml" },
     { id = "check-vcs-permalinks" },
     { id = "check-yaml" },
     { id = "check-xml" },
+    # { id = "deny-filename-pattern" },
+    # { id = "deny-pattern" },
+    # { id = "replace-pattern" },
+    # { id = "require-filename-pattern" },
+    # { id = "require-pattern" },
     { id = "mixed-line-ending" },
+    # { id = "normalize-indentation" },
     { id = "check-symlinks" },
     { id = "destroyed-symlinks" },
     { id = "check-merge-conflict" },
     { id = "detect-private-key" },
     { id = "no-commit-to-branch" },
+    # { id = "check-signed-commit" },
+    # { id = "check-commit-trailers" },
+    { id = "check-executables-have-shebangs" },
     { id = "check-shebang-scripts-are-executable" },
-    { id = "check-executables-have-shebangs" }
 ]
 
 [[repos]]
@@ -185,22 +195,4 @@ hooks = [
         files = "^src/|^tests/",
         args = ["check", "--"]
     },
-    {
-        id = "rst-backtick-check",
-        name = "[rst] backtick-check",
-        language = "pygrep",
-        types_or = ["python", "pyi", "rst"],
-        files = "^src/|^tests/",
-        groups = ["unused"],
-        stages = ["manual"],
-        entry = '(?<!`)`(?![`\s])(?!(?:\w+\.)*\w+`)[^`\n]*?(?<!\s)`(?![`_])',
-        args = [],
-        # `foo` E: no match
-        # `foo.bar` E: no match
-        # ``(1,2,3)`` E: no match
-        # `(1,2,3)` E: match
-        # `x+1` E: match
-        # `x+1 <url>`_  E: no match
-        # both `encode` and `decode` method.  E: no match
-    }
 ]
