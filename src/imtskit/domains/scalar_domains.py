@@ -9,6 +9,7 @@ __all__ = [
 import logging
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
+from enum import nonmember
 from math import inf, isnan, nan
 from types import MappingProxyType
 from typing import Any, ClassVar, Final, Self, cast, overload
@@ -74,12 +75,17 @@ class Interval(ScalarDomain):
                 lower_inclusive = interval.lower_inclusive
                 upper_inclusive = interval.upper_inclusive
 
-            case float(value):
+            case float(value) | int(value):
                 if upper is None and lower is None:
                     raise TypeError("Missing upper bound")
                 if upper is None:  # lower.upper given positionally
                     upper = lower
                 lower = value
+
+                if lower_inclusive is None:
+                    raise TypeError("Missing argument: lower_inclusive (bool)")
+                if upper_inclusive is None:
+                    raise TypeError("Missing argument: upper_inclusive (bool)")
 
             case None:
                 if (
@@ -733,9 +739,7 @@ class ScalarDomains(ScalarDomain, PosetEnum):
     UNIT_BALL = Interval("[-1, 1]")
     OPEN_UNIT_BALL = Interval("(-1, 1)")
 
-    @classmethod
-    def Interval(cls, arg) -> Interval:  # ruff: ignore[N802]
-        return Interval(arg)
+    Interval: Final = nonmember(Interval)
 
     @classmethod
     def _missing_(cls, value: object) -> Self | None:
