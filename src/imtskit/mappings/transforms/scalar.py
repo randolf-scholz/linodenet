@@ -22,7 +22,7 @@ import torch
 from torch import Tensor, nn
 from torch.nn import functional as F
 
-from imtskit.domains import ScalarDomain, ScalarDomains
+from imtskit.domains import RealDomains, ScalarDomain
 from imtskit.mappings.abstract import Transform
 from imtskit.nn.containers import Constant
 from signatures import signature
@@ -40,8 +40,8 @@ class Exp(nn.Module, Transform):
     The logabsdet is: $\log|\exp(x)| = x$.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.POSITIVE_REALS
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.POSITIVE_REALS
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -70,8 +70,8 @@ class Sinh(nn.Module, Transform):
     The logabsdet is: $\log|\cosh(x)| = \log\cosh(x)$.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -96,8 +96,8 @@ class Sigmoid(nn.Module, Transform):
     The derivative is: $σ'(x) = σ(x) (1-σ(x))$.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.OPEN_UNIT_BALL
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.OPEN_UNIT_BALL
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -126,8 +126,8 @@ class Tanh(nn.Module, Transform):
     The derivative is: $\frac{d}{dx}\tanh(x) = 1-\tanh²(x)$.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.OPEN_UNIT_BALL
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.OPEN_UNIT_BALL
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -159,8 +159,8 @@ class Softsign(nn.Module, Transform):
     The derivative is: $\frac{d}{dx}\frac{x}{1+\abs{x}} = \frac{1}{(1+\abs{x})²}$.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.OPEN_UNIT_BALL
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.OPEN_UNIT_BALL
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -189,8 +189,8 @@ class SmoothSoftsign(nn.Module, Transform):
     The derivative is: $\frac{2}{√(1+4x²)(1 + √(1 + 4x²))}$.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.OPEN_UNIT_BALL
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.OPEN_UNIT_BALL
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -219,8 +219,8 @@ class Softplus(nn.Module, Transform):
     The derivative is: $\frac{d}{dx}\log(1+\exp(x)) = σ(x)$.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.POSITIVE_REALS
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.POSITIVE_REALS
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -250,8 +250,8 @@ class ELU(nn.Module, Transform):
     For $α≠1$, the map is not differentiable at zero.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.Interval("(-1, ∞)")
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.Interval("(-1, ∞)")
 
     alpha: Final[float]
 
@@ -290,8 +290,8 @@ class CELU(nn.Module, Transform):
     The inverse requires $y>-α$.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.Interval("(-1, ∞)")
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.Interval("(-1, ∞)")
 
     alpha: Final[float]
 
@@ -334,8 +334,8 @@ class EntLU(nn.Module, Transform):
     entropic linear unit. The inverse methods are not implemented.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.POSITIVE_REALS
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.POSITIVE_REALS
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:
@@ -368,8 +368,8 @@ class Tanhshrink(nn.Module, Transform):
     The inverse methods are not implemented.
     """
 
-    DOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
-    CODOMAIN: Final[ScalarDomain] = ScalarDomains.REAL_LINE
+    DOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
+    CODOMAIN: Final[ScalarDomain] = RealDomains.REAL_LINE
 
     @signature("(...) -> (...)")
     def forward(self, x: Tensor, /) -> Tensor:

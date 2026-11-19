@@ -9,11 +9,11 @@ from imtskit.domains import (
     Domain,
     DomainMapping,
     Interval,
+    IntervalUnion,
     Join,
     MatrixDomains as M,
     Meet,
-    RealDomain,
-    ScalarDomains as S,
+    RealDomains as S,
     TensorDomains as T,
     VectorDomains as V,
     is_left_invertible,
@@ -131,7 +131,7 @@ class TestScalarDomains:
 
         assert str(S.OPEN_UNIT_INTERVAL) == "(0, 1)"
         assert str(S.UNIT_INTERVAL.value) == "[0, 1]"
-        assert isinstance(S.NONZERO.value, RealDomain)
+        assert isinstance(S.NONZERO.value, IntervalUnion)
 
     def test_membership(self) -> None:
         values = tensor([-0.5, 0.0, 0.5, 1.0, 1.5])
@@ -145,10 +145,10 @@ class TestScalarDomains:
         assert result == expected
 
     def test_interval_union_normalization_and_membership(self) -> None:
-        domain = RealDomain("[0, 1] | (1, 2) | [3, 4] | [3.5, 5]")
+        domain = IntervalUnion("[0, 1] | (1, 2) | [3, 4] | [3.5, 5]")
         assert str(domain) == "[0, 2) | [3, 5]"
 
-        domain = RealDomain("(-inf, 0) | (0, inf)")
+        domain = IntervalUnion("(-inf, 0) | (0, inf)")
         assert str(domain) == "(-inf, 0) | (0, inf)"
 
         values = tensor([-1.0, 0.0, 1.0])
@@ -169,9 +169,9 @@ class TestScalarDomains:
         assert not Interval("[0, inf]") <= Interval("(0, inf)")
 
     def test_interval_union_strict_subset(self) -> None:
-        assert RealDomain("[0, 1]") < RealDomain("[0, 2]")
-        assert RealDomain("(-inf, 0) | (0, inf)") < RealDomain("[-inf, inf]")
-        assert not RealDomain("[-inf, inf]") < RealDomain("[-inf, inf]")
+        assert IntervalUnion("[0, 1]") < IntervalUnion("[0, 2]")
+        assert IntervalUnion("(-inf, 0) | (0, inf)") < IntervalUnion("[-inf, inf]")
+        assert not IntervalUnion("[-inf, inf]") < IntervalUnion("[-inf, inf]")
 
 
 class TestVectorDomains:

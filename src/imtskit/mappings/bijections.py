@@ -12,7 +12,7 @@ from typing import Final
 import torch
 from torch import Tensor, nn
 
-from imtskit.domains import MatrixDomains, ScalarDomains, VectorDomains
+from imtskit.domains import MatrixDomains, RealDomains, VectorDomains
 from imtskit.special import matrix_log
 from signatures import signature
 
@@ -51,7 +51,7 @@ class MatrixExponential(nn.Module, Bijection):
 class PositiveScalarMatrix(nn.Module, Bijection):
     r"""Map scalars to positive scalar matrices via $x ↦ \exp(x) I$."""
 
-    DOMAIN: Final[ScalarDomains] = ScalarDomains.REAL_LINE
+    DOMAIN: Final[RealDomains] = RealDomains.REAL_LINE
     CODOMAIN: Final[MatrixDomains] = MatrixDomains.POSITIVE_SCALAR_MATRIX
 
     size: int

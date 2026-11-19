@@ -2,11 +2,13 @@ r"""Scalar domain primitives, including intervals and scalar domain labels."""
 
 __all__ = [
     "Interval",
+    "IntervalUnion",
     "RealDomain",
-    "ScalarDomains",
+    "RealDomains",
 ]
 
 import logging
+from abc import abstractmethod
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import nonmember
@@ -14,15 +16,61 @@ from math import inf, isnan, nan
 from types import MappingProxyType
 from typing import Any, ClassVar, Final, Self, cast, overload
 
+import torch
 from torch import Tensor
 
-from .base import Indeterminate, PosetEnum, ScalarDomain
+from .base import PosetEnum, ScalarDomain
 
 __logger__ = logging.getLogger(__name__)
 
 
+class RealDomain(ScalarDomain):
+    r"""A floating point domain with decidable subset relationships.
+
+    Every real domain exposes its finite interval decomposition through
+    `intervals`. This representation makes subset relationships decidable:
+    comparisons between real domains return a `bool`, rather than a symbolic
+    or indeterminate result. Finite unions and intersections are real domains
+    as well.
+
+    Note:
+        The interval decomposition follows these conventions:
+
+        - The empty set is represented by the empty tuple `()`.
+        - Nonempty domains contain nonempty, pairwise disjoint intervals sorted
+          by lower bound.
+        - Components are maximal: adjacent intervals are merged whenever their
+          union is an interval. A shared endpoint must be excluded by both.
+        - Bounds may include `-∞` and `+∞`. NaN is not a domain element;
+          `Interval.EMPTY` uses NaN bounds only as an empty-interval sentinel.
+
+        An `Interval` exposes itself as a singleton tuple, or `()` if empty.
+        An `IntervalUnion` exposes its stored components, and `RealDomains`
+        delegates to the underlying domain. Use `IntervalUnion(domain)` when
+        a concrete union object is needed.
+    """
+
+    @property
+    @abstractmethod
+    def intervals(self) -> tuple[Interval, ...]:
+        r"""Return the normalized interval components, or `()` for the empty set."""
+        ...
+
+    @abstractmethod
+    def is_empty(self) -> bool: ...
+
+    @abstractmethod
+    def __le__(self, other: RealDomain, /) -> bool: ...
+
+    @abstractmethod
+    def __and__(self, other: RealDomain, /) -> RealDomain: ...
+
+    @abstractmethod
+    def __or__(self, other: RealDomain, /) -> RealDomain: ...
+
+
 @dataclass(unsafe_hash=True, init=False)
-class Interval(ScalarDomain):
+class Interval(RealDomain):
     r"""A named tuple representing an interval."""
 
     EMPTY: ClassVar[Final[Interval]] = cast("Any", ...)
@@ -228,6 +276,10 @@ class Interval(ScalarDomain):
         assert non_empty ^ is_empty_sentinel  # safety check.
         return is_empty_sentinel
 
+    @property
+    def intervals(self) -> tuple[Interval, ...]:
+        return () if self.is_empty() else (self,)
+
     def check(self, item: Tensor, /) -> Tensor:
         lower_mask = (
             (item >= self.lower) if self.lower_inclusive else (item > self.lower)
@@ -283,7 +335,7 @@ class Interval(ScalarDomain):
 
     def __eq__(self, rhs: object, /) -> bool:
         if (other := Interval.parse(rhs)) is None:
-            if (union := RealDomain.parse(rhs)) is None:
+            if (union := IntervalUnion.parse(rhs)) is None:
                 return NotImplemented
             return union == self
 
@@ -294,9 +346,14 @@ class Interval(ScalarDomain):
 
     def __le__(self, rhs: object, /) -> bool:
         if (other := Interval.parse(rhs)) is None:
-            if (union := RealDomain.parse(rhs)) is None:
+            if (union := IntervalUnion.parse(rhs)) is None:
                 return NotImplemented
             return union >= self
+
+        if self.is_empty():
+            return True
+        if other.is_empty():
+            return False
 
         lower_ok = self.lower > other.lower or (
             self.lower == other.lower
@@ -310,21 +367,21 @@ class Interval(ScalarDomain):
 
     def __lt__(self, rhs: object, /) -> bool:
         if (other := Interval.parse(rhs)) is None:
-            if (union := RealDomain.parse(rhs)) is None:
+            if (union := IntervalUnion.parse(rhs)) is None:
                 return NotImplemented
             return union > self
         return self <= other and self != other
 
     def __ge__(self, rhs: object, /) -> bool:
         if (other := Interval.parse(rhs)) is None:
-            if (union := RealDomain.parse(rhs)) is None:
+            if (union := IntervalUnion.parse(rhs)) is None:
                 return NotImplemented
             return union <= self
         return other <= self
 
     def __gt__(self, rhs: object, /) -> bool:
         if (other := Interval.parse(rhs)) is None:
-            if (union := RealDomain.parse(rhs)) is None:
+            if (union := IntervalUnion.parse(rhs)) is None:
                 return NotImplemented
             return union < self
         return self >= other and self != other
@@ -332,10 +389,10 @@ class Interval(ScalarDomain):
     @overload
     def __and__(self, rhs: Interval, /) -> Interval: ...
     @overload
-    def __and__(self, rhs: RealDomain | str, /) -> Interval | RealDomain: ...
-    def __and__(self, rhs: object, /) -> Interval | RealDomain:
+    def __and__(self, rhs: RealDomain | str, /) -> Interval | IntervalUnion: ...
+    def __and__(self, rhs: object, /) -> Interval | IntervalUnion:
         if (other := Interval.parse(rhs)) is None:
-            if (union := RealDomain.parse(rhs)) is None:
+            if (union := IntervalUnion.parse(rhs)) is None:
                 return NotImplemented
             return union & self
 
@@ -372,22 +429,22 @@ class Interval(ScalarDomain):
     @overload
     def __rand__(self, rhs: Interval, /) -> Interval: ...
     @overload
-    def __rand__(self, rhs: RealDomain | str, /) -> Interval | RealDomain: ...
-    def __rand__(self, lhs: object, /) -> Interval | RealDomain:
+    def __rand__(self, rhs: RealDomain | str, /) -> Interval | IntervalUnion: ...
+    def __rand__(self, lhs: object, /) -> Interval | IntervalUnion:
         if (other := Interval.parse(lhs)) is None:
-            if (union := RealDomain.parse(lhs)) is None:
+            if (union := IntervalUnion.parse(lhs)) is None:
                 return NotImplemented
             return union & self
         return other & self
 
-    def __or__(self, rhs: object, /) -> Interval | RealDomain:
+    def __or__(self, rhs: object, /) -> Interval | IntervalUnion:
         if (other := Interval.parse(rhs)) is None:
-            if (union := RealDomain.parse(rhs)) is None:
+            if (union := IntervalUnion.parse(rhs)) is None:
                 return NotImplemented
             return union | self
 
         if self.is_disjoint(other):
-            return RealDomain(self, other)
+            return IntervalUnion(self, other)
 
         lower = self.lower
         lower_inclusive = self.lower_inclusive
@@ -412,9 +469,9 @@ class Interval(ScalarDomain):
             upper_inclusive=upper_inclusive,
         )
 
-    def __ror__(self, lhs: object, /) -> Interval | RealDomain:
+    def __ror__(self, lhs: object, /) -> Interval | IntervalUnion:
         if (other := Interval.parse(lhs)) is None:
-            if (union := RealDomain.parse(lhs)) is None:
+            if (union := IntervalUnion.parse(lhs)) is None:
                 return NotImplemented
             return union | self
         return other | self
@@ -439,26 +496,21 @@ Interval.EMPTY = Interval(  # pyright: ignore[reportAttributeAccessIssue]
 )
 
 
-class RealDomain(ScalarDomain, Collection[Interval]):
-    r"""A finite union of sorted, simplified intervals on the extended real line.
+class IntervalUnion(RealDomain, Collection[Interval]):
+    r"""A normalized finite interval union following the `RealDomain` conventions.
 
-    Note:
-        The stored intervals satisfy these invariants:
-
-        - The empty domain is represented canonically as `(Interval.EMPTY,)`.
-        - Nonempty domains store disjoint intervals sorted by lower bound.
-        - Adjacent intervals may share a boundary point only if both exclude it.
+    With no arguments, constructs the empty domain.
     """
 
-    intervals: Final[tuple[Interval, ...]]
+    _intervals: Final[tuple[Interval, ...]]
 
     @classmethod
-    def parse(cls, other: object, /) -> RealDomain | None:
+    def parse(cls, other: object, /) -> IntervalUnion | None:
         match other:
-            case RealDomain():
+            case IntervalUnion():
                 return other
-            case Interval():
-                return RealDomain(other)
+            case RealDomain():
+                return IntervalUnion(other)
             case str(string):
                 intervals: list[Interval] = []
                 for part in string.split("|"):
@@ -470,31 +522,30 @@ class RealDomain(ScalarDomain, Collection[Interval]):
                         )
                         return None
                     intervals.append(interval)
-                return RealDomain(*intervals)
+                return IntervalUnion(*intervals)
             case _:
                 __logger__.debug("Failed to unknown type %r", type(other))
                 return None
 
-    def __init__(self, *intervals: Interval | str | RealDomain) -> None:
-        if not intervals:
-            raise ValueError("Expected at least one interval.")
-
+    def __init__(self, *intervals: RealDomain | str) -> None:
         flat_intervals: list[Interval] = []
         for item in intervals:
             match item:
-                case RealDomain() as domain:
-                    flat_intervals.extend(domain)
+                case RealDomain():
+                    flat_intervals.extend(item.intervals)
                 case str(spec):
                     if (parsed := self.parse(spec)) is None:
                         raise ValueError(f"Invalid union of intervals string: {spec}")
                     flat_intervals.extend(parsed)
-                case Interval() as interval:
-                    flat_intervals.append(interval)
                 case _:
                     raise TypeError(f"Invalid interval: {item}")
 
-        self.intervals = tuple(self._merge_intervals(flat_intervals))
+        self._intervals = tuple(self._merge_intervals(flat_intervals))
         self._validate()
+
+    @property
+    def intervals(self) -> tuple[Interval, ...]:
+        return self._intervals
 
     def __len__(self) -> int:
         return len(self.intervals)
@@ -505,20 +556,17 @@ class RealDomain(ScalarDomain, Collection[Interval]):
     @overload
     def __getitem__(self, index: int, /) -> Interval: ...
     @overload
-    def __getitem__(self, index: slice, /) -> RealDomain: ...
-    def __getitem__(self, index: int | slice, /) -> Interval | RealDomain:
+    def __getitem__(self, index: slice, /) -> IntervalUnion: ...
+    def __getitem__(self, index: int | slice, /) -> Interval | IntervalUnion:
         if isinstance(index, slice):
-            return RealDomain(*self.intervals[index])
+            return IntervalUnion(*self.intervals[index])
         return self.intervals[index]
 
     def is_empty(self) -> bool:
-        all_empty = all(interval.is_empty() for interval in self)
-        uses_empty_sentinel = self.intervals == (Interval.EMPTY,)
-        assert all_empty == uses_empty_sentinel
-        return uses_empty_sentinel
+        return not self.intervals
 
-    def is_disjoint(self, arg: RealDomain | Interval | str, /) -> bool:
-        other = RealDomain(arg)
+    def is_disjoint(self, arg: RealDomain | str, /) -> bool:
+        other = IntervalUnion(arg)
         if self.is_empty() or other.is_empty():
             return True
 
@@ -559,7 +607,6 @@ class RealDomain(ScalarDomain, Collection[Interval]):
     @staticmethod
     def _merge_intervals(intervals: Iterable[Interval], /) -> Iterator[Interval]:
         if not (intervals := [i for i in intervals if not i.is_empty()]):
-            yield Interval.EMPTY
             return
 
         ordered = sorted(intervals, key=lambda i: (i.lower, not i.lower_inclusive))
@@ -599,28 +646,33 @@ class RealDomain(ScalarDomain, Collection[Interval]):
         yield current
 
     def check(self, item: Tensor, /) -> Tensor:
-        result = self[0].check(item)
-        for interval in self[1:]:
+        result = torch.zeros_like(item, dtype=torch.bool)
+        for interval in self:
             result = result | interval.check(item)
         return result
 
     def __eq__(self, rhs: object, /) -> bool:
-        if (other := RealDomain.parse(rhs)) is None:
+        if (other := IntervalUnion.parse(rhs)) is None:
             return NotImplemented
         return hash(self) == hash(other)
 
     def __hash__(self) -> int:
         return hash(self.intervals)
 
-    def __pos__(self) -> RealDomain:
+    def __pos__(self) -> IntervalUnion:
         return self
 
-    def __neg__(self) -> RealDomain:
-        return RealDomain(*(-interval for interval in reversed(self)))
+    def __neg__(self) -> IntervalUnion:
+        return IntervalUnion(*(-interval for interval in reversed(self)))
 
     def __le__(self, rhs: object, /) -> bool:
-        if (other := RealDomain.parse(rhs)) is None:
+        if (other := IntervalUnion.parse(rhs)) is None:
             return NotImplemented
+
+        if self.is_empty():
+            return True
+        if other.is_empty():
+            return False
 
         right_intervals = iter(other)
         right = next(right_intervals, None)
@@ -638,31 +690,31 @@ class RealDomain(ScalarDomain, Collection[Interval]):
         return True
 
     def __lt__(self, rhs: object, /) -> bool:
-        if (other := RealDomain.parse(rhs)) is None:
+        if (other := IntervalUnion.parse(rhs)) is None:
             return NotImplemented
         return self <= other and self != other
 
     def __ge__(self, rhs: object, /) -> bool:
-        if (other := RealDomain.parse(rhs)) is None:
+        if (other := IntervalUnion.parse(rhs)) is None:
             return NotImplemented
         return other <= self
 
     def __gt__(self, rhs: object, /) -> bool:
-        if (other := RealDomain.parse(rhs)) is None:
+        if (other := IntervalUnion.parse(rhs)) is None:
             return NotImplemented
         return self >= other and self != other
 
-    def __add__(self, other: float, /) -> RealDomain:
-        return RealDomain(*(interval + other for interval in self))
+    def __add__(self, other: float, /) -> IntervalUnion:
+        return IntervalUnion(*(interval + other for interval in self))
 
-    def __sub__(self, other: float, /) -> RealDomain:
+    def __sub__(self, other: float, /) -> IntervalUnion:
         return self + (-other)
 
-    def __mul__(self, other: float, /) -> RealDomain:
-        return RealDomain(*(interval * other for interval in self))
+    def __mul__(self, other: float, /) -> IntervalUnion:
+        return IntervalUnion(*(interval * other for interval in self))
 
-    def __and__(self, rhs: object, /) -> RealDomain:
-        if (other := RealDomain.parse(rhs)) is None:
+    def __and__(self, rhs: object, /) -> IntervalUnion:
+        if (other := IntervalUnion.parse(rhs)) is None:
             return NotImplemented
 
         left_intervals = iter(self)
@@ -684,36 +736,37 @@ class RealDomain(ScalarDomain, Collection[Interval]):
             else:
                 left = next(left_intervals, None)
 
-        if not intersections:
-            return RealDomain(Interval.EMPTY)
-        return RealDomain(*intersections)
+        return IntervalUnion(*intersections)
 
-    def __rand__(self, other: object, /) -> RealDomain:
-        if (other_union := RealDomain.parse(other)) is None:
+    def __rand__(self, other: object, /) -> IntervalUnion:
+        if (other_union := IntervalUnion.parse(other)) is None:
             return NotImplemented
         return other_union & self
 
-    def __or__(self, rhs: object, /) -> RealDomain:
-        if (other := RealDomain.parse(rhs)) is None:
+    def __or__(self, rhs: object, /) -> IntervalUnion:
+        if (other := IntervalUnion.parse(rhs)) is None:
             return NotImplemented
-        return RealDomain(*self._merge_intervals((*self, *other)))
+        return IntervalUnion(*self._merge_intervals((*self, *other)))
 
-    def __ror__(self, other: object, /) -> RealDomain:
-        if (other_union := RealDomain.parse(other)) is None:
+    def __ror__(self, other: object, /) -> IntervalUnion:
+        if (other_union := IntervalUnion.parse(other)) is None:
             return NotImplemented
         return other_union | self
 
     def __str__(self) -> str:
-        return " | ".join(str(interval) for interval in self)
+        return " | ".join(str(interval) for interval in self) or str(Interval.EMPTY)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}('{self!s}')"
 
 
-class ScalarDomains(ScalarDomain, PosetEnum):
-    r"""Enumeration of some scalar domains."""
+type _Interval = Interval  # Avoid shadowing by RealDomains.Interval in annotations.
 
-    _value_: ScalarDomain
+
+class RealDomains(RealDomain, PosetEnum):
+    r"""Enumeration of some real domains."""
+
+    _value_: RealDomain
     ALIASES: ClassVar[Mapping[str, Self]]
 
     ANY = Interval("[-inf, +inf]")
@@ -730,7 +783,7 @@ class ScalarDomains(ScalarDomain, PosetEnum):
     NEGATIVE_REALS = Interval("(-inf, 0)")
     NONNEGATIVE_REALS = Interval("[0, inf)")
     NONPOSITIVE_REALS = Interval("(-inf, 0]")
-    NONZERO = RealDomain("(-inf, 0) | (0, +inf)")
+    NONZERO = IntervalUnion("(-inf, 0) | (0, +inf)")
 
     UNIT_INTERVAL = Interval("[0, 1]")
     OPEN_UNIT_INTERVAL = Interval("(0, 1)")
@@ -739,7 +792,7 @@ class ScalarDomains(ScalarDomain, PosetEnum):
     UNIT_BALL = Interval("[-1, 1]")
     OPEN_UNIT_BALL = Interval("(-1, 1)")
 
-    Interval: Final = nonmember(Interval)
+    Interval = nonmember(Interval)
 
     @classmethod
     def _missing_(cls, value: object) -> Self | None:
@@ -748,34 +801,54 @@ class ScalarDomains(ScalarDomain, PosetEnum):
                 return matched
             if (parsed := Interval.parse(value)) is not None:
                 return cls(parsed)
-            if (parsed := RealDomain.parse(value)) is not None:
+            if (parsed := IntervalUnion.parse(value)) is not None:
                 return cls(parsed)
             return None
         return None
 
     @property
-    def domain(self) -> ScalarDomain:
+    def domain(self) -> RealDomain:
         return self.value
 
     def check(self, item: Tensor, /) -> Tensor:
         return self.domain.check(item)
 
-    def __le__(self, other: object, /) -> bool | Indeterminate:
-        if isinstance(other, ScalarDomains):
-            return self.domain <= other.domain
-        return self.domain <= other
+    def is_empty(self) -> bool:
+        return self.domain.is_empty()
 
-    def __lt__(self, other: object, /) -> bool | Indeterminate:
-        result = self <= other
-        if result is NotImplemented:
-            return NotImplemented
-        return result and self != other
+    @property
+    def intervals(self) -> tuple[_Interval, ...]:
+        return self.domain.intervals
+
+    def __le__(self, other: object, /) -> bool:
+        return IntervalUnion(self).__le__(other)
+
+    def __lt__(self, other: object, /) -> bool:
+        return IntervalUnion(self).__lt__(other)
+
+    def __ge__(self, other: object, /) -> bool:
+        return IntervalUnion(self).__ge__(other)
+
+    def __gt__(self, other: object, /) -> bool:
+        return IntervalUnion(self).__gt__(other)
+
+    def __and__(self, other: object, /) -> IntervalUnion:
+        return IntervalUnion(self).__and__(other)
+
+    def __rand__(self, other: object, /) -> IntervalUnion:
+        return IntervalUnion(self).__rand__(other)
+
+    def __or__(self, other: object, /) -> IntervalUnion:
+        return IntervalUnion(self).__or__(other)
+
+    def __ror__(self, other: object, /) -> IntervalUnion:
+        return IntervalUnion(self).__ror__(other)
 
     def __str__(self) -> str:
         return str(self.value)
 
 
-S = ScalarDomains  # temporary alias
+S = RealDomains  # temporary alias
 S.ALIASES = MappingProxyType({
     "any"                     : S.ANY,
     "empty"                   : S.EMPTY,

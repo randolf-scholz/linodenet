@@ -3,7 +3,7 @@ r"""Tests for imtskit.bijections."""
 import pytest
 import torch
 
-from imtskit.domains import MATRIX_TESTS, MatrixDomains, ScalarDomains
+from imtskit.domains import MATRIX_TESTS, MatrixDomains, RealDomains
 from imtskit.mappings import (
     Bijection,
     PositiveDiagonal,
@@ -24,7 +24,7 @@ class TestScalarOpenUnitBallMap:
         x = torch.linspace(-4, 4, 128)
         y = bijection(x)
 
-        assert ScalarDomains.OPEN_UNIT_BALL.check(y).all()
+        assert RealDomains.OPEN_UNIT_BALL.check(y).all()
         torch.testing.assert_close(bijection.inverse(y), x, atol=1e-5, rtol=1e-5)
 
     def test_inverse_roundtrip_on_codomain_samples(
@@ -48,7 +48,7 @@ class TestScalarOpenUnitBallMap:
         y = bijection(x)
 
         assert y.shape == x.shape
-        assert ScalarDomains.OPEN_UNIT_BALL.check(y).all()
+        assert RealDomains.OPEN_UNIT_BALL.check(y).all()
 
 
 class TestPositiveDiagonal:
