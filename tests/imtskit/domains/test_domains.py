@@ -1,3 +1,4 @@
+from dataclasses import FrozenInstanceError, replace
 from typing import Never
 
 import pytest
@@ -38,6 +39,7 @@ from imtskit.domains.matrix_domains import (
     LeftInvertible,
     LipschitzBounded,
     LowerTriangular,
+    LowRank,
     LowRankSkewSymmetric,
     LowRankSquare,
     LowRankSymmetric,
@@ -63,6 +65,7 @@ from imtskit.domains.matrix_domains import (
     RowStochastic,
     SpecialOrthogonal,
     SpectrallyNormalized,
+    Square,
     Symplectic,
     Tall,
     Toeplitz,
@@ -303,6 +306,47 @@ class TestTensorDomains:
 
 
 class TestMatrixDomains:
+    @pytest.mark.parametrize(
+        "domain_type",
+        [Square, LowRankSquare, BlockDiagonal, Circulant, Identity, Symplectic],
+    )
+    def test_square_dimensions_are_derived(self, domain_type: type[Square]) -> None:
+        domain = domain_type(4)
+        assert domain.size == domain.rows == domain.cols == 4
+        assert domain.shape == (4, 4)
+        assert domain_type(size=4) == domain
+        assert replace(domain, size=2).shape == (2, 2)
+        assert domain_type().shape is None
+        assert domain_type().rows is None
+        assert domain_type().cols is None
+
+        with pytest.raises(TypeError):
+            domain_type(3, 3)  # type: ignore
+        with pytest.raises(TypeError):
+            domain_type(rows=3, cols=3)  # type: ignore
+        with pytest.raises(FrozenInstanceError):
+            setattr(domain, "rows", 2)  # noqa: B010
+
+    def test_rank_one_has_fixed_rank(self) -> None:
+        domain = RankOne(2, 3)
+        assert isinstance(domain, LowRank)
+        assert domain.rank == 1
+        assert domain.shape == (2, 3)
+        assert torch.ones(2, 3) in domain
+        assert torch.ones(3, 2) not in domain
+        assert RankOne().rank == 1
+        assert replace(domain, rows=3, cols=2).rank == 1
+
+        with pytest.raises(TypeError):
+            RankOne(rank=1)  # type: ignore
+        with pytest.raises(TypeError):
+            RankOne(2, 3, 1)  # type: ignore
+        with pytest.raises(FrozenInstanceError):
+            setattr(domain, "rank", 2)  # noqa: B010
+
+    def test_matrix_domains_are_not_callable(self) -> None:
+        assert all(not callable(member.value) for member in M)
+
     def test_string_lookup_covers_all_members(self) -> None:
         assert set(M.__members__.values()) <= set(M.ALIASES.values())
 
