@@ -3,7 +3,7 @@
 -e .
 cuda-toolkit==13.2.2 ; sys_platform == 'linux'
     # via torch
-filelock==4.2.9
+filelock==4.2.12
     # via torch
 fsspec==2026.9.0
     # via torch
@@ -15,7 +15,7 @@ mpmath==1.3.0
     # via sympy
 networkx==3.7
     # via torch
-numpy==2.5.4
+numpy==2.5.5
     # via imtskit
 nvidia-cublas==13.4.1.3 ; sys_platform == 'linux'
     # via
@@ -69,7 +69,7 @@ torch==2.15.0
     #   imtskit
     #   torchode
     #   torchtyping
-torchode==1.0.1
+torchode==1.2.0
     # via imtskit
 torchtyping==0.1.5
     # via torchode
