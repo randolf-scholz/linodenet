@@ -11,7 +11,6 @@ import logging
 from abc import abstractmethod
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
-from enum import nonmember
 from math import inf, isnan, nan
 from types import MappingProxyType
 from typing import Any, ClassVar, Final, Self, cast, overload
@@ -760,14 +759,12 @@ class IntervalUnion(RealDomain, Collection[Interval]):
         return f"{self.__class__.__name__}('{self!s}')"
 
 
-type _Interval = Interval  # Avoid shadowing by RealDomains.Interval in annotations.
-
-
 class RealDomains(RealDomain, PosetEnum):
     r"""Enumeration of some real domains."""
 
     _value_: RealDomain
     ALIASES: ClassVar[Mapping[str, Self]]
+    Interval: ClassVar[type[Interval]]
 
     ANY = Interval("[-inf, +inf]")
     EMPTY = Interval.EMPTY
@@ -792,8 +789,6 @@ class RealDomains(RealDomain, PosetEnum):
     UNIT_BALL = Interval("[-1, 1]")
     OPEN_UNIT_BALL = Interval("(-1, 1)")
 
-    Interval = nonmember(Interval)
-
     @classmethod
     def _missing_(cls, value: object) -> Self | None:
         if isinstance(value, str):
@@ -817,7 +812,7 @@ class RealDomains(RealDomain, PosetEnum):
         return self.domain.is_empty()
 
     @property
-    def intervals(self) -> tuple[_Interval, ...]:
+    def intervals(self) -> tuple[Interval, ...]:
         return self.domain.intervals
 
     def __le__(self, other: object, /) -> bool:
@@ -846,6 +841,9 @@ class RealDomains(RealDomain, PosetEnum):
 
     def __str__(self) -> str:
         return str(self.value)
+
+
+RealDomains.Interval = Interval
 
 
 S = RealDomains  # temporary alias
