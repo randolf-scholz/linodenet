@@ -48,7 +48,7 @@ from .base import (
 )
 from .matrix_domains import MatrixDomains
 from .matrix_tests import *
-from .scalar_domains import Interval, IntervalUnion, RealDomain, RealDomains
+from .real_domains import Interval, IntervalUnion, RealDomain, RealDomains
 from .tensor_domains import TensorDomains
 from .tensor_tests import *
 from .vector_domains import VectorDomains
