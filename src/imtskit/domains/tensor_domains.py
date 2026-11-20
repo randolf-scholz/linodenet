@@ -16,7 +16,6 @@ __all__ = [
 
 from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass
-from types import MappingProxyType
 from typing import Any, ClassVar, Final, Self, overload
 
 import torch
@@ -189,16 +188,16 @@ class TensorDomains(TensorDomain, PosetEnum):
 
 
 T = TensorDomains  # temporary alias
-T.KNOWN_SUPERTYPES = MappingProxyType({
+T.KNOWN_SUPERTYPES = frozendict({
     T.BOOLEAN: {T.REAL},
     T.ONE: {T.BOOLEAN, T.NONZERO},
     T.REAL: {T.COMPLEX},
     T.ZERO: {T.BOOLEAN, T.SPARSE},
 })  # fmt: skip
-T.KNOWN_SUBTYPES = MappingProxyType({
+T.KNOWN_SUBTYPES = frozendict({
     T.SPARSE: {T.ZERO},
 })  # fmt: skip
-T.ALIASES = MappingProxyType({
+T.ALIASES = frozendict({
     "any"     : T.ANY,
     "boolean" : T.BOOLEAN,
     "complex" : T.COMPLEX,

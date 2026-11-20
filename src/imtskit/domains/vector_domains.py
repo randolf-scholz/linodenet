@@ -30,7 +30,6 @@ __all__ = [
 
 from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass
-from types import MappingProxyType
 from typing import Any, ClassVar, Final, Self, overload
 
 import torch
@@ -332,7 +331,7 @@ V.KNOWN_MEETS = (  # pyright: ignore[reportAttributeAccessIssue]
     (V.ZERO, V.NONNEGATIVE & V.NONPOSITIVE),
 )
 # pyrefly: ignore[bad-assignment]
-V.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAttributeAccessIssue]
+V.KNOWN_SUPERTYPES = frozendict({  # pyright: ignore[reportAttributeAccessIssue]
     V.BOOLEAN: {V.REAL & V.NONNEGATIVE},
     V.DISCRETE: {V.REAL},
     V.NEGATIVE: {V.REAL & V.NONPOSITIVE & V.NONZERO},
@@ -349,10 +348,10 @@ V.KNOWN_SUPERTYPES = MappingProxyType({  # pyright: ignore[reportAttributeAccess
     V.UNIT_L1_BALL: {V.UNIT_BALL},
     V.ZERO: {V.BOOLEAN},
 })  # fmt: skip
-V.KNOWN_SUBTYPES = MappingProxyType(
+V.KNOWN_SUBTYPES = frozendict(
     {V.SPARSE: {V.ZERO, V.ONE_HOT}},
 )
-V.ALIASES = MappingProxyType({
+V.ALIASES = frozendict({
     "any"            : V.ANY,
     "boolean"        : V.BOOLEAN,
     "complex"        : V.COMPLEX,

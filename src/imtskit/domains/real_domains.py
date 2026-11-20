@@ -12,7 +12,6 @@ from abc import abstractmethod
 from collections.abc import Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from math import inf, isnan, nan
-from types import MappingProxyType
 from typing import Any, ClassVar, Final, Self, cast, overload
 
 import torch
@@ -847,7 +846,7 @@ RealDomains.Interval = Interval
 
 
 S = RealDomains  # temporary alias
-S.ALIASES = MappingProxyType({
+S.ALIASES = frozendict({
     "any"                     : S.ANY,
     "empty"                   : S.EMPTY,
     "extended-line"           : S.EXTENDED_LINE,

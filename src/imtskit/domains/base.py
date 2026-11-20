@@ -27,7 +27,7 @@ from collections.abc import (
 from dataclasses import dataclass
 from enum import Enum, EnumType
 from functools import cache
-from types import MappingProxyType, NotImplementedType
+from types import NotImplementedType
 from typing import (
     Any,
     ClassVar,
@@ -179,7 +179,7 @@ class Meet[D: DomainLike](Domain):
             case Join():
                 # (A₁ ∧ … ∧ Aₙ) ∧ (B₁ ∨ … ∨ Bₙ)
                 # ≡ A₁ ∧ … ∧ Aₙ ∧ (B₁ ∨ … ∨ Bₙ)
-                return Meet({*self, other})  # ty: ignore[invalid-argument-type]
+                return Meet({*self, other})
             case Meet():
                 # (A₁ ∧ … ∧ Aₙ) ∧ (B₁ ∧ … ∧ Bₙ)
                 # ≡ (A₁ ∧ … ∧ Aₙ ∧ B₁ ∧ … ∧ Bₙ)
@@ -298,7 +298,7 @@ class Join[D: DomainLike](Domain):
             case Meet():
                 # (A₁ ∨ … ∨ Aₙ) ∨ (B₁ ∧ … ∧ Bₘ)
                 # is already in DNF as singleton disjuncts and one conjunctive clause.
-                return Join({*self, other})  # ty: ignore[invalid-argument-type]
+                return Join({*self, other})
             case _:
                 # (A₁ ∨ … ∨ Aₙ) ∨ B ≡ (A₁ ∨ … ∨ Aₙ ∨ B)
                 return Join({*self, other})
@@ -346,7 +346,7 @@ class DomainMapping[D: Domain](Mapping[D, D]):
     def __init__(self, domains: Mapping[D, D], /) -> None:
         backend = dict(domains)
         self._validate(backend)
-        object.__setattr__(self, "domains", MappingProxyType(backend))
+        object.__setattr__(self, "domains", frozendict(backend))
 
     def __len__(self) -> int:
         return len(self.domains)

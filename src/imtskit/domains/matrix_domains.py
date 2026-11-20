@@ -70,7 +70,6 @@ __all__ = [
 
 from collections.abc import Mapping
 from dataclasses import KW_ONLY, dataclass, field
-from types import MappingProxyType
 from typing import Any, ClassVar, Literal, Self
 
 import torch
@@ -935,7 +934,7 @@ M.KNOWN_MEETS = (
     (M.UPPER_INVERTIBLE, M.UPPER_TRIANGULAR & M.INVERTIBLE),
 )
 # pyrefly: ignore[bad-assignment]
-M.KNOWN_SUPERTYPES = MappingProxyType({
+M.KNOWN_SUPERTYPES = frozendict({
     M.BANDED: {M.TOEPLITZ},
     M.BOOLEAN: {M.RECTANGULAR},
     M.CAYLEY_ORTHOGONAL: {M.SPECIAL_ORTHOGONAL},
@@ -1004,7 +1003,7 @@ M.KNOWN_SUPERTYPES = MappingProxyType({
     M.ZERO: {M.BOOLEAN},
     M.ZERO_DIAGONAL: {M.TRACELESS},
 })  # fmt: skip
-M.KNOWN_SUBTYPES = MappingProxyType({
+M.KNOWN_SUBTYPES = frozendict({
     # These relationships are not modeled by inheritance.
     M.SPARSE: {
         M.ZERO, M.PERMUTATION, M.ONE_HOT, M.BANDED,
@@ -1016,7 +1015,7 @@ M.KNOWN_SUBTYPES = MappingProxyType({
         M.TRIANGULAR, M.DIAGONAL, M.TRIDIAGONAL,
     },
 })  # fmt: skip
-M.ALIASES = MappingProxyType({
+M.ALIASES = frozendict({
     "any"                        : M.ANY,
     "backward-stable"            : M.BACKWARD_STABLE,
     "banded"                     : M.BANDED,
