@@ -375,14 +375,13 @@ def main() -> None:
     r"""Stage authored Markdown and assets, then generate the public API pages."""
     with (DOCS_DIR / "zensical.toml").open("rb") as file:
         config = tomllib.load(file)
-    content_dir = DOCS_DIR / "content"
     staging_dir = DOCS_DIR / config["project"]["docs_dir"]
 
     # Recreate staged sources so deleted pages and assets cannot survive a rebuild.
     if staging_dir.exists():
         shutil.rmtree(staging_dir)
     # Follow symlinks so shared documents and assets become ordinary staged files.
-    shutil.copytree(content_dir, staging_dir)
+    shutil.copytree(DOCS_DIR / "content", staging_dir)
 
     # Publish static files; HTML templates are loaded directly by Zensical.
     shutil.copytree(DOCS_DIR / "static", staging_dir / "static")
@@ -424,9 +423,8 @@ def main() -> None:
                 file.write(f"- [{module.identifier}]({path})\n")
 
     # Literate navigation mirrors the generated page hierarchy.
-    with (staging_dir / REFERENCE_DIR / "SUMMARY.md").open(
-        "w", encoding="utf-8"
-    ) as file:
+    summary_file = staging_dir / REFERENCE_DIR / "SUMMARY.md"
+    with summary_file.open("w", encoding="utf-8") as file:
         file.write("- [API reference](index.md)\n" + "".join(nav.build_literate_nav()))
 
 
