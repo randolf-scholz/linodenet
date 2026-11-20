@@ -1,42 +1,19 @@
-#!/usr/bin/env just --justfile
+#!/usr/bin/env -S just --justfile
 BUILD_DIR := "./build"
 
 [default]
-[doc("Show documentation commands.")]
+[doc('List available commands.')]
 help:
-    @just --justfile {{ source_directory() / "justfile" }} --list
+    @just --justfile {{ source_directory() / "justfile" }} --list --unsorted
 
-[doc("Build the Zensical documentation (the default builder).")]
-make *zensical_args: (zensical zensical_args)
-
-[doc("Deprecated: remove Sphinx output and generated API source files.")]
-sphinx-clean:
-    rm -rf {{ BUILD_DIR }}/sphinx sphinx/_autosummary sphinx/autoapi sphinx/apidoc
-
-[doc("Deprecated: remove ProperDocs output.")]
-properdocs-clean:
-    rm -rf {{ BUILD_DIR }}/properdocs
-
-[doc("Remove Zensical output and generated API Markdown.")]
-zensical-clean:
-    rm -rf {{ BUILD_DIR }}/zensical {{ BUILD_DIR }}/reference
-
-[doc("Remove all generated documentation output.")]
-clean: sphinx-clean properdocs-clean zensical-clean
-
-[doc("Deprecated: build the ProperDocs site; use Zensical instead.")]
-properdocs *properdocs_args: properdocs-clean
-    @echo "Warning: ProperDocs is deprecated; use 'just docs' instead." >&2
-    uv run properdocs build --strict --config-file properdocs/properdocs.yaml {{ properdocs_args }}
+alias make := build
 
 [doc("Build the Zensical site with generated API Markdown and strict validation.")]
-zensical *zensical_args: zensical-clean
-    uv run python scripts/generate_reference.py
-    uv run zensical build --clean --strict --config-file zensical.toml {{ zensical_args }}
+build *zensical_args:
+    # Stage authored pages and theme assets, and generate API Markdown and navigation.
+    uv run python generate_reference.py
+    uv run zensical build --strict --config-file zensical.toml {{ zensical_args }}
 
-[doc("Deprecated: rebuild the Sphinx docs; use Zensical instead.")]
-sphinx *sphinx_args: sphinx-clean
-    @echo "Warning: Sphinx is deprecated; use 'just docs' instead." >&2
-    uv run sphinx-build -M html sphinx {{ BUILD_DIR }}/sphinx {{ sphinx_args }}
-    # Sphinx Immaterial omits user static files when bundling theme assets.
-    cp -RL _static/* {{ BUILD_DIR }}/sphinx/html/_static/
+[doc('Clean all documentation build artifacts.')]
+clean:
+    rm -rf {{ BUILD_DIR }}

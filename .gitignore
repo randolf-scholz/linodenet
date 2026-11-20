@@ -27,13 +27,6 @@ tmp*.py
 **/libtorch/
 **/build/
 
-# documentation
-docs/apidoc/
-docs/autoapi/
-docs/sphinx/apidoc/
-docs/sphinx/autoapi/
-docs/reference/
-
 # testing
 **/tests/**/reports/
 # endregion custom ---------------------------------------------------------------------

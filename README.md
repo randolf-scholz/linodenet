@@ -1,8 +1,8 @@
 # imtskit — 𝗜rregular 𝗠ultivariate 𝗧ime 𝗦eries Tool𝗞𝗶𝘁
 
-[INSTALLATION](#installation) | [DOCUMENTATION](docs/index.rst) | [CONTRIBUTING](CONTRIBUTING.md) | [LICENSE](LICENSE)
+[INSTALLATION](#installation) | [DOCUMENTATION](CONTRIBUTING.md#2-documentation) | [CONTRIBUTING](CONTRIBUTING.md) | `LICENSE`
 
-![model-sketch](docs/lssm.png)
+![model-sketch](assets/lssm.png)
 
 ## Introduction
 

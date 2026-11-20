@@ -2,8 +2,8 @@
 
 This guide describes the development workflow and conventions for `imtskit`.
 Keep changes focused, add tests for new behavior and bug fixes, and update the
-relevant documentation. Project configuration lives in [pyproject.toml](pyproject.toml);
-[AGENTS.md](AGENTS.md) contains additional instructions for automated contributors.
+relevant documentation. Project configuration lives in `pyproject.toml`;
+`AGENTS.md` contains additional instructions for automated contributors.
 
 ## 1. Setting up the development environment
 
@@ -57,8 +57,8 @@ from the active environment. Run all project-local Python commands through
 ## 2. Documentation
 
 Documentation uses **Zensical and Markdown**. Write new documentation for the
-site under [docs](docs); its configuration is
-[docs/zensical.toml](docs/zensical.toml).
+site under `docs`; its configuration is
+`docs/zensical.toml`.
 
 ### Docstring Conventions
 
@@ -80,22 +80,22 @@ site under [docs](docs); its configuration is
 From the repository root, run:
 
 ```bash
-just docs
+just docs::build
 ```
 
 This recipe regenerates the API reference Markdown from `src/`, builds the site
 with strict validation, and includes static assets. The HTML output is written to
-`docs/build/zensical/`; open `docs/build/zensical/index.html` to inspect it. API
-pages under `docs/reference/` are generated, so update the source
+`docs/build/site/`; open `docs/build/site/index.html` to inspect it. API
+pages under `docs/build/sources/reference/` are generated, so update the source
 docstrings or the generator instead of editing those pages directly.
 
-`just docs::zensical` explicitly selects the same builder. The Sphinx and
-ProperDocs recipes remain available but are deprecated.
+See `docs/README.md` for the content and theme layout, build
+options, and cleanup commands.
 
 ## 3. Linting & Formatting
 
 Use `prek` to run the repository's configured checks. The hook configuration is
-[prek.toml](prek.toml):
+`prek.toml`:
 
 ```bash
 prek run -a  # prefix with `uv run` if venv not active
@@ -120,7 +120,7 @@ Ruff's rules and formatting settings are defined in `pyproject.toml`. To check
 formatting without changing files, run `uv run ruff format --check src/ tests/`.
 To apply lint fixes, run `uv run ruff check --fix src/ tests/` and review the result.
 
-Tach checks imports against the module boundaries in [tach.toml](tach.toml), with
+Tach checks imports against the module boundaries in `tach.toml`, with
 additional settings in `pyproject.toml`. Update declared dependencies when an
 intentional architectural change adds imports across those boundaries.
 
