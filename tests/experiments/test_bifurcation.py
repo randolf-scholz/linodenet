@@ -641,7 +641,10 @@ def tune_model_hyperparameters(
                     name: tensor.detach().cpu()
                     for name, tensor in (
                         # patch for torch.compiled model.
-                        getattr(trained_model, "_orig_mod", trained_model)
+                        cast(
+                            "nn.Module",
+                            getattr(trained_model, "_orig_mod", trained_model),
+                        )
                         .state_dict()
                         .items()
                     )
