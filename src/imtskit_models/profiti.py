@@ -43,7 +43,7 @@ class ModuleSequence[M: nn.Module](nn.ModuleList, Sequence[M]):
     def __getitem__(self, index: int, /) -> M: ...  # pyrefly: ignore[bad-override]
     @overload
     def __getitem__(self, index: slice, /) -> ModuleSequence[M]: ...
-    def __getitem__(self, index: int | slice, /) -> M | ModuleSequence[M]:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __getitem__(self, index: int | slice, /) -> M | ModuleSequence[M]:  # type: ignore
         if isinstance(index, slice):
             modules = list(self._modules.values())
             selection = modules[index]

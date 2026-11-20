@@ -172,7 +172,7 @@ class TransformSequence(nn.ModuleList, Sequence[nn.Module]):
     def __getitem__(self, index: int, /) -> nn.Module: ...  # pyrefly: ignore[bad-override]
     @overload
     def __getitem__(self, index: slice, /) -> TransformSequence: ...
-    def __getitem__(self, index: int | slice, /) -> nn.Module | TransformSequence:  # pyright: ignore[reportIncompatibleMethodOverride]
+    def __getitem__(self, index: int | slice, /) -> nn.Module | TransformSequence:  # type: ignore
         if isinstance(index, slice):
             modules = list(self._modules.values())
             return TransformSequence(modules[index])
