@@ -444,7 +444,7 @@ def series[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Series[M 
     """
     match x, y:
         case Fn(), Fn():
-            return Series((x, y))  # ty: ignore[invalid-return-type]
+            return Series((x, y))  # ty: ignore[invalid-explicit-return]
         case Fn(), [*modules]:
             return Series((x, *modules))  # ty: ignore[invalid-argument-type]
         case [*modules], Fn():
@@ -546,7 +546,7 @@ def parallel[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Paralle
     """
     match x, y:
         case Fn(), Fn():
-            return Parallel((x, y))  # ty: ignore[invalid-return-type]
+            return Parallel((x, y))  # ty: ignore[invalid-explicit-return]
         case Fn(), [*modules]:
             return Parallel((x, *modules))  # ty: ignore[invalid-argument-type]
         case [*modules], Fn():
@@ -673,7 +673,7 @@ def fork[M: Fn, N: Fn](x: M | Sequence[M], y: N | Sequence[N], /) -> Fork[M | N]
     """
     match x, y:
         case Fn(), Fn():
-            return Fork((x, y))  # ty: ignore[invalid-return-type]
+            return Fork((x, y))  # ty: ignore[invalid-explicit-return]
         case Fn(), [*modules]:
             return Fork((x, *modules))  # ty: ignore[invalid-argument-type]
         case [*modules], Fn():

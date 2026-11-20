@@ -646,4 +646,4 @@ def initialize[T = Any](spec: T | type[T] | Blueprint[T], /) -> T:
             raise TypeError("Expected a blueprint dictionary.")
         return BLUEPRINT_REGISTRY.initialize(spec)
     # fall through
-    return spec  # ty: ignore[invalid-return-type]
+    return spec  # ty: ignore[invalid-explicit-return]
