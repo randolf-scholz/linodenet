@@ -38,8 +38,7 @@ class LinearContraction(nn.Linear):
     input_size: Final[int]
     output_size: Final[int]
 
-    @override
-    def __init__(  # pyrefly: ignore[bad-override]
+    def __init__(
         self,
         in_features: int,
         out_features: int,
