@@ -38,7 +38,7 @@ from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from enum import IntEnum, StrEnum
 from types import EllipsisType
-from typing import ClassVar, Literal, TypeIs, overload
+from typing import ClassVar, Final, Literal, ReadOnly, TypeIs, overload
 
 type ShapeType = tuple[DimType, ...] | tuple[EllipsisType, *tuple[DimType, ...]]
 type DimType = ConstantDim | StaticDim | VariadicDim | AffineDim | DynamicDim
@@ -133,7 +133,8 @@ class DimKind(StrEnum):
 class Dim:
     r"""Base representation for a shape dimension or a bundle of axes."""
 
-    kind: ClassVar[DimKind]
+    # FIXME: Using https://peps.python.org/pep-0767/
+    kind: ClassVar[ReadOnly[DimKind]]  # type: ignore
 
     @abstractmethod
     def __str__(self) -> str: ...
@@ -146,7 +147,7 @@ class ConstantDim(Dim):
     The class stores the integer without validating dimension size bounds.
     """
 
-    kind: ClassVar[Literal[DimKind.CONSTANT]] = DimKind.CONSTANT
+    kind: ClassVar[Final[Literal[DimKind.CONSTANT]]] = DimKind.CONSTANT
 
     value: int  # (>= 0)
 
@@ -158,7 +159,7 @@ class ConstantDim(Dim):
 class StaticDim(Dim):
     r"""Named single-axis size fixed for a call, such as `n`."""
 
-    kind: ClassVar[Literal[DimKind.STATIC]] = DimKind.STATIC
+    kind: ClassVar[Final[Literal[DimKind.STATIC]]] = DimKind.STATIC
 
     value: Identifier
 
@@ -170,7 +171,7 @@ class StaticDim(Dim):
 class VariadicDim(Dim):
     r"""Named bundle of axes fixed for a call, such as `*xs`."""
 
-    kind: ClassVar[Literal[DimKind.VARIADIC]] = DimKind.VARIADIC
+    kind: ClassVar[Final[Literal[DimKind.VARIADIC]]] = DimKind.VARIADIC
 
     value: Identifier
 
@@ -182,7 +183,7 @@ class VariadicDim(Dim):
 class DynamicDim(Dim):
     r"""Named single-axis size that may vary across calls, such as `$n`."""
 
-    kind: ClassVar[Literal[DimKind.VARIADIC]] = DimKind.VARIADIC
+    kind: ClassVar[Final[Literal[DimKind.DYNAMIC]]] = DimKind.DYNAMIC
 
     value: Identifier
 
@@ -216,7 +217,7 @@ class AffineDim(Dim):
     - `2$n + m`
     """
 
-    kind: ClassVar[Literal[DimKind.AFFINE]] = DimKind.AFFINE
+    kind: ClassVar[Final[Literal[DimKind.AFFINE]]] = DimKind.AFFINE
 
     terms: Sequence[tuple[Sign, ConstantDim, StaticDim | DynamicDim]]
     offset: ConstantDim | None = None
