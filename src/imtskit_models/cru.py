@@ -484,9 +484,9 @@ class CRU(nn.Module):
     def __init__(
         self,
         input_size: int,
-        latent_size: int,  # corresponds to latent_observation_size in CRU reference impl.
+        output_size: int,
         *,
-        output_size: int | None = None,
+        latent_size: int,  # corresponds to latent_observation_size in CRU reference impl.
         encoder: nn.Module,
         decoder: nn.Module,
         num_basis: int = 15,  # number of basis matrices for the transition model
@@ -497,27 +497,23 @@ class CRU(nn.Module):
         batch_first: bool = True,
     ) -> None:
         super().__init__()
-        if initial_variance <= 0:
-            raise ValueError("initial_variance must be positive.")
 
         self.input_size = input_size
-        if output_size is None:
-            output_size = getattr(decoder, "output_size", None)
-        if not isinstance(output_size, int):
-            raise TypeError(
-                "output_size must be provided if decoder has no output_size."
-            )
         self.output_size = output_size
         self.latent_size = latent_size
         self.num_basis = num_basis
         self.validate_args = validate_args
         self.initial_variance = initial_variance
         self.batch_first = batch_first
-
         self.variance_activation = new_activation(variance_activation)
-
         self.encoder = encoder
         self.decoder = decoder
+
+        decoder_output_size = getattr(decoder, "output_size", None)
+        if self.output_size != decoder_output_size:
+            raise ValueError("output_size must match decoder.output_size if provided.")
+        if self.initial_variance <= 0:
+            raise ValueError("initial_variance must be positive.")
 
         # The transition matrix A is parametrized as a linear combination ∑ₖαₖ(μₜ)Aₖ
         # where Aₖ = [[B₁₁, B₁₂], [B₂₁, B₂₂]] and each block is a d×d banded matrix of bandwidth b.
@@ -999,8 +995,8 @@ def build_cru(config: CRUConfig | CRUConfigDict | Mapping[str, Any], /) -> CRU:
     )
 
     return CRU(
-        config.input_size,
-        config.latent_size,
+        input_size=config.input_size,
+        latent_size=config.latent_size,
         output_size=config.output_size,
         encoder=encoder,
         decoder=decoder,

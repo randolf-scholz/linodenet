@@ -285,8 +285,8 @@ class TestCRU(TestProbabilisticModel[CRU]):
             variance_activation=config.decoder.variance_activation,
         )
         model = CRU(
-            config.input_size,
-            config.latent_size,
+            input_size=config.input_size,
+            latent_size=config.latent_size,
             output_size=config.output_size,
             encoder=encoder,
             decoder=decoder,
