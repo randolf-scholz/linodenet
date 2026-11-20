@@ -533,7 +533,7 @@ class TestMatrixDomains:
         assert not M.POSITIVE_DEFINITE <= M.NEGATIVE_DEFINITE
         assert not M.NEGATIVE_DEFINITE <= M.POSITIVE_DEFINITE
 
-        assert M.EYE is M.IDENTITY
+        assert M.EYE is M.IDENTITY  # pyrefly: ignore[unnecessary-comparison]
 
         with pytest.raises(TypeError):
             _ = M.SQUARE <= "square"
