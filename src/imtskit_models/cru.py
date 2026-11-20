@@ -285,7 +285,7 @@ type EncoderConfigLike = EncoderConfig | EncoderConfigDict
 type DecoderConfigLike = DecoderConfig | DecoderConfigDict
 
 
-def update_masked[R: Tensor | tuple[Tensor, ...]](
+def update_masked[R: (Tensor, tuple[Tensor, ...])](
     target: R,  # (*(..., *eᵢ),)
     fn: Callable[..., R],  # [*(..., *dᵢ)] -> (*(..., *eᵢ),)
     /,
@@ -299,7 +299,7 @@ def update_masked[R: Tensor | tuple[Tensor, ...]](
     ys = fn(*(x[batch_mask] for x in args))
     if isinstance(ys, Tensor):
         assert isinstance(target, Tensor)
-        return target.masked_scatter(  # pyrefly: ignore[bad-return]
+        return target.masked_scatter(  # ty: ignore[invalid-explicit-return]
             batch_mask.reshape(
                 *batch_mask.shape, *(1,) * (target.ndim - batch_mask.ndim)
             ),
