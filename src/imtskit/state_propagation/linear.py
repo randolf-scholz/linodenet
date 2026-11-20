@@ -79,7 +79,7 @@ def linear_flow(
     return torch.einsum("...nkl, ...l -> ...nk", expAdt, x0) + phi1bt
 
 
-class LinearFlow(nn.Module, ContinuousFlow):
+class LinearFlow(nn.Module, ContinuousFlow[Tensor]):
     r"""Learnable affine linear flow with optional kernel constraints.
 
     With effective drift matrix $A$, the module evaluates
@@ -320,7 +320,7 @@ def linear_gaussian_flow(
     return mu_t, sigma_t
 
 
-class LinearGaussianFlow(nn.Module, ContinuousFlow):
+class LinearGaussianFlow(nn.Module, ContinuousFlow[tuple[Tensor, Tensor]]):
     r"""Learnable linear-Gaussian flow for Gaussian states.
 
     The module parameterizes the drift matrix $A$, diffusion covariance $Q$, and
