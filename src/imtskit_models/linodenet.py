@@ -126,8 +126,6 @@ class LinearFlow(nn.Module):
 
     def _init_kernel(self, init: str | Tensor | nn.Module, /) -> Tensor:
         match init:
-            case None:
-                return torch.randn(self.input_size, self.input_size)
             case "zero":
                 return torch.zeros(self.input_size, self.input_size)
             case "skew-symmetric":
