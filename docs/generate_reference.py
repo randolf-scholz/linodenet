@@ -386,9 +386,10 @@ def main() -> None:
     shutil.copytree(content_dir, staging_dir)
 
     # Publish browser assets separately from the theme's HTML templates.
-    shutil.copytree(THEME_DIR / "css", staging_dir / "assets/css", dirs_exist_ok=True)
-    shutil.copy2(
-        THEME_DIR / "mathjax_config.js", staging_dir / "assets/mathjax_config.js"
+    shutil.copytree(
+        THEME_DIR,
+        staging_dir / "theme",
+        ignore=shutil.ignore_patterns("templates"),
     )
 
     # Discover all targets before writing pages so forward references can resolve.
@@ -420,8 +421,8 @@ def main() -> None:
 
     # The reference landing page lists only top-level packages.
     (staging_dir / REFERENCE_DIR).mkdir(parents=True, exist_ok=True)
-    with (staging_dir / REFERENCE_INDEX).open("a", encoding="utf-8") as file:
-        file.write("\n## Packages\n\n")
+    with (staging_dir / REFERENCE_INDEX).open("w", encoding="utf-8") as file:
+        file.write("# API reference\n\n## Packages\n\n")
         for module in modules.values():
             if "." not in module.identifier:
                 path = get_relative_path(REFERENCE_INDEX, module.doc_path)

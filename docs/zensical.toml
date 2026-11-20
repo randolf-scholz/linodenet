@@ -9,11 +9,11 @@ site_url = "https://github.com/randolf-scholz/imtskit"
 site_author = "Randolf Scholz"
 repo_url = "https://github.com/randolf-scholz/imtskit"
 repo_name = "randolf-scholz/imtskit"
-extra_css = ["assets/css/adjacent-navigation.css", "assets/css/signatures.css"]
+extra_css = ["theme/css/adjacent-navigation.css", "theme/css/signatures.css"]
 
 # The configuration must be loaded before the MathJax runtime.
 extra_javascript = [
-    "assets/mathjax_config.js",
+    "theme/mathjax_config.js",
     "https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js",
 ]
 

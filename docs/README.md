@@ -24,14 +24,17 @@ and `LICENSE.md` → `../../LICENSE`. Edit the root files to update the site.
 Staging follows these symlinks and copies their contents without rewriting links.
 References to repository-only files in shared pages use filenames in backticks.
 
-The reference landing page lives in `content/reference/index.md`; the generator
-appends its package list to the staged copy.
+The generator creates the entire reference section, including the landing page
+at `build/sources/reference/index.md` with its heading and package list.
 
 Site appearance and rendering live in `theme/`: HTML templates in `templates/`,
 stylesheets in `css/`, and MathJax configuration directly in `mathjax_config.js`.
-The build stages stylesheets under `build/sources/assets/css/` and the MathJax
-configuration at `build/sources/assets/mathjax_config.js`. Zensical loads templates
-directly from `theme/templates/`; they are not copied into the site sources.
+The build copies that directory into `build/sources/theme/`, excluding
+`templates/`, so CSS and JavaScript paths retain their source layout. Local theme
+paths in `zensical.toml`, such as `theme/css/signatures.css` and
+`theme/mathjax_config.js`, also exist relative to this directory before building.
+Zensical loads templates directly from `theme/templates/`; they are not copied
+into the site sources.
 
 Put images and attachments used by repository-root Markdown files in the root
 `assets/` directory. The relative symlink `content/assets` → `../../assets` makes
@@ -42,7 +45,8 @@ example in `content/diagrams/` or `content/theory/`.
 This README contains maintainer instructions and is not copied into the site.
 
 The generated site uses explicit `.html` links so pages can be opened directly
-from disk, and system fonts for offline reading. MathJax is the exception: its
-runtime, math fonts, and extensions load from a CDN, so rendering mathematics
-requires an internet connection unless those resources are already cached.
-External reference links still lead to their respective websites.
+from disk. The default web fonts load from Google Fonts, with system fonts as an
+offline fallback. MathJax's runtime, math fonts, and extensions load from a CDN,
+so rendering mathematics requires an internet connection unless those resources
+are already cached. External reference links still lead to their respective
+websites.
