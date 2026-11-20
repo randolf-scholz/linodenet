@@ -1,5 +1,7 @@
 r"""Test Signature utility."""
 
+from collections.abc import Callable
+
 import pytest
 
 from signatures import GenericType, Identifier, Parser, signature
@@ -22,6 +24,12 @@ from signatures import GenericType, Identifier, Parser, signature
             "[Tensor[(m, n)]?, Label?] -> Output?",
             "{[Tensor[(m, n)]?, Label?] -> Output?}",
         ),
+        ("() -> ()", "{() -> ()}"),
+        ("(n,) -> (m,)", "{(n) -> (m)}"),
+        ("(...,) -> (..., n,)", "{(..., ) -> (..., n)}"),
+        ("(*rest, $n, 3) -> ()", "{(*rest, $n, 3) -> ()}"),
+        ("(2n-$m+3) -> (-2)", "{(2n - $m + 3) -> (-2)}"),
+        ("[] -> []", "{[] -> []}"),
     ],
 )
 def test_signature(argument: str, expected: str) -> None:
@@ -117,34 +125,110 @@ def test_reject_required_arg_after_optional_arg(argument: str) -> None:
         Parser.parse_arglist(argument)
 
 
-def test() -> None:
-    examples = [
-        "[x]",
-        "[Tensor[(3, 224, 224)], Label]",
+@pytest.mark.parametrize(
+    "argument",
+    [
+        "",
+        "A",
+        "A ->",
+        "{A -> B",
+        "[A",
+        "(n,",
+        "(*",
+        "($",
+        "(2$",
+        "Tensor[",
+    ],
+)
+def test_reject_truncated_signature(argument: str) -> None:
+    r"""Incomplete productions should raise syntax errors rather than index errors."""
+    with pytest.raises(RuntimeError) as exc_info:
+        Parser.parse_signature(argument)
+    assert isinstance(exc_info.value.__cause__, SyntaxError)
+
+
+@pytest.mark.parametrize(
+    ("parse", "argument", "error_type"),
+    [
+        (Parser.parse_signature, "A -> B C", RuntimeError),
+        (Parser.parse_arglist, "[A] B", SyntaxError),
+        (Parser.parse_identifier, "A B", SyntaxError),
+    ],
+)
+def test_reject_trailing_tokens(
+    parse: Callable[[str], object], argument: str, *, error_type: type[Exception]
+) -> None:
+    r"""Every public entry point should require complete input consumption."""
+    with pytest.raises(error_type) as exc_info:
+        parse(argument)
+    error = exc_info.value.__cause__ or exc_info.value
+    assert "expected end of input" in str(error)
+
+
+@pytest.mark.parametrize(
+    "argument",
+    [
         "[Tensor[(3, ...)], Tensor[(n, m)], Flag]",
-        "[Foo[Bar, Baz], (1, 2, n, *rest, **kwrest), ...]",  # last "..." is invalid ArgType -> will error
+        "[Foo[Bar, Baz], (1, 2, n, *rest, **kwrest), ...]",
         "[T1, T2, Tensor[(1, 2, 3)], Tensor[(n, ...)], Tensor[(**k, *x, d)]]",
-    ]
+        "[A,]",
+        "[A",
+        "[Tensor[(n,)]",
+    ],
+)
+def test_reject_invalid_arglist(argument: str) -> None:
+    r"""Malformed argument lists should fail, including misplaced ellipses."""
+    with pytest.raises(SyntaxError):
+        Parser.parse_arglist(argument)
 
-    for src in examples:
-        print("SOURCE:", src)
-        try:
-            ast = Parser.parse_arglist(src)
-            print("AST:   ", ast)
-        except SyntaxError as e:
-            print("ERROR:", e)
-        print("-" * 60)
 
-    examples_sig = [
-        "[Tensor[(3, 224, 224)]] -> Tensor[(3, 224, 224)]",
-        "Tensor[(..., n)] -> [Tensor[(n, m)], Flag]",
-    ]
+@pytest.mark.parametrize("argument", ["A", "Tensor", "axis_1"])
+def test_parse_identifier(argument: str) -> None:
+    r"""Identifier parsing should return the complete identifier."""
+    assert Parser.parse_identifier(argument) == Identifier(argument)
 
-    for src in examples_sig:
-        print("SIGNATURE SOURCE:", src)
-        try:
-            sig = Parser.parse_signature(src)
-            print("SIG:   ", sig)
-        except SyntaxError as e:
-            print("ERROR:", e)
-        print("-" * 60)
+
+@pytest.mark.parametrize("argument", ["", "[A]", "A?"])
+def test_reject_invalid_identifier(argument: str) -> None:
+    r"""Identifier parsing should reject empty input and extra syntax."""
+    with pytest.raises(SyntaxError):
+        Parser.parse_identifier(argument)
+
+
+@pytest.mark.parametrize("argument", ["A -> @", ") @"])
+def test_signature_lexical_error_wrapping(argument: str) -> None:
+    r"""Later lexical errors should be wrapped and precede grammar errors."""
+    with pytest.raises(RuntimeError) as exc_info:
+        Parser.parse_signature(argument)
+    error = exc_info.value
+    assert isinstance(error.__cause__, SyntaxError)
+    assert "Unexpected character '@'" in str(error.__cause__)
+    assert error.__notes__ == [str(error.__cause__)]
+
+
+def test_signature_initial_lexical_error() -> None:
+    r"""Failure to read the first token should remain an unwrapped syntax error."""
+    with pytest.raises(SyntaxError, match="Unexpected character '@' at position 0"):
+        Parser.parse_signature("@ -> A")
+
+
+@pytest.mark.parametrize(
+    ("parse", "argument", "context"),
+    [
+        (Parser.parse_arglist, "[A] @", "arglist"),
+        (Parser.parse_identifier, "A @", "identifier"),
+    ],
+)
+def test_lexical_error_notes(
+    parse: Callable[[str], object], argument: str, *, context: str
+) -> None:
+    r"""Eager tokenization errors should retain the public entry point's context."""
+    with pytest.raises(SyntaxError, match="Unexpected character '@'") as exc_info:
+        parse(argument)
+    assert exc_info.value.__notes__ == [f"Failed to parse {context} from {argument!r}"]
+
+
+def test_signature_many_dimensions() -> None:
+    r"""All dimensions should be consumed without recursive calls per dimension."""
+    shape = f"({', '.join(f'n{i}' for i in range(1000))})"
+    assert str(Parser.parse_signature(f"{shape} -> ()")) == f"{{{shape} -> ()}}"

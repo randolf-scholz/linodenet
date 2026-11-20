@@ -462,10 +462,13 @@ def _has_wrapping_braces(source: str, /) -> bool:
 
 
 class Parser:
-    r"""Recursive-descent parser consuming an iterator of `Token` objects.
+    r"""Entry points for functional recursive-descent parsing.
 
-    The public parsing methods require EOF after the expected construct. Empty
-    token streams are treated as EOF at character position zero.
+    Each entry point tokenizes its input once into a shared tuple ending in EOF.
+    Private parsing functions receive that sequence and a token index, returning
+    the parsed value and the next index without slicing or mutating the tokens.
+    Complete input consumption is required. Lexical errors take precedence over
+    grammar errors because tokenization finishes before parsing starts.
     """
 
     @staticmethod
@@ -478,14 +481,16 @@ class Parser:
                 The original error is retained as the cause and its message is
                 added as an exception note.
         """
-        self = Parser(tokenize(arg))
+        stream = tokenize(arg)
+        first = next(stream)
         try:
-            result = (
-                self._parse_fn_type()
+            tokens = (first, *stream)
+            result, pos = (
+                _parse_fn_type(tokens, 0)
                 if _has_wrapping_braces(arg)
-                else self._parse_fn_body()
+                else _parse_fn_body(tokens, 0)
             )
-            self._check_eof()
+            _check_eof(tokens, pos)
         except SyntaxError as parser_error:
             exc = RuntimeError(f"Failed to parse signature {arg!r}")
             exc.add_note(str(parser_error))
@@ -500,11 +505,12 @@ class Parser:
         Required arguments must precede optional arguments marked with `?`.
         Unexpected tokens or trailing input raise `SyntaxError`.
         """
-        self = Parser(tokenize(arg))
-
+        stream = tokenize(arg)
+        first = next(stream)
         try:
-            result = self._parse_arglist()
-            self._check_eof()
+            tokens = (first, *stream)
+            result, pos = _parse_arglist(tokens, 0)
+            _check_eof(tokens, pos)
         except SyntaxError as exc:
             exc.add_note(f"Failed to parse arglist from {arg!r}")
             raise
@@ -517,296 +523,243 @@ class Parser:
 
         Unexpected tokens or trailing input raise `SyntaxError`.
         """
-        self = Parser(tokenize(arg))
-
+        stream = tokenize(arg)
+        first = next(stream)
         try:
-            result = self._parse_identifier()
-            self._check_eof()
+            tokens = (first, *stream)
+            result, pos = _parse_identifier(tokens, 0)
+            _check_eof(tokens, pos)
         except SyntaxError as exc:
             exc.add_note(f"Failed to parse identifier from {arg!r}")
             raise
 
         return result
 
-    def __init__(self, tokens: Iterator[Token], /) -> None:
-        self._tokens = tokens
-        # prime the first token
-        try:
-            self._current: Token = next(self._tokens)
-        except StopIteration:
-            # empty stream -> synthetic EOF at pos 0
-            self._current = Token(0, TokenKind.EOF)
 
-    @property
-    def current(self) -> Token:
-        return self._current
+def _consume(tokens: Sequence[Token], pos: int, /, *, kind: TokenKind) -> int:
+    r"""Require a non-EOF token of `kind` and return the next token index.
 
-    def _advance(self) -> None:
-        try:
-            self._current = next(self._tokens)
-        except StopIteration:
-            # Once exhausted, stay on EOF
-            if self._current.kind is not TokenKind.EOF:
-                self._current = Token(self._current.pos, TokenKind.EOF)
+    The shared sequence must end in EOF, and `pos` must index an existing token.
+    Parsing functions leave EOF unconsumed so truncated input raises `SyntaxError`.
+    """
+    if (tok := tokens[pos]).kind is not kind:
+        raise SyntaxError(
+            f"Expected {kind.name} ({kind.value!r}) at position {tok.pos}, "
+            f"got {tok.kind.name} ({tok.value!r})"
+        )
+    return pos + 1
 
-    def consume(self, kind: TokenKind) -> Token:
-        tok = self.current
-        if tok.kind is not kind:
-            raise SyntaxError(
-                f"Expected {kind.name} ({kind.value!r}) at position {tok.pos}, "
-                f"got {tok.kind.name} ({tok.value!r})"
-            )
-        self._advance()
-        return tok
 
-    def _check_eof(self) -> None:
-        if self.current.kind is not TokenKind.EOF:
-            tok = self.current
-            raise SyntaxError(
-                f"Unexpected token {tok.kind.name} {tok.value!r} at position {tok.pos}, "
-                "expected end of input"
-            )
-
-    # SignatureType ::= FnType | FnBody
-    def _parse_signature_type(self) -> SignatureType:
-        r"""Parse a top-level signature, allowing optional outer braces."""
-        if self.current.kind is TokenKind.LBRACE:
-            return self._parse_fn_type()
-        return self._parse_fn_body()
-
-    # FnType ::= "{" FnBody "}"
-    def _parse_fn_type(self) -> FnType:
-        r"""Parse a braced function type."""
-        self.consume(TokenKind.LBRACE)
-        fn_type = self._parse_fn_body()
-        self.consume(TokenKind.RBRACE)
-        return fn_type
-
-    # FnBody ::= (ArgList | Arg) "->" (ArgList | Arg)
-    def _parse_fn_body(self) -> FnType:
-        r"""Parse an unbraced function type body."""
-        lhs = (
-            self._parse_arglist()
-            if self.current.kind is TokenKind.LBRACKET
-            else [self._parse_arg()]
+def _check_eof(tokens: Sequence[Token], pos: int, /) -> None:
+    if (tok := tokens[pos]).kind != TokenKind.EOF:
+        raise SyntaxError(
+            f"Unexpected token {tok.kind.name} {tok.value!r} at position {tok.pos}, "
+            "expected end of input"
         )
 
-        self.consume(TokenKind.ARROW)
 
-        rhs = (
-            self._parse_arglist()
-            if self.current.kind is TokenKind.LBRACKET
-            else [self._parse_arg()]
-        )
+# FnType ::= "{" FnBody "}"
+def _parse_fn_type(tokens: Sequence[Token], pos: int, /) -> tuple[FnType, int]:
+    r"""Parse a braced function type."""
+    pos = _consume(tokens, pos, kind=TokenKind.LBRACE)
+    fn_type, pos = _parse_fn_body(tokens, pos)
+    pos = _consume(tokens, pos, kind=TokenKind.RBRACE)
+    return fn_type, pos
 
-        return FnType(lhs, rhs)
 
-    # ArgList ::= "[" (Arg ("," Arg)*)? "]"
-    def _parse_arglist(self) -> ArgList:
-        self.consume(TokenKind.LBRACKET)
-        args: ArgList = []
+# FnBody ::= (ArgList | Arg) "->" (ArgList | Arg)
+def _parse_fn_body(tokens: Sequence[Token], pos: int, /) -> tuple[FnType, int]:
+    r"""Parse an unbraced function type body."""
+    match tokens[pos].kind:
+        case TokenKind.LBRACKET:
+            lhs, pos = _parse_arglist(tokens, pos)
+        case _:
+            arg, pos = _parse_arg(tokens, pos)
+            lhs = [arg]
 
-        if self.current.kind is not TokenKind.RBRACKET:
-            arg = self._parse_arg()
-            args.append(arg)
-            seen_optional = arg.optional
-            while self.current.kind is TokenKind.COMMA:
-                self.consume(TokenKind.COMMA)
-                arg_pos = self.current.pos
-                arg = self._parse_arg()
-                if seen_optional and not arg.optional:
-                    raise SyntaxError(
-                        f"Non-optional argument at position {arg_pos} "
-                        "cannot follow an optional argument"
-                    )
-                args.append(arg)
-                seen_optional = seen_optional or arg.optional
+    pos = _consume(tokens, pos, kind=TokenKind.ARROW)
 
-        self.consume(TokenKind.RBRACKET)
-        return args
+    match tokens[pos].kind:
+        case TokenKind.LBRACKET:
+            rhs, pos = _parse_arglist(tokens, pos)
+        case _:
+            arg, pos = _parse_arg(tokens, pos)
+            rhs = [arg]
 
-    def _accept_optional(self) -> bool:
-        if self.current.kind is TokenKind.QMARK:
-            self.consume(TokenKind.QMARK)
-            return True
-        return False
+    return FnType(lhs, rhs), pos
 
-    # Arg ::= ArgType "?"?
-    def _parse_arg(self) -> Arg:
-        value: ArgType
-        match (tok := self.current).kind:
-            case TokenKind.LBRACE:
-                value = self._parse_fn_type()
 
-            # ShapeType starts with "("
-            case TokenKind.LPAREN:
-                value = self._parse_shape_type()
+# ArgList ::= "[" (Arg ("," Arg)*)? "]"
+def _parse_arglist(tokens: Sequence[Token], pos: int, /) -> tuple[ArgList, int]:
+    pos = _consume(tokens, pos, kind=TokenKind.LBRACKET)
+    if tokens[pos].kind is TokenKind.RBRACKET:
+        return [], pos + 1
 
-            # IdentifierType ArgList?
-            case TokenKind.IDENT:
-                ident = self._parse_identifier()
-                if self.current.kind is TokenKind.LBRACKET:
-                    arglist = self._parse_arglist()
+    arg, pos = _parse_arg(tokens, pos)
+    args = [arg]
+    while tokens[pos].kind is TokenKind.COMMA:
+        pos += 1
+        next_arg, next_pos = _parse_arg(tokens, pos)
+        if arg.optional and not next_arg.optional:
+            raise SyntaxError(
+                f"Non-optional argument at position {tokens[pos].pos} "
+                "cannot follow an optional argument"
+            )
+        arg, pos = next_arg, next_pos
+        args.append(arg)
+
+    return args, _consume(tokens, pos, kind=TokenKind.RBRACKET)
+
+
+# Arg ::= ArgType "?"?
+def _parse_arg(tokens: Sequence[Token], pos: int, /) -> tuple[Arg, int]:
+    value: ArgType
+    match (tok := tokens[pos]).kind:
+        case TokenKind.LBRACE:
+            value, pos = _parse_fn_type(tokens, pos)
+
+        case TokenKind.LPAREN:
+            value, pos = _parse_shape_type(tokens, pos)
+
+        case TokenKind.IDENT:
+            ident, pos = _parse_identifier(tokens, pos)
+            match tokens[pos].kind:
+                case TokenKind.LBRACKET:
+                    arglist, pos = _parse_arglist(tokens, pos)
                     value = GenericType(id=ident, arglist=arglist)
-                else:
+                case _:
                     value = ident
 
-            case _:
+        case _:
+            raise SyntaxError(
+                f"Expected ArgType at position {tok.pos}, "
+                f"got {tok.kind.name} {tok.value!r}"
+            )
+
+    optional = tokens[pos].kind is TokenKind.QMARK
+    return Arg(value, optional=optional), pos + optional
+
+
+# ShapeType ::= "(" ( ("..." | DimType) ("," DimType)* ","?)? ")"
+def _parse_shape_type(tokens: Sequence[Token], pos: int, /) -> tuple[ShapeType, int]:
+    pos = _consume(tokens, pos, kind=TokenKind.LPAREN)
+    with_ellipsis = False
+    dims: list[DimType] = []
+
+    match tokens[pos].kind:
+        case TokenKind.RPAREN:
+            return (), pos + 1
+        case TokenKind.ELLIPSIS:
+            pos += 1
+            with_ellipsis = True
+        case _:
+            dim, pos = _parse_dim_type(tokens, pos)
+            dims.append(dim)
+
+    while tokens[pos].kind is TokenKind.COMMA:
+        pos += 1
+        if tokens[pos].kind is TokenKind.RPAREN:
+            break
+        dim, pos = _parse_dim_type(tokens, pos)
+        dims.append(dim)
+
+    pos = _consume(tokens, pos, kind=TokenKind.RPAREN)
+    shape: ShapeType = (Ellipsis, *dims) if with_ellipsis else tuple(dims)
+    return shape, pos
+
+
+# DimType ::= AffineDim | "*" IdentifierType
+def _parse_dim_type(tokens: Sequence[Token], pos: int, /) -> tuple[DimType, int]:
+    match (tok := tokens[pos]).kind:
+        case TokenKind.ELLIPSIS:
+            raise SyntaxError(
+                "At most one Ellipsis (...) is allowed per ShapeType, "
+                "and if present, it must be the first item."
+            )
+
+        case TokenKind.STAR:
+            ident, pos = _parse_identifier(tokens, pos + 1)
+            return VariadicDim(ident), pos
+
+        case _:
+            try:
+                affine_dim, pos = _parse_affine_dim(tokens, pos)
+            except SyntaxError as exc:
                 raise SyntaxError(
-                    f"Expected ArgType at position {tok.pos}, got {tok.kind.name} {tok.value!r}"
-                )
-        optional = self._accept_optional()
-        return Arg(value, optional=optional)
+                    f"Expected DimType at position {tok.pos}, got {tok.kind.name} {tok.value!r}"
+                ) from exc
 
-    # ShapeType ::= "(" ( ("..." | DimType) ("," DimType)*)? ")"
-    def _parse_shape_type(self) -> ShapeType:
-        self.consume(TokenKind.LPAREN)
-
-        with_ellipsis: bool = False
-        dims: list[DimType] = []
-
-        # check first token after "("
-        match self.current.kind:
-            case TokenKind.RPAREN:  # empty shape, exit early
-                self.consume(TokenKind.RPAREN)
-                return ()
-
-            case TokenKind.ELLIPSIS:
-                self.consume(TokenKind.ELLIPSIS)
-                if with_ellipsis or dims:
-                    raise SyntaxError(
-                        "At most one Ellipsis (...) is allowed per ShapeType, "
-                        "and if present, it must be the first item."
+            # Simplify single-term affine dims.
+            match affine_dim.terms, affine_dim.offset:
+                case [], None:
+                    raise AssertionError(
+                        "AffineDim must have at least one term or offset"
                     )
-                with_ellipsis = True
+                case [], offset:
+                    assert offset is not None
+                    return offset, pos
+                case [(Sign.POS, ConstantDim(1), var)], None:
+                    return var, pos
+                case _:
+                    return affine_dim, pos
 
+
+def _parse_affine_dim(tokens: Sequence[Token], pos: int, /) -> tuple[AffineDim, int]:
+    terms: list[tuple[Sign, ConstantDim, StaticDim | DynamicDim]] = []
+    offset: ConstantDim | None = None
+    sign: Sign
+    coef: ConstantDim
+    var: StaticDim | DynamicDim
+
+    while True:
+        # Parse sign.
+        match tokens[pos].kind:
+            case TokenKind.PLUS:
+                pos += 1
+                sign = Sign.POS
+            case TokenKind.MINUS:
+                pos += 1
+                sign = Sign.NEG
+            case _ if not terms:
+                sign = Sign.POS
             case _:
-                dim = self._parse_dim_type()
-                dims.append(dim)
-
-        # parse remaining dimensions
-        while self.current.kind is TokenKind.COMMA:
-            self.consume(TokenKind.COMMA)
-            if self.current.kind is TokenKind.RPAREN:
                 break
-            dims.append(self._parse_dim_type())
 
-        self.consume(TokenKind.RPAREN)
-        return (Ellipsis, *dims) if with_ellipsis else tuple(dims)
-
-    # DimType ::= Number | ("*"? IdentifierType)
-    def _parse_dim_type(self) -> DimType:
-        match (tok := self.current).kind:
-            case TokenKind.ELLIPSIS:
-                raise SyntaxError(
-                    "At most one Ellipsis (...) is allowed per ShapeType, "
-                    "and if present, it must be the first item."
-                )
-
-            case TokenKind.STAR:
-                self.consume(TokenKind.STAR)
-                ident = self._parse_identifier()
-                return VariadicDim(ident)
-
+        # Parse coefficient.
+        match (tok := tokens[pos]).kind:
+            case TokenKind.NUMBER:
+                coef = ConstantDim(int(tok.value))
+                pos += 1
             case _:
-                try:
-                    affine_dim = self._parse_affine_dim()
-                except SyntaxError as exc:
-                    raise SyntaxError(
-                        f"Expected DimType at position {tok.pos}, got {tok.kind.name} {tok.value!r}"
-                    ) from exc
+                coef = ConstantDim(1)
 
-                # simplify single-term affine dims
-                match affine_dim.terms, affine_dim.offset:
-                    case [], None:
-                        raise AssertionError(
-                            "AffineDim must have at least one term or offset"
-                        )
-                    case [], offset:
-                        assert offset is not None
-                        return offset
-                    case [(Sign.POS, ConstantDim(1), var)], None:
-                        return var
-                    case _:
-                        return affine_dim
-
-    def _parse_affine_dim(self) -> AffineDim:
-        terms: list[tuple[Sign, ConstantDim, StaticDim | DynamicDim]] = []
-        offset: ConstantDim | None = None
-
-        sign: Sign
-        coef: ConstantDim
-        var: StaticDim | DynamicDim
-
-        while True:
-            # parse sign
-            match self.current.kind:
-                case TokenKind.PLUS:
-                    self.consume(TokenKind.PLUS)
-                    sign = Sign.POS
-                case TokenKind.MINUS:
-                    self.consume(TokenKind.MINUS)
-                    sign = Sign.NEG
-                case _ if not terms:
-                    # leading term without sign -> positive
-                    sign = Sign.POS
-                case _:
-                    break
-
-            # parse coefficient
-            match self.current.kind:
-                case TokenKind.NUMBER:
-                    coef = self._parse_constant_dim()
-                case _:
-                    coef = ConstantDim(1)
-
-            # parse variable
-            match self.current.kind:
-                case TokenKind.IDENT:
-                    var = self._parse_static_dim()
-
-                case TokenKind.DOLLAR:
-                    var = self._parse_dynamic_dim()
-
-                case _:
-                    # no variable -> offset term
-                    offset = ConstantDim(sign * coef.value)
-                    break
-
-            # append term
-            terms.append((sign, coef, var))
-
-        return AffineDim(terms=terms, offset=offset)
-
-    # IdentifierType ::= /[A-Za-z]\w*/
-    def _parse_identifier(self) -> Identifier:
-        match (tok := self.current).kind:
+        # Parse variable, or finish with an offset term.
+        match tokens[pos].kind:
             case TokenKind.IDENT:
-                self.consume(TokenKind.IDENT)
-                return Identifier(tok.value)
+                ident, pos = _parse_identifier(tokens, pos)
+                var = StaticDim(ident)
+            case TokenKind.DOLLAR:
+                ident, pos = _parse_identifier(tokens, pos + 1)
+                var = DynamicDim(ident)
             case _:
-                raise SyntaxError(
-                    f"Expected identifier at position {tok.pos}, "
-                    f"got {tok.kind.name} {tok.value!r}"
-                )
+                offset = ConstantDim(sign * coef.value)
+                break
 
-    def _parse_constant_dim(self) -> ConstantDim:
-        tok = self.consume(TokenKind.NUMBER)
-        return ConstantDim(int(tok.value))
+        terms.append((sign, coef, var))
 
-    def _parse_static_dim(self) -> StaticDim:
-        ident = self._parse_identifier()
-        return StaticDim(ident)
+    return AffineDim(terms=terms, offset=offset), pos
 
-    def _parse_variadic_dim(self) -> VariadicDim:
-        self.consume(TokenKind.STAR)
-        ident = self._parse_identifier()
-        return VariadicDim(ident)
 
-    def _parse_dynamic_dim(self) -> DynamicDim:
-        self.consume(TokenKind.DOLLAR)
-        ident = self._parse_identifier()
-        return DynamicDim(ident)
+# IdentifierType ::= /[A-Za-z]\w*/
+def _parse_identifier(tokens: Sequence[Token], pos: int, /) -> tuple[Identifier, int]:
+    match (tok := tokens[pos]).kind:
+        case TokenKind.IDENT:
+            return Identifier(tok.value), pos + 1
+        case _:
+            raise SyntaxError(
+                f"Expected identifier at position {tok.pos}, "
+                f"got {tok.kind.name} {tok.value!r}"
+            )
 
 
 LAZY_EVAL = False
