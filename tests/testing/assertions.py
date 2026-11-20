@@ -1,9 +1,27 @@
-__all__ = ["TestSuite"]
+__all__ = [
+    "TestSuite",
+    "assert_jit_compatible",
+    "check_jit_scriptable",
+    "check_jit_serializable",
+]
 
+import tempfile
 import warnings
+from collections.abc import Callable, Mapping
+from typing import Any, Final, Never, Optional, overload
 
 import torch
-from torch import Tensor
+from torch import Tensor, jit
+from torch.nn import Module
+
+from imtskit.testing import assert_is_trainable, check_backward, check_forward
+from imtskit.testing.utils import get_device, get_shapes, to_device
+from imtskit.types import Nested, Scalar
+
+type Tree = Nested[Tensor | Scalar]
+type Func = Callable[..., Nested[Tensor]]
+
+_EMPTY_MAP: Final[Mapping[Any, Never]] = frozendict()
 
 
 class TestSuite:
@@ -327,3 +345,131 @@ class TestSuite:
                 f"\n\tmedian rel error={median_rel_err:8.2e}  (expected > {rtol})"
             )
             raise AssertionError(msg)
+
+
+@overload
+def check_jit_scriptable(arg: Module, /) -> jit.ScriptModule: ...
+@overload
+def check_jit_scriptable(arg: Func, /) -> jit.ScriptFunction: ...
+def check_jit_scriptable(
+    arg: Module | Func, /
+) -> jit.ScriptModule | jit.ScriptFunction:
+    r"""Test JIT compilation.
+
+    Raises:
+        AssertionError: If JIT compilation fails.
+    """
+    try:
+        scripted = jit.script(arg)
+    except Exception as exc:
+        raise AssertionError("Model JIT compilation Failed!") from exc
+    return scripted
+
+
+def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
+    r"""Save and reload a JIT-compiled module or function.
+
+    Raises:
+        AssertionError: If JIT compilation, saving, or loading fails.
+    """
+    scripted = (
+        arg
+        if isinstance(arg, jit.ScriptModule | jit.ScriptFunction)
+        else check_jit_scriptable(arg)
+    )
+
+    with tempfile.TemporaryFile() as file:
+        try:
+            jit.save(scripted, file)
+            file.seek(0)
+        except Exception as exc:
+            raise AssertionError("Model saving failed!") from exc
+
+        try:
+            loaded = jit.load(file)
+        except Exception as exc:
+            raise AssertionError("Model loading failed!") from exc
+
+        # move parameters/buffers to the same device
+        device = get_device(scripted)
+        loaded = to_device(loaded, device=device)
+    return loaded
+
+
+def assert_jit_compatible(
+    module_or_function: Module | Func,
+    /,
+    *,
+    call_args: tuple[Any, ...] = (),
+    call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
+    # optional arguments
+    reference_model: Optional[Module | Func] = None,
+    check_is_trainable: bool = True,
+) -> None:
+    r"""Test if a model is compatible with JIT."""
+    # get reference values from forward/backward pass
+    ref_obj = module_or_function if reference_model is None else reference_model
+    ref_outs = check_forward(
+        ref_obj,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+    )
+
+    ref_grads = check_backward(
+        ref_obj,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+    )
+
+    # script the module
+    scripted_obj = check_jit_scriptable(module_or_function)
+
+    # perform forward pass
+    check_forward(
+        scripted_obj,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+        reference_values=ref_outs,
+        reference_shapes=get_shapes(ref_outs),
+    )
+    # perform backward pass
+    check_backward(
+        scripted_obj,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+        reference_gradients=ref_grads,
+        reference_shapes=get_shapes(ref_grads),
+    )
+    if check_is_trainable and isinstance(scripted_obj, Module):
+        assert_is_trainable(
+            scripted_obj,
+            call_args=call_args,
+            call_kwargs=call_kwargs,
+        )
+
+    # check serialization
+    deserialized_obj = check_jit_serializable(scripted_obj)
+
+    # perform forward pass
+    check_forward(
+        deserialized_obj,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+        reference_values=ref_outs,
+        reference_shapes=get_shapes(ref_outs),
+    )
+    # perform backward pass
+    check_backward(
+        deserialized_obj,
+        call_args=call_args,
+        call_kwargs=call_kwargs,
+        reference_gradients=ref_grads,
+        reference_shapes=get_shapes(ref_grads),
+    )
+
+    if check_is_trainable and isinstance(deserialized_obj, Module):
+        assert_is_trainable(
+            deserialized_obj,
+            call_args=call_args,
+            call_kwargs=call_kwargs,
+        )

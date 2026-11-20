@@ -13,15 +13,12 @@ __all__ = [
     "assert_all_close",
     "assert_export_compatible",
     "assert_is_trainable",
-    "assert_jit_compatible",
     "assert_model_ok",
     # check functions
     "check_backward",
     "check_export_serializable",
     "check_forward",
-    "check_jit_serializable",
     "check_initialization",
-    "check_jit_scriptable",
     # helper functions
     "all_close",
     "all_finite",
@@ -31,17 +28,16 @@ import logging
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from typing import Any, Final, Never, Optional, overload
+from typing import Any, Final, Never, Optional
 
 import torch
-from torch import Tensor, jit
+from torch import Tensor
 from torch.export import ExportedProgram
 from torch.nn import Module
 
 from imtskit.types import Nested, Scalar
 
 from .utils import (
-    get_device,
     get_grads,
     get_norm,
     get_shapes,
@@ -281,55 +277,6 @@ def check_backward(
     return gradients
 
 
-@overload
-def check_jit_scriptable(arg: Module, /) -> jit.ScriptModule: ...
-@overload
-def check_jit_scriptable(arg: Func, /) -> jit.ScriptFunction: ...
-def check_jit_scriptable(
-    arg: Module | Func, /
-) -> jit.ScriptModule | jit.ScriptFunction:
-    r"""Test JIT compilation.
-
-    Raises:
-        AssertionError: If JIT compilation fails.
-    """
-    try:
-        scripted = jit.script(arg)
-    except Exception as exc:
-        raise AssertionError("Model JIT compilation Failed!") from exc
-    return scripted
-
-
-def check_jit_serializable[M: Module | Func](arg: M, /) -> M:
-    r"""Save and reload a JIT-compiled module or function.
-
-    Raises:
-        AssertionError: If JIT compilation, saving, or loading fails.
-    """
-    scripted = (
-        arg
-        if isinstance(arg, jit.ScriptModule | jit.ScriptFunction)
-        else check_jit_scriptable(arg)
-    )
-
-    with tempfile.TemporaryFile() as file:
-        try:
-            jit.save(scripted, file)
-            file.seek(0)
-        except Exception as exc:
-            raise AssertionError("Model saving failed!") from exc
-
-        try:
-            loaded = jit.load(file)
-        except Exception as exc:
-            raise AssertionError("Model loading failed!") from exc
-
-        # move parameters/buffers to the same device
-        device = get_device(scripted)
-        loaded = to_device(loaded, device=device)
-    return loaded
-
-
 def check_export_serializable(exported_program: ExportedProgram, /) -> ExportedProgram:
     r"""Test saving and loading an exported program.
 
@@ -408,85 +355,6 @@ def assert_is_trainable(
         raise AssertionError(f"Loss did not decrease! \n{history=}")
 
 
-def assert_jit_compatible(
-    module_or_function: Module | Func,
-    /,
-    *,
-    call_args: tuple[Any, ...] = (),
-    call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
-    # optional arguments
-    reference_model: Optional[Module | Func] = None,
-    check_is_trainable: bool = True,
-) -> None:
-    r"""Test if a model is compatible with JIT."""
-    # get reference values from forward/backward pass
-    ref_obj = module_or_function if reference_model is None else reference_model
-    ref_outs = check_forward(
-        ref_obj,
-        call_args=call_args,
-        call_kwargs=call_kwargs,
-    )
-
-    ref_grads = check_backward(
-        ref_obj,
-        call_args=call_args,
-        call_kwargs=call_kwargs,
-    )
-
-    # script the module
-    scripted_obj = check_jit_scriptable(module_or_function)
-
-    # perform forward pass
-    check_forward(
-        scripted_obj,
-        call_args=call_args,
-        call_kwargs=call_kwargs,
-        reference_values=ref_outs,
-        reference_shapes=get_shapes(ref_outs),
-    )
-    # perform backward pass
-    check_backward(
-        scripted_obj,
-        call_args=call_args,
-        call_kwargs=call_kwargs,
-        reference_gradients=ref_grads,
-        reference_shapes=get_shapes(ref_grads),
-    )
-    if check_is_trainable and isinstance(scripted_obj, Module):
-        assert_is_trainable(
-            scripted_obj,
-            call_args=call_args,
-            call_kwargs=call_kwargs,
-        )
-
-    # check serialization
-    deserialized_obj = check_jit_serializable(scripted_obj)
-
-    # perform forward pass
-    check_forward(
-        deserialized_obj,
-        call_args=call_args,
-        call_kwargs=call_kwargs,
-        reference_values=ref_outs,
-        reference_shapes=get_shapes(ref_outs),
-    )
-    # perform backward pass
-    check_backward(
-        deserialized_obj,
-        call_args=call_args,
-        call_kwargs=call_kwargs,
-        reference_gradients=ref_grads,
-        reference_shapes=get_shapes(ref_grads),
-    )
-
-    if check_is_trainable and isinstance(deserialized_obj, Module):
-        assert_is_trainable(
-            deserialized_obj,
-            call_args=call_args,
-            call_kwargs=call_kwargs,
-        )
-
-
 def assert_export_compatible(
     module: Module,
     /,
@@ -562,12 +430,11 @@ def assert_model_ok(
     # extra
     device: Optional[torch.device] = None,
     treat_inputs_as_parameters: bool = True,
-    test_jit: bool = True,
     test_optim: bool = False,
 ) -> None:
     r"""Check that a module or function can perform forward and backward passes.
 
-    Optionally check JIT compatibility and, for modules, optimization.
+    Optionally check optimization for modules.
     """
     # region get name and logger -------------------------------------------------------
     test_obj: Module | Func
@@ -626,6 +493,3 @@ def assert_model_ok(
 
     if test_optim and isinstance(test_obj, Module):
         assert_is_trainable(test_obj, call_args=call_args, call_kwargs=call_kwargs)
-
-    if test_jit:
-        assert_jit_compatible(test_obj, call_args=call_args, call_kwargs=call_kwargs)

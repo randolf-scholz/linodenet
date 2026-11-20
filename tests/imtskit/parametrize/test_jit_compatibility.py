@@ -8,6 +8,7 @@ from torch.nn.functional import mse_loss
 from torch.optim import SGD
 
 from imtskit.nn.parametrize import register_parametrization, update_parametrizations
+from tests.testing.assertions import check_jit_serializable
 
 
 class UpperTriangular(nn.Module):
@@ -70,15 +71,6 @@ def test_register_parametrization_uses_upper_triangular_cache() -> None:
 
 
 class TestTorchScript:
-    @staticmethod
-    def deserialize_module(module: nn.Module | jit.ScriptModule) -> jit.ScriptModule:
-        scripted = jit.script(module)
-
-        with tempfile.TemporaryFile() as file:
-            jit.save(scripted, file)
-            file.seek(0)
-            return jit.load(file)
-
     def test_training_freshly_scripted_model(self) -> None:
         model = make_parametrized_model()
         scripted = jit.script(model)
@@ -88,7 +80,7 @@ class TestTorchScript:
 
     def test_training_deserialized_scripted_model(self) -> None:
         model = make_parametrized_model()
-        scripted = self.deserialize_module(model)
+        scripted = check_jit_serializable(model)
 
         assert is_upper_triangular(scripted.weight)
         assert_update_refreshes_parametrized_weight(scripted)

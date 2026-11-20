@@ -3,10 +3,12 @@ r"""Tests for imtskit.testing."""
 import torch
 
 from imtskit.testing import assert_model_ok
+from tests.testing.assertions import assert_jit_compatible
 
 
 def test_test_model() -> None:
     r"""Test test_model."""
     model = torch.nn.Linear(4, 4)
     x = torch.randn(3, 4)
-    assert_model_ok(model, call_args=(x,), test_jit=True)
+    assert_model_ok(model, call_args=(x,))
+    assert_jit_compatible(model, call_args=(x,))

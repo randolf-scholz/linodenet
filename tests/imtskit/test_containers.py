@@ -7,7 +7,8 @@ import torch
 from torch import Tensor, nn
 
 from imtskit.nn import ModuleMapping, ModuleSequence
-from imtskit.testing import assert_export_compatible, assert_jit_compatible
+from imtskit.testing import assert_export_compatible
+from tests.testing.assertions import assert_jit_compatible
 
 BATCH_SIZE = 5
 
