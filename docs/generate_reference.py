@@ -12,7 +12,6 @@ from typing import TextIO
 
 DOCS_DIR = Path(__file__).resolve().parent
 SOURCE_DIR = DOCS_DIR.parent / "src"
-THEME_DIR = DOCS_DIR / "theme"
 REFERENCE_DIR = Path("reference")
 REFERENCE_INDEX = REFERENCE_DIR / "index.md"
 type NavigationTree = dict[str, str | NavigationTree]
@@ -385,12 +384,8 @@ def main() -> None:
     # Follow symlinks so shared documents and assets become ordinary staged files.
     shutil.copytree(content_dir, staging_dir)
 
-    # Publish browser assets separately from the theme's HTML templates.
-    shutil.copytree(
-        THEME_DIR,
-        staging_dir / "theme",
-        ignore=shutil.ignore_patterns("templates"),
-    )
+    # Publish static files; HTML templates are loaded directly by Zensical.
+    shutil.copytree(DOCS_DIR / "static", staging_dir / "static")
 
     # Discover all targets before writing pages so forward references can resolve.
     modules = get_modules(SOURCE_DIR)

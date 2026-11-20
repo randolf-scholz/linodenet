@@ -12,7 +12,7 @@ arguments for Zensical.
 
 Authored pages and their attachments live in `content/`. The build runs
 `generate_reference.py`, which copies that directory recursively into `build/sources/`,
-stages theme assets, and generates API reference Markdown and `reference/SUMMARY.md`
+stages static files, and generates API reference Markdown and `reference/SUMMARY.md`
 navigation from the Python source. It reads the staging path from `docs_dir` in
 `zensical.toml`. Each run replaces the staged sources so renamed or deleted pages
 do not linger. Zensical renders those sources into `build/site/` and reuses its
@@ -27,14 +27,12 @@ References to repository-only files in shared pages use filenames in backticks.
 The generator creates the entire reference section, including the landing page
 at `build/sources/reference/index.md` with its heading and package list.
 
-Site appearance and rendering live in `theme/`: HTML templates in `templates/`,
-stylesheets in `css/`, and MathJax configuration directly in `mathjax_config.js`.
-The build copies that directory into `build/sources/theme/`, excluding
-`templates/`, so CSS and JavaScript paths retain their source layout. Local theme
-paths in `zensical.toml`, such as `theme/css/signatures.css` and
-`theme/mathjax_config.js`, also exist relative to this directory before building.
-Zensical loads templates directly from `theme/templates/`; they are not copied
-into the site sources.
+Browser files live in `static/`: stylesheets in `static/css/` and MathJax
+configuration in `static/mathjax_config.js`. The build copies the entire
+directory into `build/sources/static/`, preserving its layout. Local static paths
+in `zensical.toml` also exist relative to this directory before building.
+HTML templates live separately in `templates/`. Zensical loads them directly;
+they are not copied into the site sources.
 
 Put images and attachments used by repository-root Markdown files in the root
 `assets/` directory. The relative symlink `content/assets` → `../../assets` makes
