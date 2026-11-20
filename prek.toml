@@ -179,6 +179,7 @@ hooks = [
         files = "^src/|^tests/",
         # FIXME: https://github.com/microsoft/pyright/issues/11446
         exclude = "src/imtskit/domains",
+        stages = ["manual"]
     }
 ]
 
