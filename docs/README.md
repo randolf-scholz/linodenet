@@ -11,7 +11,7 @@ From this directory, omit the `docs::` prefix. The build commands accept extra
 arguments for Zensical.
 
 Authored pages and their attachments live in `content/`. The build runs
-`generate_reference.py`, which copies that directory recursively into `build/sources/`,
+`prepare_sources.py`, which copies that directory recursively into `build/sources/`,
 stages static files, and generates API reference Markdown and `reference/SUMMARY.md`
 navigation from the Python source. It reads the staging path from `docs_dir` in
 `zensical.toml`. Each run replaces the staged sources so renamed or deleted pages
