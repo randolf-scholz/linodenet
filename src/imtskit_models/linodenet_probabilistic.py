@@ -14,7 +14,7 @@ __all__ = [
 import math
 import warnings
 from collections.abc import Callable, Mapping
-from typing import Any, Final, Optional
+from typing import Any, Final
 
 import torch
 from torch import Generator, Tensor, einsum, nan, nn
@@ -67,7 +67,7 @@ def linear_gaussian_flow(
     z0: tuple[Tensor, Tensor],  # Float[..., d], Float[..., d, d]
     A: Tensor,  # Float[d, d]
     Q: Tensor,  # Float[d, d]
-    b: Optional[Tensor] = None,  # Float[d]
+    b: Tensor | None = None,  # Float[d]
     /,
 ) -> tuple[Tensor, Tensor]:  # Float[...., $n, d], Float[..., $n, d, d]
     r"""Propagate the mean and covariance of a linear Gaussian system.
@@ -176,7 +176,7 @@ class LinearGaussianFlow(nn.Module):
         input_size: int,
         *,
         kernel_initialization: str | Tensor | nn.Module = "skew-symmetric",
-        kernel_parametrization: Optional[str | nn.Module] = None,
+        kernel_parametrization: str | nn.Module | None = None,
         use_rezero: bool = True,
         use_bias: bool = False,
     ) -> None:

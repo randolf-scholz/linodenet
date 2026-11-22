@@ -13,7 +13,7 @@ __all__ = [
 ]
 
 from collections.abc import Callable, Sequence
-from typing import Optional, Protocol, SupportsFloat
+from typing import Protocol, SupportsFloat
 
 import torch
 from torch import Tensor, nn
@@ -92,7 +92,7 @@ def is_standardized(
     /,
     *,
     dim: None | int | tuple[int, ...] | list[int] = -1,
-    tol: Optional[float] = None,
+    tol: float | None = None,
 ) -> Tensor:  # Float[...]
     r"""Check whether a tensor has approximately zero mean and unit variance.
 
@@ -139,7 +139,7 @@ def is_forward_stable(
     input_shapes: list[tuple[int, ...]],
     *,
     num_runs: int = 100,
-    tol: Optional[float] = None,
+    tol: float | None = None,
 ) -> bool:
     r"""Check whether a function preserves approximate standardization.
 
@@ -176,7 +176,7 @@ def is_backward_stable(
     *,
     check_params: bool = False,
     num_runs: int = 100,
-    tol: Optional[float] = None,
+    tol: float | None = None,
 ) -> bool:
     r"""Check whether a function's gradients are approximately standardized.
 
@@ -242,7 +242,7 @@ def assert_forward_stable(
     input_shapes: list[tuple[int, ...]],
     *,
     num_runs: int = 100,
-    tol: Optional[float] = None,
+    tol: float | None = None,
 ) -> None:
     r"""Raise `AssertionError` if the function is not forward stable."""
     if not is_forward_stable(func, input_shapes, num_runs=num_runs, tol=tol):
@@ -258,7 +258,7 @@ def assert_backward_stable(
     *,
     num_runs: int = 100,
     check_params: bool = False,
-    tol: Optional[float] = None,
+    tol: float | None = None,
 ) -> None:
     r"""Raise `AssertionError` if the function is not backward stable."""
     if not is_backward_stable(

@@ -140,8 +140,9 @@ Use modern Python 3.14+ typing syntax, within the project's current Python 3.14
 runtime constraint:
 
 - Use builtin generics such as `list[int]`, `dict[str, Tensor]`, and `tuple[int, ...]`.
-- Use PEP 604 unions (`T | U`) and `T | None`. Reserve `Optional[T]` for optional
-  keyword arguments and return types; use `T | None` elsewhere.
+- Use PEP 604 unions (`T | U`), including `T | None` wherever `None` is accepted.
+  Do not use `typing.Optional`. Document what `None` means when its interpretation
+  is not obvious.
 - Use `type` statements for type aliases and type parameter syntax for generic
   functions and classes, such as `type Batch[T] = list[T]`.
 - Use Python 3.14's lazy annotations. Do not add

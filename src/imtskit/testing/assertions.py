@@ -28,7 +28,7 @@ import logging
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from copy import deepcopy
-from typing import Any, Final, Never, Optional
+from typing import Any, Final, Never
 
 import torch
 from torch import Tensor
@@ -187,8 +187,8 @@ def check_forward(
     call_args: tuple[Any, ...],
     call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # optional: reference outputs and shapes
-    reference_values: Optional[Nested[Tensor]] = None,
-    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+    reference_values: Nested[Tensor] | None = None,
+    reference_shapes: list[tuple[int, ...]] | None = None,
 ) -> Nested[Tensor]:
     r"""Test a forward pass.
 
@@ -220,8 +220,8 @@ def check_backward(
     call_args: tuple[Any, ...],
     call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # Optional: reference gradients
-    reference_shapes: Optional[list[tuple[int, ...]]] = None,
-    reference_gradients: Optional[Nested[Tensor]] = None,
+    reference_shapes: list[tuple[int, ...]] | None = None,
+    reference_gradients: Nested[Tensor] | None = None,
     treat_inputs_as_parameters: bool = True,
 ) -> list[Tensor]:
     r"""Test a backward pass.
@@ -423,12 +423,12 @@ def assert_model_ok(
     call_args: tuple[Any, ...],
     call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # reference arguments
-    reference_model: Optional[Module | Func] = None,
-    reference_gradients: Optional[Nested[Tensor]] = None,
-    reference_outputs: Optional[Nested[Tensor]] = None,
-    reference_shapes: Optional[list[tuple[int, ...]]] = None,
+    reference_model: Module | Func | None = None,
+    reference_gradients: Nested[Tensor] | None = None,
+    reference_outputs: Nested[Tensor] | None = None,
+    reference_shapes: list[tuple[int, ...]] | None = None,
     # extra
-    device: Optional[torch.device] = None,
+    device: torch.device | None = None,
     treat_inputs_as_parameters: bool = True,
     test_optim: bool = False,
 ) -> None:

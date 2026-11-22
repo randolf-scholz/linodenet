@@ -27,7 +27,7 @@ from collections.abc import Callable as Fn
 from importlib.resources import as_file, files
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Final, Optional, cast
+from typing import Any, Final, cast
 
 import torch
 from torch import Tensor
@@ -316,8 +316,8 @@ def spectral_norm(
     A: Tensor,
     /,
     *,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
+    u0: Tensor | None = None,
+    v0: Tensor | None = None,
     maxiter: int | None = None,
     atol: float = 1e-6,
     rtol: float = 1e-6,
@@ -347,8 +347,8 @@ def singular_triplet(
     A: Tensor,
     /,
     *,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
+    u0: Tensor | None = None,
+    v0: Tensor | None = None,
     maxiter: int | None = None,
     atol: float = 1e-6,
     rtol: float = 1e-6,

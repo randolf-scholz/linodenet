@@ -55,7 +55,6 @@ from copy import deepcopy
 from typing import (
     Any,
     Final,
-    Optional,
     Protocol,
     Self,
     SupportsIndex,
@@ -824,7 +823,7 @@ class Choice[X = Any](Reduce[X]):
     ```
     """
 
-    def __init__(self, num: Optional[int] = None) -> None:
+    def __init__(self, num: int | None = None) -> None:
         self.num: Final[int | None] = num
         super().__init__(random.choice)
 
@@ -834,7 +833,7 @@ class Choice[X = Any](Reduce[X]):
         return Diagonal(self.num)
 
 
-def choice(num: Optional[int] = None) -> Choice:
+def choice(num: int | None = None) -> Choice:
     r"""Randomly choose one of the inputs.
 
     ```text

@@ -3,7 +3,6 @@ r"""Utilities for parametrization."""
 __all__ = ["resolve_matrix_parametrization"]
 
 import importlib
-from typing import Optional
 
 from torch import nn
 
@@ -11,7 +10,7 @@ from imtskit.utils import resolve_name
 
 
 def resolve_matrix_parametrization(
-    kernel_parametrization: Optional[str | nn.Module],
+    kernel_parametrization: str | nn.Module | None,
     /,
 ) -> nn.Module | None:
     match kernel_parametrization:

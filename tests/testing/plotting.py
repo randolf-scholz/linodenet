@@ -1,6 +1,6 @@
 r"""Plotting utilities."""
 
-from typing import Literal, Optional
+from typing import Literal
 
 import numpy as np
 import torch
@@ -33,7 +33,7 @@ def visualize_distribution(
     log: bool = True,
     loc: Location = "upper right",
     print_stats: bool = True,
-    extra_stats: Optional[dict] = None,
+    extra_stats: dict | None = None,
 ) -> None:
     r"""Plot the distribution of x in the given figure axes.
 

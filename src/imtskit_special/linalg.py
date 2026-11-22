@@ -6,7 +6,6 @@ __all__ = [
     "geometric_mean",
 ]
 
-from typing import Optional
 
 import torch
 from torch import Tensor
@@ -39,7 +38,7 @@ def geometric_mean(
     x: Tensor,
     /,
     *,
-    axis: Optional[int | list[int]] = None,
+    axis: int | list[int] | None = None,
     keepdim: bool = False,
 ) -> Tensor:
     r"""Geometric mean of a tensor."""
@@ -59,7 +58,7 @@ def scaled_norm(
     /,
     *,
     p: float = 2.0,
-    axis: Optional[int | list[int]] = None,
+    axis: int | list[int] | None = None,
     keepdim: bool = False,
 ) -> Tensor:
     r"""Shortcut for scaled norm."""

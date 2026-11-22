@@ -1,21 +1,20 @@
 r"""Test if typing_extensions is compatible with torch.jit.script."""
 
 from tempfile import TemporaryDirectory
-from typing import Optional, Optional as OptionalExt
 
 import pytest
 import torch
 from torch import Tensor, jit, nn
 
 
-def foo(x: Tensor, y: Optional[Tensor] = None) -> Tensor:
+def foo(x: Tensor, y: Tensor | None = None) -> Tensor:
     r"""Dummy function."""
     if y is None:
         return x
     return x + y
 
 
-def bar(x: Tensor, y: OptionalExt[Tensor] = None) -> Tensor:
+def bar(x: Tensor, y: Tensor | None = None) -> Tensor:
     r"""Dummy function."""
     if y is None:
         return x
@@ -25,7 +24,7 @@ def bar(x: Tensor, y: OptionalExt[Tensor] = None) -> Tensor:
 class Foo(nn.Module):
     r"""Dummy module."""
 
-    def forward(self, x: Tensor, y: Optional[Tensor] = None) -> Tensor:
+    def forward(self, x: Tensor, y: Tensor | None = None) -> Tensor:
         if y is None:
             return x
         return x + y
@@ -34,7 +33,7 @@ class Foo(nn.Module):
 class Bar(nn.Module):
     r"""Dummy module."""
 
-    def forward(self, x: Tensor, y: OptionalExt[Tensor] = None) -> Tensor:
+    def forward(self, x: Tensor, y: Tensor | None = None) -> Tensor:
         if y is None:
             return x
         return x + y

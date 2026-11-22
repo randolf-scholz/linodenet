@@ -5,7 +5,6 @@ __all__ = [
     "singular_triplet_native",
 ]
 
-from typing import Optional
 
 import torch
 from torch import Tensor
@@ -84,8 +83,8 @@ def singular_triplet(
     A: Tensor,
     /,
     *,
-    u0: Optional[Tensor] = None,
-    v0: Optional[Tensor] = None,
+    u0: Tensor | None = None,
+    v0: Tensor | None = None,
     maxiter: int | None = None,
     atol: float = 1e-6,
     rtol: float = 1e-6,
@@ -111,8 +110,8 @@ def singular_triplet_native(
     A: Tensor,
     /,
     *,
-    u0: Optional[Tensor] = None,  # ruff: ignore[ARG001]
-    v0: Optional[Tensor] = None,  # ruff: ignore[ARG001]
+    u0: Tensor | None = None,  # ruff: ignore[ARG001]
+    v0: Tensor | None = None,  # ruff: ignore[ARG001]
     maxiter: int | None = None,  # ruff: ignore[ARG001]
     atol: float = 1e-6,  # ruff: ignore[ARG001]
     rtol: float = 1e-6,  # ruff: ignore[ARG001]

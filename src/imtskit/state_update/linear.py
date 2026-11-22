@@ -10,7 +10,6 @@ __all__ = [
 ]
 
 from math import sqrt
-from typing import Optional
 
 import torch
 from torch import Tensor, nn
@@ -40,7 +39,7 @@ class LinearRNNCell(nn.Module, VectorStateUpdate):
     r"""PARAM: Hidden-state matrix $U$."""
     V: Tensor
     r"""PARAM: Observation-to-state matrix $V$."""
-    bias: Optional[Tensor]
+    bias: Tensor | None
     r"""PARAM: Optional affine bias vector."""
 
     def __init__(

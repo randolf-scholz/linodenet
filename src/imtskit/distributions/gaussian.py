@@ -49,7 +49,7 @@ __all__ = [
 
 import math
 from enum import StrEnum
-from typing import Final, Literal, NamedTuple, Optional, Self, assert_never
+from typing import Final, Literal, NamedTuple, Self, assert_never
 
 import torch
 import torch.nn.functional as F
@@ -1371,8 +1371,8 @@ class MultiHeadGaussian(DistributionBase):
         n_heads: int,
         n_feats: int,
         *,
-        means: Optional[Tensor] = None,
-        covs: Optional[Tensor] = None,
+        means: Tensor | None = None,
+        covs: Tensor | None = None,
     ) -> None:
         super().__init__(batch_shape=(n_heads,), event_shape=(n_feats,))
         # CONSTANTS

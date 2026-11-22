@@ -35,7 +35,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import IntEnum
 from functools import partial
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -49,7 +49,7 @@ def _sample_unique_sequences(
     seq_length: int,
     num_samples: int,
     *,
-    device: Optional[str | torch.device] = None,
+    device: str | torch.device | None = None,
     batch_size: int = 4096,
 ) -> Tensor:
     r"""Sample `num_samples` distinct sequences from `range(size)`.
@@ -89,7 +89,7 @@ def _random_orthogonal_matrix(
     /,
     *,
     dtype: torch.dtype,
-    device: Optional[str | torch.device] = None,
+    device: str | torch.device | None = None,
 ) -> Tensor:
     r"""Sample a Haar-distributed orthogonal matrix via QR."""
     A = torch.randn(dim, dim, dtype=dtype, device=device)
@@ -119,9 +119,9 @@ def wide_angle_sphere_init(
     num: int,
     dim: int,
     *,
-    dtype: Optional[torch.dtype] = None,
-    device: Optional[str | torch.device] = None,
-    seed: Optional[int] = None,
+    dtype: torch.dtype | None = None,
+    device: str | torch.device | None = None,
+    seed: int | None = None,
     uniform_grid: bool = False,
 ) -> Tensor:
     r"""Initialize $n$ points on the unit sphere $Sᵈ⁻¹⊂ℝᵈ$ from coordinate grids.
@@ -474,9 +474,9 @@ def thomson_initialization(
     atol: float = 1e-5,
     rtol: float = 1e-5,
     patience: int = 5,
-    dtype: Optional[torch.dtype] = None,
-    device: Optional[str | torch.device] = None,
-    seed: Optional[int] = None,
+    dtype: torch.dtype | None = None,
+    device: str | torch.device | None = None,
+    seed: int | None = None,
 ) -> OptimizerResult:
     r"""Optimize $n$ points on the unit sphere $Sᵈ⁻¹⊂ℝᵈ$ for separation.
 

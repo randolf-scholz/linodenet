@@ -33,7 +33,7 @@ __all__ = [
     "UnitVector",
 ]
 
-from typing import ClassVar, Final, Optional
+from typing import ClassVar, Final
 
 import torch
 from torch import Tensor, nn
@@ -92,7 +92,7 @@ class LipschitzBounded(nn.Module, Projection):
     r"""CONST: The constant γ, the transformation ensures $‖A‖₂≤γ$."""
     ONE: Tensor
     r"""CONST: The constant 1."""
-    maxiter: Final[Optional[int]]
+    maxiter: Final[int | None]
     r"""CONST: The maximum number of iterations for the power method."""
     atol: Final[float]
     r"""CONST: The absolute tolerance for the power method."""
@@ -105,7 +105,7 @@ class LipschitzBounded(nn.Module, Projection):
         *,
         atol: float = ATOL,
         rtol: float = RTOL,
-        maxiter: Optional[int] = None,
+        maxiter: int | None = None,
     ) -> None:
         super().__init__()
 
@@ -177,7 +177,7 @@ class SpectrallyNormalized(LipschitzBounded):
     CODOMAIN: ClassVar[MatrixDomains] = MatrixDomains.SPECTRALLY_NORMALIZED
 
     def __init__(
-        self, atol: float = ATOL, rtol: float = RTOL, maxiter: Optional[int] = None
+        self, atol: float = ATOL, rtol: float = RTOL, maxiter: int | None = None
     ) -> None:
         super().__init__(lipschitz_bound=1.0, atol=atol, rtol=rtol, maxiter=maxiter)
 
@@ -234,7 +234,7 @@ class Contraction(LipschitzBounded):
         *,
         atol: float = ATOL,
         rtol: float = RTOL,
-        maxiter: Optional[int] = None,
+        maxiter: int | None = None,
     ) -> None:
         if not 0 < lipschitz_bound < 1:
             raise ValueError("lipschitz_bound must be between 0 and 1")

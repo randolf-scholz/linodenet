@@ -49,7 +49,8 @@ Project conventions for automated agents contributing to `imtskit`.
 
 - Type checking use `pyright` and `pyrefly`.
 - Use builtin generics and PEP 604 unions (`list[int]`, `T | U`).
-- Use `Optional[T]` only for optional kwargs and return types; otherwise `T | None`.
+- Use `T | None` wherever `None` is accepted; do not use `typing.Optional`.
+- Document what `None` means when its interpretation is not obvious.
 - Prefer abstract types for inputs (`Sequence`, `Mapping`) and concrete types for outputs.
 
 ## Function signatures

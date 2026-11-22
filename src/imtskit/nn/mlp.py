@@ -6,8 +6,6 @@ __all__ = [
 ]
 
 
-from typing import Optional
-
 from torch import nn
 
 
@@ -30,7 +28,7 @@ class MLP(nn.Sequential):
         inputs_size: int,
         output_size: int,
         *,
-        hidden_size: Optional[int] = None,
+        hidden_size: int | None = None,
         num_blocks: int = 2,
         dropout: float = 0.2,
     ) -> None:

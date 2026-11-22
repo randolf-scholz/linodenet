@@ -68,7 +68,6 @@ from typing import (
     Any,
     Final,
     Literal,
-    Optional,
     Protocol,
     Self,
     TypeIs,
@@ -158,7 +157,7 @@ class Parametrized(Protocol):
 
 
 def is_parametrized(
-    module: object, tensor_name: Optional[str] = None
+    module: object, tensor_name: str | None = None
 ) -> TypeIs[Parametrized]:
     r"""Check whether a module has registered parametrizations.
 
@@ -298,7 +297,7 @@ class ParametrizationList[
         self.cached_parameter.copy_(self.evaluate())
 
     @jit.export
-    def set_stale(self, _: Optional[Tensor] = None) -> None:
+    def set_stale(self, _: Tensor | None = None) -> None:
         # poison the cached tensor
         self.cached_parameter.fill_(torch.nan)
         self.is_stale.fill_(True)

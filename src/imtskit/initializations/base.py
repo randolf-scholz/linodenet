@@ -8,7 +8,7 @@ __all__ = [
 
 import importlib
 from collections.abc import Callable
-from typing import Concatenate, Optional, Protocol
+from typing import Concatenate, Protocol
 
 import torch
 from torch import Tensor, nn
@@ -26,8 +26,8 @@ class Initialization(Protocol):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         r"""Draw samples with batch shape `size`."""
         ...

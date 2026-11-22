@@ -1,6 +1,6 @@
 r"""Test JIT compatibility with subclassing."""
 
-from typing import Final, Optional
+from typing import Final
 
 import pytest
 import torch
@@ -28,7 +28,7 @@ class Foo(nn.Module):
 class WithDecoder(Foo):
     r"""Direct subclass of Foo."""
 
-    decoder: Optional[nn.Module]
+    decoder: nn.Module | None
 
     def __init__(
         self,

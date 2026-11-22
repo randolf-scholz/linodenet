@@ -12,7 +12,7 @@ __all__ = [
     "linear_flow",
 ]
 
-from typing import Final, Optional
+from typing import Final
 
 import torch
 from torch import Tensor, nn
@@ -32,7 +32,7 @@ def linear_flow(
     timedeltas: Tensor,  # (..., $n)
     x0: Tensor,  # (..., d)
     kernel: Tensor,  # (d, d)
-    bias: Optional[Tensor] = None,
+    bias: Tensor | None = None,
     /,
 ) -> Tensor:  # (..., $n, d)
     r"""Propagate an affine linear ODE by a matrix exponential.
@@ -136,7 +136,7 @@ class LinearFlow(nn.Module, ContinuousFlow[Tensor]):
         input_size: int,
         *,
         kernel_initialization: str | Tensor | nn.Module = "skew-symmetric",
-        kernel_parametrization: Optional[str | nn.Module] = None,
+        kernel_parametrization: str | nn.Module | None = None,
         use_rezero: bool = True,
         use_bias: bool = False,
     ) -> None:
@@ -240,7 +240,7 @@ def linear_gaussian_flow(
     z0: tuple[Tensor, Tensor],  # (..., d), (..., d, d)
     A: Tensor,  # (d, d)
     Q: Tensor,  # (d, d)
-    b: Optional[Tensor] = None,  # (d,) | None
+    b: Tensor | None = None,  # (d,) | None
     /,
 ) -> tuple[Tensor, Tensor]:  # (...., $n, d), (..., $n, d, d)
     r"""Propagate a Gaussian state through a linear-Gaussian SDE.
@@ -371,7 +371,7 @@ class LinearGaussianFlow(nn.Module, ContinuousFlow[tuple[Tensor, Tensor]]):
         input_size: int,
         *,
         kernel_initialization: str | Tensor | nn.Module = "skew-symmetric",
-        kernel_parametrization: Optional[str | nn.Module] = None,
+        kernel_parametrization: str | nn.Module | None = None,
     ) -> None:
         r"""Initialize the linear-Gaussian flow.
 

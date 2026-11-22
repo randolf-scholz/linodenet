@@ -2,7 +2,7 @@ r"""Residual Network Implementation."""
 
 __all__ = ["ResNet"]
 
-from typing import Final, Optional
+from typing import Final
 
 from torch import Tensor, nn
 
@@ -45,7 +45,7 @@ class ResNet(ModuleSequence[nn.Module]):
         latent_size: int | None = None,
         activation: str | nn.Module = "relu",
         use_rezero: bool = True,
-        scalar_map: Optional[nn.Module] = None,
+        scalar_map: nn.Module | None = None,
         use_batchnorm: bool = False,
     ) -> None:
         self.input_size = input_size

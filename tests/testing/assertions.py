@@ -8,7 +8,7 @@ __all__ = [
 import tempfile
 import warnings
 from collections.abc import Callable, Mapping
-from typing import Any, Final, Never, Optional, overload
+from typing import Any, Final, Never, overload
 
 import torch
 from torch import Tensor, jit
@@ -403,7 +403,7 @@ def assert_jit_compatible(
     call_args: tuple[Any, ...] = (),
     call_kwargs: Mapping[str, Tree] = _EMPTY_MAP,
     # optional arguments
-    reference_model: Optional[Module | Func] = None,
+    reference_model: Module | Func | None = None,
     check_is_trainable: bool = True,
 ) -> None:
     r"""Test if a model is compatible with JIT."""

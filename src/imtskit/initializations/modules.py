@@ -19,7 +19,7 @@ __all__ = [
     "Traceless",
 ]
 
-from typing import Final, Optional
+from typing import Final
 
 import torch
 from torch import Tensor, nn
@@ -43,8 +43,8 @@ class Fixed(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         tensor = self.value.to(dtype=dtype or self.value.dtype, device=device)
         match size:
@@ -80,8 +80,8 @@ class Gaussian(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         return functional.gaussian(
             size,
@@ -107,8 +107,8 @@ class DiagonallyDominant(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         return functional.diagonally_dominant(
             size, dim=self.dim, dtype=dtype, device=device
@@ -129,8 +129,8 @@ class Symmetric(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         return functional.symmetric(size, dim=self.dim, dtype=dtype, device=device)
 
@@ -149,8 +149,8 @@ class SkewSymmetric(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         return functional.skew_symmetric(size, dim=self.dim, dtype=dtype, device=device)
 
@@ -169,8 +169,8 @@ class Orthogonal(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         return functional.orthogonal(size, dim=self.dim, dtype=dtype, device=device)
 
@@ -189,8 +189,8 @@ class SpecialOrthogonal(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         return functional.special_orthogonal(
             size, dim=self.dim, dtype=dtype, device=device
@@ -212,8 +212,8 @@ class LowRank(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         return functional.low_rank(
             size, dim=self.dim, rank=self.rank, dtype=dtype, device=device
@@ -234,8 +234,8 @@ class Traceless(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         return functional.traceless(size, dim=self.dim, dtype=dtype, device=device)
 
@@ -254,7 +254,7 @@ class Symplectic(nn.Module):
         size: int | tuple[int, ...] = (),
         /,
         *,
-        dtype: Optional[torch.dtype] = None,
-        device: Optional[str | torch.device] = None,
+        dtype: torch.dtype | None = None,
+        device: str | torch.device | None = None,
     ) -> Tensor:
         return functional.symplectic(size, dim=self.dim, dtype=dtype, device=device)

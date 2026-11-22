@@ -7,7 +7,7 @@ __all__ = [
 ]
 
 import warnings
-from typing import Final, Optional
+from typing import Final
 
 import torch
 from torch import Tensor, nn
@@ -127,7 +127,7 @@ class LinODEnet(nn.Module):
         input_size: int,
         latent_size: int,
         *,
-        hidden_size: Optional[int] = None,
+        hidden_size: int | None = None,
         embedding: nn.Module | Blueprint[nn.Module] = _DEFAULT_EMBEDDING_BLUEPRINT,
         encoder: nn.Module | Blueprint[nn.Module] = _DEFAULT_ENCODER_BLUEPRINT,
         system: nn.Module | Blueprint[nn.Module] = _DEFAULT_SYSTEM_BLUEPRINT,
@@ -187,8 +187,8 @@ class LinODEnet(nn.Module):
         self,
         T: Tensor,
         X: Tensor,
-        t0: Optional[Tensor] = None,
-        z0: Optional[Tensor] = None,
+        t0: Tensor | None = None,
+        z0: Tensor | None = None,
     ) -> Tensor:
         r"""Forward pass of the LinODEnet model.
 
@@ -283,8 +283,8 @@ class LinODEnet(nn.Module):
         t: Tensor,
         x: Tensor,
         *,
-        t0: Optional[Tensor] = None,
-        z0: Optional[Tensor] = None,
+        t0: Tensor | None = None,
+        z0: Tensor | None = None,
     ) -> Tensor:
         r"""Predict the future of the system."""
         t0 = t0 if t0 is not None else t[..., 0].unsqueeze(-1)
@@ -445,7 +445,7 @@ class LatentLinODECell(nn.Module):
         input_size: int,
         latent_size: int,
         *,
-        hidden_size: Optional[int] = None,
+        hidden_size: int | None = None,
         embedding: nn.Module | Blueprint[nn.Module] = _DEFAULT_EMBEDDING_BLUEPRINT,
         encoder: nn.Module | Blueprint[nn.Module] = _DEFAULT_ENCODER_BLUEPRINT,
         system: nn.Module | Blueprint[nn.Module] = _DEFAULT_SYSTEM_BLUEPRINT,

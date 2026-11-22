@@ -3,7 +3,7 @@ r"""Implementation of the Categorical distribution."""
 __all__ = ["Categorical"]
 
 from math import prod
-from typing import Optional, override
+from typing import override
 
 import torch
 from torch import Tensor
@@ -23,7 +23,7 @@ class Categorical(DistributionBase):
     weights: Tensor
     r"""Param: Unnormalized logits of the distribution."""
 
-    def __init__(self, weights: Tensor, *, ndim: Optional[int] = None) -> None:
+    def __init__(self, weights: Tensor, *, ndim: int | None = None) -> None:
         event_shape = weights.shape[-ndim:] if ndim is not None else weights.shape
         batch_shape = weights.shape[: -len(self.event_shape)]
         super().__init__(batch_shape=batch_shape, event_shape=event_shape)

@@ -24,7 +24,7 @@ import os
 from importlib import metadata
 from pathlib import Path
 from types import ModuleType
-from typing import IO, Literal, Optional, ReadOnly, TypedDict, TypeGuard, cast
+from typing import IO, Literal, ReadOnly, TypedDict, TypeGuard, cast
 from zipfile import ZipFile
 
 import torch
@@ -223,7 +223,7 @@ def serialize_model[M: nn.Module | ExportedProgram](
     filepath: FilePath,
     /,
     *,
-    hyperparameters: Optional[JSON] = None,
+    hyperparameters: JSON | None = None,
 ) -> SavedModelBlueprint[M]:
     r"""Write a model archive and return its storage blueprint.
 

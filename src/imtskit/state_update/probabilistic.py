@@ -18,7 +18,7 @@ __all__ = [
     "discrete_probabilistic_kalman_update",
 ]
 
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from torch import Tensor, nn
@@ -43,7 +43,7 @@ def probabilistic_kalman_update(
     obs: MultivariateNormal,
     val: MultivariateNormal,
     /,
-    H: Optional[Tensor] = None,
+    H: Tensor | None = None,
 ) -> MultivariateNormal:
     r"""Form a Gaussian conditioning update from an observation distribution.
 
@@ -111,7 +111,7 @@ def discrete_probabilistic_kalman_update(
     state: MultivariateNormal,
     *,
     R: Tensor,
-    H: Optional[Tensor] = None,
+    H: Tensor | None = None,
 ) -> MultivariateNormal:
     r"""Prototype Kalman update for a point observation with missing coordinates.
 

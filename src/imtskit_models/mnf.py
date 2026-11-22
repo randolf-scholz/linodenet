@@ -42,7 +42,7 @@ __all__ = [
 
 import math
 from collections.abc import Iterable, Iterator, Mapping, Sequence
-from typing import TYPE_CHECKING, Final, NamedTuple, Optional, overload
+from typing import TYPE_CHECKING, Final, NamedTuple, overload
 
 import torch
 from torch import Generator, Tensor, nan, nn
@@ -1019,8 +1019,8 @@ class MultiHeadGaussian(nn.Module):
         num_feats: int,
         *,
         num_heads: int,
-        means: Optional[Tensor] = None,
-        covs: Optional[Tensor] = None,
+        means: Tensor | None = None,
+        covs: Tensor | None = None,
     ) -> None:
         super().__init__()
 

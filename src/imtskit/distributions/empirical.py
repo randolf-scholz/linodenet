@@ -5,7 +5,7 @@ __all__ = [
     "Empirical",
 ]
 
-from typing import Final, Optional
+from typing import Final
 
 import torch
 from torch import Tensor
@@ -32,7 +32,7 @@ class Empirical(DistributionBase):
     ndims: Final[int]  # D
     r"""CONST: The number of dimensions of the data."""
 
-    def __init__(self, values: Tensor, /, ndim: Optional[int] = None) -> None:
+    def __init__(self, values: Tensor, /, ndim: int | None = None) -> None:
         r"""Initialize the empirical distribution.
 
         Args:

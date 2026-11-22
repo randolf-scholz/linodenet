@@ -25,7 +25,7 @@ __all__ = [
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Final, Optional, Protocol, ReadOnly, TypedDict
+from typing import Final, Protocol, ReadOnly, TypedDict
 
 import torch
 from torch import Tensor
@@ -75,7 +75,7 @@ class GaussianToBimodal(Protocol):
         mu: Tensor = ...,
         sigma: Tensor = ...,
         *,
-        maxiter: Optional[int] = ...,
+        maxiter: int | None = ...,
     ) -> Tensor: ...
 
 
@@ -89,7 +89,7 @@ class GaussianToBimodalValueAndGrad(Protocol):
         mu: Tensor = ...,
         sigma: Tensor = ...,
         *,
-        maxiter: Optional[int] = ...,
+        maxiter: int | None = ...,
     ) -> tuple[Tensor, Tensor]: ...
 
 
@@ -120,7 +120,7 @@ class GaussianToMixture(Protocol):
         mus: Tensor,
         sigmas: Tensor,
         *,
-        maxiter: Optional[int] = ...,
+        maxiter: int | None = ...,
     ) -> Tensor: ...
 
 
@@ -135,7 +135,7 @@ class GaussianToMixtureValueAndGrad(Protocol):
         mus: Tensor,
         sigmas: Tensor,
         *,
-        maxiter: Optional[int] = ...,
+        maxiter: int | None = ...,
     ) -> tuple[Tensor, Tensor]: ...
 
 
@@ -183,9 +183,9 @@ class SingularTriplet(Protocol):
         A: Tensor,
         /,
         *,
-        u0: Optional[Tensor] = None,
-        v0: Optional[Tensor] = None,
-        maxiter: Optional[int] = ...,
+        u0: Tensor | None = None,
+        v0: Tensor | None = None,
+        maxiter: int | None = ...,
         atol: float = ...,
         rtol: float = ...,
     ) -> tuple[Tensor, Tensor, Tensor]:
@@ -217,9 +217,9 @@ class SpectralNorm(Protocol):
         A: Tensor,
         /,
         *,
-        u0: Optional[Tensor] = None,
-        v0: Optional[Tensor] = None,
-        maxiter: Optional[int] = ...,
+        u0: Tensor | None = None,
+        v0: Tensor | None = None,
+        maxiter: int | None = ...,
         atol: float = ...,
         rtol: float = ...,
     ) -> Tensor:

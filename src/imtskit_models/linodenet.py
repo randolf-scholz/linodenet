@@ -11,7 +11,7 @@ __all__ = [
 
 import warnings
 from collections.abc import Callable, Mapping
-from typing import Any, Final, Optional
+from typing import Any, Final
 
 import torch
 from torch import Tensor, nn
@@ -25,7 +25,7 @@ def linear_flow(
     timedeltas: Tensor,  # Float[..., $n]
     x0: Tensor,  # Float[..., d]
     kernel: Tensor,  # Float[d, d]
-    bias: Optional[Tensor] = None,
+    bias: Tensor | None = None,
     /,
 ) -> Tensor:  # Float[..., $n, d]
     r"""Linear ODE.
@@ -99,7 +99,7 @@ class LinearFlow(nn.Module):
         input_size: int,
         *,
         kernel_initialization: str | Tensor | nn.Module = "skew-symmetric",
-        kernel_parametrization: Optional[str | nn.Module] = None,
+        kernel_parametrization: str | nn.Module | None = None,
         use_rezero: bool = True,
         use_bias: bool = False,
     ) -> None:

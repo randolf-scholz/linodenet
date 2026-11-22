@@ -40,7 +40,7 @@ __all__ = [
 
 from enum import Enum
 from math import sqrt
-from typing import Optional, SupportsFloat
+from typing import SupportsFloat
 
 import torch
 from torch import Tensor, nn
@@ -185,7 +185,7 @@ class NonLinearKalmanUpdate(nn.Module, VectorStateUpdate):
     """
 
     # PARAMETERS
-    H: Optional[Tensor]
+    H: Tensor | None
     r"""PARAM: Observation matrix $H$."""
     kernel: Tensor
     r"""Legacy kernel annotation; no `kernel` tensor is initialized."""

@@ -4,7 +4,7 @@ import datetime as dt
 import logging
 import random
 import subprocess
-from typing import Literal, Optional
+from typing import Literal
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -99,11 +99,11 @@ def test_linear_gaussian_flow_module_kernel_initialization() -> None:
 
 def compute_linode_error(
     *,
-    num: Optional[int] = None,
-    dim: Optional[int] = None,
+    num: int | None = None,
+    dim: int | None = None,
     precision: Literal["single", "double"] = "single",
     relative_error: bool = True,
-    device: Optional[str | torch.device] = None,
+    device: str | torch.device | None = None,
 ) -> tuple[float, float, float]:
     r"""Compare `LinODE` against `scipy.odeint` on linear system.
 
